@@ -234,6 +234,24 @@ export function BillingHealthPage({
           )}
         </WorkflowPanel>
 
+        {/* Projection health is a sibling, not a section here. This page can be
+            entirely green while every customer is being told the wrong thing,
+            so the link states the difference rather than just offering a jump. */}
+        <WorkflowPanel title="Is the access answer still current?">
+          <p className="text-sm leading-6">
+            This page answers whether store input is still becoming facts. Whether the authoritative
+            answer Mosaic gives about a customer&rsquo;s access is still current is a separate
+            question with a separate queue: a healthy intake pipeline and a stalled projection queue
+            look identical from here.
+          </p>
+          <a
+            className={`${buttonVariants({ variant: "outline" })} mt-3`}
+            href={`${base}/projection-health`}
+          >
+            Open projection health
+          </a>
+        </WorkflowPanel>
+
         <WorkflowPanel title="What this view cannot tell you yet">
           <ul className="text-muted-foreground list-disc space-y-2 pl-5 text-sm leading-6">
             <li>

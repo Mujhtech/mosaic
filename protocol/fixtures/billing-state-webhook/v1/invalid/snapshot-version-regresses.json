@@ -1,0 +1,36 @@
+{
+  "billingStateWebhookContractVersion": "1",
+  "recordType": "billingStateEvent",
+  "payload": {
+    "eventType": "customer.entitlements.changed",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "billingCustomerId": "fixture-customer-0001",
+    "projectionRuleVersion": 1,
+    "sourceReason": "source_ended",
+    "isTestSource": false,
+    "eventId": "fixture-event-0002",
+    "subscriptionInstanceId": "fixture-subscription-instance-0001",
+    "snapshotVersion": 9,
+    "previousSnapshotVersion": 11,
+    "occurredAt": "2026-08-01T09:00:00.000Z",
+    "createdAt": "2026-08-01T09:00:05.000Z",
+    "changedEntitlements": [
+      {
+        "entitlementKey": "pro",
+        "previousState": "active",
+        "currentState": "inactive"
+      }
+    ],
+    "stateSummary": {
+      "accessState": "inactive",
+      "lifecycleState": "expired",
+      "renewalIntent": "auto_renew_disabled",
+      "billingState": "failed",
+      "uncertainty": {
+        "reason": "none"
+      }
+    },
+    "correlationId": "fixture-correlation-0101"
+  }
+}

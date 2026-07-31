@@ -6,14 +6,17 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,6 +38,13 @@ import dev.mosaic.sdk.MosaicPlacement
 import dev.mosaic.sdk.MosaicPurchaseProvider
 import dev.mosaic.sdk.MosaicCommerceUpdateAcceptance
 import dev.mosaic.sdk.MosaicCommerceUpdateAcceptanceDisposition
+import dev.mosaic.sdk.MosaicCustomerAccessToken
+import dev.mosaic.sdk.MosaicCustomerAccessTokenProvider
+import dev.mosaic.sdk.MosaicCustomerAccessTokenResult
+import dev.mosaic.sdk.MosaicCustomerEntitlementSnapshotState
+import dev.mosaic.sdk.MosaicCustomerEntitlementState
+import dev.mosaic.sdk.MosaicCustomerSyncResult
+import kotlinx.coroutines.launch
 import dev.mosaic.sdk.googleplay.MosaicGooglePlayAdapter
 import dev.mosaic.sdk.revenuecat.MosaicRevenueCatAdapter
 import java.net.URI
@@ -114,6 +124,16 @@ class MainActivity : ComponentActivity() {
         val endpoint = intent.getStringExtra(SDK_ENDPOINT_EXTRA)?.let(URI::create)
         val applicationId = intent.getStringExtra(APPLICATION_ID_EXTRA)?.takeIf(String::isNotBlank)
         val purchaseProvider = configuredHostedProvider()
+        // Stands in for the application backend Mosaic Billing requires. A real app calls its own
+        // authenticated server, which mints the token through Mosaic's trusted API; a public SDK key
+        // can never select a Billing Customer, so there is no client-only version of this.
+        val customerToken = intent.getStringExtra(CUSTOMER_TOKEN_EXTRA)?.takeIf { it.length >= 16 }
+        val customerId = intent.getStringExtra(CUSTOMER_ID_EXTRA)?.takeIf(String::isNotBlank)
+        val tokenProvider = customerToken?.let { value ->
+            MosaicCustomerAccessTokenProvider { _ ->
+                MosaicCustomerAccessTokenResult.Issued(MosaicCustomerAccessToken(value), customerId)
+            }
+        }
         val mosaic = Mosaic.configure(
             sdkKey,
             purchaseProvider,
@@ -124,6 +144,8 @@ class MainActivity : ComponentActivity() {
             // validation sooner; the example never treats it as proof of anything.
             transactionObservationEnabled =
                 intent.getBooleanExtra(TRANSACTION_OBSERVATION_ENABLED_EXTRA, false),
+            // Null unless a token was supplied, which leaves authoritative entitlements inert.
+            customerAccessTokenProvider = tokenProvider,
         )
         val hosted = mosaic.hostedConfiguration(applicationContext)
         val placement = intent.getStringExtra(PLACEMENT_EXTRA)?.takeIf(String::isNotBlank)
@@ -144,9 +166,43 @@ class MainActivity : ComponentActivity() {
                         "${observations.acceptedCount} accepted for validation · " +
                         "${observations.droppedCount} dropped · ${observations.lastSafeCode ?: "no code"}"
                 }
+                // The authoritative state is observed, not polled: identity changes and background
+                // refreshes both move it, and a Compose host should see both without asking.
+                val authoritative by hosted.customerEntitlements.collectAsState()
+                var restoreStatus by remember { mutableStateOf("") }
+                val scope = rememberCoroutineScope()
+
                 Column(Modifier.fillMaxSize()) {
                     Text(analyticsStatus, modifier = Modifier.padding(12.dp))
                     Text(observationStatus, modifier = Modifier.padding(horizontal = 12.dp))
+                    Text(
+                        describeAuthoritative(authoritative) + restoreStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                    if (tokenProvider != null) {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    restoreStatus = " · restoring…"
+                                    // Two axes, reported separately: what the store did, and what
+                                    // Mosaic could conclude from it.
+                                    restoreStatus = when (val result = hosted.restoreAndSyncCustomerEntitlements()) {
+                                        is MosaicCustomerSyncResult.AuthoritativeEntitlementsUpdated ->
+                                            " · restored, snapshot ${result.snapshot.snapshotVersion}"
+                                        is MosaicCustomerSyncResult.NativeRecoveryCompleted ->
+                                            " · recovered, Mosaic validation pending"
+                                        is MosaicCustomerSyncResult.NoAdditionalPurchases ->
+                                            " · no additional purchases"
+                                        else -> " · restore: ${result.providerOutcome}"
+                                    }
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                        ) {
+                            Text("Restore and sync")
+                        }
+                    }
                     MosaicPlacement(
                         client = hosted,
                         placement = placement,
@@ -204,5 +260,34 @@ class MainActivity : ComponentActivity() {
         const val ANALYTICS_ENABLED_EXTRA = "mosaic.analytics.enabled"
         const val ANALYTICS_FLUSH_EXTRA = "mosaic.analytics.flush"
         const val TRANSACTION_OBSERVATION_ENABLED_EXTRA = "mosaic.observations.enabled"
+        const val CUSTOMER_TOKEN_EXTRA = "mosaic.customer.token"
+        const val CUSTOMER_ID_EXTRA = "mosaic.customer.id"
+    }
+}
+
+/**
+ * Renders the four authoritative states distinctly.
+ *
+ * `unknown` and `unavailable` are deliberately not shown as "no access": they mean Mosaic could not
+ * answer, and an app that renders them as a denial revokes paying customers during an outage.
+ */
+private fun describeAuthoritative(state: MosaicCustomerEntitlementSnapshotState): String = when (state) {
+    MosaicCustomerEntitlementSnapshotState.Loading -> "Authoritative: waiting for Mosaic."
+    MosaicCustomerEntitlementSnapshotState.SignedOut ->
+        "Authoritative: no customer (pass mosaic.customer.token to enable)."
+    is MosaicCustomerEntitlementSnapshotState.Unavailable ->
+        "Authoritative: unavailable (${state.reason.wireName}) · " +
+            "last known snapshot ${state.lastKnown?.snapshotVersion ?: "none"}"
+    is MosaicCustomerEntitlementSnapshotState.Available -> {
+        val pro = state.snapshot.entry("pro")?.state
+        val access = when (pro) {
+            is MosaicCustomerEntitlementState.Active -> if (pro.isStale) "active (stale)" else "active"
+            is MosaicCustomerEntitlementState.Inactive -> "inactive"
+            is MosaicCustomerEntitlementState.Unknown -> "unknown"
+            is MosaicCustomerEntitlementState.Unavailable -> "unavailable"
+            null -> "no entry"
+        }
+        "Authoritative pro: $access · snapshot ${state.snapshot.snapshotVersion} · " +
+            "cache ${state.cacheState.wireName}"
     }
 }

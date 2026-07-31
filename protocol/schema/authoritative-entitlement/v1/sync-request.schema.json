@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:sync-request",
+  "title": "Mosaic Authoritative Entitlement Contract v1 sync request",
+  "description": "The request an SDK sends to synchronize its authoritative Entitlement snapshot. Contract negotiation lives in this body; no Configuration Delivery capability request changes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "authoritativeEntitlementContractVersion",
+    "recordType",
+    "payload"
+  ],
+  "properties": {
+    "authoritativeEntitlementContractVersion": {
+      "const": "1"
+    },
+    "recordType": {
+      "const": "entitlementSyncRequest"
+    },
+    "payload": {
+      "$ref": "#/$defs/entitlementSyncRequest"
+    }
+  },
+  "$defs": {
+    "entitlementSyncRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supportedAuthoritativeEntitlementContracts",
+        "correlationId"
+      ],
+      "properties": {
+        "billingCustomerId": {
+          "description": "A hint only. The server derives the Billing Customer from the Customer Access Token and verifies this value against it; a mismatch is refused. A caller can never select a customer by asserting an identifier, so this member can never widen access.",
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:snapshot#/$defs/identifier"
+        },
+        "knownSnapshotVersion": {
+          "description": "The version the caller already holds. Zero is the cached never-projected placeholder; issued snapshots start at 1 and replace it through the ordinary monotonic comparison. The placeholder is always re-issued rather than answered as snapshotUnchanged. For issued versions, the server answers snapshotUnchanged when its current version equals this value and the entity tag also matches.",
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:snapshot#/$defs/snapshotVersionOrPlaceholder"
+        },
+        "entityTag": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:snapshot#/$defs/entityTag"
+        },
+        "supportedAuthoritativeEntitlementContracts": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:snapshot#/$defs/supportedContractVersions"
+        },
+        "requestedEntitlementKeys": {
+          "description": "Narrows the response to these keys. Unrecognized keys are project data and are accepted; a key the Project does not define simply contributes no entry.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:snapshot#/$defs/entitlementKey"
+          }
+        },
+        "correlationId": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:snapshot#/$defs/identifier"
+        }
+      }
+    }
+  }
+}

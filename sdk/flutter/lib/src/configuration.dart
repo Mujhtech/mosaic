@@ -11,6 +11,12 @@ import 'commerce_configuration_transport.dart';
 import 'configuration_cache.dart';
 import 'configuration_client.dart';
 import 'configuration_transport.dart';
+import 'customer_authentication.dart';
+import 'customer_entitlement_cache.dart';
+import 'customer_entitlement_runtime.dart';
+import 'customer_entitlement_transport.dart';
+import 'customer_entitlements.dart';
+import 'customer_restore_sync.dart';
 import 'experiment_analytics.dart';
 import 'experiment_assignment_store.dart';
 import 'placement_decision.dart';
@@ -142,7 +148,9 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     MosaicExperimentAnalyticsSink? experimentAnalyticsSink,
     MosaicExperimentAssignmentStore? experimentAssignmentStore,
     MosaicTransactionObservationRuntime? transactionObservationRuntime,
+    MosaicCustomerEntitlementRuntime? customerEntitlementRuntime,
   })  : _configurationClient = configurationClient,
+        _customerEntitlements = customerEntitlementRuntime,
         _identityController = identityController,
         _analyticsRuntime = analyticsRuntime,
         _experimentAnalyticsSink = experimentAnalyticsSink,
@@ -159,11 +167,24 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
   void _observeCommerceUpdates() {
     final runtime = _transactionObservationRuntime;
     final router = _commerceProviderRouter;
-    if (runtime == null || router == null) return;
+    if (router == null) return;
+    if (runtime == null) {
+      final entitlements = _customerEntitlements;
+      if (entitlements == null) return;
+      _commerceUpdateSubscription = router.commerceUpdates.listen((update) {
+        if (update.outcome == MosaicCommerceUpdateOutcome.purchased) {
+          entitlements.refreshInBackground();
+        }
+      });
+      return;
+    }
     _commerceUpdateSubscription = router.commerceUpdates.listen((update) {
       // Phase 9A observes a completed purchase only. Every other outcome,
       // including pending and entitlement changes, stays on the device.
       if (update.outcome != MosaicCommerceUpdateOutcome.purchased) return;
+      // Authoritative state moves server-side once validation lands. The
+      // refresh is unawaited so it can never delay or alter a purchase.
+      _customerEntitlements?.refreshInBackground();
       runtime.observeProviderUpdate(
         providerId: update.providerId,
         transactionReference: update.transactionReference,
@@ -213,6 +234,12 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     MosaicTransactionObservationStorage transactionObservationStorage =
         const MosaicFileTransactionObservationStorage(),
     MosaicTransactionObservationTransport? transactionObservationTransport,
+    MosaicCustomerTokenProvider? customerTokenProvider,
+    MosaicCustomerEntitlementCache? customerEntitlementCache,
+    MosaicCustomerEntitlementTransport? customerEntitlementTransport,
+    MosaicCustomerEntitlementSettings customerEntitlementSettings =
+        const MosaicCustomerEntitlementSettings(),
+    DateTime Function() clock = _utcNow,
   }) {
     final factories = commerceProviderFactories.toList(growable: false);
     final router = factories.isEmpty
@@ -286,6 +313,39 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
             environmentEnabled: analyticsEnvironmentSettings.collectionEnabled,
             hostEnabled: analyticsHostEnabled,
           );
+    // Authoritative entitlements require an application backend to mint a
+    // Customer Access Token. Without a token provider the subsystem is never
+    // constructed, and every authoritative read reports unavailable rather
+    // than guessing.
+    final customerEntitlements =
+        customerTokenProvider == null || resolvedBaseUrl == null
+            ? null
+            : MosaicCustomerEntitlementRuntime(
+                baseUrl: resolvedBaseUrl,
+                publicSdkKey: configuration.publicSdkKey,
+                transport: customerEntitlementTransport ??
+                    const MosaicIoCustomerEntitlementTransport(),
+                cache: customerEntitlementCache ??
+                    MosaicFileCustomerEntitlementCache(),
+                tokenProvider: customerTokenProvider,
+                settings: customerEntitlementSettings,
+                timeout: configuration.requestTimeout,
+                clock: clock,
+                onDiagnostic: onDiagnostic == null
+                    ? null
+                    : (code, {required bool severe}) => onDiagnostic(
+                          MosaicDiagnostic(
+                            code: code,
+                            severity: severe
+                                ? MosaicDiagnosticSeverity.error
+                                : MosaicDiagnosticSeverity.warning,
+                            message: severe
+                                ? 'Authoritative entitlement state was cleared.'
+                                : 'Authoritative entitlement state is '
+                                    'unconfirmed.',
+                          ),
+                        ),
+              );
     // Off by default: absent opt-in means the subsystem is never constructed,
     // so nothing is observed, queued, persisted, or submitted. A Store Platform
     // is required because it determines the contract's reference kind; without
@@ -298,6 +358,12 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
                 baseUrl: resolvedBaseUrl,
                 publicSdkKey: configuration.publicSdkKey,
                 timeout: configuration.requestTimeout,
+                // Read at send time, so a token minted after the purchase
+                // still binds it, and a signed-out submission simply omits the
+                // header rather than waiting for one.
+                customerToken: customerEntitlements == null
+                    ? null
+                    : customerEntitlements.currentCustomerTokenForSubmission,
               ));
     final observationRuntime = transactionObservation == null ||
             resolvedStorePlatform == null ||
@@ -322,6 +388,7 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     return Mosaic._(
       configuration: configuration,
       purchaseProvider: resolvedPurchaseProvider,
+      customerEntitlementRuntime: customerEntitlements,
       transactionObservationRuntime: observationRuntime,
       identityController: identityController,
       analyticsRuntime: runtime,
@@ -379,6 +446,8 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
   final MosaicExperimentAssignmentStore? _experimentAssignmentStore;
   final MosaicCommerceProviderRouter? _commerceProviderRouter;
   final MosaicTransactionObservationRuntime? _transactionObservationRuntime;
+  final MosaicCustomerEntitlementRuntime? _customerEntitlements;
+  MosaicTransactionObservationSink? _purchaseSink;
   StreamSubscription<MosaicCommerceUpdate>? _commerceUpdateSubscription;
   bool _observingLifecycle = false;
 
@@ -409,7 +478,11 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
       MosaicAnalyticsCapabilityReport();
 
   /// Loads or creates the stable app-install-scoped anonymous identity.
-  Future<MosaicIdentityState> loadIdentity() => _identityController.load();
+  Future<MosaicIdentityState> loadIdentity() async {
+    final state = await _identityController.load();
+    await _customerEntitlements?.bindIdentity(state);
+    return state;
+  }
 
   /// Sets the host application's user identity. This may intentionally change
   /// assignments for Rule Sets using an identified-user policy.
@@ -419,6 +492,10 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     await _analyticsRuntime?.identityDidChange(
       effectiveUserChange: previous.userId != result.userId,
     );
+    // Bumps the generation, cancels in-flight work, and clears authoritative
+    // state before any read can observe it. Installation identity is
+    // preserved: it is Phase 6 state and it is evidence, never an anchor.
+    await _customerEntitlements?.bindIdentity(result);
     notifyListeners();
     return result;
   }
@@ -459,6 +536,8 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
       effectiveUserChange:
           previous.userId != null || previous.attributes.isNotEmpty,
     );
+    // Signing out discards the token and the cached snapshot together.
+    await _customerEntitlements?.clearCustomer();
     notifyListeners();
     return result;
   }
@@ -467,6 +546,7 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
   Future<MosaicIdentityState> resetInstallationIdentity() async {
     final result = await _identityController.rotateInstallation();
     await _analyticsRuntime?.identityDidChange(effectiveUserChange: true);
+    await _customerEntitlements?.clearCustomer();
     notifyListeners();
     return result;
   }
@@ -511,8 +591,18 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
   /// The renderer's fire-and-forget observation sink, or `null` when the
   /// opt-in is absent. It exposes no way to read a validation outcome, because
   /// a Transaction Observation is a trigger and never proof.
-  MosaicTransactionObservationSink? get transactionObservations =>
-      _transactionObservationRuntime;
+  MosaicTransactionObservationSink? get transactionObservations {
+    final runtime = _transactionObservationRuntime;
+    final entitlements = _customerEntitlements;
+    if (entitlements == null) return runtime;
+    // The renderer's purchase path is also where authoritative state becomes
+    // stale. Decorating the sink hooks it without the renderer knowing that
+    // authoritative entitlements exist.
+    return _purchaseSink ??= _MosaicPurchaseSignalSink(
+      delegate: runtime,
+      onPurchaseObserved: entitlements.refreshInBackground,
+    );
+  }
 
   /// Host consent switch for the Transaction Observation handoff. Turning it
   /// off clears the queue and deletes the persisted document.
@@ -545,6 +635,102 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
             attemptsExhausted: 0,
           )
         : await runtime.diagnostics();
+  }
+
+  // ---------------------------------------------------------------------
+  // Authoritative entitlements
+  // ---------------------------------------------------------------------
+
+  /// Mosaic's authoritative view of what the signed-in Billing Customer may
+  /// access, or `null` when no Customer Access Token provider is configured.
+  ///
+  /// This is deliberately separate from the provider-observed entitlements a
+  /// Commerce Provider reports. Provider-observed state answers "what did the
+  /// store just tell this device"; authoritative state answers "what has
+  /// Mosaic validated, and why".
+  MosaicCustomerEntitlementRuntime? get customerEntitlements =>
+      _customerEntitlements;
+
+  /// Sealed transitions of authoritative state, including the `Cleared` events
+  /// an identity change produces.
+  Stream<MosaicCustomerEntitlementUpdate> get customerEntitlementUpdates =>
+      _customerEntitlements?.updates ??
+      const Stream<MosaicCustomerEntitlementUpdate>.empty();
+
+  /// Answers one access question from memory. It performs no I/O and never
+  /// returns a bare boolean.
+  MosaicCustomerEntitlementCheck checkCustomerEntitlement(
+    String entitlementKey,
+  ) {
+    final runtime = _customerEntitlements;
+    if (runtime == null) {
+      // Billing disabled maps to unavailable on every surface, never inactive.
+      return MosaicCustomerEntitlementCheck(
+        entitlementKey: entitlementKey,
+        state: MosaicCustomerAccessState.unavailable,
+        cacheState: MosaicEntitlementCacheState.missing,
+        sourceCount: 0,
+        endKnown: false,
+        isStale: false,
+        isTestSource: false,
+        reasonCode: 'entitlements.disabled',
+      );
+    }
+    return runtime.checkCustomerEntitlement(entitlementKey);
+  }
+
+  Future<MosaicCustomerEntitlementRefreshResult>
+      refreshCustomerEntitlements() async {
+    final runtime = _customerEntitlements;
+    return runtime == null
+        ? const MosaicCustomerEntitlementUnavailable(
+            reasonCode: 'entitlements.disabled',
+          )
+        : await runtime.refresh();
+  }
+
+  MosaicCustomerEntitlementDiagnostics get customerEntitlementDiagnostics =>
+      _customerEntitlements?.diagnostics ??
+      const MosaicCustomerEntitlementDiagnostics(
+        enabled: false,
+        cacheState: MosaicEntitlementCacheState.missing,
+        identityGeneration: 0,
+        staleGraceSeconds: 0,
+        token: MosaicCustomerTokenDiagnostics(
+          hasToken: false,
+          identityGeneration: 0,
+        ),
+        lastReasonCode: 'entitlements.disabled',
+      );
+
+  /// Restores through the Commerce Provider, hands observations to Mosaic for
+  /// validation, and reports what Mosaic can actually confirm.
+  ///
+  /// It reports `restored` only once an accepted snapshot at a higher version
+  /// reflects the restore. A successful native restore whose facts are still
+  /// being validated is `validationPending`, which is honest rather than
+  /// hopeful.
+  Future<MosaicCustomerRestoreResult> restorePurchasesAndSync() async {
+    final runtime = _customerEntitlements;
+    final requestedAt = DateTime.now().toUtc();
+    if (runtime == null) {
+      return MosaicCustomerRestoreFailed(
+        providerOutcome: MosaicCustomerRestoreProviderOutcome.notAttempted,
+        requestedAt: requestedAt,
+        stages: const <MosaicCustomerRestoreStage>[],
+        uncertainty: MosaicCustomerUncertainty(
+          reason: MosaicCustomerUncertaintyReason.projectionFailed,
+          since: requestedAt,
+          expectedResolution: MosaicCustomerExpectedResolution.customerAction,
+        ),
+        reasonCode: 'entitlements.disabled',
+      );
+    }
+    return MosaicCustomerRestoreCoordinator(
+      purchaseProvider: purchaseProvider,
+      entitlements: runtime,
+      observations: _transactionObservationRuntime,
+    ).restorePurchasesAndSync();
   }
 
   MosaicConfigurationCapabilityRequest get capabilityRequest =>
@@ -599,12 +785,51 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     if (_transactionObservationRuntime case final runtime?) {
       unawaited(runtime.disposeRuntime().catchError((Object _) {}));
     }
+    _customerEntitlements?.dispose();
     _commerceProviderRouter?.deactivate();
     if (_analyticsRuntime case final runtime?) {
       // Disposal must never surface storage failures as uncaught zone errors.
       unawaited(runtime.release().catchError((Object _) {}));
     }
     super.dispose();
+  }
+}
+
+DateTime _utcNow() => DateTime.now().toUtc();
+
+/// Wraps the renderer's observation sink so a completed purchase also triggers
+/// an unawaited authoritative refresh. It returns `void` for the same reason
+/// the sink does: a billing handoff can never be awaited from, block, or alter
+/// a purchase flow.
+final class _MosaicPurchaseSignalSink
+    implements MosaicTransactionObservationSink {
+  const _MosaicPurchaseSignalSink({
+    required this.delegate,
+    required this.onPurchaseObserved,
+  });
+
+  final MosaicTransactionObservationSink? delegate;
+  final void Function() onPurchaseObserved;
+
+  @override
+  void observePurchaseResult({
+    required String? providerId,
+    required String? transactionReference,
+    String? providerOrderReference,
+    String? mosaicProductId,
+    String? purchaseAttemptId,
+  }) {
+    try {
+      delegate?.observePurchaseResult(
+        providerId: providerId,
+        transactionReference: transactionReference,
+        providerOrderReference: providerOrderReference,
+        mosaicProductId: mosaicProductId,
+        purchaseAttemptId: purchaseAttemptId,
+      );
+    } finally {
+      onPurchaseObserved();
+    }
   }
 }
 

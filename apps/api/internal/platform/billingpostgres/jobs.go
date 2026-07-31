@@ -2,6 +2,8 @@ package billingpostgres
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -9,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
 )
 
 // LeaseValidationJob claims one job with SELECT ... FOR UPDATE SKIP LOCKED,
@@ -219,40 +222,41 @@ func (r *Repository) CompleteAttempt(ctx context.Context, job billing.Validation
 
 	factRecorded := false
 	if fact := outcome.Fact; fact != nil {
-		tag, err := tx.Exec(ctx,
-			`INSERT INTO billing_transaction_facts(
-				id, project_id, environment_id, environment_mode, application_id, provider, store_environment,
-				provider_transaction_id, provider_original_transaction_id, purchase_chain_digest,
-				supersedes_chain_digest, transaction_type, fact_kind, occurred_at, period_start_at,
-				period_end_at, revoked_at, refunded_at, renewal_expected, is_test_transaction,
-				provider_product_identifier, provider_base_plan_identifier, provider_offer_identifier,
-				resolution_state, mosaic_product_id, provider_product_mapping_id, resolved_mapping_version,
-				validator_version, fact_version, source_raw_input_id, validation_attempt_id, fact_digest, recorded_at)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,''),$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-				$21,NULLIF($22,''),NULLIF($23,''),$24,NULLIF($25,''),NULLIF($26,''),$27,$28,$29,$30,$31,$32,$33)
-			 ON CONFLICT (environment_id, fact_digest) DO NOTHING`,
-			fact.ID, fact.ProjectID, fact.EnvironmentID, fact.EnvironmentMode, fact.ApplicationID,
-			fact.Provider, fact.StoreEnvironment, fact.ProviderTransactionID,
-			fact.ProviderOriginalTransactionID, nullBytes(fact.PurchaseChainDigest),
-			nullBytes(fact.SupersedesChainDigest), fact.TransactionType, fact.FactKind, fact.OccurredAt,
-			fact.PeriodStartAt, fact.PeriodEndAt, fact.RevokedAt, fact.RefundedAt, fact.RenewalExpected,
-			fact.IsTestTransaction, fact.ProviderProductIdentifier, fact.ProviderBasePlanIdentifier,
-			fact.ProviderOfferIdentifier, fact.ResolutionState, fact.MosaicProductID,
-			fact.ProviderProductMappingID, fact.ResolvedMappingVersion, fact.ValidatorVersion,
-			fact.FactVersion, fact.SourceRawInputID, fact.ValidationAttemptID, fact.FactDigest, fact.RecordedAt)
+		recorded, err := insertFact(ctx, tx, *fact)
 		if err != nil {
-			return fmt.Errorf("append transaction fact: %w", err)
+			return err
 		}
 		// Zero rows means the identical fact already exists. That is the replay
 		// no-op, and it is recorded as a deduplication rather than silently
 		// dropped so the ledger shows the pipeline ran and found nothing new.
-		factRecorded = tag.RowsAffected() == 1
+		factRecorded = recorded
 		if !factRecorded {
 			if err := insertLedger(ctx, tx, billing.LedgerEntry{
 				ID: "ble_" + hashID(fact.SourceRawInputID, "dedup", now), ProjectID: fact.ProjectID,
 				EnvironmentID: fact.EnvironmentID, EntryType: billing.LedgerFactDeduplicated,
 				RawInputID: fact.SourceRawInputID, ValidationAttemptID: attempt.ID,
 				CorrelationID: attempt.CorrelationID, OccurredAt: now,
+			}); err != nil {
+				return err
+			}
+		}
+	}
+
+	// A supersession fact rides in the same transaction as the state fact it
+	// was derived from, and is recorded in the ledger only when this write is
+	// the first observation of the link.
+	if fact := outcome.Supersession; fact != nil {
+		recorded, err := insertFact(ctx, tx, *fact)
+		if err != nil {
+			return err
+		}
+		if recorded {
+			if err := insertLedger(ctx, tx, billing.LedgerEntry{
+				ID: "ble_" + hashID(fact.SourceRawInputID, "supersession", now), ProjectID: fact.ProjectID,
+				EnvironmentID: fact.EnvironmentID, EntryType: billing.LedgerFactRecorded,
+				RawInputID: fact.SourceRawInputID, ValidationAttemptID: attempt.ID,
+				TransactionFactID: fact.ID,
+				CorrelationID:     attempt.CorrelationID, OccurredAt: now,
 			}); err != nil {
 				return err
 			}
@@ -290,6 +294,32 @@ func (r *Repository) CompleteAttempt(ctx context.Context, job billing.Validation
 		}
 	}
 
+	// A committed fact enqueues its projection in the same transaction that
+	// records it. Enqueueing after the commit would leave a window in which a
+	// crash loses the trigger and the fact never reaches anyone's access;
+	// enqueueing inside means the trigger is exactly as durable as the fact.
+	//
+	// The job is scoped to the lineage the fact belongs to. It coalesces onto
+	// the scope key, so a burst of facts for one purchase produces one
+	// projection rather than one per fact.
+	//
+	// The lineage and its projection instance are materialized first, in this
+	// same transaction. Nothing used to create either, so the trigger below
+	// found no lineage and treated that as silence — a fact reached no
+	// projection, and the whole Phase 9B read model was unreachable from a
+	// purchase (defect D-1). Both writes are deterministic functions of the
+	// fact's own chain digest, decide nothing, and must be exactly as durable as
+	// the fact, because the trigger they enable is written here too.
+	if factRecorded && outcome.Fact != nil {
+		lineage, err := materializeLineage(ctx, tx, *outcome.Fact, now)
+		if err != nil {
+			return err
+		}
+		if err := enqueueProjectionForFact(ctx, tx, *outcome.Fact, lineage, now); err != nil {
+			return err
+		}
+	}
+
 	status := outcome.JobStatus
 	if status == "" {
 		status = "completed"
@@ -310,6 +340,248 @@ func (r *Repository) CompleteAttempt(ctx context.Context, job billing.Validation
 		return fmt.Errorf("commit attempt: %w", err)
 	}
 	return nil
+}
+
+// materializeLineage creates the Purchase Lineage a newly recorded fact belongs
+// to, and the projection instance that lineage owns.
+//
+// Three rules are load-bearing here.
+//
+// *The lineage is keyed on the chain root, not on the fact's own digest.* A
+// Google plan change hands the subscription a new purchase token and states the
+// old one as `linkedPurchaseToken`; the fact for the successor therefore carries
+// a different `purchase_chain_digest` from its predecessor. Keying on it would
+// mint a fresh lineage on every plan change and fragment one subscription's
+// history into unconnected pieces — and the projection loader would not put it
+// back together, because it walks supersession edges *forward from the root*.
+// The root is resolved here by walking those edges backwards.
+//
+// *The digest domain is the fact's own.* Every fact-to-lineage join in the
+// codebase compares `purchase_chain_digest` to `lineage_key_digest`, so any
+// other domain produces a lineage that can never join to the facts it was
+// created for.
+//
+// *Neither write may disturb an existing row.* ON CONFLICT DO NOTHING on both,
+// because a lineage's customer association and an instance's projection state
+// are owned by other writers, and a fact arriving is not new information about
+// either.
+func materializeLineage(ctx context.Context, tx pgx.Tx, fact billing.TransactionFact, now time.Time) (lineage materializedLineage, err error) {
+	if len(fact.PurchaseChainDigest) == 0 {
+		return materializedLineage{}, nil
+	}
+	rootDigest, err := chainRootDigest(ctx, tx, fact)
+	if err != nil {
+		return materializedLineage{}, err
+	}
+
+	lineageType := billingcustomer.LineageSubscription
+	if fact.TransactionType == billing.TypeNonConsumable {
+		lineageType = billingcustomer.LineageOneTime
+	}
+	// The identifier is derived rather than random so a retry of this
+	// transaction proposes the same row and the unique constraint recognises it.
+	lineageID := "bpl_" + hashID(fact.EnvironmentID, fact.Provider, hex.EncodeToString(rootDigest))
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO purchase_lineages(
+			id, project_id, environment_id, environment_mode, application_id, provider,
+			store_environment, lineage_key_digest, lineage_type, projection_frozen,
+			diagnostic_status, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,false,'identity_unresolved',$10,$10)
+		 ON CONFLICT (environment_id, provider, lineage_key_digest) DO NOTHING`,
+		lineageID, fact.ProjectID, fact.EnvironmentID, fact.EnvironmentMode, fact.ApplicationID,
+		fact.Provider, fact.StoreEnvironment, rootDigest, lineageType, now); err != nil {
+		return materializedLineage{}, fmt.Errorf("materialize purchase lineage: %w", err)
+	}
+
+	// Re-read rather than trusting the proposed id: another transaction may have
+	// created this lineage first, under its own identifier.
+	var resolvedID, customerID string
+	if err := tx.QueryRow(ctx,
+		`SELECT id, COALESCE(billing_customer_id,'') FROM purchase_lineages
+		 WHERE environment_id=$1 AND provider=$2 AND lineage_key_digest=$3`,
+		fact.EnvironmentID, fact.Provider, rootDigest).Scan(&resolvedID, &customerID); err != nil {
+		return materializedLineage{}, fmt.Errorf("read materialized purchase lineage: %w", err)
+	}
+	lineage = materializedLineage{
+		ID: resolvedID, CustomerID: customerID, RootDigest: rootDigest, Type: lineageType,
+	}
+
+	acquiredAt := fact.OccurredAt
+	if fact.PeriodStartAt != nil && fact.PeriodStartAt.Before(acquiredAt) {
+		acquiredAt = *fact.PeriodStartAt
+	}
+	if lineageType == billingcustomer.LineageOneTime {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO one_time_purchase_instances(
+				id, project_id, environment_id, application_id, purchase_lineage_id, provider,
+				acquired_at, validity_state, created_at, updated_at)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,'owned',$8,$8)
+			 ON CONFLICT (purchase_lineage_id) DO NOTHING`,
+			"otp_"+hashID(resolvedID, "instance", ""), fact.ProjectID, fact.EnvironmentID,
+			fact.ApplicationID, resolvedID, fact.Provider, acquiredAt, now); err != nil {
+			return materializedLineage{}, fmt.Errorf("materialize one-time purchase instance: %w", err)
+		}
+		return lineage, nil
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO subscription_instances(
+			id, project_id, environment_id, application_id, purchase_lineage_id, provider,
+			created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$7)
+		 ON CONFLICT (purchase_lineage_id) DO NOTHING`,
+		"sbi_"+hashID(resolvedID, "instance", ""), fact.ProjectID, fact.EnvironmentID,
+		fact.ApplicationID, resolvedID, fact.Provider, now); err != nil {
+		return materializedLineage{}, fmt.Errorf("materialize subscription instance: %w", err)
+	}
+	return lineage, nil
+}
+
+// materializedLineage is what the fact-commit transaction learned about the
+// lineage it just ensured exists.
+type materializedLineage struct {
+	ID         string
+	CustomerID string
+	RootDigest []byte
+	Type       string
+}
+
+// chainRootDigest walks supersession edges backwards from a fact's own chain
+// digest to the root of its purchase chain.
+//
+// The walk is bounded and cycle-safe for the same reason the pure helper in the
+// identity module is: provider data cannot contain a cycle, so reaching one
+// means the data is already wrong and the safe answer is the deepest node
+// reached rather than a hang.
+func chainRootDigest(ctx context.Context, tx pgx.Tx, fact billing.TransactionFact) ([]byte, error) {
+	var root []byte
+	err := tx.QueryRow(ctx,
+		`WITH RECURSIVE walk(digest, depth) AS (
+			SELECT $3::bytea, 0
+		  UNION ALL
+			SELECT f.supersedes_chain_digest, walk.depth + 1
+			FROM walk
+			JOIN LATERAL (
+				SELECT supersedes_chain_digest
+				FROM billing_transaction_facts
+				WHERE project_id = $1 AND environment_id = $2
+				  AND purchase_chain_digest = walk.digest
+				  AND supersedes_chain_digest IS NOT NULL
+				  AND supersedes_chain_digest <> walk.digest
+				LIMIT 1
+			) f ON true
+			WHERE walk.depth < 32
+		 )
+		 SELECT digest FROM walk ORDER BY depth DESC LIMIT 1`,
+		fact.ProjectID, fact.EnvironmentID, fact.PurchaseChainDigest).Scan(&root)
+	if err != nil {
+		return nil, fmt.Errorf("walk purchase chain root: %w", err)
+	}
+	if len(root) == 0 {
+		return fact.PurchaseChainDigest, nil
+	}
+	return root, nil
+}
+
+// enqueueProjectionForFact queues a projection for the lineage a newly
+// recorded fact belongs to.
+//
+// The lineage always exists by the time this runs: materializeLineage created
+// it a few statements earlier, in this same transaction. An unassociated lineage
+// still enqueues — at lineage scope — so the subscription state advances while
+// the identity half of the seam is still deciding who owns it.
+func enqueueProjectionForFact(ctx context.Context, tx pgx.Tx, fact billing.TransactionFact,
+	lineage materializedLineage, now time.Time) error {
+
+	if lineage.ID == "" {
+		// A fact with no provider chain digest names no purchase chain, so there
+		// is nothing to project. Nothing else reaches here now that the lineage
+		// is materialized in this same transaction — before it was, a missing
+		// lineage was the ordinary case and this function was silence (defect
+		// D-1).
+		return nil
+	}
+
+	// A customer snapshot may only ever be minted from *all* of the customer's
+	// lineages, so a job that names a customer must never also name a lineage
+	// (defect D-4).
+	//
+	// The detail used to carry both. `loadLineages` filters on the lineage when
+	// one is present, while `Compute` branches on the customer being present and
+	// mints a full customer aggregate — so committing a fact on one of a
+	// customer's lineages rewrote their authoritative snapshot from that lineage
+	// alone. Every other Entitlement Source vanished and any Entitlement that
+	// depended on one flipped to inactive: no refund, no revocation, no expiry,
+	// just sources that were never loaded. A customer holding a subscription and
+	// a lifetime purchase lost the lifetime purchase on the subscription's next
+	// renewal.
+	//
+	// The two scopes are now disjoint. A resolved lineage enqueues customer
+	// scope and nothing else; an unresolved one enqueues lineage scope, which
+	// advances the subscription state and mints no customer snapshot at all.
+	// That also restores the coalescing index's meaning: `customer:…` and
+	// `lineage:…` keys can no longer stand for two different amounts of work.
+	scopeKey := "lineage:" + lineage.ID
+	detail := map[string]string{"lineageId": lineage.ID}
+	if lineage.CustomerID != "" {
+		scopeKey = "customer:" + lineage.CustomerID
+		detail = map[string]string{"customerId": lineage.CustomerID}
+	}
+	encodedDetail, err := json.Marshal(detail)
+	if err != nil {
+		return fmt.Errorf("encode projection job detail: %w", err)
+	}
+	// ON CONFLICT DO NOTHING against the scope-key partial unique index is the
+	// coalescing: a scope that already has queued or leased work absorbs this
+	// trigger rather than creating a second job.
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO projection_jobs(
+			id, project_id, environment_id, scope_key, kind, detail, status,
+			attempt_count, max_attempts, available_at, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,'fact_committed',$5,'queued',0,8,$6,$6,$6)
+		 ON CONFLICT DO NOTHING`,
+		"pjb_"+hashID(scopeKey, "fact_committed", fact.ID), fact.ProjectID, fact.EnvironmentID,
+		scopeKey, encodedDetail, now); err != nil {
+		return fmt.Errorf("enqueue projection for committed fact: %w", err)
+	}
+	return nil
+}
+
+// insertFact appends one Transaction Fact, reporting whether the row was new.
+// The ON CONFLICT target is the fact-identity constraint, so a recomputed
+// identical fact is a structural no-op.
+func insertFact(ctx context.Context, tx pgx.Tx, fact billing.TransactionFact) (bool, error) {
+	tag, err := tx.Exec(ctx,
+		`INSERT INTO billing_transaction_facts(
+			id, project_id, environment_id, environment_mode, application_id, provider, store_environment,
+			provider_transaction_id, provider_original_transaction_id, purchase_chain_digest,
+			supersedes_chain_digest, transaction_type, fact_kind, occurred_at, period_start_at,
+			period_end_at, revoked_at, refunded_at, renewal_expected, is_test_transaction,
+			provider_product_identifier, provider_base_plan_identifier, provider_offer_identifier,
+			resolution_state, mosaic_product_id, provider_product_mapping_id, resolved_mapping_version,
+			validator_version, fact_version, source_raw_input_id, validation_attempt_id, fact_digest, recorded_at,
+			grace_period_expires_at, billing_retry_active, auto_renew_product_identifier, is_upgraded,
+			revocation_reason, refund_type, in_app_ownership_type, subscription_group_identifier,
+			provider_event_occurred_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,''),$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+			$21,NULLIF($22,''),NULLIF($23,''),$24,NULLIF($25,''),NULLIF($26,''),$27,$28,$29,$30,$31,$32,$33,
+			$34,$35,NULLIF($36,''),$37,$38,NULLIF($39,''),NULLIF($40,''),NULLIF($41,''),$42)
+		 ON CONFLICT (environment_id, fact_digest) DO NOTHING`,
+		fact.ID, fact.ProjectID, fact.EnvironmentID, fact.EnvironmentMode, fact.ApplicationID,
+		fact.Provider, fact.StoreEnvironment, fact.ProviderTransactionID,
+		fact.ProviderOriginalTransactionID, nullBytes(fact.PurchaseChainDigest),
+		nullBytes(fact.SupersedesChainDigest), fact.TransactionType, fact.FactKind, fact.OccurredAt,
+		fact.PeriodStartAt, fact.PeriodEndAt, fact.RevokedAt, fact.RefundedAt, fact.RenewalExpected,
+		fact.IsTestTransaction, fact.ProviderProductIdentifier, fact.ProviderBasePlanIdentifier,
+		fact.ProviderOfferIdentifier, fact.ResolutionState, fact.MosaicProductID,
+		fact.ProviderProductMappingID, fact.ResolvedMappingVersion, fact.ValidatorVersion,
+		fact.FactVersion, fact.SourceRawInputID, fact.ValidationAttemptID, fact.FactDigest, fact.RecordedAt,
+		fact.GracePeriodExpiresAt, fact.BillingRetryActive, fact.AutoRenewProductIdentifier,
+		fact.IsUpgraded, fact.RevocationReason, fact.RefundType, fact.InAppOwnershipType,
+		fact.SubscriptionGroupIdentifier, fact.ProviderEventOccurredAt)
+	if err != nil {
+		return false, fmt.Errorf("append transaction fact: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 // MappingCandidates returns every mapping in scope regardless of status.
@@ -418,4 +690,25 @@ func (r *Repository) ExpireRawInputBodies(ctx context.Context, now time.Time, li
 		return 0, fmt.Errorf("expire raw billing input bodies: %w", err)
 	}
 	return tag.RowsAffected(), nil
+}
+
+// ChainRootDigest resolves the root of the purchase chain a fact belongs to.
+//
+// It is the same walk the fact-commit transaction performs, exposed as a read so
+// the seam can name the lineage that transaction created without the transaction
+// having to hand its identifiers back through the CompleteAttempt contract.
+func (r *Repository) ChainRootDigest(ctx context.Context, fact billing.TransactionFact) ([]byte, error) {
+	if len(fact.PurchaseChainDigest) == 0 {
+		return nil, nil
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin chain root read: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	root, err := chainRootDigest(ctx, tx, fact)
+	if err != nil {
+		return nil, err
+	}
+	return root, tx.Commit(ctx)
 }

@@ -15,6 +15,14 @@ public enum MosaicDiagnosticStage: String, Sendable {
   case fallbackValidation
   case commerce
   case rendering
+  // Authoritative entitlement stages. Adding members to this enumeration is
+  // source-breaking for an exhaustive `switch` in a host app; that is accepted
+  // at 0.1.0-dev and recorded in the changelog.
+  case entitlementTransport
+  case entitlementValidation
+  case entitlementCache
+  case entitlementAuthentication
+  case entitlementRestore
 }
 
 /// A deliberately safe diagnostic. It contains a stable code and stage, never

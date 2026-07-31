@@ -1,0 +1,16 @@
+{
+  "authoritativeEntitlementContractVersion": "1",
+  "recordType": "entitlementCheckRequest",
+  "payload": {
+    "billingCustomerId": "fixture-customer-0001",
+    "entitlementKeys": [
+      "pro",
+      "pro_lifetime"
+    ],
+    "expectedSnapshotVersion": 4,
+    "supportedAuthoritativeEntitlementContracts": [
+      "1"
+    ],
+    "correlationId": "fixture-correlation-0006"
+  }
+}

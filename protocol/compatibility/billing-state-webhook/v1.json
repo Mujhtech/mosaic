@@ -1,0 +1,88 @@
+{
+  "billingStateWebhookContractVersion": "1",
+  "status": "draft",
+  "schemas": {
+    "event": "../../schema/billing-state-webhook/v1/event.schema.json",
+    "delivery": "../../schema/billing-state-webhook/v1/delivery.schema.json"
+  },
+  "canonicalFixtures": [
+    "../../fixtures/billing-state-webhook/v1/deliveries/exhausted.json",
+    "../../fixtures/billing-state-webhook/v1/deliveries/failed-retry-scheduled.json",
+    "../../fixtures/billing-state-webhook/v1/deliveries/pending.json",
+    "../../fixtures/billing-state-webhook/v1/deliveries/retry-same-event-id.json",
+    "../../fixtures/billing-state-webhook/v1/deliveries/skipped-destination-disabled.json",
+    "../../fixtures/billing-state-webhook/v1/deliveries/succeeded.json",
+    "../../fixtures/billing-state-webhook/v1/events/entitlement-activated.json",
+    "../../fixtures/billing-state-webhook/v1/events/entitlement-deactivated.json",
+    "../../fixtures/billing-state-webhook/v1/events/expiry-extended.json",
+    "../../fixtures/billing-state-webhook/v1/events/refund.json",
+    "../../fixtures/billing-state-webhook/v1/events/revocation.json",
+    "../../fixtures/billing-state-webhook/v1/events/subscription-cancelled-access-active.json",
+    "../../fixtures/billing-state-webhook/v1/events/unknown-state-transition.json"
+  ],
+  "recordTypes": [
+    "billingStateEvent",
+    "webhookDeliveryAttempt"
+  ],
+  "eventTypes": [
+    "customer.entitlements.changed",
+    "subscription.state.changed",
+    "subscription.period.changed",
+    "subscription.renewal_intent.changed",
+    "subscription.expired",
+    "subscription.revoked",
+    "subscription.refunded",
+    "customer.billing_identity.conflict",
+    "customer.projection.failed",
+    "customer.projection.recovered"
+  ],
+  "emittedEventTypes": [
+    "customer.entitlements.changed"
+  ],
+  "signing": {
+    "header": "Mosaic-Signature",
+    "algorithm": "HMAC-SHA256",
+    "signingVersion": "v1",
+    "signedPayloadTemplate": "{signingVersion}.{timestamp}.{eventId}.{rawBody}",
+    "encoding": "lowercase_hex",
+    "timestampParameter": "t",
+    "signatureParameter": "v1",
+    "multipleActiveSignatures": true,
+    "replayWindowSeconds": 300,
+    "testEndpointSupported": true,
+    "signatureVectors": "packages/test-fixtures/src/webhook-signature-vectors.json"
+  },
+  "delivery": {
+    "guarantee": "atLeastOnce",
+    "deduplicationKey": "eventId",
+    "orderingKey": "snapshotVersion",
+    "failureIsolation": "deliveryNeverRollsBackState"
+  },
+  "limits": {
+    "maxRecordBytes": 32768,
+    "maxChangedEntitlementsPerEvent": 200,
+    "maxResponseExcerptCharacters": 240,
+    "maxDeliveryAttempts": 32,
+    "maxDiagnosticsPerRecord": 10,
+    "replayWindowSeconds": 300
+  },
+  "producerPolicy": {
+    "unknownField": "rejectRecord",
+    "unknownEventType": "rejectRecord",
+    "providerSecret": "forbidden",
+    "rawPurchaseToken": "forbidden",
+    "rawProviderPayload": "forbidden",
+    "eventIdStability": "stableAcrossAttemptsAndReplays",
+    "exactlyOnceDelivery": "neverPromised",
+    "deliveryRecordTransport": "neverSentToDestination"
+  },
+  "consumerTolerance": {
+    "unknownField": "ignore",
+    "unknownEventType": "ignore",
+    "unknownEnumerationMember": "ignore",
+    "authoritativeState": "reReadSnapshot",
+    "ordering": "ignoreOlderSnapshotVersion",
+    "duplicateEvent": "deduplicateByEventId",
+    "signatureVerification": "requiredBeforeParsing"
+  }
+}

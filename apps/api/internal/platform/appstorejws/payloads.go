@@ -11,9 +11,13 @@ import (
 //
 //   - `price`, `currency`, `offerDiscountType` — Apple's own documentation says
 //     not to use them for accounting, and Phase 9A persists no monetary value.
-//   - `appAccountToken` — a developer-chosen customer correlator. Reading it
-//     into memory at all is the first step toward persisting customer identity,
-//     which this phase excludes.
+//   - `appAccountToken` was on this list for Phase 9A and no longer is. Phase 9B
+//     is the phase with a gate for customer identity, and the value is read here
+//     so the association resolver can match it. It is hashed the moment it
+//     leaves this struct: `billing.AliasDigest` is the only thing that receives
+//     it, no Transaction Fact column holds it, and no log line, metric
+//     attribute, or audit record ever sees either the value or its digest.
+//     Phase 9A's fact-shape exclusion is unchanged.
 //
 // Anything not named here stays inside the encrypted raw input, recoverable by
 // a future phase that has a gate for it.
@@ -65,6 +69,12 @@ type TransactionPayload struct {
 	RevocationDate              int64  `json:"revocationDate"`
 	RevocationReason            *int   `json:"revocationReason"`
 	Storefront                  string `json:"storefront"`
+	// AppAccountToken is the developer-chosen customer correlator, a UUID the
+	// app supplied at purchase time. Apple scopes it to the purchase rather than
+	// to the store account, which is exactly why it is evidence of moderate
+	// authority rather than an identity: it says the app believed this purchase
+	// belonged to that user, not that the store agrees.
+	AppAccountToken string `json:"appAccountToken"`
 }
 
 // RenewalPayload is the subset of JWSRenewalInfoDecodedPayload Phase 9A reads.

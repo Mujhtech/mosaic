@@ -109,6 +109,15 @@ export function CloudWorkspaceShell() {
                     title: "Access",
                     icon: <></>,
                   },
+                  // What a Product grants is versioned and immutable, so it is
+                  // its own surface rather than a set of buttons on Product
+                  // detail. It sits in Catalog because grant versions relate two
+                  // Project-scoped things, Products and Entitlements.
+                  {
+                    to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/catalog/grant-versions`,
+                    title: "Grant versions",
+                    icon: <></>,
+                  },
                   {
                     to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/catalog/providers`,
                     title: "Purchase setup",
@@ -129,6 +138,31 @@ export function CloudWorkspaceShell() {
                   subItems: [
                     ...(billingEnabled
                       ? [
+                          // Customers leads the group. It answers the question
+                          // operators actually arrive with — "does this person
+                          // have access?" — which the ledger deliberately
+                          // cannot.
+                          {
+                            to: scope.environmentId
+                              ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/customers`
+                              : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                            title: "Customers",
+                            icon: <></>,
+                          },
+                          {
+                            to: scope.environmentId
+                              ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/identity-conflicts`
+                              : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                            title: "Identity conflicts",
+                            icon: <></>,
+                          },
+                          {
+                            to: scope.environmentId
+                              ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/restores`
+                              : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                            title: "Restores",
+                            icon: <></>,
+                          },
                           {
                             to: scope.environmentId
                               ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/transactions`
@@ -155,6 +189,16 @@ export function CloudWorkspaceShell() {
                               ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/health`
                               : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
                             title: "Billing health",
+                            icon: <></>,
+                          },
+                          // A sibling of billing health, never a tab inside it:
+                          // store input can be arriving perfectly while every
+                          // customer is being told the wrong thing.
+                          {
+                            to: scope.environmentId
+                              ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/projection-health`
+                              : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                            title: "Projection health",
                             icon: <></>,
                           },
                         ]

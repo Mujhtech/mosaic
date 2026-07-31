@@ -49,11 +49,14 @@ func TestKeyringRotationCoversEveryEnvelopeTable(t *testing.T) {
 	}
 
 	// provider_connection_credentials is rotated by the Provider Connection
-	// path in cloudworkspacepostgres; the two billing tables are rotated here.
+	// path in cloudworkspacepostgres; the billing tables are rotated here.
+	// webhook_signing_secrets joined them in Phase 9B (ADR-0024) and is sealed
+	// under the webhook_signing_secret SubjectKind.
 	rotatable := map[string]bool{
 		"provider_connection_credentials": true,
 		"store_server_credentials":        true,
 		"billing_raw_inputs":              true,
+		"webhook_signing_secrets":         true,
 	}
 	for table := range found {
 		if !rotatable[table] {
@@ -769,6 +772,87 @@ func TestQuarantineListCursorWalksEveryRecord(t *testing.T) {
 	for id := range expected {
 		if seen[id] != 1 {
 			t.Fatalf("record %s was returned %d times across the walk, want exactly 1", id, seen[id])
+		}
+	}
+}
+
+// 9A correction — a keyset cursor must not round the page boundary away.
+//
+// `timestamptz` is microsecond-resolution and the cursor used to encode
+// milliseconds. Encoding the boundary row at `…:00.123456Z` as `…:00.123000Z`
+// and then applying `(occurred_at, id) < (cursor_time, cursor_id)` excludes
+// every row in the discarded sub-millisecond remainder: the page after the
+// boundary silently loses rows, with a well-formed cursor and a plausible page.
+// One worker pass writes several ledger entries inside the same millisecond
+// routinely, so this is the ordinary case rather than a contrived one.
+//
+// The listing under test is the ledger because its rows need no foreign keys,
+// but the encoder is shared by facts, attempts, ledger, quarantine,
+// reconciliation runs, and replay jobs, so one boundary walk protects all six.
+func TestLedgerListCursorKeepsSubMillisecondRows(t *testing.T) {
+	pool, ctx := testPool(t)
+	repository := New(pool)
+	projectID, environmentID, _ := seed(t, ctx, pool, "microcursor")
+
+	// Two entries inside one millisecond, straddling a page boundary of one.
+	base := time.Now().UTC().Truncate(time.Millisecond).Add(-time.Hour)
+	expected := map[string]time.Time{
+		"bled_micro_late":  base.Add(456 * time.Microsecond),
+		"bled_micro_early": base.Add(123 * time.Microsecond),
+	}
+	for id, at := range expected {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO billing_ledger_entries(id, project_id, environment_id, entry_type,
+				correlation_id, occurred_at)
+			 VALUES ($1,$2,$3,'input_received',$4,$5)`,
+			id, projectID, environmentID, "corr-"+id, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var organizationID string
+	if err := pool.QueryRow(ctx, `SELECT organization_id FROM projects WHERE id=$1`, projectID).
+		Scan(&organizationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO organization_members(organization_id,actor_id,role,created_at,updated_at)
+		 VALUES ($1,'actor_owner_microcursor','owner',$2,$2)
+		 ON CONFLICT (organization_id,actor_id) DO UPDATE SET role=EXCLUDED.role`,
+		organizationID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cleanupContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		_, _ = pool.Exec(cleanupContext,
+			`DELETE FROM organization_members WHERE organization_id=$1 AND actor_id='actor_owner_microcursor'`,
+			organizationID)
+	})
+	actor := billing.Actor{ID: "actor_owner_microcursor"}
+
+	seen := map[string]int{}
+	cursor := ""
+	for page := 0; page < 8; page++ {
+		result, err := repository.ListLedger(ctx, actor, projectID, environmentID,
+			billing.ListOptions{Limit: 1, Cursor: cursor})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range result.Items {
+			seen[entry.ID]++
+		}
+		if result.NextCursor == "" {
+			break
+		}
+		cursor = result.NextCursor
+	}
+
+	for id := range expected {
+		if seen[id] != 1 {
+			t.Fatalf("ledger entry %s was returned %d times across the walk, want exactly 1; "+
+				"a cursor that truncates to milliseconds drops rows sharing a millisecond with "+
+				"the page boundary", id, seen[id])
 		}
 	}
 }

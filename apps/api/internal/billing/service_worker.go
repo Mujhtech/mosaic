@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -60,7 +61,55 @@ func (s *Service) ProcessNextValidation(ctx context.Context, workerID string) (b
 	if err := s.repository.CompleteAttempt(ctx, job, outcome, s.now()); err != nil {
 		return true, safeFailure(err, "billing_attempt_write_failed")
 	}
+	if err := s.bindFactIdentity(ctx, outcome); err != nil {
+		// The fact and its lineage are committed; only the identity decision
+		// failed. The job is still `processed` — re-leasing it would re-run the
+		// provider call and re-record an attempt for work that succeeded — but
+		// the error is reported so the worker's failure signal and its metrics
+		// see it. The lineage is left unassociated, which is exactly what
+		// `unresolvedLineages` on the projection-health surface counts, and the
+		// next fact on the same chain retries the decision.
+		return true, safeFailure(err, "billing_lineage_bind_failed")
+	}
 	return true, nil
+}
+
+// bindFactIdentity runs the identity half of the Phase 9A→9B seam.
+//
+// It is outside CompleteAttempt's transaction on purpose. The structural half —
+// the lineage row and its projection instance — is written inside that
+// transaction because it is a deterministic function of the fact and must be
+// exactly as durable as it. Deciding *who owns* the lineage reads alias
+// resolutions and prior evidence and can open an operator conflict, which is
+// application logic rather than a write, and holding the fact's transaction open
+// across it would put the ledger's hot path behind the identity module.
+func (s *Service) bindFactIdentity(ctx context.Context, outcome AttemptOutcome) error {
+	if s.lineages == nil || outcome.Fact == nil || len(outcome.Fact.PurchaseChainDigest) == 0 {
+		return nil
+	}
+	fact := *outcome.Fact
+	root, err := s.repository.ChainRootDigest(ctx, fact)
+	if err != nil {
+		return err
+	}
+	if len(root) == 0 {
+		root = fact.PurchaseChainDigest
+	}
+	acquiredAt := fact.OccurredAt
+	if fact.PeriodStartAt != nil && fact.PeriodStartAt.Before(acquiredAt) {
+		acquiredAt = *fact.PeriodStartAt
+	}
+	return s.lineages.BindFact(ctx, FactBinding{
+		ProjectID:        fact.ProjectID,
+		EnvironmentID:    fact.EnvironmentID,
+		Provider:         fact.Provider,
+		LineageKeyDigest: root,
+		FactChainDigest:  fact.PurchaseChainDigest,
+		RawInputID:       fact.SourceRawInputID,
+		ReferenceDigests: outcome.ReferenceDigests,
+		Correlators:      outcome.Correlators,
+		AcquiredAt:       acquiredAt,
+	})
 }
 
 // runValidation performs one attempt and assembles everything it produced. It
@@ -250,8 +299,51 @@ func (s *Service) validateApple(ctx context.Context, job ValidationJob, input Ra
 		SourceRawInputID:              input.ID,
 		ValidationAttemptID:           attemptID,
 	}
+	if !applyAppleTransaction(&fact, transaction, renewal) {
+		// 9A correction (B7): worker wall-clock must never stand in for
+		// occurred_at — it participates in FactDigest, so a wall-clock value
+		// makes every replay of the same input a "new" fact and defeats replay
+		// idempotency. An Apple payload with neither purchaseDate nor
+		// signedDate quarantines instead.
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "no_provider_timestamp"), QuarantineMissingProviderTimestamp, "error")
+	}
+
+	outcome := s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, storeEnvironment)
+	// The correlator is read from the App Store Server API's own verified
+	// transaction rather than from the notification body, because that response
+	// is the authority and the notification is only the trigger. It is hashed
+	// here and the raw value goes no further.
+	// Every reference an observation for this transaction could have been
+	// submitted under. A client observation cannot classify the Store
+	// Environment, so it lands under `unclassified`; a restore names the
+	// original transaction rather than the renewal.
+	outcome.ReferenceDigests = appendDigest(outcome.ReferenceDigests, input.TransactionReferenceDigest)
+	for _, reference := range []string{transaction.TransactionID, transaction.OriginalTransactionID} {
+		if reference == "" {
+			continue
+		}
+		for _, environment := range []string{storeEnvironment, StoreUnclassified} {
+			outcome.ReferenceDigests = appendDigest(outcome.ReferenceDigests,
+				AppleTransactionKey(environment, reference))
+		}
+	}
+	if token := strings.TrimSpace(transaction.AppAccountToken); token != "" {
+		outcome.Correlators = append(outcome.Correlators, AssociationCorrelator{
+			EvidenceType: EvidenceAppAccountToken,
+			AliasType:    AliasAppleAppAccountToken,
+			Digest:       AliasDigest(AliasAppleAppAccountToken, token),
+		})
+	}
+	return outcome
+}
+
+// applyAppleTransaction populates the transaction-derived fields of an Apple
+// fact. It reports false when the payload carries no provider timestamp at
+// all, in which case no fact may be recorded (9A correction B7).
+func applyAppleTransaction(fact *TransactionFact, transaction appstorejws.TransactionPayload, renewal *appstorejws.RenewalPayload) bool {
 	if transaction.OriginalTransactionID != "" {
-		fact.PurchaseChainDigest = AppleTransactionKey(storeEnvironment, transaction.OriginalTransactionID)
+		fact.PurchaseChainDigest = AppleTransactionKey(fact.StoreEnvironment, transaction.OriginalTransactionID)
 	}
 	if when, ok := appstorejws.Millis(transaction.PurchaseDate); ok {
 		fact.OccurredAt = when
@@ -261,24 +353,41 @@ func (s *Service) validateApple(ctx context.Context, job ValidationJob, input Ra
 		fact.PeriodEndAt = &when
 	}
 	if when, ok := appstorejws.Millis(transaction.RevocationDate); ok {
+		// 9A correction: both of Apple's revocation reasons are refunds — 0 is
+		// "refunded for another reason", 1 is "refunded due to an app issue" —
+		// so a revocation always carries refunded_at, not only reason 1.
 		fact.RevokedAt = &when
-		if transaction.RevocationReason != nil && *transaction.RevocationReason == 1 {
-			fact.RefundedAt = &when
-		}
+		fact.RefundedAt = &when
+	}
+	// Fact-shape v2: persist what was already parsed but dropped (quality B10).
+	fact.RevocationReason = transaction.RevocationReason
+	fact.InAppOwnershipType = transaction.InAppOwnershipType
+	fact.SubscriptionGroupIdentifier = transaction.SubscriptionGroupIdentifier
+	if transaction.IsUpgraded {
+		upgraded := true
+		fact.IsUpgraded = &upgraded
 	}
 	if renewal != nil {
 		expected := renewal.AutoRenewStatus == 1
 		fact.RenewalExpected = &expected
+		fact.AutoRenewProductIdentifier = renewal.AutoRenewProductID
+		if renewal.IsInBillingRetry {
+			retrying := true
+			fact.BillingRetryActive = &retrying
+		}
+		if when, ok := appstorejws.Millis(renewal.GracePeriodExpiresAt); ok {
+			fact.GracePeriodExpiresAt = &when
+		}
+	}
+	if when, ok := appstorejws.Millis(transaction.SignedDate); ok {
+		fact.ProviderEventOccurredAt = &when
 	}
 	if fact.OccurredAt.IsZero() {
 		if when, ok := appstorejws.Millis(transaction.SignedDate); ok {
 			fact.OccurredAt = when
-		} else {
-			fact.OccurredAt = started
 		}
 	}
-
-	return s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, storeEnvironment)
+	return !fact.OccurredAt.IsZero()
 }
 
 // appleTransactionType maps Apple's product type onto the two types Phase 9A
@@ -483,11 +592,13 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 			Permanent(CategoryInvalid, "raw_body_unavailable"), QuarantineMalformedReference, "warning")
 	}
 
-	packageName, purchaseToken, productID, orderID, subscription, ok := decodeGoogleWork(body)
+	work, ok := decodeGoogleWork(body)
 	if !ok {
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryInvalid, "malformed_google_input"), QuarantineMalformedReference, "error")
 	}
+	packageName, purchaseToken, productID, orderID := work.packageName, work.purchaseToken, work.productID, work.orderID
+	subscription := work.subscription
 	if packageName == "" {
 		// Only an RTDN carries a packageName; an observation does not.
 		packageName = scopedPackageName
@@ -541,9 +652,24 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		FactVersion:         1,
 		SourceRawInputID:    input.ID,
 		ValidationAttemptID: attemptID,
-		OccurredAt:          started,
+		// OccurredAt is deliberately not defaulted: only a provider-stated
+		// time may date a fact (9A correction B7), and a branch that cannot
+		// supply one quarantines below.
+	}
+	// Fact-shape v2: recover the provider event time so ordering inside a
+	// Google lineage does not tie on the constant startTime. The RTDN's
+	// eventTimeMillis is the provider's own statement; the raw input's
+	// provider_occurred_at (Pub/Sub publish time) is the fallback.
+	if !work.eventTime.IsZero() {
+		when := work.eventTime
+		fact.ProviderEventOccurredAt = &when
+	} else if input.ProviderOccurredAt != nil {
+		when := input.ProviderOccurredAt.UTC()
+		fact.ProviderEventOccurredAt = &when
 	}
 
+	linkedPurchaseToken := ""
+	obfuscatedAccountID := ""
 	if subscription {
 		purchase, err := s.google.GetSubscription(ctx, account, packageName, purchaseToken)
 		s.providerRequests.Add(ctx, 1, metric.WithAttributes(
@@ -557,35 +683,60 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 				Permanent(CategoryInvalid, "subscription_has_no_line_items"), QuarantineMalformedReference, "error")
 		}
-		item := purchase.LineItems[0]
-		fact.TransactionType = TypeAutoRenewableSubscription
-		fact.ProviderProductIdentifier = item.ProductID
-		fact.ProviderTransactionID = purchase.LatestOrderID
-		fact.FactKind = googleSubscriptionKind(purchase.SubscriptionState)
-		fact.IsTestTransaction = purchase.TestPurchase != nil
-		if item.OfferDetails != nil {
-			fact.ProviderBasePlanIdentifier = item.OfferDetails.BasePlanID
-			fact.ProviderOfferIdentifier = item.OfferDetails.OfferID
+		applyGoogleSubscription(&fact, purchase)
+		if purchase.ExternalAccountIdentifiers != nil {
+			obfuscatedAccountID = purchase.ExternalAccountIdentifiers.ObfuscatedExternalAccountID
 		}
-		if item.AutoRenewingPlan != nil {
-			expected := item.AutoRenewingPlan.AutoRenewEnabled
-			fact.RenewalExpected = &expected
+		if !applyGoogleVoid(&fact, work, input.ProviderOccurredAt) {
+			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+				Permanent(CategoryInvalid, "void_event_time_unavailable"), QuarantineMissingProviderTimestamp, "error")
 		}
-		if when, ok := parseRFC3339(purchase.StartTime); ok {
-			fact.PeriodStartAt = &when
-			fact.OccurredAt = when
-		}
-		if when, ok := parseRFC3339(item.ExpiryTime); ok {
-			fact.PeriodEndAt = &when
-		}
-		if purchase.LinkedPurchaseToken != "" {
-			// The link is recorded, not acted on: acting on it would mean
-			// revoking access, and no access state exists to revoke.
-			fact.SupersedesChainDigest = TokenDigest(purchase.LinkedPurchaseToken)
-			fact.FactKind = KindPurchaseSuperseded
-		}
+		linkedPurchaseToken = purchase.LinkedPurchaseToken
 	} else {
+		// A voided-purchase notification carries no SKU; recover it from the
+		// order so the refund fact still resolves to a Product.
+		if productID == "" && orderID != "" {
+			order, orderErr := s.google.GetOrder(ctx, account, packageName, orderID)
+			s.providerRequests.Add(ctx, 1, metric.WithAttributes(
+				attribute.String("provider", ProviderGooglePlay),
+				attribute.String("endpoint", "order_get"),
+				attribute.Bool("failed", orderErr != nil)))
+			if orderErr != nil {
+				// Review finding I-4: a *permanently* failing orders.get on a
+				// void used to burn attempts and record nothing, so the refund
+				// never became a fact and the purchase kept granting forever.
+				// A transient failure still retries — the order may come back —
+				// but once the failure is permanent (or retries are spent) the
+				// void is recorded with an unresolved Product instead of being
+				// dropped.
+				classification := Classify(orderErr, s.now())
+				if !work.voided || (classification.Retryable &&
+					!classification.ExhaustedFor(attemptNumber, job.MaxAttempts)) {
+					return s.classifiedFailure(job, input, attemptID, attemptNumber, started, orderErr)
+				}
+				return s.voidWithoutProduct(job, input, fact, work, attemptID, attemptNumber, started,
+					orderID, "void_order_lookup_permanently_failed")
+			}
+			if len(order.LineItems) == 1 {
+				productID = order.LineItems[0].ProductID
+			} else if work.voided {
+				// Review finding I-4: a multi-line-item order cannot be
+				// attributed to one SKU from the order alone. Quarantining the
+				// whole input left the refund unrecorded and the purchase
+				// entitled, so the void is recorded product-unresolved instead
+				// and gets its own quarantine reason — an operator looking at
+				// `product_identifier_unavailable` had no way to tell this case
+				// (revenue already refunded, access still to be corrected) from
+				// a plainly malformed reference.
+				return s.voidWithoutProduct(job, input, fact, work, attemptID, attemptNumber, started,
+					orderID, "void_order_line_items_ambiguous")
+			}
+		}
 		if productID == "" {
+			if work.voided {
+				return s.voidWithoutProduct(job, input, fact, work, attemptID, attemptNumber, started,
+					orderID, "void_product_identifier_unavailable")
+			}
 			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 				Permanent(CategoryInvalid, "product_identifier_unavailable"), QuarantineMalformedReference, "error")
 		}
@@ -597,23 +748,23 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		if err != nil {
 			return s.classifiedFailure(job, input, attemptID, attemptNumber, started, err)
 		}
-		if purchase.PurchaseState != 0 {
+		if purchase.PurchaseState != 0 && !work.voided {
 			// Only PURCHASED is a completed purchase. PENDING and CANCELLED are
 			// recorded as inputs but produce no fact, because a fact asserts that
 			// the store confirmed a completed transaction.
 			return s.recordedNoFactAttempt(job, input, attemptID, attemptNumber, started, "google_purchase_not_completed")
 		}
-		fact.TransactionType = TypeNonConsumable
-		fact.FactKind = KindOneTimePurchase
-		fact.ProviderProductIdentifier = purchase.ProductID
-		fact.ProviderTransactionID = purchase.OrderID
-		if purchase.PurchaseType != nil && *purchase.PurchaseType == 0 {
-			fact.IsTestTransaction = true
-		}
-		if millis, err := strconv.ParseInt(purchase.PurchaseTimeMillis, 10, 64); err == nil && millis > 0 {
-			when := time.UnixMilli(millis).UTC()
-			fact.OccurredAt = when
-			fact.PeriodStartAt = &when
+		// 9A correction (B2): a voided one-time purchase re-queries as
+		// purchaseState != 0, and recording no fact left refunded
+		// non-consumables entitled forever. The voided-purchase notification is
+		// the provider's refund statement — its 30-day lookback is why the void
+		// must become a fact on receipt — so it produces a refund fact even
+		// though the re-queried state alone says only "not purchased".
+		applyGoogleOneTime(&fact, purchase)
+		obfuscatedAccountID = purchase.ObfuscatedExternalAccountID
+		if !applyGoogleVoid(&fact, work, input.ProviderOccurredAt) {
+			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+				Permanent(CategoryInvalid, "void_event_time_unavailable"), QuarantineMissingProviderTimestamp, "error")
 		}
 	}
 
@@ -627,28 +778,337 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryInvalid, "store_environment_mismatch"), QuarantineStoreEnvironmentMismatch, "error")
 	}
-	return s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, fact.StoreEnvironment)
+	if fact.OccurredAt.IsZero() {
+		// 9A correction (B7): occurred_at participates in FactDigest, so worker
+		// wall-clock would make every replay a different fact. No provider
+		// timestamp means no fact.
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "no_provider_timestamp"), QuarantineMissingProviderTimestamp, "error")
+	}
+	outcome := s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, fact.StoreEnvironment)
+	// Same treatment as Apple's appAccountToken: read from the authoritative
+	// purchase resource, hashed here, raw value goes no further.
+	outcome.ReferenceDigests = appendDigest(outcome.ReferenceDigests, input.TransactionReferenceDigest)
+	outcome.ReferenceDigests = appendDigest(outcome.ReferenceDigests, fact.PurchaseChainDigest)
+	if account := strings.TrimSpace(obfuscatedAccountID); account != "" {
+		outcome.Correlators = append(outcome.Correlators, AssociationCorrelator{
+			EvidenceType: EvidenceObfuscatedAccount,
+			AliasType:    AliasGoogleObfuscatedID,
+			Digest:       AliasDigest(AliasGoogleObfuscatedID, account),
+		})
+	}
+	if linkedPurchaseToken != "" && outcome.Fact != nil {
+		// 9A correction (B1): the linked purchase token is a persistent attribute
+		// of the successor subscription, present on every re-query for its whole
+		// life. The state-derived fact kind is kept — overwriting it hid every
+		// later expiration, cancellation, and grace fact behind
+		// purchase_superseded — and the supersession edge is recorded as its own
+		// fact built only from lineage-constant fields, so its digest is stable
+		// and the unique fact constraint absorbs every observation after the
+		// first. The link is thereby "emitted once when newly observed" as a
+		// structural property rather than a lookup.
+		supersession, err := s.supersessionFactFrom(*outcome.Fact)
+		if err != nil {
+			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+				Permanent(CategoryInvalid, "supersession_fact_unavailable"),
+				QuarantineMalformedReference, "error")
+		}
+		outcome.Supersession = supersession
+	}
+	return outcome
+}
+
+// applyGoogleSubscription populates the subscription-specific fields of a
+// Google fact from the authoritative subscriptionsv2 resource. It is a pure
+// assembly step, split out so the fact-kind and supersession behaviour is
+// testable without provider plumbing.
+func applyGoogleSubscription(fact *TransactionFact, purchase googleplay.SubscriptionPurchase) {
+	item := purchase.LineItems[0]
+	fact.TransactionType = TypeAutoRenewableSubscription
+	fact.ProviderProductIdentifier = item.ProductID
+	fact.ProviderTransactionID = purchase.LatestOrderID
+	fact.FactKind = googleSubscriptionKind(purchase.SubscriptionState)
+	fact.IsTestTransaction = purchase.TestPurchase != nil
+	if purchase.SubscriptionState == "SUBSCRIPTION_STATE_ON_HOLD" {
+		retrying := true
+		fact.BillingRetryActive = &retrying
+	}
+	if item.OfferDetails != nil {
+		fact.ProviderBasePlanIdentifier = item.OfferDetails.BasePlanID
+		fact.ProviderOfferIdentifier = item.OfferDetails.OfferID
+	}
+	if item.AutoRenewingPlan != nil {
+		expected := item.AutoRenewingPlan.AutoRenewEnabled
+		fact.RenewalExpected = &expected
+	}
+	if when, ok := parseRFC3339(purchase.StartTime); ok {
+		fact.PeriodStartAt = &when
+		fact.OccurredAt = when
+	}
+	if when, ok := parseRFC3339(item.ExpiryTime); ok {
+		fact.PeriodEndAt = &when
+		if purchase.SubscriptionState == "SUBSCRIPTION_STATE_IN_GRACE_PERIOD" {
+			// Play does not publish a separate grace-end field: while a
+			// subscription is in grace it keeps `expiryTime` extended to the
+			// end of the grace window, so that value *is* the provider-stated
+			// grace end. Without it the grace fact carried no bound, the
+			// projection warned on every pass, reported the lineage plainly
+			// active, and a Project's grants_in_grace opt-out had nothing to
+			// act on.
+			graceEnd := when
+			fact.GracePeriodExpiresAt = &graceEnd
+		}
+	}
+	if purchase.LinkedPurchaseToken != "" {
+		// The link is recorded, not acted on: acting on it would mean revoking
+		// access, and no access state exists to revoke. The state-derived
+		// fact_kind above is deliberately not overwritten (9A defect B1).
+		fact.SupersedesChainDigest = TokenDigest(purchase.LinkedPurchaseToken)
+	}
+}
+
+// applyGoogleOneTime populates the one-time-purchase fields of a Google fact
+// from the authoritative purchases.products resource.
+func applyGoogleOneTime(fact *TransactionFact, purchase googleplay.ProductPurchase) {
+	fact.TransactionType = TypeNonConsumable
+	fact.FactKind = KindOneTimePurchase
+	fact.ProviderProductIdentifier = purchase.ProductID
+	fact.ProviderTransactionID = purchase.OrderID
+	if purchase.PurchaseType != nil && *purchase.PurchaseType == 0 {
+		fact.IsTestTransaction = true
+	}
+	if millis, err := strconv.ParseInt(purchase.PurchaseTimeMillis, 10, 64); err == nil && millis > 0 {
+		when := time.UnixMilli(millis).UTC()
+		fact.OccurredAt = when
+		fact.PeriodStartAt = &when
+	}
+}
+
+// applyGoogleVoid rewrites a fact as the refund the voided-purchase
+// notification asserts (9A correction B2). A Google void both refunds and
+// revokes ownership, so both effective timestamps are set from the provider's
+// own event time. It reports false when the input is voided but no provider
+// timestamp exists to date the refund — a fact must never be dated with worker
+// wall-clock.
+func applyGoogleVoid(fact *TransactionFact, work googleWork, providerOccurredAt *time.Time) bool {
+	if !work.voided {
+		return true
+	}
+	when := work.eventTime
+	if when.IsZero() && providerOccurredAt != nil {
+		when = providerOccurredAt.UTC()
+	}
+	if when.IsZero() {
+		return false
+	}
+	fact.FactKind = KindRefund
+	fact.OccurredAt = when
+	fact.RefundedAt = &when
+	fact.RevokedAt = &when
+	switch work.refundType {
+	case 1:
+		fact.RefundType = RefundTypeFull
+	case 2:
+		fact.RefundType = RefundTypeQuantityPartial
+	}
+	return true
+}
+
+// ProviderProductVoidUnresolved stands in for the SKU of a voided Google
+// purchase Mosaic could not attribute to one product. Play product identifiers
+// cannot contain a colon, so the sentinel can never collide with a real one, and
+// it exists only because `provider_product_identifier` is NOT NULL and non-blank
+// on every fact.
+const ProviderProductVoidUnresolved = "unresolved:voided_purchase"
+
+// voidWithoutProduct records a Google void whose Product could not be resolved
+// (review finding I-4).
+//
+// Two provider shapes reach here: an order with several line items, which
+// cannot be attributed to one SKU, and an orders.get that fails permanently.
+// Both previously produced no fact at all — the first quarantined the input as
+// a malformed reference, the second exhausted its attempts — so a refunded
+// purchase went on granting its Entitlement indefinitely. Money left the
+// merchant and access did not.
+//
+// The refund is therefore recorded as a fact with `resolution_state =
+// unresolved`, which drives the lineage to `unknown` rather than leaving it
+// `owned`: Mosaic states that this purchase is no longer good without claiming
+// to know which Product it was. The input is quarantined alongside it under its
+// own reason code, so the operator queue distinguishes "refund recorded,
+// product needs attribution" from a plainly malformed reference.
+func (s *Service) voidWithoutProduct(job ValidationJob, input RawInput, fact TransactionFact, work googleWork,
+	attemptID string, attemptNumber int, started time.Time, orderID, diagnostic string) AttemptOutcome {
+
+	fact.TransactionType = TypeNonConsumable
+	fact.ProviderProductIdentifier = ProviderProductVoidUnresolved
+	fact.ResolutionState = StateUnresolved
+	fact.MosaicProductID = ""
+	fact.ProviderProductMappingID = ""
+	fact.ResolvedMappingVersion = nil
+	if orderID != "" {
+		fact.ProviderTransactionID = orderID
+	} else {
+		fact.ProviderTransactionID = "token:" + hexOf(fact.PurchaseChainDigest)
+	}
+	if !applyGoogleVoid(&fact, work, input.ProviderOccurredAt) || fact.OccurredAt.IsZero() {
+		// 9A correction B7 still governs: no provider timestamp, no fact. The
+		// void is reported under the timestamp reason rather than this one,
+		// because the operator's next action is different.
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "void_event_time_unavailable"),
+			QuarantineMissingProviderTimestamp, "error")
+	}
+	if !storeEnvironmentMatchesMode(fact.StoreEnvironment, input.EnvironmentMode) {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "store_environment_mismatch"),
+			QuarantineStoreEnvironmentMismatch, "error")
+	}
+
+	factID, err := s.newID("btf")
+	if err != nil {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "fact_identifier_unavailable"),
+			QuarantineMalformedReference, "error")
+	}
+	fact.ID = factID
+	fact.RecordedAt = s.now()
+	fact.FactDigest = FactDigest(fact)
+
+	completed := s.now()
+	outcome := AttemptOutcome{
+		Attempt: ValidationAttempt{
+			ID: attemptID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID,
+			RawInputID: input.ID, CredentialID: input.CredentialID,
+			AttemptNumber: attemptNumber, ValidatorVersion: ValidatorVersion,
+			StartedAt: started, CompletedAt: completed,
+			// Quarantined rather than validated: a fact was produced, but the
+			// input still needs operator attention, which is the same shape
+			// resolveAndBuild uses for an unresolvable Product.
+			Outcome: OutcomeQuarantined, Retryable: false,
+			FailureCategory:  CategoryResolution,
+			DiagnosticCode:   diagnostic,
+			StoreEnvironment: fact.StoreEnvironment,
+			LatencyMs:        int(completed.Sub(started).Milliseconds()),
+			CorrelationID:    input.CorrelationID,
+		},
+		Fact: &fact,
+		Quarantine: &QuarantineWrite{
+			RawInputID: input.ID, ApplicationID: fact.ApplicationID, Provider: fact.Provider,
+			ReasonCode: QuarantineVoidProductUnresolved, Severity: "error",
+			Scopes:         []string{"provider_product_mapping"},
+			DiagnosticCode: diagnostic, OccurredAt: completed,
+		},
+		// The work is done: re-running it would re-query the same order and
+		// reach the same answer, and the fact is already recorded.
+		JobStatus: "completed",
+	}
+	outcome.Ledger = s.ledgerFor(input, outcome)
+	return outcome
+}
+
+// supersessionFactFrom derives the once-per-lineage purchase_superseded fact
+// from a validated successor fact. Every field that changes across the
+// successor's life (order id, period end, revocation, renewal intent) is
+// cleared or replaced with a lineage-constant value, so re-observing the same
+// link always recomputes the same FactDigest.
+func (s *Service) supersessionFactFrom(main TransactionFact) (*TransactionFact, error) {
+	fact := main
+	id, err := s.newID("btf")
+	if err != nil {
+		// Previously this returned nil and the link was silently never emitted.
+		// A supersession edge that is dropped without a trace is a lineage that
+		// never learns its own chain root, so the failure is reported.
+		return nil, fmt.Errorf("generate supersession fact identifier: %w", err)
+	}
+	fact.ID = id
+	fact.FactKind = KindPurchaseSuperseded
+	fact.ProviderTransactionID = "token:" + hexOf(fact.PurchaseChainDigest)
+	fact.PeriodEndAt = nil
+	fact.RevokedAt = nil
+	fact.RefundedAt = nil
+	fact.RenewalExpected = nil
+	fact.GracePeriodExpiresAt = nil
+	fact.BillingRetryActive = nil
+	fact.AutoRenewProductIdentifier = ""
+	fact.IsUpgraded = nil
+	fact.RevocationReason = nil
+	fact.RefundType = ""
+	fact.ProviderEventOccurredAt = nil
+
+	// The edge is a statement about two purchase tokens and nothing else, so
+	// every field that can move underneath it is cleared before the digest is
+	// taken. Product identity in particular is not lineage-constant: an offer
+	// expires, a mapping is edited, an unresolved fact is later resolved — and
+	// each of those recomputed a different digest for the same link, minting a
+	// duplicate purchase_superseded fact every time.
+	fact.ProviderProductIdentifier = "superseded"
+	fact.ProviderBasePlanIdentifier = ""
+	fact.ProviderOfferIdentifier = ""
+	fact.ResolutionState = StateUnresolved
+	fact.MosaicProductID = ""
+	fact.ProviderProductMappingID = ""
+	fact.ResolvedMappingVersion = nil
+	// A void rewrites OccurredAt to the refund instant, so the subscription's
+	// own start is used where it exists: that value is constant for the chain.
+	if fact.PeriodStartAt != nil {
+		fact.OccurredAt = fact.PeriodStartAt.UTC()
+	}
+	fact.RecordedAt = s.now()
+	fact.FactDigest = FactDigest(fact)
+	return &fact, nil
+}
+
+// googleWork is the decoded intent of one Google raw body: which purchase to
+// re-query, and — for a voided purchase notification — the void semantics the
+// re-queried state alone cannot express.
+type googleWork struct {
+	packageName   string
+	purchaseToken string
+	productID     string
+	orderID       string
+	subscription  bool
+	// voided marks a voidedPurchaseNotification. Google's own state on
+	// re-query says only "not purchased"; the notification is the evidence
+	// that the reason is a refund, and its 30-day lookback means the void
+	// must be persisted on receipt.
+	voided bool
+	// refundType is Google's voided refundType: 1 full, 2 quantity-based
+	// partial. Zero when absent.
+	refundType int
+	// eventTime is the RTDN eventTimeMillis, the provider-stated instant the
+	// event occurred. Zero when the body carried none.
+	eventTime time.Time
 }
 
 // decodeGoogleWork reads whichever shape the raw body holds: a decoded RTDN or
 // a Mosaic-built observation record.
-func decodeGoogleWork(body []byte) (packageName, purchaseToken, productID, orderID string, subscription bool, ok bool) {
+func decodeGoogleWork(body []byte) (googleWork, bool) {
 	var notification googleplay.DeveloperNotification
 	if err := json.Unmarshal(body, &notification); err == nil && notification.PackageName != "" {
-		packageName = notification.PackageName
+		work := googleWork{packageName: notification.PackageName}
+		if millis, err := strconv.ParseInt(notification.EventTimeMillis, 10, 64); err == nil && millis > 0 {
+			work.eventTime = time.UnixMilli(millis).UTC()
+		}
 		switch {
 		case notification.SubscriptionNotification != nil:
-			return packageName, notification.SubscriptionNotification.PurchaseToken,
-				notification.SubscriptionNotification.SubscriptionID, "", true, true
+			work.purchaseToken = notification.SubscriptionNotification.PurchaseToken
+			work.productID = notification.SubscriptionNotification.SubscriptionID
+			work.subscription = true
+			return work, true
 		case notification.OneTimeProductNotification != nil:
-			return packageName, notification.OneTimeProductNotification.PurchaseToken,
-				notification.OneTimeProductNotification.SKU, "", false, true
+			work.purchaseToken = notification.OneTimeProductNotification.PurchaseToken
+			work.productID = notification.OneTimeProductNotification.SKU
+			return work, true
 		case notification.VoidedPurchaseNotification != nil:
-			return packageName, notification.VoidedPurchaseNotification.PurchaseToken, "",
-				notification.VoidedPurchaseNotification.OrderID,
-				notification.VoidedPurchaseNotification.ProductType == 1, true
+			work.purchaseToken = notification.VoidedPurchaseNotification.PurchaseToken
+			work.orderID = notification.VoidedPurchaseNotification.OrderID
+			work.subscription = notification.VoidedPurchaseNotification.ProductType == 1
+			work.voided = true
+			work.refundType = notification.VoidedPurchaseNotification.RefundType
+			return work, true
 		case notification.TestNotification != nil:
-			return packageName, "", "", "", false, true
+			return work, true
 		}
 	}
 	var observation struct {
@@ -658,9 +1118,13 @@ func decodeGoogleWork(body []byte) (packageName, purchaseToken, productID, order
 		PurchaseToken  string `json:"purchaseToken"`
 	}
 	if err := json.Unmarshal(body, &observation); err != nil {
-		return "", "", "", "", false, false
+		return googleWork{}, false
 	}
-	return "", observation.PurchaseToken, "", observation.OrderReference, true, true
+	return googleWork{
+		purchaseToken: observation.PurchaseToken,
+		orderID:       observation.OrderReference,
+		subscription:  true,
+	}, true
 }
 
 func googleSubscriptionKind(state string) string {
@@ -1066,3 +1530,17 @@ func zero(value []byte) {
 }
 
 var _ = errors.Is
+
+// appendDigest adds one digest to a set, ignoring empties and duplicates. The
+// set is small and unordered, so a linear scan is the whole implementation.
+func appendDigest(digests [][]byte, digest []byte) [][]byte {
+	if len(digest) == 0 {
+		return digests
+	}
+	for _, existing := range digests {
+		if string(existing) == string(digest) {
+			return digests
+		}
+	}
+	return append(digests, digest)
+}

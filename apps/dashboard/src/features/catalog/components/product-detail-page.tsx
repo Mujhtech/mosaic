@@ -15,14 +15,11 @@ import { NativeProviderMappingSheet } from "@/features/catalog/components/native
 import {
   archiveProviderMappingMutationOptions,
   createProviderMappingDraftMutationOptions,
-  grantEntitlementMutationOptions,
   productLifecycleMutationOptions,
-  removeEntitlementGrantMutationOptions,
   replaceProviderMappingMutationOptions,
   setProductReplacementMutationOptions,
 } from "@/features/catalog/mutations/catalog-mutations"
 import {
-  entitlementsQueryOptions,
   productEntitlementsQueryOptions,
   productQueryOptions,
   productReadinessQueryOptions,
@@ -53,7 +50,7 @@ import {
   projectQueryOptions,
 } from "@/features/projects/queries/projects-query"
 import { useOrganizationAccess } from "@/hooks/use-organization-access"
-import { describeReturnDestination } from "@/lib/routing/workspace-hrefs"
+import { describeReturnDestination, grantVersionsHref } from "@/lib/routing/workspace-hrefs"
 
 interface ProductDetailPageProps {
   onReadinessScopeChange: (scope: { applicationId?: string; environmentId?: string }) => void
@@ -104,7 +101,6 @@ export function ProductDetailPage({
     })),
   })
   const grants = useQuery({ ...productEntitlementsQueryOptions(productId), enabled: scopeReady })
-  const entitlements = useQuery({ ...entitlementsQueryOptions(projectId), enabled: scopeReady })
   const replacements = useQuery({ ...productsQueryOptions(projectId), enabled: scopeReady })
   const applications = useQuery({ ...applicationsQueryOptions(projectId), enabled: scopeReady })
   const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
@@ -142,10 +138,6 @@ export function ProductDetailPage({
   const archive = useMutation(productLifecycleMutationOptions(queryClient, "archive"))
   const restore = useMutation(productLifecycleMutationOptions(queryClient, "restore"))
   const setReplacement = useMutation(setProductReplacementMutationOptions(productId, queryClient))
-  const grant = useMutation(grantEntitlementMutationOptions(productId, projectId, queryClient))
-  const removeGrant = useMutation(
-    removeEntitlementGrantMutationOptions(productId, projectId, queryClient),
-  )
   const archiveMapping = useMutation(
     archiveProviderMappingMutationOptions(productId, projectId, queryClient),
   )
@@ -425,8 +417,15 @@ export function ProductDetailPage({
           </div>
         </WorkflowPanel>
 
+        {/* Retired in Phase 9B.
+            A grant used to be a single mutable row here, so removing an
+            Entitlement changed what every past purchase of this Product had
+            meant — one DELETE away from mass revocation, with no record that it
+            had ever granted anything. What a Product grants is now a versioned,
+            immutable interval selected by each purchase's own effective time, so
+            the change surface moved to Grant versions and this panel reads. */}
         <WorkflowPanel
-          description="These definitions describe access a Product grants. They are not customer entitlement state."
+          description="What this Product grants, as it stands today. These definitions describe access a Product grants; they are not any customer's entitlement state."
           title="Access grants"
         >
           <ul className="mb-4 divide-y">
@@ -441,37 +440,33 @@ export function ProductDetailPage({
                     · {entitlement.key}
                   </span>
                 </span>
-                {access.canManage ? (
-                  <Button
-                    disabled={removeGrant.isPending}
-                    onClick={() => removeGrant.mutate(entitlement.id)}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    Remove grant
-                  </Button>
-                ) : null}
+                <a
+                  className="text-primary text-xs font-semibold"
+                  href={
+                    grantVersionsHref(
+                      { organizationId, projectId },
+                      { entitlementId: entitlement.id, productId },
+                    ) ?? "#"
+                  }
+                >
+                  Version history
+                </a>
               </li>
             ))}
           </ul>
+          <p className="text-muted-foreground mb-3 text-sm leading-6">
+            Changing what a Product grants publishes a new immutable grant version rather than
+            editing this list. The projection engine selects a version by each purchase&rsquo;s own
+            effective time, so a change made here would otherwise rewrite what someone was entitled
+            to at an instant that has already passed.
+          </p>
           {access.canManage ? (
-            <div className="flex flex-wrap gap-2">
-              {entitlements.data?.items
-                .filter(
-                  (entitlement) =>
-                    !grants.data?.items.some((granted) => granted.id === entitlement.id),
-                )
-                .map((entitlement) => (
-                  <Button
-                    key={entitlement.id}
-                    onClick={() => grant.mutate(entitlement.id)}
-                    size="sm"
-                    variant="outline"
-                  >
-                    Grant {entitlement.name}
-                  </Button>
-                ))}
-            </div>
+            <a
+              className={buttonVariants({ variant: "outline" })}
+              href={grantVersionsHref({ organizationId, projectId }, { productId }) ?? "#"}
+            >
+              Open grant versions
+            </a>
           ) : (
             <a
               className="text-primary text-sm font-semibold"
@@ -480,11 +475,6 @@ export function ProductDetailPage({
               Ask an Owner or Admin to change Access grants
             </a>
           )}
-          {grant.error || removeGrant.error ? (
-            <p className="text-destructive mt-3 text-sm" role="alert">
-              {(grant.error ?? removeGrant.error)?.message}
-            </p>
-          ) : null}
         </WorkflowPanel>
 
         <ProviderMappingsPanel

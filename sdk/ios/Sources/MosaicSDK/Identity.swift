@@ -38,7 +38,16 @@ actor MosaicIdentityFilePersistence: MosaicIdentityPersistence {
   }
   func save(_ data: Data) throws {
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    // The installation identifier is meant to identify one app install. Carried
+    // to a second device by a backup restore it would report two installs as
+    // one, which silently corrupts experiment bucketing and analytics identity.
+    var resource = URLResourceValues()
+    resource.isExcludedFromBackup = true
+    var mutableDirectory = directory
+    try? mutableDirectory.setResourceValues(resource)
     try data.write(to: file, options: .atomic)
+    var mutableFile = file
+    try? mutableFile.setResourceValues(resource)
   }
 }
 

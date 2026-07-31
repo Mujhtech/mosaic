@@ -151,6 +151,59 @@ persistent storage, applies accepted/permanently-rejected/retryable results,
 advances through the canonical retry delay, and proves the retained event is
 later accepted.
 
+## Phase 9B authoritative entitlements
+
+The **Customer** tab shows Mosaic's authoritative answer to "what may this
+customer access, and why", which is separate from the provider-observed
+entitlements the paywall tabs use.
+
+Mosaic Billing requires an application backend: your server mints the Customer
+Access Token. The example stubs that with a `--dart-define` so the tab can be
+pointed at a real Environment without shipping a secret in source.
+
+```bash
+flutter run \
+  --dart-define=MOSAIC_HOSTED_BASE_URL=http://127.0.0.1:8080 \
+  --dart-define=MOSAIC_PUBLIC_SDK_KEY=public_example_key \
+  --dart-define=MOSAIC_CUSTOMER_USER_ID=user_example_0001 \
+  --dart-define=MOSAIC_CUSTOMER_ACCESS_TOKEN=mcat_...
+```
+
+Issue the token against a Billing Customer with the trusted-server API:
+
+```bash
+curl -X POST http://127.0.0.1:8080/v1/billing/server/customer-tokens \
+  -H 'Authorization: Bearer <secret_server_key>' \
+  -H 'Content-Type: application/json' \
+  -d '{"customerAccessTokenContractVersion":"1",
+       "recordType":"customerAccessTokenIssuanceRequest",
+       "payload":{"billingCustomerId":"<customer id>",
+                  "audience":"sdk_sync","scopes":["entitlements:read"],
+                  "correlationId":"example-0001"}}'
+```
+
+With no token defined the tab is the signed-out demonstration: every read
+reports **Unavailable**, never Inactive. That distinction is the point of the
+screen.
+
+What to exercise:
+
+- **Identify** then **Refresh** to accept a snapshot; the snapshot version,
+  `asOf`, cache state, validity window, and projection health are all shown.
+- **Refresh** again to see the conditional request answered as unchanged, with
+  the freshness window sliding rather than the version advancing.
+- **Restore and sync** to see the multi-stage result: the provider outcome and
+  Mosaic's outcome are reported separately, and `restored` appears only once an
+  accepted snapshot reflects it.
+- Stop the API and refresh: the cache keeps serving, the state stays Active, and
+  the activity log records `unavailable` rather than any claim about access.
+- **Sign out** to see the token handle and the cached snapshot disappear
+  together.
+
+The diagnostics panel shows the token *handle* and expiry. The token value is
+structurally unavailable to the UI: it is memory-only and never enters a
+diagnostic.
+
 ## Run optional RevenueCat commerce
 
 The example includes the optional `mosaic_revenuecat` package but does not

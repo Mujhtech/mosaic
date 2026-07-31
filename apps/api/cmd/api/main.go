@@ -16,6 +16,14 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billinggrant"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingoperator"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
@@ -25,7 +33,17 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingaccesspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingcustomerpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billinggrantpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingkeys"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingoperatorpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingrestorepostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingseam"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingwebhookpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
@@ -255,7 +273,15 @@ func run() (runErr error) {
 	analyticsEventLimiter := ratelimit.New(cfg.Analytics.KeyEventsPerMinute, cfg.Analytics.KeyEventBurst, cfg.Analytics.LimiterEntries)
 
 	var billingService *billing.Service
-	var billingIPLimiter, billingKeyLimiter *ratelimit.Limiter
+	var billingAccessService *billingaccess.Service
+	var billingDiagnosticsService *billingdiagnostics.Service
+	var billingGrantService *billinggrant.Service
+	var billingRestoreService *billingrestore.Service
+	var billingCustomerService *billingcustomer.Service
+	var billingOperatorService *billingoperator.Service
+	var billingProjectionService *billingprojection.Service
+	var billingWebhookService *billingwebhook.Service
+	var billingIPLimiter, billingKeyLimiter, entitlementSyncLimiter *ratelimit.Limiter
 	if cfg.Billing.Enabled {
 		billingCipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
 		if err != nil {
@@ -287,12 +313,58 @@ func run() (runErr error) {
 		if err != nil {
 			return fmt.Errorf("configure Google Play client: %w", err)
 		}
+		billingIPLimiter = ratelimit.New(cfg.Billing.ObservationsPerMinute, cfg.Billing.ObservationBurst, cfg.Billing.LimiterEntries)
+		billingKeyLimiter = ratelimit.New(cfg.Billing.ObservationsPerMinute, cfg.Billing.ObservationBurst, cfg.Billing.LimiterEntries)
+		billingAccessService = billingaccess.NewService(
+			billingaccesspostgres.New(databasePool),
+			billingaccesspostgres.NewKeyAuthenticator(billingpostgres.New(databasePool)),
+			billingaccess.WithIssuer(cfg.Telemetry.ServiceName),
+			billingaccess.WithFreshness(billingaccess.Freshness{
+				RefreshAfter: cfg.Billing.EntitlementRefreshAfter,
+				ValidFor:     cfg.Billing.EntitlementValidFor,
+				StaleGrace:   cfg.Billing.EntitlementStaleGrace(),
+			}))
+		entitlementSyncLimiter = ratelimit.New(cfg.Billing.EntitlementSyncPerMinute,
+			cfg.Billing.EntitlementSyncBurst, cfg.Billing.LimiterEntries)
+		// The API process runs no projection jobs; it constructs the projection
+		// service only to enqueue triggers (identity movements) and to run
+		// bounded operator replays. Both go through the same command the worker
+		// runs, so there is no second write path.
+		projectionRepository := billingprojectionpostgres.New(databasePool)
+		billingProjectionService = billingprojection.NewService(projectionRepository)
+		billingDiagnosticsService = billingdiagnostics.NewService(
+			billingdiagnosticspostgres.New(databasePool),
+			billingdiagnostics.WithReplay(billingProjectionService, projectionRepository))
+		billingKeys := billingkeys.New(billingpostgres.New(databasePool))
+		billingRestoreService = billingrestore.NewService(
+			billingrestorepostgres.New(databasePool), billingKeys.Restore())
+		billingCustomerService = billingcustomer.NewService(
+			billingcustomerpostgres.New(databasePool), billingKeys.Identity(), billingProjectionService)
+		// The Phase 9A→9B seam. The ingestion service is constructed last
+		// because it depends on it: an observation submitted with a Customer
+		// Access Token records the association that lets a first purchase reach
+		// an identified customer, and a committed fact hands its lineage to the
+		// identity service. Without this the 9B read model is unreachable from a
+		// purchase, which was defect D-1.
 		billingService = billing.NewService(billingpostgres.New(databasePool), billingCipher, verifier,
 			billing.WithProviders(appleClient, googleClient),
 			billing.WithRetention(cfg.Billing.RawRetention()),
-			billing.WithNotificationBaseURL(cfg.Billing.NotificationBaseURL))
-		billingIPLimiter = ratelimit.New(cfg.Billing.ObservationsPerMinute, cfg.Billing.ObservationBurst, cfg.Billing.LimiterEntries)
-		billingKeyLimiter = ratelimit.New(cfg.Billing.ObservationsPerMinute, cfg.Billing.ObservationBurst, cfg.Billing.LimiterEntries)
+			billing.WithNotificationBaseURL(cfg.Billing.NotificationBaseURL),
+			billing.WithSeam(billingseam.New(billingCustomerService, billingAccessService),
+				billingseam.New(billingCustomerService, billingAccessService)))
+		billingGrantService = billinggrant.NewService(billinggrantpostgres.New(databasePool))
+		// The operator surface reads through the same repositories the trusted
+		// APIs read through, so the dashboard and an application backend see one
+		// answer derived once. Its own repository holds only the read model the
+		// dashboard needs and no writer at all.
+		billingOperatorService = billingoperator.NewService(
+			billingoperatorpostgres.New(databasePool),
+			billingaccesspostgres.New(databasePool),
+			billingCustomerService)
+		billingWebhookService = billingwebhook.NewService(
+			billingwebhookpostgres.New(databasePool), billingCipher,
+			billingwebhook.NewPolicy(billingwebhook.WithSelfHostedAllowlist(
+				cfg.Billing.WebhookAllowPrivateDestinations)))
 	}
 
 	readiness := health.NewReadiness(
@@ -320,27 +392,35 @@ func run() (runErr error) {
 		TrustedProxyCIDRs: cfg.HTTP.TrustedProxyCIDRs,
 		EnableHSTS:        cfg.ProductionLike(),
 	}, logger, httpserver.Dependencies{
-		BrowserAuth:           browserAuthService,
-		BrowserAuthConfig:     browserauthhttp.Config{CookieSecure: cfg.BrowserAuth.CookieSecure, CookieDomain: cfg.BrowserAuth.CookieDomain, AllowedOrigins: cfg.HTTP.CORSAllowedOrigins, RateLimiter: authenticationLimiter},
-		CloudWorkspace:        workspaceService,
-		HostedPublishing:      publishingService,
-		PlacementDecision:     placementDecisionService,
-		PrincipalResolver:     authn.NewBrowserSessionResolver(browserAuthService),
-		DeliveryLimiter:       deliveryLimiter,
-		Analytics:             analyticsService,
-		AnalyticsIPLimiter:    analyticsIPLimiter,
-		AnalyticsKeyLimiter:   analyticsKeyLimiter,
-		AnalyticsEventLimiter: analyticsEventLimiter,
-		Experiment:            experimentService,
-		Billing:               billingService,
-		BillingIPLimiter:      billingIPLimiter,
-		BillingKeyLimiter:     billingKeyLimiter,
-		APILimiter:            apiLimiter,
-		DecisionLimiter:       decisionLimiter,
-		UploadLimiter:         uploadLimiter,
-		ExportLimiter:         exportLimiter,
-		Readiness:             readiness,
-		ReadinessChecker:      database.HealthChecker{Pinger: databasePool},
+		BrowserAuth:            browserAuthService,
+		BrowserAuthConfig:      browserauthhttp.Config{CookieSecure: cfg.BrowserAuth.CookieSecure, CookieDomain: cfg.BrowserAuth.CookieDomain, AllowedOrigins: cfg.HTTP.CORSAllowedOrigins, RateLimiter: authenticationLimiter},
+		CloudWorkspace:         workspaceService,
+		HostedPublishing:       publishingService,
+		PlacementDecision:      placementDecisionService,
+		PrincipalResolver:      authn.NewBrowserSessionResolver(browserAuthService),
+		DeliveryLimiter:        deliveryLimiter,
+		Analytics:              analyticsService,
+		AnalyticsIPLimiter:     analyticsIPLimiter,
+		AnalyticsKeyLimiter:    analyticsKeyLimiter,
+		AnalyticsEventLimiter:  analyticsEventLimiter,
+		Experiment:             experimentService,
+		Billing:                billingService,
+		BillingAccess:          billingAccessService,
+		BillingDiagnostics:     billingDiagnosticsService,
+		BillingGrant:           billingGrantService,
+		BillingRestore:         billingRestoreService,
+		BillingCustomer:        billingCustomerService,
+		BillingOperator:        billingOperatorService,
+		BillingWebhook:         billingWebhookService,
+		BillingIPLimiter:       billingIPLimiter,
+		BillingKeyLimiter:      billingKeyLimiter,
+		EntitlementSyncLimiter: entitlementSyncLimiter,
+		APILimiter:             apiLimiter,
+		DecisionLimiter:        decisionLimiter,
+		UploadLimiter:          uploadLimiter,
+		ExportLimiter:          exportLimiter,
+		Readiness:              readiness,
+		ReadinessChecker:       database.HealthChecker{Pinger: databasePool},
 	})
 
 	server := &http.Server{

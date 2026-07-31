@@ -85,22 +85,59 @@ what makes a server-to-server observation actionable — a digest cannot be
 reversed into something the Play API will answer. It is encrypted on receipt,
 never logged, never returned by any endpoint, and expires with the raw body.
 
-### What is deliberately **not** stored
+### Customer correlators and Billing Customers (Phase 9B)
+
+Phase 9A stored no customer identity at all. Phase 9B changes that, and the
+change is worth stating precisely rather than in summary.
 
 Apple's `appAccountToken` and Google's `obfuscatedExternalAccountId` are the
-developer-chosen customer correlators, and Mosaic never decodes or persists
-either. There is no customer, subscriber, entitlement-state, or access-grant
-table anywhere in Mosaic Billing, and no price or currency column: Phase 9A
-records that a store confirmed a transaction, and decides nothing about
-customer access.
+developer-chosen customer correlators. Mosaic now parses them server-side out of
+raw provider payloads — never from anything a client asserts — and records them
+as **SHA-256 digests with domain separation**. The raw values are never
+persisted, never logged, never returned by any endpoint, and never appear in a
+metric or a span. Capture is **forward-only**: correlators are read from inputs
+received after the feature landed, and no historical raw input is reprocessed to
+mine identity out of it.
+
+A **Billing Customer** is a Project-scoped row that purchases attach to. It is
+created lazily — either when your backend identifies a user, or when a validated
+purchase needs somewhere to attach — so SDK initialization and installation
+registration create nothing. Aliases (application user id, installation id, and
+the two provider correlators) are stored as digests only, one active resolution
+per value, with end-dated history.
+
+Still deliberately absent: any price or currency column, any store account
+identifier, any device identifier beyond the installation alias digest, and any
+raw correlator value.
+
+Mosaic Billing's alias tables carry **no foreign key into the analytics identity
+tables**, deliberately. The identified-user join happens at report time on the
+shared application-user id value. A foreign key would force a choice between
+breaking accepted deletion behaviour and silently revoking entitlements when a
+subject is deleted, and neither is acceptable.
 
 ### Billing data and identity deletion
 
-**Billing records are exempt from analytics identity deletion**, by owner
-decision. This is not an oversight and it does not leave a subject's data
-behind: Transaction Facts carry no customer identity, so an identity deletion
-has nothing in them to reach. The link between a transaction and a person
-exists in your own systems and in the store's, not in Mosaic's ledger.
+The exemption is now a **split**, because the old rationale — "Transaction Facts
+carry no customer identity, so a deletion has nothing to reach" — stopped being
+true when Billing Customers arrived. Repeating it would have been the
+comfortable answer rather than the accurate one.
+
+**Erasable on an identity deletion request:** Billing Customer aliases. The
+alias is the person-to-purchase link and therefore the personal data in Mosaic
+Billing. Deleting a subject end-dates and redacts their alias rows, so the
+correlation between a human being and a purchase is gone.
+
+**Exempt, and why:** Transaction Facts, Billing Customers themselves,
+subscription snapshots, and Customer Entitlement Snapshots. These are financial
+evidence — the record of what a store confirmed and what access was granted on
+the strength of it. They survive an alias deletion carrying no identifier that
+points at a person: a Billing Customer with every alias removed is an anonymous
+purchase anchor, which is what a refund dispute, a tax audit, and a chargeback
+investigation each need to still exist.
+
+The practical consequence: after deletion, the purchase history is still there
+and nothing in Mosaic can tell you whose it was.
 
 The store-issued material that *is* sensitive — signed payloads and purchase
 tokens — ages out on the raw-input retention window rather than on a deletion
@@ -108,6 +145,39 @@ request, because it is evidence of what a store said rather than a record about
 a person. If you need it gone sooner, lower
 `MOSAIC_BILLING_RAW_RETENTION_DAYS` (minimum 30) or disable billing for the
 Project.
+
+### What leaves Mosaic on a billing webhook (Phase 9B)
+
+An application webhook is the one billing path where Mosaic sends data to a URL
+an operator chose, so what it may carry is worth stating rather than implying.
+
+A `customer.entitlements.changed` delivery carries the Project and Environment
+identifiers, the Billing Customer identifier, the snapshot version it announces,
+which Entitlement keys changed and their before/after states, a four-axis state
+summary of the subscription the change came from, and Mosaic's own correlation
+identifier. That is the whole payload; the contract declares
+`additionalProperties: false` at every level, so nothing else can be added to a
+delivery without a contract version.
+
+Structurally absent, and unable to be added by configuration: any raw alias
+value, any alias digest, any provider purchase token, any signed store payload,
+any store account identifier, any price or currency, and any device identifier.
+An event is a notification that state changed, never a copy of the state, which
+is why the contract instructs consumers to re-read the snapshot rather than to
+trust the payload.
+
+The destination is constrained rather than free: HTTPS only, no redirects,
+private and link-local address space refused against the *resolved* address on
+every attempt, and a self-hosted exception that is a deployment-level flag
+rather than a per-destination toggle. The reasoning is in
+[ADR-0024](../architecture/decisions/0024-sign-application-webhooks-with-hmac-sha256.md).
+
+Delivery attempt history keeps a bounded, control-character-free excerpt of your
+endpoint's response body so an integrator can see why their own endpoint
+refused. It is never parsed and never influences Mosaic state. Attempts are
+retained for a much shorter window than the events themselves, because the event
+identifier is a contract a consumer deduplicates on and an attempt is
+operational detail.
 
 ### Backup and key handling
 

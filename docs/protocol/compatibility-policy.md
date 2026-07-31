@@ -26,6 +26,9 @@ carries no compatibility meaning relative to any other contract.
 | Contract | Version | Status | Manifest |
 | --- | --- | --- | --- |
 | Billing Ingestion | `1` | `draft` | `protocol/compatibility/billing-ingestion/v1.json` |
+| Authoritative Entitlement | `1` | `draft` | `protocol/compatibility/authoritative-entitlement/v1.json` |
+| Customer Access Token | `1` | `draft` | `protocol/compatibility/customer-access-token/v1.json` |
+| Billing State Webhook | `1` | `draft` | `protocol/compatibility/billing-state-webhook/v1.json` |
 
 A draft contract carries **no compatibility guarantee**: it may change or
 disappear without a version bump, and nothing in the approved set depends on it.
@@ -33,6 +36,70 @@ Billing Ingestion `1` reaches `approved` only through an explicit product-owner
 decision recorded in the Phase 9A review. It is optional, adds no required
 reference to any approved contract, and is not generated into the browser
 contract. See [Billing Ingestion Contract v1](billing-ingestion-v1.md).
+
+The three Phase 9B contracts are born `draft` for the same reason and are
+promoted alongside Billing Ingestion `1` once live-sandbox evidence exists. None
+of them `$ref`s another draft: a draft that referenced another draft would
+inherit its lifecycle, so shared shapes such as the safe-diagnostic object are
+**copied** into each contract rather than referenced. See
+[Authoritative Entitlement Contract v1](authoritative-entitlement-v1.md),
+[Customer Access Token Contract v1](customer-access-token-v1.md), and
+[Billing State Webhook Contract v1](billing-state-webhook-v1.md).
+
+### Unknown access is never inactive
+
+**Normative, and the strongest reader obligation Mosaic states.** Wherever a
+reader of Authoritative Entitlement `1` rejects a document — unknown version,
+unknown field, unknown enumeration member, content-digest mismatch, version
+regression, expired cache, network failure — the resulting access state is
+`unknown` and the previously accepted cache is preserved. It is **never**
+`inactive`.
+
+`inactive` is a claim about a person: Mosaic looked, found no qualifying source,
+and is confident. It may only be the result of a snapshot Mosaic issued and the
+reader fully accepted. A reader that collapses "I could not find out" into "you
+do not have it" converts every Mosaic outage into a mass revocation experienced
+by paying customers, at exactly the moment Mosaic is least able to observe it.
+
+The one exception to *preserving* the cache is a customer, Project, or
+Environment binding mismatch, which **clears** it: continuing to serve the
+previous customer's access after an identity change is the leak that rule exists
+to prevent. The resulting state is still `unknown`.
+
+This is enforced, not merely documented.
+`protocol/tools/authoritative-entitlement-validation-v1.mjs` fails if any reader
+policy value in the manifest resolves to `inactive`, and fails if the persisted
+snapshot-entry state vocabulary ever gains `unavailable`.
+
+### Webhook consumer tolerance is a documented exception
+
+**Owner-approved (Phase 9B OD-16).** Every other contract in this repository
+fails closed on both sides. Billing State Webhook `1` is asymmetric on purpose:
+
+| | Producer (Mosaic) | Consumer (application backend) |
+| --- | --- | --- |
+| Unknown field | `rejectRecord` | **ignore** |
+| Unknown event type | `rejectRecord` | **ignore** |
+| Unknown enumeration member | `rejectRecord` | **ignore** |
+| Authoritative state | — | **re-read the snapshot** |
+| Ordering | — | ignore older `snapshotVersion` |
+| Duplicate delivery | — | deduplicate by `eventId` |
+| Signature | — | **verify before parsing** |
+
+The justification is that a webhook event is not authoritative — the Customer
+Entitlement Snapshot is. A consumer that rejected an event carrying a field it
+had not seen would stop reacting to real state changes in order to protect itself
+from information it was free to ignore. Ignoring the unknown and re-reading the
+snapshot reaches the same fail-safe outcome by the opposite route, which is why
+this exception is safe here and would not be safe for a delivery contract that
+readers act on directly.
+
+Signature verification is the one place a consumer must not be tolerant, and it
+happens before the body is parsed at all.
+
+Both halves are pinned as separate manifest blocks (`producerPolicy` and
+`consumerTolerance`) so the exception stays machine-checked and cannot spread by
+imitation.
 
 ## Exact-match reading
 

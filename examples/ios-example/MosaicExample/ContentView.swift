@@ -163,6 +163,8 @@ private struct HostedConfigurationPreview: View {
       .padding(.bottom, 10)
 
       Divider()
+      CustomerEntitlementsPanel(model: model)
+      Divider()
       if let mosaic = model.mosaic {
         MosaicPlacementPaywall(
           mosaic: mosaic,
@@ -192,11 +194,21 @@ private struct HostedConfigurationPreview: View {
 }
 
 @MainActor
-private final class HostedConfigurationModel: ObservableObject {
+final class HostedConfigurationModel: ObservableObject {
   @Published private(set) var statusText = "Add hosted SDK settings to the scheme."
   @Published private(set) var isLoading = false
   @Published private(set) var releaseIdentity = "none"
+  @Published private(set) var entitlementSummary = "No customer token provider configured."
+  @Published private(set) var restoreStages: [String] = []
+  @Published var customerSelection: ExampleCustomerTokenProvider.State = .signedOut {
+    didSet {
+      guard customerSelection != oldValue else { return }
+      Task { await applyCustomerSelection() }
+    }
+  }
   private(set) var mosaic: Mosaic?
+  let customerTokenProvider = ExampleCustomerTokenProvider()
+  private var entitlementObservation: Task<Void, Never>?
 
   let placement: String
   let setupMessage: String
@@ -268,7 +280,8 @@ private final class HostedConfigurationModel: ObservableObject {
         baseURL: baseURL,
         applicationVersion: applicationVersion,
         transactionObservations: transactionObservationsEnabled ? .enabled : .disabled,
-        purchaseProvider: purchaseProvider
+        purchaseProvider: purchaseProvider,
+        customerTokenProvider: customerTokenProvider
       )
       mosaic = configured
       await configured.setAnalyticsCollection(
@@ -280,6 +293,7 @@ private final class HostedConfigurationModel: ObservableObject {
         configured.transactionObservationSink())
       await refreshCommerce(for: configured)
       await updateStatus(for: configured)
+      observeEntitlements(configured)
     } catch {
       statusText = "Hosted SDK settings are invalid. Check the key and base URL."
     }
@@ -396,6 +410,113 @@ private final class HostedConfigurationModel: ObservableObject {
       + "\(diagnostics.persistedAssignmentCount) persisted · \(time)"
   }
 
+  // MARK: Authoritative entitlements
+
+  /// Watches the update stream rather than polling. Each identity transition
+  /// emits its own state, so the UI never has to infer "the previous user's
+  /// grants no longer apply" from silence.
+  private func observeEntitlements(_ mosaic: Mosaic) {
+    entitlementObservation?.cancel()
+    entitlementObservation = Task { [weak self] in
+      for await update in await mosaic.customerEntitlementUpdates() {
+        guard let self, !Task.isCancelled else { return }
+        await self.apply(update)
+      }
+    }
+  }
+
+  private func apply(_ update: MosaicCustomerEntitlementUpdate) {
+    switch update {
+    case .loading:
+      entitlementSummary = "Loading…"
+    case .signedOut:
+      entitlementSummary = "Signed out · no customer, so no authoritative answer."
+    case .cleared(let reason):
+      entitlementSummary = "Cleared · \(reason.rawValue)"
+    case .unavailable(let reason):
+      // Never "no access": unavailable is about Mosaic, not about the customer.
+      entitlementSummary = "Unavailable · \(reason.rawValue) · this is not 'inactive'"
+    case .snapshot(let value):
+      let pro = value.snapshot.entry(forKey: "pro")
+      let state = pro.map { "\($0.state.rawValue)" } ?? "no pro entry"
+      entitlementSummary =
+        "v\(value.snapshot.snapshotVersion) · \(describe(value.cacheState)) · pro: \(state)"
+        + " · \(value.snapshot.entries.count) entries"
+    }
+  }
+
+  private func describe(_ state: MosaicCustomerEntitlementCacheState) -> String {
+    switch state {
+    case .fresh: "fresh"
+    case .refreshRecommended: "refresh recommended"
+    case .staleWithinGrace(let until): "STALE within grace until \(until)"
+    case .expired: "expired"
+    case .missing: "no cache"
+    case .invalid: "cache invalid"
+    case .differentCustomer: "different customer"
+    }
+  }
+
+  private func applyCustomerSelection() async {
+    guard let mosaic else { return }
+    await customerTokenProvider.set(customerSelection)
+    restoreStages = []
+    // Identity changes go through the SDK so the token generation is bumped,
+    // in-flight work is cancelled, and the cache is cleared before any read.
+    do {
+      switch customerSelection {
+      case .signedOut:
+        try await mosaic.resetIdentity()
+      case .customerA:
+        try await mosaic.identify(userID: "ios_example_customer_a")
+      case .customerB:
+        try await mosaic.identify(userID: "ios_example_customer_b")
+      case .backendFailing:
+        _ = await mosaic.refreshCustomerEntitlements()
+      }
+    } catch {
+      entitlementSummary = "Identity update rejected safely"
+    }
+  }
+
+  func refreshEntitlements() async {
+    guard let mosaic else { return }
+    let result = await mosaic.refreshCustomerEntitlements()
+    let diagnostics = await mosaic.customerEntitlementDiagnostics()
+    statusText =
+      "Entitlements \(String(describing: result)) · "
+      + "\(diagnostics.acceptedSnapshotCount) accepted · "
+      + "\(diagnostics.rejectedSnapshotCount) rejected · "
+      + (diagnostics.lastRejectionReason ?? "no rejection")
+  }
+
+  func restoreAndSync() async {
+    guard let mosaic else { return }
+    restoreStages = ["running…"]
+    let result = await mosaic.restoreAndSyncCustomerEntitlements()
+    restoreStages = result.stages.map(Self.describe)
+    statusText =
+      "Restore · \(String(describing: result.outcome)) · "
+      + "authoritatively updated: \(result.authoritativeEntitlementsUpdated)"
+  }
+
+  func clearCustomerState() async {
+    guard let mosaic else { return }
+    await mosaic.clearCustomerState()
+    restoreStages = []
+  }
+
+  private static func describe(_ stage: MosaicRestoreAndSyncStage) -> String {
+    switch stage {
+    case .providerRestoreStarted: "provider restore started"
+    case .providerRestoreFinished(let result): "provider restore · \(String(describing: result))"
+    case .authoritativeSyncStarted: "authoritative sync started"
+    case .authoritativeSnapshotAccepted(let version): "snapshot accepted · v\(version)"
+    case .authoritativeValidationPending(let attempts): "validation pending · \(attempts) attempts"
+    case .authoritativeSyncUnavailable(let reason): "sync unavailable · \(reason.rawValue)"
+    }
+  }
+
   private func updateStatus(for mosaic: Mosaic) async {
     switch await mosaic.configurationStatus() {
     case .available(let metadata, let source, let diagnostics):
@@ -455,6 +576,107 @@ extension MosaicPlacementDecisionResult {
     case .unsupportedDecisionContract: return "unsupported decision contract"
     case .evaluationFailed: return "evaluation failed"
     }
+  }
+}
+
+/// Stands in for the host application's own backend.
+///
+/// In a real app this calls an authenticated endpoint on your server, which
+/// asks Mosaic for a Customer Access Token with its `secret_server` key and
+/// returns it. Mosaic Billing requires an application backend: a public SDK key
+/// identifies an application and can never select a Billing Customer, so there
+/// is no anonymous mode to fall back to.
+///
+/// The example mints a fake token so the sign-in, sign-out, and switch-customer
+/// flows can be exercised without a server. It also models the two failure modes
+/// worth seeing in a demo: a signed-out user and a backend that cannot answer.
+actor ExampleCustomerTokenProvider: MosaicCustomerTokenProvider {
+  enum State: String, CaseIterable, Identifiable {
+    case signedOut
+    case customerA
+    case customerB
+    case backendFailing
+
+    var id: String { rawValue }
+
+    var label: String {
+      switch self {
+      case .signedOut: "Signed out"
+      case .customerA: "Customer A"
+      case .customerB: "Customer B"
+      case .backendFailing: "Backend failing"
+      }
+    }
+  }
+
+  private var state: State = .signedOut
+  private(set) var forcedRefreshCount = 0
+
+  func set(_ state: State) { self.state = state }
+  func current() -> State { state }
+
+  func customerAccessToken(forceRefresh: Bool) async -> MosaicCustomerTokenResult {
+    if forceRefresh { forcedRefreshCount += 1 }
+    switch state {
+    case .signedOut: return .signedOut
+    case .backendFailing: return .unavailable
+    case .customerA: return .token(MosaicCustomerAccessToken("mcat_example_customer_a"))
+    case .customerB: return .token(MosaicCustomerAccessToken("mcat_example_customer_b"))
+    }
+  }
+}
+
+/// Shows what the SDK can honestly say about authoritative access, including the
+/// states that are easy to forget: stale-but-serving, expired, and unavailable.
+@MainActor
+struct CustomerEntitlementsPanel: View {
+  @ObservedObject var model: HostedConfigurationModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        Text("Authoritative entitlements")
+          .font(.subheadline.weight(.semibold))
+        Spacer(minLength: 8)
+        Picker("Customer", selection: $model.customerSelection) {
+          ForEach(ExampleCustomerTokenProvider.State.allCases) { state in
+            Text(state.label).tag(state)
+          }
+        }
+        .pickerStyle(.menu)
+        .accessibilityLabel("Simulated customer session")
+      }
+
+      Text(model.entitlementSummary)
+        .font(.caption.monospaced())
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityLabel("Entitlement state: \(model.entitlementSummary)")
+
+      if !model.restoreStages.isEmpty {
+        VStack(alignment: .leading, spacing: 2) {
+          ForEach(Array(model.restoreStages.enumerated()), id: \.offset) { _, stage in
+            Text("• \(stage)")
+              .font(.caption2.monospaced())
+              .foregroundStyle(.secondary)
+          }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Restore stages: \(model.restoreStages.joined(separator: ", "))")
+      }
+
+      HStack(spacing: 8) {
+        Button("Refresh") { Task { await model.refreshEntitlements() } }
+          .buttonStyle(.bordered)
+        Button("Restore & sync") { Task { await model.restoreAndSync() } }
+          .buttonStyle(.bordered)
+        Button("Clear") { Task { await model.clearCustomerState() } }
+          .buttonStyle(.bordered)
+      }
+      .disabled(model.mosaic == nil)
+    }
+    .padding(.horizontal)
+    .padding(.bottom, 8)
   }
 }
 

@@ -28,6 +28,12 @@ const envelopeAADDomainV2 = "mosaic-billing-envelope-v2"
 const (
 	SubjectStoreServerCredential = "store_server_credential"
 	SubjectBillingRawInput       = "billing_raw_input"
+	// SubjectWebhookSigningSecret is the Phase 9B addition recorded in
+	// ADR-0024. Binding the AAD to the destination row means a sealed secret
+	// moved to another destination — by a bug, or by a compromise that can
+	// write the table but not decrypt it — fails to open rather than signing
+	// deliveries for the wrong tenant.
+	SubjectWebhookSigningSecret = "webhook_signing_secret"
 )
 
 // SubjectScope binds a v2 envelope to one tenant and one row. Every field is
@@ -47,7 +53,7 @@ func validSubjectScope(scope SubjectScope) bool {
 		return false
 	}
 	switch scope.SubjectKind {
-	case SubjectStoreServerCredential, SubjectBillingRawInput:
+	case SubjectStoreServerCredential, SubjectBillingRawInput, SubjectWebhookSigningSecret:
 		return true
 	default:
 		return false

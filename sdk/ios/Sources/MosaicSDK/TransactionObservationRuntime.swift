@@ -12,7 +12,11 @@ struct MosaicTransactionObservationHTTPResponse: Sendable {
 }
 
 protocol MosaicTransactionObservationTransport: Sendable {
-  func send(data: Data) async throws -> MosaicTransactionObservationHTTPResponse
+  /// `customerToken` is read fresh at send time and passed per call rather than
+  /// held by the transport, so a token can never outlive the request it was read
+  /// for and can never be captured into anything persistent.
+  func send(data: Data, customerToken: MosaicCustomerAccessToken?) async throws
+    -> MosaicTransactionObservationHTTPResponse
 }
 
 struct MosaicURLSessionTransactionObservationTransport: MosaicTransactionObservationTransport {
@@ -32,12 +36,22 @@ struct MosaicURLSessionTransactionObservationTransport: MosaicTransactionObserva
     session = URLSession(configuration: configuration)
   }
 
-  func send(data: Data) async throws -> MosaicTransactionObservationHTTPResponse {
+  func send(data: Data, customerToken: MosaicCustomerAccessToken?) async throws
+    -> MosaicTransactionObservationHTTPResponse
+  {
     var request = URLRequest(url: endpoint, timeoutInterval: timeout)
     request.httpMethod = "POST"
     request.httpBody = data
     request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    // Binds this purchase to the identified Billing Customer server-side.
+    // Without it the submission still succeeds and is validated; it just anchors
+    // anonymously, and the purchase has to be associated later by other
+    // evidence. Absent or expired is therefore not an error: the header is
+    // simply omitted.
+    if let customerToken {
+      request.setValue(customerToken.value, forHTTPHeaderField: "Mosaic-Customer-Token")
+    }
     let (responseData, response) = try await session.data(for: request)
     guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
     return MosaicTransactionObservationHTTPResponse(
@@ -148,6 +162,10 @@ actor MosaicTransactionObservationRuntime {
   private var state: MosaicTransactionObservationState?
   private var stateLoadTask: Task<MosaicTransactionObservationState, Never>?
   private var flushTask: Task<MosaicTransactionObservationFlushResult, Never>?
+  /// Read at flush time, never at enqueue time, and never written to the queue.
+  /// A queued observation can outlive many token generations, so binding one at
+  /// enqueue time would either persist a credential or attach a stale one.
+  private var customerTokenSource: (any MosaicCustomerTokenSource)?
 
   init(
     persistence: any MosaicTransactionObservationPersistence,
@@ -161,6 +179,12 @@ actor MosaicTransactionObservationRuntime {
     self.context = context
     self.clock = clock
     self.jitter = jitter
+  }
+
+  /// Attaches the source consulted for a customer token at send time. Passing
+  /// `nil` returns submissions to anonymous anchoring.
+  func attachCustomerTokenSource(_ source: (any MosaicCustomerTokenSource)?) {
+    customerTokenSource = source
   }
 
   /// Queues one observation and opportunistically attempts delivery. A
@@ -253,8 +277,12 @@ actor MosaicTransactionObservationRuntime {
       // An observation that cannot be encoded can never succeed.
       return (.permanentlyRejected(code: "observation_schema_invalid"), nil)
     }
+    // Read now, not when the observation was queued: a user who signs in
+    // between enqueue and flush gets their purchase bound correctly, and one who
+    // signs out does not get someone else's token attached.
+    let customerToken = await customerTokenSource?.heldCustomerToken()
     do {
-      let response = try await transport.send(data: body)
+      let response = try await transport.send(data: body, customerToken: customerToken)
       guard (200...202).contains(response.statusCode) else {
         return (
           .retryableFailure(code: safeHTTPCode(response.statusCode)), response.retryAfterSeconds

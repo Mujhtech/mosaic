@@ -207,6 +207,135 @@ How it behaves:
   path.
 - Every storage and network failure degrades to a stable safe code and never
   throws into the host application.
+- When authoritative entitlements are configured and a Customer Access Token is
+  held, the submission carries it in a `Mosaic-Customer-Token` header so the
+  purchase binds to the identified Billing Customer rather than only to a
+  purchase-anchored one. The contract record is unchanged; this is transport
+  only. The token is read at send time, never stored with the queue, and never
+  logged, and reading it never mints one — a signed-out submission simply omits
+  the header.
+
+## Authoritative entitlements (Mosaic Billing)
+
+Off by default, and **it requires an application backend**. Mosaic Billing has
+no anonymous mode: a Customer Access Token is minted by your own server, and a
+client-generated installation identifier can never create or select a Billing
+Customer. Without a `customerTokenProvider` the subsystem is never constructed
+and every authoritative read reports `unavailable`.
+
+```dart
+final mosaic = Mosaic.configure(
+  publicSdkKey: 'public_sdk_key',
+  baseUrl: Uri.parse('https://mosaic.example.com'),
+  purchaseProvider: provider,
+  customerTokenProvider: (request) async {
+    // Your backend mints the token. Return null when nobody is signed in.
+    final minted = await yourBackend.mintMosaicToken(
+      userId: request.userId,
+      forceRefresh: request.forceRefresh,
+    );
+    if (minted == null) return null;
+    return MosaicCustomerToken(
+      value: minted.token,
+      tokenId: minted.tokenId,
+      expiresAt: minted.expiresAt,
+    );
+  },
+);
+
+await mosaic.identify('user_1042');
+await mosaic.refreshCustomerEntitlements();
+
+final pro = mosaic.checkCustomerEntitlement('pro');
+switch (pro.state) {
+  case MosaicCustomerAccessState.active:   // grant, and show pro.isStale
+  case MosaicCustomerAccessState.inactive: // Mosaic looked and found nothing
+  case MosaicCustomerAccessState.unknown:  // Mosaic could not find out
+  case MosaicCustomerAccessState.unavailable: // Mosaic could not answer
+}
+```
+
+### Authoritative versus provider-observed
+
+The two coexist and answer different questions. Neither replaces the other, and
+no provider-observed symbol changed.
+
+| | Provider-observed (`MosaicEntitlement`, `activeEntitlements()`) | Authoritative (`MosaicCustomer…`) |
+| --- | --- | --- |
+| Answers | What did the store just tell this device? | What has Mosaic validated, and why? |
+| Source | StoreKit, Play Billing, or RevenueCat, on this device | Mosaic's projection of validated provider facts |
+| Survives reinstall | Only after a native restore | Yes, it is server state |
+| Placement targeting | Yes — unchanged | No, deliberately (Phase 9B keeps targeting on provider-observed state) |
+| Result vocabulary | `MosaicEntitlement` set | Four access states plus an explanation |
+
+### The rule that matters most
+
+**Any rejection yields `unknown` and preserves the cache. Never `inactive`.**
+
+`inactive` means Mosaic looked, found no qualifying source, and is confident. It
+is never inferred from a network failure, a timeout, an expired cache, an
+unknown field, a digest mismatch, or a signed-out customer. Every one of those
+is `unknown` or `unavailable`. A reader that collapsed them into "you do not
+have it" would turn every outage into a mass revocation experienced by paying
+customers.
+
+### Offline behaviour
+
+Bounded grace is the shipped policy, driven entirely by the server-issued
+`refreshAfter`, `validUntil`, and `staleGraceSeconds`:
+
+| Window | `cacheState` | Behaviour |
+| --- | --- | --- |
+| before `refreshAfter` | `fresh` | Serve; do not refresh. |
+| to `validUntil` | `refreshRecommended` | Fully valid; refresh opportunistically. |
+| to `validUntil + staleGraceSeconds` | `staleWithinGrace` | Previously active Entitlements stay active and `isStale` is `true` — **surface it**. |
+| after that | `expired` | Report `unknown`. Never `inactive`. |
+
+The window moves only when the server sends the canonical `snapshotUnchanged`
+record, which carries the refreshed bounds. A bodyless `304` preserves the cache
+and re-anchors trusted time but does not extend it.
+
+Clock-skew tolerance is 60 seconds and is applied in the direction that favours
+the user. A device clock earlier than issuance by more than the tolerance is
+unreliable, which forces expired-equivalent behaviour rather than becoming a
+fifth state.
+
+### Tokens
+
+- Held in **memory only**. Never written to disk, preferences, or a keychain,
+  and never present in a log, diagnostic, crash report, or telemetry —
+  diagnostics carry `tokenId`.
+- Never parsed. The token is opaque.
+- Refreshed proactively 60 seconds before expiry, once per generation on a
+  `401`, and behind a single-flight so concurrent callers make one request.
+- A provider failure enters a 30-second cooldown and reports `unavailable`. A
+  backend that cannot mint a token has not revoked anyone's subscription.
+- Signing out discards the token **and** clears the entitlement cache.
+
+### Restore
+
+```dart
+final result = await mosaic.restorePurchasesAndSync();
+```
+
+It reports two independent axes. `MosaicCustomerEntitlementsRestored` exists
+only once an accepted snapshot at a higher version reflects the restore; a
+successful native restore Mosaic has not yet validated is
+`MosaicCustomerRestoreValidationPending`, within a bound of 3 attempts over
+roughly 6 seconds. The purchase and restore paths are never blocked by any of
+this: authoritative refreshes triggered by a completed purchase are unawaited
+and never alter a presentation result.
+
+### What it is not
+
+- **Not a bearer credential.** A snapshot is a read model. Possessing it
+  authorizes nothing, and your backend must never accept one presented by a
+  client as proof of access.
+- **Not a replacement for server authorization.** The cache supports UI
+  continuity and feature gating; protected resources are authorized by your own
+  server.
+- **Not placement targeting input.** Targeting continues to read
+  provider-observed state, unchanged.
 
 ## Requirements
 

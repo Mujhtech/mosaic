@@ -2,7 +2,6 @@ import { mutationOptions, type QueryClient } from "@tanstack/react-query"
 
 import {
   addPlanProduct,
-  addProductEntitlement,
   archiveProviderMapping,
   archiveProduct,
   createEntitlement,
@@ -10,7 +9,6 @@ import {
   createProduct,
   createProviderMappingDraft,
   removePlanProduct,
-  removeProductEntitlement,
   replaceProviderMapping,
   restoreProduct,
   setProductReplacement,
@@ -182,52 +180,21 @@ export function removePlanProductMutationOptions(
   })
 }
 
-export function grantEntitlementMutationOptions(
-  productId: string,
-  projectId: string,
-  queryClient: QueryClient,
-) {
-  return mutationOptions({
-    mutationFn: async (entitlementId: string) => {
-      const result = await addProductEntitlement({
-        body: { entitlementId },
-        client: generatedDashboardClient,
-        path: { productId },
-        throwOnError: true,
-      })
-      return result.data.data
-    },
-    onSuccess: async (_, entitlementId) =>
-      invalidateCatalogImpact(queryClient, {
-        entitlementIds: [entitlementId],
-        productIds: [productId],
-        projectId,
-      }),
-  })
-}
-
-export function removeEntitlementGrantMutationOptions(
-  productId: string,
-  projectId: string,
-  queryClient: QueryClient,
-) {
-  return mutationOptions({
-    mutationFn: async (entitlementId: string) => {
-      await removeProductEntitlement({
-        client: generatedDashboardClient,
-        path: { entitlementId, productId },
-        throwOnError: true,
-      })
-      return entitlementId
-    },
-    onSuccess: async (entitlementId) =>
-      invalidateCatalogImpact(queryClient, {
-        entitlementIds: [entitlementId],
-        productIds: [productId],
-        projectId,
-      }),
-  })
-}
+/*
+ * Retired in Phase 9B.
+ *
+ * `grantEntitlementMutationOptions` and `removeEntitlementGrantMutationOptions`
+ * changed a single mutable grant row, which meant removing an Entitlement
+ * silently changed what every past purchase of the Product had meant — one
+ * DELETE away from mass revocation with nothing left saying it had ever granted
+ * anything. What a Product grants is now an immutable, versioned interval that
+ * the projection engine selects by each purchase's own effective time, so the
+ * only write path is publishing a new version:
+ * `features/entitlement-grants/mutations/grant-version-mutations.ts`.
+ *
+ * The read (`productEntitlementsQueryOptions`) stays: Product detail still shows
+ * what the Product grants today and links to the version history.
+ */
 
 export function productLifecycleMutationOptions(
   queryClient: QueryClient,

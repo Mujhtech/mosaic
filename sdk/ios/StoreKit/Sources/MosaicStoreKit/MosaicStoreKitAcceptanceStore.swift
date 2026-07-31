@@ -46,10 +46,22 @@ public actor MosaicStoreKitFileAcceptanceStore: MosaicStoreKitAcceptanceStore {
 
   public func insert(_ updateID: String) throws {
     guard accepted.insert(updateID).inserted else { return }
+    let directory = fileURL.deletingLastPathComponent()
     try FileManager.default.createDirectory(
-      at: fileURL.deletingLastPathComponent(),
+      at: directory,
       withIntermediateDirectories: true
     )
+    // Correctness, not housekeeping. This set is what stops one transaction
+    // being delivered to the host twice. Restored onto a second device from a
+    // backup it would suppress legitimate first-time delivery there, and
+    // restored onto a wiped device it would claim transactions the host has
+    // never actually seen.
+    var resource = URLResourceValues()
+    resource.isExcludedFromBackup = true
+    var mutableDirectory = directory
+    try? mutableDirectory.setResourceValues(resource)
     try JSONEncoder().encode(accepted).write(to: fileURL, options: .atomic)
+    var mutableFile = fileURL
+    try? mutableFile.setResourceValues(resource)
   }
 }

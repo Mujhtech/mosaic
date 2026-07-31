@@ -71,11 +71,26 @@ type listCursor struct {
 //
 // It is opaque on purpose: callers forward it unchanged and must not construct
 // or parse it, so the ordering key can change without a client change. The
-// encoding is base64url over "<unix-millis>:<id>" rather than JSON, because it
+// encoding is base64url over "<unix-micros>:<id>" rather than JSON, because it
 // travels in a query string.
+//
+// Microseconds, not milliseconds, and that is the whole point of this comment.
+// PostgreSQL `timestamptz` has microsecond resolution, so a millisecond cursor
+// rounds the boundary row's timestamp down and the next page's
+// `(ordering_time, id) < (cursor_time, cursor_id)` predicate then excludes every
+// row whose real timestamp falls in the discarded sub-millisecond remainder —
+// silently, with a well-formed cursor and a plausible-looking page. Facts,
+// attempts, and ledger entries written by one worker pass routinely arrive
+// inside the same millisecond, so this was not a theoretical boundary. The
+// Phase 9B customer listing already encoded microseconds; this is the same
+// encoding applied to the Phase 9A listings that shipped before it (9A
+// correction). A cursor minted by the previous build and presented across the
+// deploy decodes to a 1970 position and yields an empty page — a paging session
+// held open across a deploy restarts, which is the safe direction: it can show
+// nothing, never the wrong rows.
 func encodeCursor(at time.Time, id string) string {
 	return base64.RawURLEncoding.EncodeToString(
-		[]byte(strconv.FormatInt(at.UTC().UnixMilli(), 10) + ":" + id))
+		[]byte(strconv.FormatInt(at.UTC().UnixMicro(), 10) + ":" + id))
 }
 
 // decodeCursor parses an opaque cursor. A malformed or stale value yields the
@@ -90,15 +105,15 @@ func decodeCursor(raw string) listCursor {
 	if err != nil {
 		return listCursor{}
 	}
-	millis, id, found := strings.Cut(string(decoded), ":")
+	micros, id, found := strings.Cut(string(decoded), ":")
 	if !found || id == "" {
 		return listCursor{}
 	}
-	value, err := strconv.ParseInt(millis, 10, 64)
+	value, err := strconv.ParseInt(micros, 10, 64)
 	if err != nil {
 		return listCursor{}
 	}
-	at := time.UnixMilli(value).UTC()
+	at := time.UnixMicro(value).UTC()
 	return listCursor{At: &at, ID: id}
 }
 
@@ -117,7 +132,11 @@ func (r *Repository) ListFacts(ctx context.Context, actor billing.Actor, project
 		        COALESCE(provider_offer_identifier,''), resolution_state,
 		        COALESCE(mosaic_product_id,''), COALESCE(provider_product_mapping_id,''),
 		        resolved_mapping_version, validator_version, fact_version,
-		        source_raw_input_id, validation_attempt_id, recorded_at
+		        source_raw_input_id, validation_attempt_id, recorded_at,
+		        grace_period_expires_at, billing_retry_active,
+		        COALESCE(auto_renew_product_identifier,''), is_upgraded, revocation_reason,
+		        COALESCE(refund_type,''), COALESCE(in_app_ownership_type,''),
+		        COALESCE(subscription_group_identifier,''), provider_event_occurred_at
 		 FROM billing_transaction_facts
 		 WHERE environment_id=$1
 		   AND ($2::timestamptz IS NULL OR (occurred_at, id) < ($2::timestamptz, $3))
@@ -141,7 +160,10 @@ func (r *Repository) ListFacts(ctx context.Context, actor billing.Actor, project
 			&fact.ProviderBasePlanIdentifier, &fact.ProviderOfferIdentifier, &fact.ResolutionState,
 			&fact.MosaicProductID, &fact.ProviderProductMappingID, &fact.ResolvedMappingVersion,
 			&fact.ValidatorVersion, &fact.FactVersion, &fact.SourceRawInputID,
-			&fact.ValidationAttemptID, &fact.RecordedAt); err != nil {
+			&fact.ValidationAttemptID, &fact.RecordedAt,
+			&fact.GracePeriodExpiresAt, &fact.BillingRetryActive, &fact.AutoRenewProductIdentifier,
+			&fact.IsUpgraded, &fact.RevocationReason, &fact.RefundType, &fact.InAppOwnershipType,
+			&fact.SubscriptionGroupIdentifier, &fact.ProviderEventOccurredAt); err != nil {
 			return billing.Page[billing.TransactionFact]{}, fmt.Errorf("scan transaction fact: %w", err)
 		}
 		items = append(items, fact)

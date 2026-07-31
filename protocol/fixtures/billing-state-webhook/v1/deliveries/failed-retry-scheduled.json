@@ -1,0 +1,27 @@
+{
+  "billingStateWebhookContractVersion": "1",
+  "recordType": "webhookDeliveryAttempt",
+  "payload": {
+    "destinationId": "fixture-destination-0001",
+    "maxAttempts": 8,
+    "deliveryId": "fixture-delivery-0003",
+    "eventId": "fixture-event-0002",
+    "attempt": 1,
+    "status": "failed",
+    "requestedAt": "2026-08-01T09:00:06.000Z",
+    "respondedAt": "2026-08-01T09:00:11.000Z",
+    "responseStatusCode": 503,
+    "responseExcerpt": "upstream temporarily unavailable",
+    "nextAttemptAt": "2026-08-01T09:00:41.000Z",
+    "diagnostics": [
+      {
+        "code": "webhook.delivery.destination_unavailable",
+        "safeMessage": "The destination returned 503. Customer state is unchanged; delivery will retry.",
+        "severity": "warning",
+        "retryable": true,
+        "retryAfterSeconds": 30,
+        "correlationId": "fixture-correlation-0101"
+      }
+    ]
+  }
+}

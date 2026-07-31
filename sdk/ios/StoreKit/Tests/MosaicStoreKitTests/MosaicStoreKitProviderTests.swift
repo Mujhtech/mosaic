@@ -229,6 +229,105 @@ final class MosaicStoreKitProviderTests: XCTestCase {
     XCTAssertTrue(sink.captured().isEmpty)
   }
 
+  /// Phase 9B finding 1.7: the restore path emitted nothing.
+  ///
+  /// Risk: a customer reinstalls, taps Restore, and StoreKit hands back their
+  /// active subscription — but Mosaic never hears about it, so the purchase is
+  /// never associated with their Billing Customer and the authoritative
+  /// snapshot keeps reporting no access. A restored transaction is normally
+  /// already finished, so it never appears in `Transaction.updates` either;
+  /// without this emission there is no path at all.
+  func testRestoreEmitsObservationsForCurrentEntitlements() async throws {
+    let order = OrderRecorder()
+    let sink = ObservationSinkSpy()
+    let provider = MosaicStoreKitProvider(
+      client: StoreKitClientStub(
+        order: order,
+        purchase: .cancelled,
+        entitlements: [
+          .verified(
+            .init(
+              id: 77, storeProductID: "com.example.pro.monthly", occurredAt: Date(),
+              environment: .production))
+        ]),
+      acceptor: AcceptorStub(order: order),
+      acceptanceStore: AcceptanceStoreStub(order: order),
+      observationSink: sink)
+    try await provider.install(configuration: configuration, mappings: [mapping])
+
+    let result = await provider.restore(entitlementMappings: [])
+
+    XCTAssertEqual(result, .restored([MosaicEntitlement(id: "pro")]))
+    let observations = sink.captured()
+    XCTAssertEqual(observations.count, 1)
+    // The raw decimal identifier Apple's transaction lookup accepts.
+    XCTAssertEqual(observations.first?.reference, "77")
+    // The same submission identifier the purchase path uses, which is what makes
+    // a restore of an already-observed purchase idempotent.
+    XCTAssertEqual(observations.first?.submissionID, "storekit_transaction_77")
+    XCTAssertEqual(observations.first?.referenceKind, .appStoreTransactionID)
+  }
+
+  /// Risk: a customer tapping Restore repeatedly must not flood the queue or
+  /// double-grant. The submission identifier is stable across restores, which is
+  /// what both de-duplication layers key on.
+  func testRepeatedRestoresReuseTheSameSubmissionIdentifier() async throws {
+    let order = OrderRecorder()
+    let sink = ObservationSinkSpy()
+    let provider = MosaicStoreKitProvider(
+      client: StoreKitClientStub(
+        order: order,
+        purchase: .cancelled,
+        entitlements: [
+          .verified(
+            .init(
+              id: 77, storeProductID: "com.example.pro.monthly", occurredAt: Date(),
+              environment: .production))
+        ]),
+      acceptor: AcceptorStub(order: order),
+      acceptanceStore: AcceptanceStoreStub(order: order),
+      observationSink: sink)
+    try await provider.install(configuration: configuration, mappings: [mapping])
+
+    _ = await provider.restore(entitlementMappings: [])
+    _ = await provider.restore(entitlementMappings: [])
+
+    let identifiers = Set(sink.captured().map(\.submissionID))
+    XCTAssertEqual(identifiers, ["storekit_transaction_77"])
+    // The restore path must not record local acceptance: a restore is not a
+    // delivery to the host, and marking it accepted would make a later genuine
+    // purchase of the same transaction skip the acceptor.
+    let events = await order.values()
+    XCTAssertFalse(events.contains { $0.hasPrefix("persist:") })
+  }
+
+  /// Risk: StoreKit Testing in Xcode produces no App Store record, so a restore
+  /// under it would submit guaranteed-rejection noise.
+  func testRestoreSuppressesXcodeTestingTransactions() async throws {
+    let order = OrderRecorder()
+    let sink = ObservationSinkSpy()
+    let provider = MosaicStoreKitProvider(
+      client: StoreKitClientStub(
+        order: order,
+        purchase: .cancelled,
+        entitlements: [
+          .verified(
+            .init(
+              id: 78, storeProductID: "com.example.pro.monthly", occurredAt: Date(),
+              environment: .localTesting))
+        ]),
+      acceptor: AcceptorStub(order: order),
+      acceptanceStore: AcceptanceStoreStub(order: order),
+      observationSink: sink)
+    try await provider.install(configuration: configuration, mappings: [mapping])
+
+    let result = await provider.restore(entitlementMappings: [])
+
+    // The restore result itself is unchanged; only the observation is suppressed.
+    XCTAssertEqual(result, .restored([MosaicEntitlement(id: "pro")]))
+    XCTAssertTrue(sink.captured().isEmpty)
+  }
+
   private var configuration: MosaicCommerceConfigurationReference {
     .init(
       configurationID: "commerce_configuration_storekit_42",

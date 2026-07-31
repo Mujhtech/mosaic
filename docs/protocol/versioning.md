@@ -9,10 +9,13 @@ Protocol `0.2`; Local Preview `0.2` (development-only); Configuration Delivery
 Earlier experimental contracts were retired before approval rather than carried
 as compatibility readers.
 
-Billing Ingestion `1` exists but is **not** in the approved set: it is born
+Four contracts exist but are **not** in the approved set. Each is born
 `status: "draft"` and carries no compatibility guarantee until an explicit
-product-owner decision approves it. See
-[Billing Ingestion versioning](#billing-ingestion-versioning).
+product-owner decision approves it: Billing Ingestion `1` (see
+[Billing Ingestion versioning](#billing-ingestion-versioning)) and the three
+Phase 9B contracts — Authoritative Entitlement `1`, Customer Access Token `1`,
+and Billing State Webhook `1` (see
+[Phase 9B contract versioning](#phase-9b-contract-versioning)).
 
 These are independent versioned contracts. Their exact version values do not
 imply compatibility with one another and do not change the Paywall
@@ -224,6 +227,48 @@ Billing records are server-only in Phase 9A and are deliberately not generated
 into the browser contract. Adding browser generation later is additive and does
 not require a contract version. See
 [Billing Ingestion Contract v1](billing-ingestion-v1.md) and ADR-0022.
+
+## Phase 9B contract versioning
+
+Authoritative Entitlement `1`, Customer Access Token `1`, and Billing State
+Webhook `1` are born `status: "draft"` per Phase 9B owner decision OD-15 and are
+promoted alongside Billing Ingestion `1` once live-sandbox evidence exists.
+
+Readers require the exact discriminators
+`authoritativeEntitlementContractVersion: "1"`,
+`customerAccessTokenContractVersion: "1"`, and
+`billingStateWebhookContractVersion: "1"`. Every enumeration in all three is
+closed and deliberately over-provisioned, so adding a record type, state,
+uncertainty reason, explanation code, change reason, source type, scope,
+revocation reason, or event type is a breaking change requiring version `2`.
+
+Three rules distinguish these contracts from the rest of the set:
+
+- **A rejection yields `unknown`, never `inactive`.** Authoritative Entitlement
+  `1` fails closed to an explicitly uncertain state rather than to a negative
+  one, and preserves the reader's cache. See
+  [compatibility policy](compatibility-policy.md#unknown-access-is-never-inactive).
+- **An unknown `entitlementKey` is accepted.** Keys are Project data rather than
+  contract vocabulary. This is the single exception to closed-vocabulary reading
+  in Authoritative Entitlement `1`; rejecting an unknown key would make defining
+  a new Entitlement a breaking change for every already-shipped SDK.
+- **Webhook consumers are documented as tolerant.** Producers stay strict. See
+  [compatibility policy](compatibility-policy.md#webhook-consumer-tolerance-is-a-documented-exception).
+
+Contract negotiation for Authoritative Entitlement lives in the **sync request
+body** (`supportedAuthoritativeEntitlementContracts`). The Configuration Delivery
+capability request is untouched, and no approved contract gains a required
+reference to any of these three. None of them `$ref`s Billing Ingestion `1` or
+each other: shared shapes are copied so a draft never inherits another draft's
+lifecycle.
+
+Like Billing Ingestion, these contracts are server- and SDK-facing and are
+deliberately **not** generated into the browser contract. Adding browser
+generation later is additive and does not require a contract version.
+
+See [Authoritative Entitlement Contract v1](authoritative-entitlement-v1.md),
+[Customer Access Token Contract v1](customer-access-token-v1.md), and
+[Billing State Webhook Contract v1](billing-state-webhook-v1.md).
 
 ## Related policy documents
 

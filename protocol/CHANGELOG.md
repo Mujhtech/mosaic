@@ -4,6 +4,54 @@ All notable Mosaic protocol changes are recorded here. A contract's artifacts
 become immutable when its `status` reaches `approved`; before that, its review
 gate may still change them. Every Mosaic contract is `approved` as of v1 GA.
 
+## Phase 9B: three draft contracts for authoritative entitlements - 2026-07-28
+
+Status: draft
+
+No change to any approved contract. Three new contracts, each born `draft` per
+owner decision OD-15, each carrying no compatibility guarantee, and none of them
+adding a required reference to anything in the approved v1 GA set.
+
+- **Authoritative Entitlement `1`** — what access a Billing Customer has and
+  why. Five schemas, seven record types, four state axes plus uncertainty, a
+  pinned canonical serialization with content digests that bind a snapshot to one
+  customer, Project, and Environment, bounded-grace freshness, and the normative
+  reader rule that **any rejection yields `accessState: unknown` and preserves
+  the cache, never `inactive`**. 37 canonical fixtures, 27 invalid.
+  [Contract changelog](authoritative-entitlement/CHANGELOG.md) ·
+  [documentation](../docs/protocol/authoritative-entitlement-v1.md).
+- **Customer Access Token `1`** — how an SDK proves it may read one customer's
+  entitlements. Opaque `mcat_` tokens stored as SHA-256 digests, an
+  owner-approved deviation from the orchestration prompt's "signed" wording
+  (OD-14), with the header names finalized as contract-owned: the customer token
+  in `Authorization: Bearer`, the public SDK key in `Mosaic-SDK-Key`. 6 canonical
+  fixtures, 9 invalid. [Contract changelog](customer-access-token/CHANGELOG.md) ·
+  [documentation](../docs/protocol/customer-access-token-v1.md).
+- **Billing State Webhook `1`** — the minimal slice approved as OD-1(b): ten
+  event types declared, one emitted, HMAC-SHA256 signing over
+  `signingVersion.timestamp.eventId.rawBody`, at-least-once delivery, and
+  operator-facing attempt history that is never transmitted. 13 canonical
+  fixtures, 8 invalid.
+  [Contract changelog](billing-state-webhook/CHANGELOG.md) ·
+  [documentation](../docs/protocol/billing-state-webhook-v1.md).
+
+Supporting changes:
+
+- Four new cross-implementation reference-vector families in
+  `packages/test-fixtures/src/`: snapshot digest, cache decision, freshness, and
+  webhook signature. Digests and signatures are computed by build scripts and
+  never hand-edited; drift against the canonical fixtures and against the
+  manifests' pinned limits is checked by the protocol test suite.
+- `docs/protocol/compatibility-policy.md` records two new normative sections:
+  "Unknown access is never inactive", and the owner-approved producer/consumer
+  tolerance asymmetry for webhooks (OD-16) as an **explicit documented
+  exception** to the repo-wide fail-closed doctrine.
+- `tools/generate-rejection-layers.mjs` gains a reusable union-probe helper and
+  registers the three new `invalid/` directories.
+- `tools/validate.mjs` registers the three new load/validate pairs.
+  `generate-browser-contract.mjs` is untouched: these contracts are server- and
+  SDK-facing and are deliberately not generated into the browser contract.
+
 ## v1 General Availability: all contracts approved - 2026-07-27
 
 Status: approved

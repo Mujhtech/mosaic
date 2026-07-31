@@ -206,7 +206,7 @@ test("every Google Play digest vector is the SHA-256 of its UTF-8 token", () => 
   const nonAscii = vectors.find((vector) => vector.id === "non-ascii-token");
   assert.ok(nonAscii, "the non-ASCII encoding vector is missing");
   // eslint-disable-next-line no-control-regex
-  assert.match(nonAscii.token, /[^ -]/);
+  assert.match(nonAscii.token, /[^\x00-\x7F]/);
 });
 
 test("reference vectors match the contract patterns and the canonical fixtures", () => {

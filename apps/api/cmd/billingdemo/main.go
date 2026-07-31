@@ -44,6 +44,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -56,10 +57,28 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billinggrant"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingoperator"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingaccesspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingcustomerpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billinggrantpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingkeys"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingoperatorpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingrestorepostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingseam"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingwebhookpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/googleplay"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/ratelimit"
@@ -78,6 +97,10 @@ type demo struct {
 	pool    *pgxpool.Pool
 	service *billing.Service
 	server  *httptest.Server
+	// operatorServer carries the Phase 9B operator surface. Since defect D-3
+	// was fixed it is the same server as `server`; the field is kept so the
+	// operator HTTP helpers keep naming the surface they exercise.
+	operatorServer *httptest.Server
 
 	apple  *appleStub
 	play   *playStub
@@ -94,14 +117,54 @@ type demo struct {
 
 	stepNumber int
 	started    time.Time
+
+	// Phase 9B services. They are the same constructions cmd/api and cmd/worker
+	// perform; only the two substitutions named in wire() differ.
+	projection  *billingprojection.Service
+	identity    *billingcustomer.Service
+	access      *billingaccess.Service
+	grants      *billinggrant.Service
+	webhooks    *billingwebhook.Service
+	restores    *billingrestore.Service
+	diagnostics *billingdiagnostics.Service
+	operator    *billingoperator.Service
+
+	tlsMaterial demoTLS
+	destination *destinationStub
+
+	// Phase 9B tenant credentials and run state.
+	publicKey9B    apiKey
+	serverKey9B    apiKey
+	intakePath9B   string
+	credentialID9B string
+	customerA      string
+	customerB      string
+	tokenA         string
+	tokenB         string
+	// bindToken is the Customer Access Token the simulated SDK presents when it
+	// reports a purchase. It is what attaches a lineage to an identified
+	// customer through production wiring; the first Stage 4 run had to stand in
+	// for this with a bridge() substitution (defect D-1).
+	bindToken string
+	// boundLineages remembers which purchase chains the SDK has already
+	// reported, so a renewal does not re-report a purchase a real SDK observed
+	// once.
+	boundLineages    map[string]bool
+	destinationID    string
+	demoNumber       int
+	oneMinute        bool
+	scenarioBaseline time.Time
 }
 
 func run() error {
+	phase := flag.String("phase", "9b", "which demonstration to run: 9a, 9b, all, or oneminute")
+	flag.Parse()
+
 	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if databaseURL == "" {
 		return errors.New("DATABASE_URL is required")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
 	pool, err := pgxpool.New(ctx, databaseURL)
@@ -110,13 +173,38 @@ func run() error {
 	}
 	defer pool.Close()
 
-	d := &demo{ctx: ctx, pool: pool, started: time.Now()}
+	d := &demo{ctx: ctx, pool: pool, started: time.Now(), boundLineages: map[string]bool{}}
 	if err := d.wire(); err != nil {
 		return err
 	}
 	defer d.server.Close()
+	defer d.destination.close()
 
-	for _, stage := range []func() error{
+	stages := []func() error(nil)
+	switch *phase {
+	case "9a":
+		stages = d.stages9A()
+	case "9b":
+		stages = d.stages9B()
+	case "all":
+		stages = append(d.stages9A(), d.stages9B()...)
+	case "oneminute":
+		d.oneMinute = true
+		stages = []func() error{d.stageOneMinute}
+	default:
+		return fmt.Errorf("unknown -phase %q", *phase)
+	}
+	for _, stage := range stages {
+		if err := stage(); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("\n=== demonstration complete in %s ===\n", time.Since(d.started).Round(time.Millisecond))
+	return nil
+}
+
+func (d *demo) stages9A() []func() error {
+	return []func() error{
 		d.stageSetup,
 		d.stageApple,
 		d.stageGoogle,
@@ -125,13 +213,7 @@ func run() error {
 		d.stageReconciliation,
 		d.stageReplay,
 		d.stageNoAccessState,
-	} {
-		if err := stage(); err != nil {
-			return err
-		}
 	}
-	fmt.Printf("\n=== demonstration complete in %s ===\n", time.Since(d.started).Round(time.Millisecond))
-	return nil
 }
 
 // wire builds the real composition root with three deliberate substitutions,
@@ -187,9 +269,42 @@ func (d *demo) wire() error {
 		return err
 	}
 
+	// Phase 9B composition, identical to cmd/api's except that the webhook
+	// policy is constructed with the self-hosted allowlist so a loopback
+	// destination is permitted. HTTPS, certificate verification, redirect
+	// refusal, resolve-and-pin, and the reserved-address screen are all
+	// unchanged.
+	if d.tlsMaterial, err = newDemoTLS(); err != nil {
+		return err
+	}
+	d.destination = newDestinationStub(d.tlsMaterial)
+
+	projectionRepository := billingprojectionpostgres.New(d.pool)
+	d.projection = billingprojection.NewService(projectionRepository)
+	keys := billingkeys.New(billingpostgres.New(d.pool))
+	d.identity = billingcustomer.NewService(billingcustomerpostgres.New(d.pool), keys.Identity(), d.projection)
+	d.access = billingaccess.NewService(
+		billingaccesspostgres.New(d.pool),
+		billingaccesspostgres.NewKeyAuthenticator(billingpostgres.New(d.pool)),
+		billingaccess.WithIssuer("mosaic-billing-demo"))
+	d.grants = billinggrant.NewService(billinggrantpostgres.New(d.pool))
+	d.webhooks = billingwebhook.NewService(billingwebhookpostgres.New(d.pool), cipher,
+		billingwebhook.NewPolicy(billingwebhook.WithSelfHostedAllowlist(true)))
+	d.restores = billingrestore.NewService(billingrestorepostgres.New(d.pool), keys.Restore())
+	d.diagnostics = billingdiagnostics.NewService(billingdiagnosticspostgres.New(d.pool),
+		billingdiagnostics.WithReplay(d.projection, projectionRepository))
+	d.operator = billingoperator.NewService(billingoperatorpostgres.New(d.pool),
+		billingaccesspostgres.New(d.pool), d.identity)
+
+	// The ingestion service is constructed last because the Phase 9A→9B seam
+	// makes it depend on the identity and access services, exactly as cmd/api
+	// and cmd/worker now wire it. This is what the driver's bridge()
+	// substitution used to stand in for (defect D-1).
+	seam := billingseam.New(d.identity, d.access)
 	d.service = billing.NewService(billingpostgres.New(d.pool), cipher, verifier,
 		billing.WithProviders(appleClient, googleClient),
-		billing.WithNotificationBaseURL(demoNotificationOrigin))
+		billing.WithNotificationBaseURL(demoNotificationOrigin),
+		billing.WithSeam(seam, seam))
 
 	logger := zerolog.New(io.Discard)
 	// SUBSTITUTION 3: the dashboard principal resolver returns a fixed actor
@@ -209,12 +324,26 @@ func (d *demo) wire() error {
 	}, logger, httpserver.Dependencies{
 		PrincipalResolver: resolver,
 		Billing:           d.service,
-		BillingIPLimiter:  ratelimit.New(600, 600, 1024),
-		BillingKeyLimiter: ratelimit.New(600, 600, 1024),
-		APILimiter:        ratelimit.New(600, 600, 1024),
-		ExportLimiter:     ratelimit.New(600, 600, 1024),
+		BillingAccess:     d.access,
+		BillingCustomer:   d.identity,
+		BillingGrant:      d.grants,
+		// Defect D-3 is fixed: BillingOperator now mounts beside Billing in the
+		// standard composition, exactly as cmd/api wires it. The demo's second
+		// operator mux is gone with it.
+		BillingOperator:        d.operator,
+		BillingRestore:         d.restores,
+		BillingWebhook:         d.webhooks,
+		BillingDiagnostics:     d.diagnostics,
+		BillingIPLimiter:       ratelimit.New(6000, 6000, 4096),
+		BillingKeyLimiter:      ratelimit.New(6000, 6000, 4096),
+		EntitlementSyncLimiter: ratelimit.New(6000, 6000, 4096),
+		APILimiter:             ratelimit.New(6000, 6000, 4096),
+		ExportLimiter:          ratelimit.New(6000, 6000, 4096),
 	})
 	d.server = httptest.NewServer(handler)
+	// The operator surface is served by the same router as everything else.
+	// The field is kept so the operator HTTP helpers need no change.
+	d.operatorServer = d.server
 	return nil
 }
 

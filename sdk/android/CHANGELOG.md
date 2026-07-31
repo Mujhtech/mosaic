@@ -1,5 +1,57 @@
 # Changelog
 
+## Unreleased (Phase 9B: subscription state and authoritative entitlements)
+
+- Add authoritative entitlements behind
+  `MosaicConfiguration.customerAccessTokenProvider`, which is `null` by default
+  and leaves the whole feature inert: no request, no file, and every
+  authoritative surface reporting `unavailable`. The change is purely additive —
+  the provider-observed commerce API, `MosaicEntitlement`, and Placement
+  targeting are untouched, and no existing symbol was renamed or deprecated.
+- Mosaic Billing requires an application backend. Access is read with an opaque
+  Customer Access Token that only the host's authenticated server can mint; a
+  public SDK key can never select a Billing Customer. Tokens are held in memory
+  only, never persisted, never logged, and never parsed, and
+  `MosaicCustomerAccessToken.toString()` redacts itself.
+- New API: `customerEntitlements` (a `StateFlow` with explicit `Loading`,
+  `SignedOut`, `Available`, and `Unavailable` states), `checkCustomerEntitlement`,
+  `refreshCustomerEntitlements`, `identifyCustomer`, `signOutCustomer`,
+  `restoreAndSyncCustomerEntitlements`, and `customerEntitlementDiagnostics`.
+  There is no boolean convenience API anywhere: `unknown` and `unavailable` are
+  real answers a `Boolean` cannot carry.
+- Sync is a `POST` carrying an `entitlementSyncRequest` record; conditional
+  revalidation travels in that body and the unchanged answer is a `200`
+  `snapshotUnchanged` record carrying its own refreshed window. The request never
+  asserts a `billingCustomerId` — the Customer Access Token is the sole customer
+  selector — and a bare `304` preserves the cache without sliding freshness.
+- `inactive` is produced only from an accepted snapshot that carries an entry
+  saying so; an Entitlement key the snapshot does not carry reads `unknown`. Every
+  failure path — transport, token, digest mismatch, unsupported contract version,
+  rejected record, expired cache, unreliable device clock — produces `unknown`
+  and preserves the cache, except a customer/Project/Environment binding
+  mismatch, which clears it and raises a high-severity diagnostic.
+- Snapshots are cached under `noBackupFilesDir` in a per-customer directory named
+  by a digest of the Billing Customer identifier, written atomically, and
+  verified by an integrity digest that detects truncation and tampering. Sign-out
+  deletes them; an identity change removes every other customer's directory.
+- Offline access follows the shipped bounded-grace policy with a 60-second
+  clock-skew tolerance. A device clock earlier than issuance is treated as
+  unreliable and forces expired-equivalent behaviour rather than becoming a fifth
+  cache state.
+- Conformance is asserted against the canonical fixtures in
+  `protocol/fixtures/authoritative-entitlement/v1/` and the shared cache-decision,
+  freshness, and snapshot-digest reference vectors, so Kotlin cannot drift from
+  the other implementations.
+- Transaction Observation submissions now carry the current Customer Access Token
+  in a `Mosaic-Customer-Token` header when one is available, so a validated
+  purchase can be bound to an identified Billing Customer instead of anchoring
+  anonymously. The token is read at send time rather than enqueue time, is read
+  from the already-held token only and never mints one, is never persisted with
+  the queue, and is never logged; when it is absent the header is omitted and the
+  anonymous submission stays valid. Billing Ingestion Contract 1 observation
+  records are unchanged.
+- No new Gradle dependency.
+
 ## Unreleased (Phase 9A: transaction ingestion and validation)
 
 - Add the optional Transaction Observation handoff, off by default behind

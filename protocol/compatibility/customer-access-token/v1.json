@@ -1,0 +1,70 @@
+{
+  "customerAccessTokenContractVersion": "1",
+  "status": "draft",
+  "schemas": {
+    "token": "../../schema/customer-access-token/v1/token.schema.json"
+  },
+  "canonicalFixtures": [
+    "../../fixtures/customer-access-token/v1/tokens/issuance-request.json",
+    "../../fixtures/customer-access-token/v1/tokens/issuance-result.json",
+    "../../fixtures/customer-access-token/v1/tokens/metadata-active.json",
+    "../../fixtures/customer-access-token/v1/tokens/metadata-restore-scope.json",
+    "../../fixtures/customer-access-token/v1/tokens/metadata-revoked.json",
+    "../../fixtures/customer-access-token/v1/tokens/revocation-identity-changed.json"
+  ],
+  "recordTypes": [
+    "customerAccessTokenIssuanceRequest",
+    "customerAccessTokenIssuanceResult",
+    "customerAccessTokenMetadata",
+    "customerAccessTokenRevocation"
+  ],
+  "tokenModel": {
+    "form": "opaqueRandom",
+    "entropyBits": 256,
+    "prefix": "mcat_",
+    "storage": "digestOnly",
+    "digestAlgorithm": "sha256",
+    "signed": false,
+    "parseable": false,
+    "carriesEntitlementState": false,
+    "revocation": "immediateServerSide",
+    "scopeEvaluation": "serverSideColumns"
+  },
+  "wireForm": {
+    "customerTokenHeader": "Authorization",
+    "customerTokenScheme": "Bearer",
+    "publicSdkKeyHeader": "Mosaic-SDK-Key",
+    "publicSdkKeyAloneSufficient": false,
+    "clockSkewToleranceSeconds": 60,
+    "clockEvaluatedBy": "server"
+  },
+  "lifetime": {
+    "defaultSeconds": 3600,
+    "maximumSeconds": 86400,
+    "minimumSeconds": 60,
+    "refreshResponsibility": "hostApplicationBackend"
+  },
+  "sdkObligations": {
+    "storage": "memoryOnly",
+    "attachment": "everySyncRequest",
+    "parsing": "forbidden",
+    "refreshOnUnauthorized": "oncePerGeneration",
+    "onLogout": "discardTokenAndClearCache",
+    "onIdentityChange": "bumpGenerationCancelInFlightClearCache",
+    "onProviderFailure": "reportUnavailableNeverInactive",
+    "loggingToken": "forbidden"
+  },
+  "readerPolicy": {
+    "unknownContractVersion": "rejectRecord",
+    "unknownRecordType": "rejectRecord",
+    "unknownField": "rejectRecord",
+    "unknownScope": "rejectRecord",
+    "unknownAudience": "rejectRecord",
+    "expiredToken": "refuseRequestReportUnavailable",
+    "revokedToken": "refuseRequestReportUnavailable",
+    "audienceMismatch": "refuseRequest",
+    "customerMismatch": "refuseRequest",
+    "tokenInQueryString": "forbidden",
+    "tokenPersistedToDisk": "forbidden"
+  }
+}

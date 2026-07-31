@@ -1,0 +1,62 @@
+{
+  "authoritativeEntitlementContractVersion": "1",
+  "recordType": "customerEntitlementSnapshot",
+  "payload": {
+    "snapshotId": "fixture-customer-snapshot-0004",
+    "billingCustomerId": "fixture-customer-0001",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "snapshotVersion": 9,
+    "previousSnapshotVersion": 8,
+    "projectionRuleVersion": 1,
+    "issuedAt": "2026-07-28T12:00:00.000Z",
+    "asOf": "2026-07-28T11:59:58.000Z",
+    "refreshAfter": "2026-07-28T13:00:00.000Z",
+    "validUntil": "2026-08-04T12:00:00.000Z",
+    "entityTag": "cs-0004-v9",
+    "contentDigest": "sha256:f3c4e19de2557f1beb25a4b06bfb71ef540faf15b8078352f5382274e0ad401d",
+    "entries": [
+      {
+        "entitlementId": "fixture-entitlement-pro",
+        "entitlementKey": "pro",
+        "state": "inactive",
+        "effectiveStart": "2026-06-01T09:00:00.000Z",
+        "effectiveEnd": "2026-07-01T09:00:00.000Z",
+        "endKnown": true,
+        "sourceIds": [
+          "fixture-source-subscription-0001"
+        ],
+        "sourceCount": 1,
+        "primaryExplanation": {
+          "code": "subscription_expired",
+          "sourceId": "fixture-source-subscription-0001"
+        }
+      }
+    ],
+    "sources": [
+      {
+        "sourceId": "fixture-source-subscription-0001",
+        "sourceType": "active_subscription",
+        "subscriptionInstanceId": "fixture-subscription-instance-0001",
+        "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+        "grantVersionId": "fixture-grant-version-0001",
+        "sourceSnapshotId": "fixture-subscription-snapshot-0001",
+        "storePlatform": "apple_app_store",
+        "start": "2026-06-01T09:00:00.000Z",
+        "end": "2026-07-01T09:00:00.000Z",
+        "sourceState": "not_granting",
+        "uncertainty": {
+          "reason": "none"
+        },
+        "explanationCode": "subscription_expired",
+        "isTestSource": false
+      }
+    ],
+    "projectionStatus": {
+      "state": "current",
+      "lastProjectedAt": "2026-07-28T11:59:58.000Z"
+    },
+    "changeReason": "source_ended",
+    "correlationId": "fixture-correlation-0001"
+  }
+}

@@ -53,6 +53,13 @@ type Service struct {
 	// is used only to render the endpoint URL returned on create and rotate.
 	notificationBaseURL string
 
+	// lineages attaches a committed fact's Purchase Lineage to a Billing
+	// Customer, and submissions record the association a token-bound
+	// observation carries. Both are the Phase 9A→9B seam (see seam.go) and both
+	// are optional: without them this service behaves exactly as Phase 9A did.
+	lineages    LineageBinder
+	submissions SubmissionBinder
+
 	intakeAccepted    metric.Int64Counter
 	intakeRejected    metric.Int64Counter
 	signatureFailure  metric.Int64Counter
@@ -106,6 +113,19 @@ func WithRetention(retention time.Duration) ServiceOption {
 		if retention > 0 {
 			s.retention = retention
 		}
+	}
+}
+
+// WithSeam wires the Phase 9B seam. Either binder may be nil.
+//
+// They are one option rather than two because wiring one without the other is
+// always a mistake: submission evidence nothing reads is dead weight, and a
+// lineage binder with no submission evidence can only ever reach the
+// purchase-anchored fallback, which silently turns every identified customer's
+// first purchase into an unidentified one.
+func WithSeam(lineages LineageBinder, submissions SubmissionBinder) ServiceOption {
+	return func(s *Service) {
+		s.lineages, s.submissions = lineages, submissions
 	}
 }
 
@@ -403,6 +423,49 @@ func (s *Service) SubmitClientObservation(ctx context.Context, rawKey string, ob
 	return s.submitObservation(ctx, scope, observation, SourceClientObservation, AuthorityClient, AuthUnauthenticated, correlationID)
 }
 
+// CustomerToken carries an optional Customer Access Token presented alongside an
+// observation.
+//
+// It is the submission-context half of the Phase 9A→9B seam. A store
+// notification arrives out of band and names nobody, and the observation
+// contract has no customer member, so a caller holding a token is the only thing
+// in a deployed system that can say which customer a *first* purchase belongs
+// to. The token is trustworthy for that because only the application's own
+// backend can mint one.
+//
+// It is a separate argument rather than a field on Observation because it is not
+// part of the contract record: it is a credential, and credentials do not travel
+// in bodies that get sealed and replayed.
+type CustomerToken string
+
+// SubmitClientObservationAs is SubmitClientObservation with a Customer Access
+// Token attached. An empty token behaves exactly like the plain form.
+func (s *Service) SubmitClientObservationAs(ctx context.Context, rawKey string, token CustomerToken,
+	observation Observation, correlationID string) (SubmissionResult, error) {
+
+	scope, err := s.repository.AuthenticateSDKKey(ctx, rawKey)
+	if err != nil {
+		return SubmissionResult{}, ErrUnauthenticated
+	}
+	observation.StoreEnvironment = StoreUnclassified
+	observation.PurchaseToken = ""
+	return s.submitObservationAs(ctx, scope, token, observation,
+		SourceClientObservation, AuthorityClient, AuthUnauthenticated, correlationID)
+}
+
+// SubmitServerObservationAs is SubmitServerObservation with a Customer Access
+// Token attached.
+func (s *Service) SubmitServerObservationAs(ctx context.Context, rawKey string, token CustomerToken,
+	observation Observation, correlationID string) (SubmissionResult, error) {
+
+	scope, err := s.repository.AuthenticateServerKey(ctx, rawKey)
+	if err != nil {
+		return SubmissionResult{}, ErrUnauthenticated
+	}
+	return s.submitObservationAs(ctx, scope, token, observation,
+		SourceTrustedServerObservation, AuthorityTrustedServer, AuthVerifiedTransport, correlationID)
+}
+
 // SubmitServerObservation records a trusted app-backend report. It may carry a
 // full Google purchase token, which is encrypted on receipt and still subjected
 // to complete provider validation: a trusted caller is more accountable, not
@@ -416,6 +479,10 @@ func (s *Service) SubmitServerObservation(ctx context.Context, rawKey string, ob
 }
 
 func (s *Service) submitObservation(ctx context.Context, scope ObservationScope, observation Observation, source, authority, authentication, correlationID string) (SubmissionResult, error) {
+	return s.submitObservationAs(ctx, scope, "", observation, source, authority, authentication, correlationID)
+}
+
+func (s *Service) submitObservationAs(ctx context.Context, scope ObservationScope, token CustomerToken, observation Observation, source, authority, authentication, correlationID string) (SubmissionResult, error) {
 	ctx, span := s.tracer.Start(ctx, "billing.intake.observation")
 	defer span.End()
 	now := s.now()
@@ -491,6 +558,34 @@ func (s *Service) submitObservation(ctx context.Context, scope ObservationScope,
 		}, nil
 	}
 	s.observeIntake(ctx, provider, result)
+
+	// Record the association the submission carries, before the switch below
+	// returns. A duplicate submission still records it: the second device of the
+	// same customer submitting the same purchase is the ordinary restore shape,
+	// and the evidence table is append-only history rather than a set.
+	if s.submissions != nil && token != "" && result.RawInputID != "" && !result.Conflicted {
+		if _, err := s.submissions.BindSubmission(ctx, string(token), SubmissionBinding{
+			ProjectID: scope.ProjectID, EnvironmentID: scope.EnvironmentID,
+			RawInputID:                 result.RawInputID,
+			TransactionReferenceDigest: referenceDigest,
+			// The credential that authenticated this submission, not the one
+			// that minted the token. A token-bound observation arriving on the
+			// public SDK key records weaker evidence than the same claim made
+			// by the application's own backend over its secret key.
+			SecretServerKey: authority == AuthorityTrustedServer,
+			ObservedAt:      now,
+		}); err != nil {
+			// The observation itself is recorded and valid. Failing the
+			// submission over the association would turn a transient identity
+			// failure into a dropped purchase, and the seam retries the decision
+			// from the fact side anyway.
+			zerolog.Ctx(ctx).Error().
+				Str("project_id", scope.ProjectID).
+				Str("raw_input_id", result.RawInputID).
+				Msg("observation submission evidence could not be recorded")
+		}
+	}
+
 	switch {
 	case result.Conflicted:
 		// The same submission id arrived carrying different content. Accepting

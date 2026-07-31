@@ -1,0 +1,61 @@
+{
+  "authoritativeEntitlementContractVersion": "1",
+  "recordType": "customerEntitlementSnapshot",
+  "payload": {
+    "snapshotId": "fixture-customer-snapshot-0002",
+    "billingCustomerId": "fixture-customer-0001",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "snapshotVersion": 1,
+    "projectionRuleVersion": 1,
+    "issuedAt": "2026-07-28T12:00:00.000Z",
+    "asOf": "2026-07-28T11:59:58.000Z",
+    "refreshAfter": "2026-07-28T13:00:00.000Z",
+    "validUntil": "2026-08-04T12:00:00.000Z",
+    "entityTag": "cs-0002-v1",
+    "contentDigest": "sha256:e703033e6a005a8bd95b298c2d897ac54a0112c6d7696d24e8499bf1a9399c20",
+    "entries": [
+      {
+        "entitlementId": "fixture-entitlement-pro",
+        "entitlementKey": "pro",
+        "state": "active",
+        "effectiveStart": "2026-07-01T09:00:00.000Z",
+        "effectiveEnd": "2026-08-04T09:00:00.000Z",
+        "endKnown": true,
+        "sourceIds": [
+          "fixture-source-subscription-0001"
+        ],
+        "sourceCount": 1,
+        "primaryExplanation": {
+          "code": "active_trial_period",
+          "sourceId": "fixture-source-subscription-0001"
+        }
+      }
+    ],
+    "sources": [
+      {
+        "sourceId": "fixture-source-subscription-0001",
+        "sourceType": "trial",
+        "subscriptionInstanceId": "fixture-subscription-instance-0001",
+        "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+        "grantVersionId": "fixture-grant-version-0001",
+        "sourceSnapshotId": "fixture-subscription-snapshot-0001",
+        "storePlatform": "apple_app_store",
+        "start": "2026-07-01T09:00:00.000Z",
+        "end": "2026-08-04T09:00:00.000Z",
+        "sourceState": "granting",
+        "uncertainty": {
+          "reason": "none"
+        },
+        "explanationCode": "active_trial_period",
+        "isTestSource": false
+      }
+    ],
+    "projectionStatus": {
+      "state": "current",
+      "lastProjectedAt": "2026-07-28T11:59:58.000Z"
+    },
+    "changeReason": "initial_projection",
+    "correlationId": "fixture-correlation-0001"
+  }
+}

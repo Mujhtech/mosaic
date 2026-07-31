@@ -171,6 +171,108 @@ func billingReferenceVectors() throws -> [String: Any] {
   throw CanonicalFixtureLookupError.notFound
 }
 
+/// One shared cross-implementation reference-vector file from
+/// `packages/test-fixtures/src/`.
+///
+/// Reading the file the backend, Flutter, and Android also read is the only way
+/// the four implementations can be shown to agree; copying the values into this
+/// target would let Swift drift silently.
+func entitlementReferenceVectors(_ name: String) throws -> [String: Any] {
+  let fileManager = FileManager.default
+  var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+  while directory.path != "/" {
+    let candidate = directory.appendingPathComponent(
+      "packages/test-fixtures/src/\(name)")
+    if fileManager.fileExists(atPath: candidate.path) {
+      guard
+        let root = try JSONSerialization.jsonObject(with: Data(contentsOf: candidate))
+          as? [String: Any]
+      else { throw CanonicalFixtureLookupError.invalidShape }
+      return root
+    }
+    directory.deleteLastPathComponent()
+  }
+  throw CanonicalFixtureLookupError.notFound
+}
+
+func entitlementVectorList(_ file: String) throws -> [[String: Any]] {
+  guard let vectors = try entitlementReferenceVectors(file)["vectors"] as? [[String: Any]],
+    !vectors.isEmpty
+  else { throw CanonicalFixtureLookupError.invalidShape }
+  return vectors
+}
+
+/// One canonical Authoritative Entitlement v1 fixture.
+func authoritativeEntitlementFixtureData(_ relativePath: String) throws -> Data {
+  try phase5FixtureData("authoritative-entitlement/v1/\(relativePath)")
+}
+
+func authoritativeEntitlementFixtureNames(in subdirectory: String) throws -> [String] {
+  let fileManager = FileManager.default
+  var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+  while directory.path != "/" {
+    let candidate = directory.appendingPathComponent(
+      "protocol/fixtures/authoritative-entitlement/v1/\(subdirectory)")
+    if fileManager.fileExists(atPath: candidate.path) {
+      return try fileManager.contentsOfDirectory(atPath: candidate.path)
+        .filter { $0.hasSuffix(".json") }
+        .sorted()
+    }
+    directory.deleteLastPathComponent()
+  }
+  throw CanonicalFixtureLookupError.notFound
+}
+
+/// Builds an iOS-local, contract-valid snapshot variant without adding or
+/// modifying a canonical shared fixture. The content digest is recomputed after
+/// the mutation so sync tests exercise the acceptance gate rather than the
+/// corruption path.
+func authoritativeEntitlementSnapshotVariant(
+  _ fixtureName: String = "active-subscription.json",
+  mutation: (inout [String: Any]) -> Void
+) throws -> Data {
+  guard
+    var root = try JSONSerialization.jsonObject(
+      with: authoritativeEntitlementFixtureData("snapshots/\(fixtureName)")) as? [String: Any],
+    var payload = root["payload"] as? [String: Any]
+  else { throw CanonicalFixtureLookupError.invalidShape }
+
+  mutation(&payload)
+  var digestInput = payload
+  digestInput.removeValue(forKey: "contentDigest")
+  payload["contentDigest"] = try MosaicCustomerCanonicalJSON.digest(digestInput)
+  root["payload"] = payload
+  return try MosaicCustomerCanonicalJSON.data(root)
+}
+
+func neverProjectedEntitlementPlaceholderData() throws -> Data {
+  try authoritativeEntitlementSnapshotVariant { payload in
+    payload["snapshotId"] = "pending.fixture-customer-0001"
+    payload["snapshotVersion"] = 0
+    payload.removeValue(forKey: "previousSnapshotVersion")
+    payload["entries"] = []
+    payload["sources"] = []
+    payload["projectionStatus"] = [
+      "state": "pending",
+      "lastProjectedAt": "2026-07-28T11:00:00.000Z",
+      "pendingFactCount": 0,
+    ]
+    payload["changeReason"] = "initial_projection"
+    payload["entityTag"] = "pending-cs-0001-v0"
+  }
+}
+
+/// Parses a contract timestamp in a test without going through the decoder
+/// under test.
+func contractTimestamp(_ value: String) throws -> Date {
+  let formatter = ISO8601DateFormatter()
+  formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+  guard let date = formatter.date(from: value) else {
+    throw CanonicalFixtureLookupError.invalidShape
+  }
+  return date
+}
+
 func commerceConfigurationFixtureData(
   named name: String = "revenuecat-configuration.json"
 ) throws -> Data {

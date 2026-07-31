@@ -171,7 +171,16 @@ type SubscriptionPurchase struct {
 	TestPurchase         *struct{}       `json:"testPurchase"`
 	CanceledStateContext json.RawMessage `json:"canceledStateContext"`
 	PausedStateContext   json.RawMessage `json:"pausedStateContext"`
-	LineItems            []struct {
+	// ExternalAccountIdentifiers carries the obfuscated account id the app
+	// supplied at purchase time. It is a customer correlator and is treated
+	// exactly as Apple's appAccountToken is: hashed on the way out of this
+	// struct, never persisted raw, never logged.
+	ExternalAccountIdentifiers *struct {
+		ObfuscatedExternalAccountID string `json:"obfuscatedExternalAccountId"`
+		ObfuscatedExternalProfileID string `json:"obfuscatedExternalProfileId"`
+		ExternalAccountID           string `json:"externalAccountId"`
+	} `json:"externalAccountIdentifiers"`
+	LineItems []struct {
 		ProductID    string `json:"productId"`
 		ExpiryTime   string `json:"expiryTime"`
 		OfferDetails *struct {
@@ -208,6 +217,10 @@ type ProductPurchase struct {
 	ProductID            string `json:"productId"`
 	Quantity             int    `json:"quantity"`
 	RegionCode           string `json:"regionCode"`
+	// ObfuscatedExternalAccountID is the one-time-purchase form of the same
+	// customer correlator the subscription resource nests under
+	// externalAccountIdentifiers.
+	ObfuscatedExternalAccountID string `json:"obfuscatedExternalAccountId"`
 }
 
 // GetProduct performs purchases.products.get.

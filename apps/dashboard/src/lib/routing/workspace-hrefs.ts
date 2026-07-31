@@ -58,6 +58,11 @@ export function catalogProductsHref(scope: WorkspaceScope) {
   return base ? `${base}/catalog/products` : undefined
 }
 
+export function catalogProductHref(scope: WorkspaceScope, productId: string) {
+  const base = catalogProductsHref(scope)
+  return base ? `${base}/${encodeURIComponent(productId)}` : undefined
+}
+
 export function providersHref(scope: WorkspaceScope) {
   const base = projectBase(scope)
   return base ? `${base}/catalog/providers` : undefined
@@ -113,6 +118,74 @@ export function billingHealthHref(scope: WorkspaceScope) {
 }
 
 /**
+ * Authoritative customer access.
+ *
+ * Environment-scoped like every other billing destination, even though a
+ * Billing Customer's *identity* is Project-scoped: everything Mosaic computes
+ * about their access — snapshots, subscriptions, entitlements — belongs to one
+ * Environment, and the customer header states the Project scope explicitly so
+ * the two are not confused.
+ */
+export function billingCustomersHref(scope: WorkspaceScope) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/customers` : undefined
+}
+
+export function billingCustomerHref(scope: WorkspaceScope, customerId: string) {
+  const base = billingCustomersHref(scope)
+  return base ? `${base}/${encodeURIComponent(customerId)}` : undefined
+}
+
+export function billingSubscriptionHref(scope: WorkspaceScope, instanceId: string) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/subscriptions/${encodeURIComponent(instanceId)}` : undefined
+}
+
+export function billingRestoresHref(scope: WorkspaceScope) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/restores` : undefined
+}
+
+/**
+ * Identity conflicts are Project-scoped data reached through an
+ * Environment-scoped route, for consistency with the rest of the Billing nav.
+ * The page itself says so rather than pretending to be filtered.
+ */
+export function billingIdentityConflictsHref(scope: WorkspaceScope) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/identity-conflicts` : undefined
+}
+
+export function billingIdentityConflictHref(scope: WorkspaceScope, conflictId: string) {
+  const base = billingIdentityConflictsHref(scope)
+  return base ? `${base}/${encodeURIComponent(conflictId)}` : undefined
+}
+
+/**
+ * Projection health is a sibling of billing health, not a tab inside it. The
+ * two answer different questions — "is store input still becoming facts?" and
+ * "is the access answer still current?" — and either can be red while the other
+ * is green.
+ */
+export function billingProjectionHealthHref(scope: WorkspaceScope) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/projection-health` : undefined
+}
+
+/**
+ * Grant versions are Project-scoped, like the Products and Entitlements they
+ * relate, so they live in Catalog rather than under an Environment.
+ */
+export function grantVersionsHref(
+  scope: WorkspaceScope,
+  filters: { entitlementId?: string; productId?: string } = {},
+) {
+  const base = projectBase(scope)
+  if (!base) return undefined
+  return appendSearch(`${base}/catalog/grant-versions`, filters)
+}
+
+/**
  * Names the destination a `returnTo` points back to.
  *
  * A recovery round trip sends an operator from the surface that found a problem
@@ -125,7 +198,11 @@ export function describeReturnDestination(href: string | undefined) {
   if (href.includes("/billing/") && href.includes("/quarantine/")) {
     return "Return to the quarantine record"
   }
+  if (href.includes("/billing/") && href.includes("/projection-health")) {
+    return "Return to projection health"
+  }
   if (href.includes("/billing/")) return "Return to Mosaic Billing"
+  if (href.includes("/catalog/grant-versions")) return "Return to grant versions"
   if (href.includes("/studio-hosted/")) return "Return to Publish review"
   return "Return to where you started"
 }

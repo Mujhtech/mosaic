@@ -8,18 +8,55 @@ import XCTest
 private actor ObservationTestTransport: MosaicTransactionObservationTransport {
   private var responses: [MosaicTransactionObservationHTTPResponse]
   private(set) var bodies: [Data] = []
+  private(set) var customerTokens: [MosaicCustomerAccessToken?] = []
 
   init(_ responses: [MosaicTransactionObservationHTTPResponse]) {
     self.responses = responses
   }
 
-  func send(data: Data) async throws -> MosaicTransactionObservationHTTPResponse {
+  func send(data: Data, customerToken: MosaicCustomerAccessToken?) async throws
+    -> MosaicTransactionObservationHTTPResponse
+  {
     bodies.append(data)
+    customerTokens.append(customerToken)
     guard !responses.isEmpty else { throw URLError(.notConnectedToInternet) }
     return responses.removeFirst()
   }
 
   func recordedBodies() -> [Data] { bodies }
+  func recordedCustomerTokens() -> [MosaicCustomerAccessToken?] { customerTokens }
+}
+
+/// A token source under direct test control, so "a token arrived between
+/// enqueue and flush" is expressible without driving a real provider.
+/// A clock the test can move forward, so retry eligibility is reachable without
+/// sleeping.
+private final class MutableClock: @unchecked Sendable {
+  private let lock = NSLock()
+  private var current: Date
+
+  init(start: Date) { current = start }
+
+  func now() -> Date {
+    lock.lock()
+    defer { lock.unlock() }
+    return current
+  }
+
+  func advance(_ seconds: TimeInterval) {
+    lock.lock()
+    current = current.addingTimeInterval(seconds)
+    lock.unlock()
+  }
+}
+
+private actor StubCustomerTokenSource: MosaicCustomerTokenSource {
+  private var token: MosaicCustomerAccessToken?
+
+  init(token: MosaicCustomerAccessToken? = nil) { self.token = token }
+
+  func set(_ token: MosaicCustomerAccessToken?) { self.token = token }
+  func heldCustomerToken() -> MosaicCustomerAccessToken? { token }
 }
 
 extension MosaicTransactionObservationHTTPResponse {
@@ -56,6 +93,128 @@ final class TransactionObservationTests: XCTestCase {
       MosaicTransactionObservation(
         submissionID: submissionID, referenceKind: .appStoreTransactionID,
         reference: reference, observedAt: observedAt))
+  }
+
+  // MARK: Customer binding
+
+  // Risk: without the customer token an identified user's purchase anchors
+  // anonymously and has to be associated to their Billing Customer later by
+  // other evidence — which is exactly the association gap Phase 9B exists to
+  // close.
+  func testSubmissionCarriesTheCustomerTokenWhenOneIsHeld() async throws {
+    let transport = ObservationTestTransport([
+      .result("accepted_for_validation", submissionID: "s1")
+    ])
+    let runtime = runtime(
+      persistence: MosaicMemoryTransactionObservationPersistence(), transport: transport)
+    await runtime.attachCustomerTokenSource(
+      StubCustomerTokenSource(token: MosaicCustomerAccessToken("mcat_bound")))
+
+    await runtime.enqueue(try observation(submissionID: "s1"))
+
+    let tokens = await transport.recordedCustomerTokens()
+    XCTAssertEqual(tokens, [MosaicCustomerAccessToken("mcat_bound")])
+  }
+
+  // Risk: attaching a token for a signed-out session would bind a purchase to
+  // whoever was signed in last. Anonymous submission stays valid, so absence is
+  // not an error and must not suppress delivery.
+  func testSubmissionOmitsTheTokenWhenSignedOutAndStillDelivers() async throws {
+    let transport = ObservationTestTransport([
+      .result("accepted_for_validation", submissionID: "s1")
+    ])
+    let runtime = runtime(
+      persistence: MosaicMemoryTransactionObservationPersistence(), transport: transport)
+    await runtime.attachCustomerTokenSource(StubCustomerTokenSource(token: nil))
+
+    await runtime.enqueue(try observation(submissionID: "s1"))
+
+    let tokens = await transport.recordedCustomerTokens()
+    XCTAssertEqual(tokens, [nil])
+    let diagnostics = await runtime.diagnostics()
+    XCTAssertEqual(
+      diagnostics.acceptedForValidationCount, 1,
+      "an anonymous submission is still a valid submission")
+  }
+
+  // Risk: a queued observation can outlive many token generations. Binding at
+  // enqueue time would either persist a credential or attach a stale one; the
+  // token must be read at send time.
+  func testTokenArrivingBetweenEnqueueAndFlushIsUsed() async throws {
+    let transport = ObservationTestTransport([
+      // The first attempt fails, so the observation stays queued.
+      .init(statusCode: 503, data: Data(), retryAfterSeconds: nil),
+      .result("accepted", submissionID: "s1"),
+    ])
+    let source = StubCustomerTokenSource(token: nil)
+    // The clock has to advance past the retry backoff, so this runtime is built
+    // directly rather than with the fixed-clock helper.
+    let start = Date(timeIntervalSince1970: 1_785_500_010)
+    let elapsed = MutableClock(start: start)
+    let runtime = MosaicTransactionObservationRuntime(
+      persistence: MosaicMemoryTransactionObservationPersistence(), transport: transport,
+      context: MosaicTransactionObservationContext(applicationVersion: "1.4.2"),
+      clock: { elapsed.now() }, jitter: { $0.upperBound })
+    await runtime.attachCustomerTokenSource(source)
+
+    await runtime.enqueue(try observation(submissionID: "s1"))
+
+    // The user signs in after the purchase was already queued, and enough time
+    // passes for the retry to become eligible.
+    await source.set(MosaicCustomerAccessToken("mcat_signed_in_later"))
+    elapsed.advance(60)
+    _ = await runtime.flush()
+
+    let tokens = await transport.recordedCustomerTokens()
+    XCTAssertEqual(tokens, [nil, MosaicCustomerAccessToken("mcat_signed_in_later")])
+  }
+
+  // Risk: a credential written into the observation queue would sit on disk far
+  // longer than the token's own lifetime, in a file that survives relaunch. It
+  // must appear in neither the persisted queue nor the diagnostics a host might
+  // log.
+  func testTokenIsNeverPersistedWithTheQueueOrSurfacedInDiagnostics() async throws {
+    let persistence = MosaicMemoryTransactionObservationPersistence()
+    // No response, so the observation fails and stays queued to be persisted.
+    let transport = ObservationTestTransport([])
+    let runtime = runtime(persistence: persistence, transport: transport)
+    await runtime.attachCustomerTokenSource(
+      StubCustomerTokenSource(token: MosaicCustomerAccessToken("mcat_secret_value")))
+
+    await runtime.enqueue(try observation(submissionID: "s1"))
+
+    let loaded = await persistence.load()
+    let stored = try XCTUnwrap(loaded)
+    XCTAssertEqual(stored.queue.count, 1, "the observation is retained for retry")
+    let encoded = try JSONEncoder().encode(stored)
+    let text = try XCTUnwrap(String(data: encoded, encoding: .utf8))
+    XCTAssertFalse(text.contains("mcat_secret_value"))
+    XCTAssertFalse(text.contains("Mosaic-Customer-Token"))
+
+    let diagnostics = await runtime.diagnostics()
+    XCTAssertFalse(String(describing: diagnostics).contains("mcat_secret_value"))
+  }
+
+  // Risk: the 9A observation record is a frozen contract. Customer binding is a
+  // transport concern and must not have leaked into the submitted document.
+  func testSubmittedRecordIsUnchangedByCustomerBinding() async throws {
+    let transport = ObservationTestTransport([
+      .result("accepted_for_validation", submissionID: "s1")
+    ])
+    let runtime = runtime(
+      persistence: MosaicMemoryTransactionObservationPersistence(), transport: transport)
+    await runtime.attachCustomerTokenSource(
+      StubCustomerTokenSource(token: MosaicCustomerAccessToken("mcat_secret_value")))
+
+    await runtime.enqueue(try observation(submissionID: "s1"))
+
+    let bodies = await transport.recordedBodies()
+    let body = try XCTUnwrap(bodies.first)
+    XCTAssertEqual(
+      body, try MosaicTransactionObservationCodec.encode(
+        try observation(submissionID: "s1"), context: context))
+    XCTAssertFalse(
+      try XCTUnwrap(String(data: body, encoding: .utf8)).contains("mcat_secret_value"))
   }
 
   /// A runtime with a fixed clock and a deterministic worst-case backoff, so

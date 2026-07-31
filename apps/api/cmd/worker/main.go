@@ -22,12 +22,25 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingaccesspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingcustomerpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingkeys"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingrestorepostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingseam"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingwebhookpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/config"
@@ -145,6 +158,11 @@ func run() (runErr error) {
 
 	var billingService *billing.Service
 	var billingRepository *billingpostgres.Repository
+	var projectionService *billingprojection.Service
+	var restoreService *billingrestore.Service
+	var restoreRepository *billingrestorepostgres.Repository
+	var webhookService *billingwebhook.Service
+	var webhookRepository *billingwebhookpostgres.Repository
 	if cfg.Billing.Enabled {
 		billingCipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
 		if err != nil {
@@ -175,9 +193,30 @@ func run() (runErr error) {
 			return fmt.Errorf("configure Google Play client: %w", err)
 		}
 		billingRepository = billingpostgres.New(pool)
+		projectionService = billingprojection.NewService(billingprojectionpostgres.New(pool))
+		// The worker is where the Phase 9A→9B seam matters most: it runs the
+		// validation job, so it is where a committed fact has to reach a Purchase
+		// Lineage and a Billing Customer. The identity and access services are
+		// constructed here for that reason alone — the worker serves no HTTP and
+		// exposes neither.
+		billingKeys := billingkeys.New(billingRepository)
+		customerService := billingcustomer.NewService(
+			billingcustomerpostgres.New(pool), billingKeys.Identity(), projectionService)
+		accessService := billingaccess.NewService(
+			billingaccesspostgres.New(pool),
+			billingaccesspostgres.NewKeyAuthenticator(billingRepository))
+		seam := billingseam.New(customerService, accessService)
 		billingService = billing.NewService(billingRepository, billingCipher, verifier,
 			billing.WithProviders(appleClient, googleClient),
-			billing.WithRetention(cfg.Billing.RawRetention()))
+			billing.WithRetention(cfg.Billing.RawRetention()),
+			billing.WithSeam(seam, seam))
+		restoreRepository = billingrestorepostgres.New(pool)
+		restoreService = billingrestore.NewService(restoreRepository,
+			billingkeys.New(billingRepository).Restore())
+		webhookRepository = billingwebhookpostgres.New(pool)
+		webhookService = billingwebhook.NewService(webhookRepository, billingCipher,
+			billingwebhook.NewPolicy(billingwebhook.WithSelfHostedAllowlist(
+				cfg.Billing.WebhookAllowPrivateDestinations)))
 	}
 
 	workerID, err := os.Hostname()
@@ -212,6 +251,18 @@ func run() (runErr error) {
 		if err := billingRepository.RegisterQueueMetrics(); err != nil {
 			return fmt.Errorf("register billing queue metrics: %w", err)
 		}
+		// Per-table row counts for the Phase 9B schema. Plan §15 decided
+		// snapshot retention with no drill baseline to extrapolate from, so the
+		// trend has to start being recorded before it is needed.
+		if err := billingdiagnosticspostgres.New(pool).RegisterRowCountMetrics(); err != nil {
+			return fmt.Errorf("register billing table row metrics: %w", err)
+		}
+		if err := restoreRepository.RegisterQueueMetrics(); err != nil {
+			return fmt.Errorf("register billing restore queue metrics: %w", err)
+		}
+		if err := webhookRepository.RegisterQueueMetrics(); err != nil {
+			return fmt.Errorf("register billing webhook queue metrics: %w", err)
+		}
 	}
 
 	families := make([]jobFamily, 0, 8)
@@ -221,8 +272,23 @@ func run() (runErr error) {
 	if billingService != nil {
 		// Validation runs first in the round-robin because a store notification
 		// waiting on validation is the latency an operator actually sees.
+		// Projection runs immediately after it: a validated fact that has not
+		// been projected has not yet changed anyone's access, so the two
+		// latencies are one user-visible number.
 		families = append(families,
 			jobFamily{"billing_validation", billingService.ProcessNextValidation},
+			jobFamily{"billing_projection", projectionService.ProcessNextProjection},
+			// A restore's outcome is only knowable once validation and
+			// projection have moved, so it runs immediately after them: any
+			// later in the round robin and every restore would observe the
+			// previous poll's state and reschedule itself once more than it
+			// needed to.
+			jobFamily{"billing_restore_sync", restoreService.ProcessNextRestoreSync},
+			// Delivery runs strictly outside the projection transaction. A
+			// destination that is down produces retries and eventually an
+			// exhausted delivery; it never rolls back an entitlement change and
+			// never blocks a projection.
+			jobFamily{"billing_webhook_delivery", webhookService.ProcessNextDelivery},
 			jobFamily{"billing_rtdn", billingService.ProcessNextRTDN},
 			jobFamily{"billing_reconciliation", billingService.ProcessNextReconciliation},
 			jobFamily{"billing_replay", billingService.ProcessNextReplay},

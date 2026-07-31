@@ -96,6 +96,18 @@ class MosaicTransactionObservationRuntime internal constructor(
 
     fun flushBestEffort() { if (enabled) scope.launch { runCatching { flush() } } }
 
+    /**
+     * Binds the Customer Access Token source used to attribute submissions.
+     *
+     * The token is never held by the queue, never written beside a queued observation, and never
+     * read until a request is actually being built — so a queued observation carries no credential
+     * at rest, and one enqueued before sign-in is still attributed correctly when it is delivered
+     * after sign-in.
+     */
+    internal fun bindCustomerTokenSource(source: MosaicCustomerTokenSource) {
+        transport.bindCustomerTokenSource(source)
+    }
+
     /** Applies a changed host opt-in without reconstructing the runtime. */
     internal fun reconcileEnabled(value: Boolean) {
         if (enabled == value) return

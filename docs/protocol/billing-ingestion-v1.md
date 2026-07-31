@@ -283,6 +283,65 @@ populates or persists either one, and no fixture carries either one.
   `unsupported_capability` detail, that is additive REST vocabulary and does not
   require a contract version bump.
 
+### The customer token is transport, not a record field
+
+Phase 9B associates validated provider facts with a Billing Customer. One of the
+accepted evidence types is **submission context**: the request that submitted an
+observation was authenticated as a known customer.
+
+An SDK therefore attaches its current Customer Access Token, when it holds one,
+to the observation-submission request:
+
+```http
+POST /v1/sdk/billing/observations
+Mosaic-SDK-Key: <public SDK key>
+Mosaic-Customer-Token: mcat_<43 base64url characters>
+Content-Type: application/json
+```
+
+`Mosaic-Customer-Token` is **optional**. An observation submitted without it is
+valid, is validated exactly as before, and simply yields no submission-context
+evidence; the fact still exists and can be associated later through a restore or
+an explicit link. Nothing about Phase 9A's behaviour changes when the header is
+absent, which is the whole point — 9A submissions remain conformant.
+
+**No Billing Ingestion record schema changes.** The frozen draft stays frozen:
+no observation record gains a field, no fixture changes, and
+`clientTransactionObservation` still rejects any unknown property. This follows
+the established rule that
+[transport is not contract](#compatibility-and-versioning) — the same rule under
+which a `406` negotiation detail is additive REST vocabulary rather than a
+contract version bump.
+
+#### Why a header and never the body
+
+The credential travels in a header specifically because an observation body does
+not behave like a request. It is:
+
+- **Persisted.** The submitted record is stored as the raw input a validation was
+  performed against. A credential in the body would be a bearer token written to
+  the ledger, and the ledger is append-only by design — there is no path to
+  redact it later.
+- **Replayable.** Observations are re-validated and replayed. A credential
+  embedded in a replayed body would be re-presented long after it expired, which
+  either fails confusingly or, worse, succeeds against a token whose lifetime
+  should have ended the association.
+- **Digested.** The body participates in idempotency and fact identity. A
+  rotating credential inside it would make two submissions of the same purchase
+  look like two different purchases.
+- **Sealed and forwarded.** Bodies are encrypted at rest and surfaced to
+  operators through diagnostics. Headers are stripped at the transport boundary
+  and never logged.
+
+The header is read once, at the transport boundary, to resolve the Billing
+Customer; the resolved association is recorded as evidence and the token itself
+is never persisted, never logged, and never enters the record. This is the same
+posture the contract already takes toward every other credential — see
+[Deliberately absent](#deliberately-absent).
+
+The token's shape, lifetime, scoping, and revocation are defined by
+[Customer Access Token Contract v1](customer-access-token-v1.md).
+
 ### Quarantine vocabulary is not REST vocabulary
 
 `quarantineRecord.reason` is the **contract** vocabulary: a closed, cross-SDK

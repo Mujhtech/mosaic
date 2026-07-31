@@ -41,6 +41,16 @@ import (
 // requires it on the intermediate, so the synthetic chain carries it.
 var appleWWDROID = asn1.ObjectIdentifier{1, 2, 840, 113635, 100, 6, 2, 1}
 
+// demoChainBackdate is how far back the synthetic chain is valid.
+//
+// appstorejws verifies the certificate chain *as of the payload's signedDate*,
+// which is correct: a signature is only meaningful against a certificate that
+// was valid when it was made. The Phase 9B demonstrations replay a subscription
+// history whose provider events are months old, so the chain that signs them
+// has to have been valid then. A real Apple chain is; this one is minted per
+// run, so its validity window is widened to match the histories it signs.
+const demoChainBackdate = 3 * 365 * 24 * time.Hour
+
 type demoChain struct {
 	root    *x509.Certificate
 	leafKey *ecdsa.PrivateKey
@@ -67,7 +77,7 @@ func newDemoChain() (demoChain, error) {
 	rootTemplate := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
 		Subject:               pkix.Name{CommonName: "Mosaic Demo Root CA (SYNTHETIC — not Apple)"},
-		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotBefore:             time.Now().Add(-demoChainBackdate),
 		NotAfter:              time.Now().Add(24 * time.Hour),
 		IsCA:                  true,
 		BasicConstraintsValid: true,
@@ -85,7 +95,7 @@ func newDemoChain() (demoChain, error) {
 	intermediateTemplate := &x509.Certificate{
 		SerialNumber:          big.NewInt(2),
 		Subject:               pkix.Name{CommonName: "Mosaic Demo Intermediate CA (SYNTHETIC)"},
-		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotBefore:             time.Now().Add(-demoChainBackdate),
 		NotAfter:              time.Now().Add(24 * time.Hour),
 		IsCA:                  true,
 		BasicConstraintsValid: true,
@@ -104,7 +114,7 @@ func newDemoChain() (demoChain, error) {
 	leafTemplate := &x509.Certificate{
 		SerialNumber: big.NewInt(3),
 		Subject:      pkix.Name{CommonName: "Mosaic Demo Leaf (SYNTHETIC)"},
-		NotBefore:    time.Now().Add(-24 * time.Hour),
+		NotBefore:    time.Now().Add(-demoChainBackdate),
 		NotAfter:     time.Now().Add(24 * time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}

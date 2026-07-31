@@ -44,6 +44,18 @@ const String _revenueCatPublicSdkKey = String.fromEnvironment(
   'REVENUECAT_PUBLIC_SDK_KEY',
 );
 
+/// Stub Customer Access Token. In a real application this value never appears
+/// in the client: the host's own backend mints it. Mosaic Billing requires an
+/// application backend, so an empty value here means "signed out", which the
+/// SDK reports as `unavailable` rather than `inactive`.
+const String _customerAccessToken = String.fromEnvironment(
+  'MOSAIC_CUSTOMER_ACCESS_TOKEN',
+);
+const String _customerUserId = String.fromEnvironment(
+  'MOSAIC_CUSTOMER_USER_ID',
+  defaultValue: 'user_example_0001',
+);
+
 var _revenueCatReady = false;
 
 MosaicStorePlatform? get _runtimeStorePlatform =>
@@ -112,6 +124,7 @@ final class _MosaicExampleShellState extends State<MosaicExampleShell> {
         children: const <Widget>[
           PaywallPlayground(),
           HostedPaywallPlayground(),
+          CustomerEntitlementsPlayground(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -127,6 +140,11 @@ final class _MosaicExampleShellState extends State<MosaicExampleShell> {
             icon: Icon(Icons.cloud_outlined),
             selectedIcon: Icon(Icons.cloud),
             label: 'Hosted',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.verified_user_outlined),
+            selectedIcon: Icon(Icons.verified_user),
+            label: 'Customer',
           ),
         ],
       ),
@@ -703,4 +721,336 @@ MockMosaicPurchaseProvider _fallbackPurchaseProvider() {
       ),
     ],
   );
+}
+
+/// Phase 9B: Mosaic's authoritative answer to "what may this customer access,
+/// and why". It is deliberately separate from the provider-observed
+/// entitlements the paywall tabs use.
+final class CustomerEntitlementsPlayground extends StatefulWidget {
+  const CustomerEntitlementsPlayground({super.key});
+
+  @override
+  State<CustomerEntitlementsPlayground> createState() =>
+      _CustomerEntitlementsPlaygroundState();
+}
+
+final class _CustomerEntitlementsPlaygroundState
+    extends State<CustomerEntitlementsPlayground> {
+  static const String _entitlementKey = 'pro';
+
+  late final Mosaic _mosaic = Mosaic.configure(
+    publicSdkKey: _publicSdkKey,
+    baseUrl: Uri.parse(_hostedBaseUrl),
+    purchaseProvider: _fallbackPurchaseProvider(),
+    // The host's backend mints this. The stub reads a --dart-define so the
+    // example can be run against a real Environment without shipping a secret.
+    customerTokenProvider: (request) async {
+      if (_customerAccessToken.isEmpty || request.userId == null) return null;
+      return MosaicCustomerToken(
+        value: _customerAccessToken,
+        tokenId: 'example-token',
+        expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 55)),
+      );
+    },
+  );
+
+  final List<String> _log = <String>[];
+  MosaicCustomerRestoreResult? _restore;
+  var _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _mosaic.addListener(_onChanged);
+    unawaited(_mosaic.loadIdentity());
+  }
+
+  @override
+  void dispose() {
+    _mosaic
+      ..removeListener(_onChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _record(String message) {
+    if (!mounted) return;
+    setState(() {
+      _log.insert(0, message);
+      if (_log.length > 12) _log.removeLast();
+    });
+  }
+
+  Future<void> _run(Future<void> Function() action) async {
+    setState(() => _busy = true);
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _identify() => _run(() async {
+        await _mosaic.identify(_customerUserId);
+        _record('Identified $_customerUserId.');
+        await _refresh();
+      });
+
+  Future<void> _signOut() => _run(() async {
+        await _mosaic.resetUserIdentity();
+        _record('Signed out. Token and cache cleared.');
+      });
+
+  Future<void> _refresh() async {
+    final result = await _mosaic.refreshCustomerEntitlements();
+    _record(switch (result) {
+      MosaicCustomerEntitlementUpdated(:final snapshot) =>
+        'Accepted snapshot v${snapshot.snapshotVersion}.',
+      MosaicCustomerEntitlementUnchanged(:final snapshotVersion) =>
+        'Unchanged at v$snapshotVersion; freshness slid.',
+      MosaicCustomerEntitlementRejected(
+        :final reasonCode,
+        :final cacheAction
+      ) =>
+        'Rejected: $reasonCode (cache ${cacheAction.name}).',
+      MosaicCustomerEntitlementUnavailable(:final reasonCode) =>
+        'Unavailable: $reasonCode.',
+    });
+  }
+
+  Future<void> _restorePurchases() => _run(() async {
+        final result = await _mosaic.restorePurchasesAndSync();
+        if (!mounted) return;
+        setState(() => _restore = result);
+        _record(
+          'Restore: ${result.outcome.wireValue} '
+          '(provider ${result.providerOutcome.wireValue}).',
+        );
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    final check = _mosaic.checkCustomerEntitlement(_entitlementKey);
+    final diagnostics = _mosaic.customerEntitlementDiagnostics;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Authoritative entitlements')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: <Widget>[
+            _AccessCard(check: check),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                FilledButton.icon(
+                  onPressed: _busy ? null : _identify,
+                  icon: const Icon(Icons.login),
+                  label: const Text('Identify'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _signOut,
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Sign out'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : () => _run(_refresh),
+                  icon: const Icon(Icons.sync),
+                  label: const Text('Refresh'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _restorePurchases,
+                  icon: const Icon(Icons.restore),
+                  label: const Text('Restore and sync'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _Section(
+              title: 'Snapshot',
+              rows: <String, String>{
+                'Snapshot version':
+                    diagnostics.snapshotVersion?.toString() ?? '—',
+                'As of': diagnostics.asOf?.toIso8601String() ?? '—',
+                'Cache state': diagnostics.cacheState.name,
+                'Valid until': diagnostics.validUntil?.toIso8601String() ?? '—',
+                'Stale grace': '${diagnostics.staleGraceSeconds}s',
+                'Billing customer': diagnostics.billingCustomerId ?? '—',
+                'Projection': diagnostics.projectionState?.name ?? '—',
+              },
+            ),
+            const SizedBox(height: 16),
+            _Section(
+              title: 'Diagnostics',
+              rows: <String, String>{
+                'Enabled': diagnostics.enabled ? 'yes' : 'no',
+                'Identity generation': '${diagnostics.identityGeneration}',
+                // The token handle only. The token value is structurally
+                // unavailable to this screen.
+                'Token handle': diagnostics.token.tokenId ?? '—',
+                'Token expires':
+                    diagnostics.token.expiresAt?.toIso8601String() ?? '—',
+                'Last reason': diagnostics.lastReasonCode ?? '—',
+              },
+            ),
+            if (_restore case final restore?) ...<Widget>[
+              const SizedBox(height: 16),
+              _RestoreStages(result: restore),
+            ],
+            const SizedBox(height: 16),
+            _Section(
+              title: 'Activity',
+              rows: <String, String>{
+                for (var index = 0; index < _log.length; index += 1)
+                  '${index + 1}': _log[index],
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _AccessCard extends StatelessWidget {
+  const _AccessCard({required this.check});
+
+  final MosaicCustomerEntitlementCheck check;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // Four labels, and neither unknown nor unavailable is written as a
+    // negative: "Mosaic could not find out" is not "you do not have it".
+    final (label, detail, color) = switch (check.state) {
+      MosaicCustomerAccessState.active => (
+          'Active',
+          check.isStale
+              ? 'Served from the bounded-grace window; awaiting confirmation.'
+              : 'Mosaic has validated a granting source.',
+          Colors.green.shade800,
+        ),
+      MosaicCustomerAccessState.inactive => (
+          'Inactive',
+          'Mosaic looked and found no qualifying source.',
+          theme.colorScheme.onSurfaceVariant,
+        ),
+      MosaicCustomerAccessState.unknown => (
+          'Unknown',
+          'Mosaic could not find out. This is not a revocation.',
+          Colors.orange.shade900,
+        ),
+      MosaicCustomerAccessState.unavailable => (
+          'Unavailable',
+          'Mosaic could not answer. Sign in to read authoritative state.',
+          Colors.orange.shade900,
+        ),
+    };
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: 'Entitlement ${check.entitlementKey} is $label. $detail',
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(check.entitlementKey, style: theme.textTheme.labelLarge),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: theme.textTheme.headlineSmall?.copyWith(color: color),
+              ),
+              const SizedBox(height: 6),
+              Text(detail, style: theme.textTheme.bodyMedium),
+              if (check.isStale) ...<Widget>[
+                const SizedBox(height: 6),
+                Text(
+                  'Stale: showing last confirmed access.',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: Colors.orange.shade900,
+                  ),
+                ),
+              ],
+              if (check.isTestSource) ...<Widget>[
+                const SizedBox(height: 6),
+                const Text('Granted by a provider test transaction.'),
+              ],
+              if (check.reasonCode case final reason?) ...<Widget>[
+                const SizedBox(height: 6),
+                Text('Reason: $reason', style: theme.textTheme.labelMedium),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final class _RestoreStages extends StatelessWidget {
+  const _RestoreStages({required this.result});
+
+  final MosaicCustomerRestoreResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Section(
+      title: 'Restore stages (${result.outcome.wireValue})',
+      rows: <String, String>{
+        for (final stage in result.stages) stage.name.name: stage.detail,
+      },
+    );
+  }
+}
+
+final class _Section extends StatelessWidget {
+  const _Section({required this.title, required this.rows});
+
+  final String title;
+  final Map<String, String> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(title, style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        if (rows.isEmpty)
+          Text('—', style: theme.textTheme.bodyMedium)
+        else
+          for (final entry in rows.entries)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  SizedBox(
+                    width: 150,
+                    child: Text(
+                      entry.key,
+                      style: theme.textTheme.labelMedium,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      entry.value,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+      ],
+    );
+  }
 }

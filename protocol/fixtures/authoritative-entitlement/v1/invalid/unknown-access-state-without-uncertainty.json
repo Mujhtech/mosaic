@@ -1,0 +1,30 @@
+{
+  "authoritativeEntitlementContractVersion": "1",
+  "recordType": "subscriptionSnapshot",
+  "payload": {
+    "subscriptionSnapshotId": "fixture-subscription-snapshot-0020",
+    "subscriptionInstanceId": "fixture-subscription-instance-0001",
+    "purchaseLineageId": "fixture-lineage-0001",
+    "billingCustomerId": "fixture-customer-0001",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "projectionVersion": 13,
+    "projectionRuleVersion": 1,
+    "computedAt": "2026-07-28T11:59:58.000Z",
+    "asOf": "2026-07-28T11:59:58.000Z",
+    "storePlatform": "apple_app_store",
+    "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+    "accessState": "unknown",
+    "lifecycleState": "unknown",
+    "renewalIntent": "unknown",
+    "billingState": "unknown",
+    "uncertainty": {
+      "reason": "none"
+    },
+    "isTestSource": false,
+    "checksum": "sha256:4e4f85fb5bff3c399a16e8bb853f562e6a4932b1b4e05d9320b409b07657ed91",
+    "changeReason": "identity_conflict_opened",
+    "explanationCode": "identity_unresolved",
+    "correlationId": "fixture-correlation-0010"
+  }
+}

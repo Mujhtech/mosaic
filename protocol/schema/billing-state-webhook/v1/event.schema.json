@@ -1,0 +1,437 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:billing-state-webhook:v1:event",
+  "title": "Mosaic Billing State Webhook Contract v1 event",
+  "description": "The committed authoritative change Mosaic delivers to an application backend. An event is a notification that state changed, never the authority on what the state now is: a consumer re-reads the Customer Entitlement Snapshot. This schema also declares the shared primitives of Billing State Webhook Contract 1; the delivery schema references them. Provider-specific event names are deliberately absent, and no provider secret, purchase token, or raw provider payload can be carried.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "billingStateWebhookContractVersion",
+    "recordType",
+    "payload"
+  ],
+  "properties": {
+    "billingStateWebhookContractVersion": {
+      "const": "1"
+    },
+    "recordType": {
+      "const": "billingStateEvent"
+    },
+    "payload": {
+      "$ref": "#/$defs/billingStateEvent"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "safeText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[^\\r\\n\\u0000-\\u001F\\u007F]*$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "minLength": 24,
+      "maxLength": 24,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "entitlementKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_.-]*$"
+    },
+    "snapshotVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 999999999999
+    },
+    "priorSnapshotVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 999999999999
+    },
+    "recordType": {
+      "description": "The complete, closed record-type set of Billing State Webhook Contract 1.",
+      "enum": [
+        "billingStateEvent",
+        "webhookDeliveryAttempt"
+      ]
+    },
+    "eventType": {
+      "description": "The complete, closed event-type set. All ten members are declared now because adding one later costs a contract version; Phase 9B emits only customer.entitlements.changed. The other nine are reserved names with defined meanings, and a producer that emits one before it is specified is a defect. No member names a provider: a consumer never has to know whether the change came from Apple or Google to handle it.",
+      "enum": [
+        "customer.entitlements.changed",
+        "subscription.state.changed",
+        "subscription.period.changed",
+        "subscription.renewal_intent.changed",
+        "subscription.expired",
+        "subscription.revoked",
+        "subscription.refunded",
+        "customer.billing_identity.conflict",
+        "customer.projection.failed",
+        "customer.projection.recovered"
+      ]
+    },
+    "accessState": {
+      "description": "Access under accepted policy, as summarized on an event. unavailable is deliberately ABSENT, unlike the read-time accessState of Authoritative Entitlement 1: unavailable means Mosaic could not answer a read, and an event is not a read. An event exists only because a projection committed a new snapshot, so the projection did answer; the worst it can say about an axis is unknown, with the uncertainty that explains why. Emitting unavailable here would let a consumer read a service-delivery state as a customer state on a record that is not even authoritative.",
+      "enum": [
+        "active",
+        "inactive",
+        "unknown"
+      ]
+    },
+    "entitlementState": {
+      "enum": [
+        "active",
+        "inactive",
+        "unknown"
+      ]
+    },
+    "priorEntitlementState": {
+      "description": "absent means the Entitlement contributed no entry to the previous snapshot, which is how a first grant is reported without pretending the customer was previously inactive.",
+      "enum": [
+        "active",
+        "inactive",
+        "unknown",
+        "absent"
+      ]
+    },
+    "lifecycleState": {
+      "enum": [
+        "trialing",
+        "active",
+        "grace_period",
+        "billing_retry",
+        "paused",
+        "expired",
+        "revoked",
+        "refunded",
+        "superseded",
+        "unknown"
+      ]
+    },
+    "renewalIntent": {
+      "enum": [
+        "auto_renew_enabled",
+        "auto_renew_disabled",
+        "provider_managed",
+        "paused",
+        "unknown"
+      ]
+    },
+    "billingState": {
+      "enum": [
+        "current",
+        "retrying",
+        "grace",
+        "failed",
+        "refunded",
+        "revoked",
+        "unknown"
+      ]
+    },
+    "uncertaintyReason": {
+      "enum": [
+        "none",
+        "provider_unavailable",
+        "missing_fact",
+        "identity_unresolved",
+        "product_unresolved",
+        "conflicting_facts",
+        "projection_failed",
+        "stale_validation",
+        "unsupported_provider_state"
+      ]
+    },
+    "uncertainty": {
+      "description": "Structurally the Authoritative Entitlement uncertainty shape, copied rather than referenced so this contract does not inherit another draft contract's lifecycle.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason"
+      ],
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/uncertaintyReason"
+        },
+        "since": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "diagnosticCode": {
+          "$ref": "#/$defs/diagnosticCode"
+        }
+      },
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "none"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "since"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "since"
+        ]
+      }
+    },
+    "sourceReason": {
+      "description": "Why the committed state changed. Identical vocabulary to the Authoritative Entitlement changeReason, copied locally.",
+      "enum": [
+        "initial_projection",
+        "subscription_state_changed",
+        "subscription_period_changed",
+        "renewal_intent_changed",
+        "source_added",
+        "source_ended",
+        "refund_applied",
+        "revocation_applied",
+        "grant_version_changed",
+        "identity_changed",
+        "identity_conflict_opened",
+        "identity_conflict_resolved",
+        "projection_replayed",
+        "projection_rule_upgraded",
+        "projection_recovered",
+        "projection_failed",
+        "manual_reprojection"
+      ]
+    },
+    "diagnosticCode": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 96,
+      "pattern": "^[a-z][a-zA-Z0-9]*(?:[._-][a-zA-Z0-9]+)+$"
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "safeMessage",
+        "severity",
+        "retryable",
+        "correlationId"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/diagnosticCode"
+        },
+        "safeMessage": {
+          "$ref": "#/$defs/safeText"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "retryAfterSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "correlationId": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "changedEntitlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entitlementKey",
+        "previousState",
+        "currentState"
+      ],
+      "properties": {
+        "entitlementKey": {
+          "$ref": "#/$defs/entitlementKey"
+        },
+        "previousState": {
+          "$ref": "#/$defs/priorEntitlementState"
+        },
+        "currentState": {
+          "$ref": "#/$defs/entitlementState"
+        }
+      }
+    },
+    "stateSummary": {
+      "description": "The four state axes of the subscription the change came from, as a safe summary. It is a convenience for routing and logging: the authoritative answer is always the snapshot the consumer re-reads.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accessState",
+        "lifecycleState",
+        "renewalIntent",
+        "billingState",
+        "uncertainty"
+      ],
+      "properties": {
+        "accessState": {
+          "$ref": "#/$defs/accessState"
+        },
+        "lifecycleState": {
+          "$ref": "#/$defs/lifecycleState"
+        },
+        "renewalIntent": {
+          "$ref": "#/$defs/renewalIntent"
+        },
+        "billingState": {
+          "$ref": "#/$defs/billingState"
+        },
+        "uncertainty": {
+          "$ref": "#/$defs/uncertainty"
+        }
+      },
+      "if": {
+        "properties": {
+          "accessState": {
+            "const": "unknown"
+          }
+        },
+        "required": [
+          "accessState"
+        ]
+      },
+      "then": {
+        "properties": {
+          "uncertainty": {
+            "properties": {
+              "reason": {
+                "not": {
+                  "const": "none"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "billingStateEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "eventType",
+        "projectId",
+        "environmentId",
+        "billingCustomerId",
+        "snapshotVersion",
+        "projectionRuleVersion",
+        "occurredAt",
+        "createdAt",
+        "changedEntitlements",
+        "stateSummary",
+        "sourceReason",
+        "correlationId"
+      ],
+      "properties": {
+        "eventId": {
+          "description": "Stable across every delivery attempt and every manual replay. It is the consumer's deduplication key; delivery is at least once and is never promised to be exactly once.",
+          "$ref": "#/$defs/identifier"
+        },
+        "eventType": {
+          "$ref": "#/$defs/eventType"
+        },
+        "projectId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "environmentId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "billingCustomerId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "subscriptionInstanceId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "snapshotVersion": {
+          "$ref": "#/$defs/snapshotVersion"
+        },
+        "previousSnapshotVersion": {
+          "$ref": "#/$defs/priorSnapshotVersion"
+        },
+        "projectionRuleVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "occurredAt": {
+          "description": "When the change became effective, which is provider-derived and may be well before the event was created.",
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "createdAt": {
+          "description": "When Mosaic committed the event. Ordering by createdAt is not safe; consumers order by snapshotVersion.",
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "changedEntitlements": {
+          "description": "Ascending and unique by entitlementKey.",
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/changedEntitlement"
+          }
+        },
+        "stateSummary": {
+          "$ref": "#/$defs/stateSummary"
+        },
+        "sourceReason": {
+          "$ref": "#/$defs/sourceReason"
+        },
+        "isTestSource": {
+          "type": "boolean"
+        },
+        "correlationId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/diagnostics"
+        }
+      },
+      "if": {
+        "properties": {
+          "eventType": {
+            "const": "customer.entitlements.changed"
+          }
+        },
+        "required": [
+          "eventType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "changedEntitlements": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  }
+}

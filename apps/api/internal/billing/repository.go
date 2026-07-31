@@ -96,11 +96,44 @@ type AttemptOutcome struct {
 	Attempt    ValidationAttempt
 	Resolution *ResolutionRecord
 	Fact       *TransactionFact
-	Ledger     []LedgerEntry
-	Quarantine *QuarantineWrite
+	// Supersession is the once-per-lineage purchase_superseded fact recorded
+	// when a Google linkedPurchaseToken is observed. It is built only from
+	// lineage-constant fields, so its digest is stable across re-observations
+	// and the fact-identity constraint absorbs every write after the first.
+	Supersession *TransactionFact
+	Ledger       []LedgerEntry
+	Quarantine   *QuarantineWrite
 	// NextAvailableAt schedules a retry; zero completes or fails the job.
 	NextAvailableAt time.Time
 	JobStatus       string
+	// Correlators are the customer correlators the provider's authoritative
+	// response carried, already hashed. They are on the outcome rather than on
+	// the fact because Phase 9A's fact-shape exclusion stands: no correlator,
+	// raw or digested, is a Transaction Fact column. Their home is the 9B
+	// association-evidence table, and this is how they get there.
+	Correlators []AssociationCorrelator
+	// ReferenceDigests are every transaction-reference digest under which a
+	// submitted observation could have recorded submission-context evidence for
+	// this transaction. There is more than one because a client observation
+	// cannot state a Store Environment — a device can be made to say anything —
+	// so it is recorded under `unclassified` while the notification for the same
+	// purchase is recorded under the environment the store confirmed.
+	ReferenceDigests [][]byte
+}
+
+// AssociationCorrelator is one hashed customer correlator observed on a
+// provider's authoritative response.
+//
+// It never carries the raw value. The value is hashed inside the validator, at
+// the point it is parsed, so that nothing downstream — the repository, the
+// binder, a log line, a span attribute — is ever in a position to leak one.
+type AssociationCorrelator struct {
+	// EvidenceType is the association-evidence vocabulary entry.
+	EvidenceType string
+	// AliasType is the alias domain the digest was taken under, which is what
+	// lets it be matched against an alias a backend already attached.
+	AliasType string
+	Digest    []byte
 }
 
 // ResolutionRecord is the persisted Resolution Snapshot.
@@ -211,6 +244,11 @@ type Repository interface {
 	// and no other worker can claim the job underneath it.
 	LeaseValidationJobFor(ctx context.Context, workerID string, input RawInput, now, leaseUntil time.Time) (ValidationJob, error)
 	CompleteAttempt(ctx context.Context, job ValidationJob, outcome AttemptOutcome, now time.Time) error
+	// ChainRootDigest resolves the root of the purchase chain a fact belongs to
+	// by walking supersession edges backwards. The seam needs it because the
+	// Purchase Lineage is keyed on the root, and a fact whose provider handed the
+	// chain a new token carries a digest that is not it.
+	ChainRootDigest(ctx context.Context, fact TransactionFact) ([]byte, error)
 	// ParkValidationJob returns a job to the queue without consuming an attempt,
 	// for conditions that are expected to resolve without operator action.
 	ParkValidationJob(ctx context.Context, job ValidationJob, reason string, now time.Time) error

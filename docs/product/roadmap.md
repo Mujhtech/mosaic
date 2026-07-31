@@ -3919,9 +3919,15 @@ Implement:
 - migration dry run
 - migration validation
 - migration rollback strategy
-- retryable billing webhooks
-- webhook signing
-- webhook audit history
+- the remainder of the billing webhook subsystem beyond the Gate 9B
+  minimal slice (owner decision OD-1(b), 2026-07-28): the nine
+  reserved event types beyond `customer.entitlements.changed`,
+  dashboard webhook destination and delivery UI, and any further
+  delivery tooling. Gate 9B shipped the minimal slice: one emitted
+  event type, HMAC signing with rotation, at-least-once delivery with
+  bounded backoff, append-only attempt history, SSRF-screened
+  API-only destination management, and an audited operator
+  delivery-replay endpoint.
 - manual reconciliation
 - repair tools
 - invalid mapping diagnostics

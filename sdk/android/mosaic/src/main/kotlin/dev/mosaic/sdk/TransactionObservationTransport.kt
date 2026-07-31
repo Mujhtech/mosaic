@@ -18,9 +18,50 @@ internal sealed interface MosaicTransactionObservationTransportResult {
         MosaicTransactionObservationTransportResult
 }
 
+/**
+ * Supplies the current Customer Access Token, if there is one, at the moment of a request.
+ *
+ * It is a *source* rather than a value because the token is read at send time, never at enqueue
+ * time. An observation may sit in the durable queue across a sign-in, an app restart, or several
+ * days offline, so a token captured when the purchase completed would be expired or simply wrong by
+ * the time the observation is delivered.
+ */
+internal fun interface MosaicCustomerTokenSource {
+    suspend fun currentCustomerToken(): MosaicCustomerAccessToken?
+}
+
+/** Header carrying the Customer Access Token that binds a submission to a Billing Customer. */
+internal const val MOSAIC_CUSTOMER_TOKEN_HEADER = "Mosaic-Customer-Token"
+
+/**
+ * Builds the observation request headers.
+ *
+ * Extracted so the binding rule is testable without a live socket. Two credentials with different
+ * meanings travel here: the public SDK key says which application build is reporting, and the
+ * customer token says whose purchase it is. The customer token is **optional** — an anonymous
+ * submission is valid and is what an unidentified user produces — so a missing token omits the
+ * header rather than failing or delaying the submission.
+ */
+internal fun mosaicObservationHeaders(
+    apiKey: String,
+    customerToken: MosaicCustomerAccessToken?,
+): Map<String, String> = buildMap {
+    put("Authorization", "Bearer $apiKey")
+    put("Accept", "application/json")
+    put("Mosaic-SDK-Platform", "android")
+    put("Mosaic-SDK-Version", MOSAIC_ANDROID_SDK_VERSION)
+    customerToken?.let { put(MOSAIC_CUSTOMER_TOKEN_HEADER, it.value) }
+}
+
 internal interface MosaicTransactionObservationTransport {
     suspend fun submit(observation: MosaicTransactionObservation): MosaicTransactionObservationTransportResult
     fun cancel() = Unit
+
+    /**
+     * Binds a customer-token source. Optional by default: a transport that never talks to Mosaic's
+     * observation endpoint has nothing to bind, and an unbound transport submits anonymously.
+     */
+    fun bindCustomerTokenSource(source: MosaicCustomerTokenSource) = Unit
 }
 
 /**
@@ -33,17 +74,23 @@ internal class MosaicHTTPTransactionObservationTransport(
     private val client: OkHttpClient = OkHttpClient.Builder().callTimeout(15, TimeUnit.SECONDS).build(),
 ) : MosaicTransactionObservationTransport {
     @Volatile private var activeCall: okhttp3.Call? = null
+    @Volatile private var customerTokenSource: MosaicCustomerTokenSource? = null
+
+    override fun bindCustomerTokenSource(source: MosaicCustomerTokenSource) {
+        customerTokenSource = source
+    }
 
     override suspend fun submit(
         observation: MosaicTransactionObservation,
     ): MosaicTransactionObservationTransportResult = withContext(Dispatchers.IO) {
         val body = MosaicTransactionObservationCodec.encode(observation)
+        // Read at send time, and never allowed to fail the submission. This path is fire and
+        // forget: a token backend that is down, slow, or absent must cost the binding, not the
+        // observation, so the request proceeds anonymously rather than being dropped or retried.
+        val customerToken = runCatching { customerTokenSource?.currentCustomerToken() }.getOrNull()
         val request = Request.Builder()
             .url(configuration.transactionObservationURL().toString())
-            .header("Authorization", "Bearer ${configuration.apiKey}")
-            .header("Accept", "application/json")
-            .header("Mosaic-SDK-Platform", "android")
-            .header("Mosaic-SDK-Version", MOSAIC_ANDROID_SDK_VERSION)
+            .apply { mosaicObservationHeaders(configuration.apiKey, customerToken).forEach(::header) }
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         try {

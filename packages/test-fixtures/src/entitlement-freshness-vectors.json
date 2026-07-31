@@ -1,0 +1,196 @@
+{
+  "$comment": "Generated cross-implementation reference vectors. Regenerate with packages/test-fixtures/src/build-entitlement-reference-vectors.mjs; never hand-edit a digest.",
+  "contract": "Authoritative Entitlement Contract v1",
+  "contractVersion": "1",
+  "compatibilityManifest": "protocol/compatibility/authoritative-entitlement/v1.json",
+  "policy": {
+    "name": "boundedGrace",
+    "clockSkewToleranceSeconds": 60,
+    "defaultRefreshAfterSeconds": 3600,
+    "defaultValidUntilSeconds": 604800,
+    "defaultStaleGraceSeconds": 86400,
+    "maxValidUntilSeconds": 2592000,
+    "maxStaleGraceSeconds": 2592000,
+    "maxCacheHorizonSeconds": 2592000
+  },
+  "rules": [
+    "fresh: deviceNow is before refreshAfter. Serve the cache and do not refresh.",
+    "refresh_recommended: deviceNow is at or after refreshAfter and before validUntil. The snapshot is still fully valid; refresh opportunistically.",
+    "stale_within_grace: deviceNow is at or after validUntil and before validUntil + staleGraceSeconds. Previously active Entitlements remain locally active and MUST be surfaced as stale. With staleGraceSeconds 0 this band does not exist and the state is expired.",
+    "expired: deviceNow is at or after validUntil + staleGraceSeconds. Report unknown. NEVER report inactive: an expired cache means Mosaic has not been heard from, not that access ended.",
+    "staleGraceSeconds defaults to 86400 (24 hours) because bounded grace is the shipped policy; in Phase 9B it is configured deployment-wide server-side rather than per Environment (per-Environment configuration is a tracked follow-up), and a strict policy is the same fields with a grace window of zero. An absent member means zero, so a producer that intends bounded grace states it explicitly.",
+    "(validUntil - issuedAt) + staleGraceSeconds may never exceed 2592000 seconds (30 days). Bounding each field alone would let a 30-day validity and a 30-day grace window compose into 60 days of unconfirmed offline access.",
+    "Boundaries are compared with the 60-second skew tolerance applied in the direction that favours the user: a boundary is crossed only once deviceNow exceeds it by more than the tolerance.",
+    "A device clock earlier than issuedAt by more than the tolerance is unreliable. An unreliable clock is not a fifth state: it forces expired-equivalent behaviour, because a cache whose age cannot be measured cannot be trusted to be young."
+  ],
+  "vectors": [
+    {
+      "id": "well-inside-window",
+      "snapshot": {
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "staleGraceSeconds": 86400
+      },
+      "deviceNow": "2026-07-28T12:30:00.000Z",
+      "clockSkewToleranceSeconds": 60,
+      "state": "fresh",
+      "notes": "The ordinary case shortly after issuance."
+    },
+    {
+      "id": "just-before-refresh-after",
+      "snapshot": {
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "staleGraceSeconds": 86400
+      },
+      "deviceNow": "2026-07-28T12:59:00.000Z",
+      "clockSkewToleranceSeconds": 60,
+      "state": "fresh",
+      "notes": "One minute before refreshAfter."
+    },
+    {
+      "id": "one-second-past-refresh-after-within-skew",
+      "snapshot": {
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "staleGraceSeconds": 86400
+      },
+      "deviceNow": "2026-07-28T13:00:01.000Z",
+      "clockSkewToleranceSeconds": 60,
+      "state": "fresh",
+      "notes": "Inside the 60-second skew tolerance, so the boundary is not yet crossed. An implementation that compares boundaries exactly flaps between two states for every device whose clock is a few seconds fast."
+    },
+    {
+      "id": "past-refresh-after-beyond-skew",
+      "snapshot": {
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "staleGraceSeconds": 86400
+      },
+      "deviceNow": "2026-07-28T13:05:00.000Z",
+      "clockSkewToleranceSeconds": 60,
+      "state": "refresh_recommended",
+      "notes": "Past the boundary by more than the tolerance. Still fully valid: this is a hint, not an expiry."
+    },
+    {
+      "id": "long-past-refresh-after",
+      "snapshot": {
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "staleGraceSeconds": 86400
+      },
+      "deviceNow": "2026-08-01T12:00:00.000Z",
+      "clockSkewToleranceSeconds": 60,
+      "state": "refresh_recommended",
+      "notes": "Days offline and still inside validUntil. Access continues normally."
+    },
+    {
+      "id": "just-past-valid-until",
+      "snapshot": {
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "staleGraceSeconds": 86400
+      },
+      "deviceNow": "2026-08-04T12:05:00.000Z",
+      "clockSkewToleranceSeconds": 60,
+      "state": "stale_within_grace",
+      "notes": "Inside the bounded-grace window. Previously active Entitlements stay active and must be marked stale in the UI."
+    },
+    {
+      "id": "end-of-grace-window",
+      "snapshot": {
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "staleGraceSeconds": 86400
+      },
+      "deviceNow": "2026-08-05T11:55:00.000Z",
+      "clockSkewToleranceSeconds": 60,
+      "state": "stale_within_grace",
+      "notes": "Five minutes before the grace window closes."
+    },
+    {
+      "id": "past-grace-window",
+      "snapshot": {
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "staleGraceSeconds": 86400
+      },
+      "deviceNow": "2026-08-05T12:05:00.000Z",
+      "clockSkewToleranceSeconds": 60,
+      "state": "expired",
+      "notes": "Past grace. The state is unknown, never inactive; a host that must not over-grant asks its own server."
+    },
+    {
+      "id": "strict-policy-past-valid-until",
+      "snapshot": {
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "staleGraceSeconds": 0
+      },
+      "deviceNow": "2026-08-04T12:05:00.000Z",
+      "clockSkewToleranceSeconds": 60,
+      "state": "expired",
+      "notes": "With staleGraceSeconds 0 there is no grace band at all, so validUntil is a hard edge. This is the strict policy expressed through the same fields rather than through a separate mode."
+    },
+    {
+      "id": "backwards-clock-before-issued-at",
+      "snapshot": {
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "staleGraceSeconds": 86400
+      },
+      "deviceNow": "2026-07-28T09:00:00.000Z",
+      "clockSkewToleranceSeconds": 60,
+      "state": "expired",
+      "notes": "The device claims a time hours before the snapshot was issued. The cache's age is unmeasurable, so it is treated as expired. A naive implementation computes a negative age, concludes 'fresh', and hands an attacker unlimited offline access by moving the clock back."
+    },
+    {
+      "id": "backwards-clock-within-skew",
+      "snapshot": {
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "staleGraceSeconds": 86400
+      },
+      "deviceNow": "2026-07-28T11:59:30.000Z",
+      "clockSkewToleranceSeconds": 60,
+      "state": "fresh",
+      "notes": "Thirty seconds before issuedAt is ordinary clock skew between a phone and a server, not a manipulated clock. It must not trip the unreliable-clock path."
+    },
+    {
+      "id": "forwards-clock-far-future",
+      "snapshot": {
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "staleGraceSeconds": 86400
+      },
+      "deviceNow": "2027-07-28T12:00:00.000Z",
+      "clockSkewToleranceSeconds": 60,
+      "state": "expired",
+      "notes": "A wildly future clock expires the cache. This direction fails safe on its own: the user sees unknown rather than a granted state."
+    }
+  ]
+}
