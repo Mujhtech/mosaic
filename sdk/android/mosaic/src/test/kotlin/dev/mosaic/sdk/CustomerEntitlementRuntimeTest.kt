@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -426,6 +427,13 @@ class CustomerEntitlementRuntimeTest {
         )
 
         val refreshes = List(8) { async { runtime.refreshCustomerEntitlements() } }
+        // async only queues these, so completing the gate here would open it
+        // before a single refresh had run and the collapse would be decided by
+        // whichever internal suspension happened to yield first. Draining the
+        // scheduler parks all eight -- one owning the request on the gate, seven
+        // awaiting it -- so the gate holds the request open for the arrivals it
+        // is meant to collect.
+        runCurrent()
         gate.complete(Unit)
         val results = refreshes.awaitAll()
 
