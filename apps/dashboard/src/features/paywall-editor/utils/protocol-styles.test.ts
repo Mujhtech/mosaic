@@ -12,9 +12,12 @@ describe("Protocol 0.2 preview styles", () => {
     [90, 180],
     [360, 90],
     [-90, 0],
-  ])("maps the physical %s° gradient angle to CSS %s°", (protocolAngle, cssAngle) => {
-    expect(protocolGradientAngleToCss(protocolAngle)).toBe(cssAngle);
-  });
+  ])(
+    "maps the physical %s° gradient angle to CSS %s°",
+    (protocolAngle, cssAngle) => {
+      expect(protocolGradientAngleToCss(protocolAngle)).toBe(cssAngle);
+    }
+  );
 
   it("renders physical gradient angles without any locale or RTL mirroring input", () => {
     const { document } = required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]");

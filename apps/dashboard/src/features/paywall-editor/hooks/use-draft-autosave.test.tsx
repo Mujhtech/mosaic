@@ -22,6 +22,7 @@ import type {
   MockPurchaseState,
 } from "@/features/paywall-editor/types/editor";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 
 function AutosaveHarness({
   mockProducts,
@@ -35,16 +36,20 @@ function AutosaveHarness({
   const status = useDraftAutosave(mockPurchaseState, mockProducts);
 
   useEffect(() => {
-    if (!document) loadTemplate(EDITOR_TEMPLATES[0]!.document);
+    if (!document) {
+      loadTemplate(
+        required(EDITOR_TEMPLATES[0], "the first editor template").document
+      );
+    }
   }, [document, loadTemplate]);
 
   return (
     <div>
       <span data-testid="autosave-status">{status}</span>
-      <button type="button" onClick={() => setLocale("ar")}>
+      <button onClick={() => setLocale("ar")} type="button">
         Arabic
       </button>
-      <button type="button" onClick={() => setTextScale(1.8)}>
+      <button onClick={() => setTextScale(1.8)} type="button">
         Large text
       </button>
     </div>
@@ -57,13 +62,17 @@ function RetryAutosaveHarness() {
   const { retry, status } = useDraftAutosaveController("productAvailable");
 
   useEffect(() => {
-    if (!document) loadTemplate(EDITOR_TEMPLATES[0]!.document);
+    if (!document) {
+      loadTemplate(
+        required(EDITOR_TEMPLATES[0], "the first editor template").document
+      );
+    }
   }, [document, loadTemplate]);
 
   return (
     <div>
       <span data-testid="retry-autosave-status">{status}</span>
-      <button type="button" onClick={retry}>
+      <button onClick={retry} type="button">
         Retry autosave
       </button>
     </div>
@@ -77,16 +86,20 @@ function FlushAutosaveHarness() {
     useDraftAutosaveController("productAvailable");
 
   useEffect(() => {
-    if (!document) loadTemplate(EDITOR_TEMPLATES[0]!.document);
+    if (!document) {
+      loadTemplate(
+        required(EDITOR_TEMPLATES[0], "the first editor template").document
+      );
+    }
   }, [document, loadTemplate]);
 
   return (
     <div>
       <span data-testid="flush-autosave-status">{status}</span>
-      <button type="button" onClick={flush}>
+      <button onClick={flush} type="button">
         Flush before Back
       </button>
-      <button type="button" onClick={retry}>
+      <button onClick={retry} type="button">
         Retry flushed autosave
       </button>
     </div>
@@ -104,17 +117,20 @@ function TransactionAutosaveHarness() {
   const status = useDraftAutosave("productAvailable");
 
   useEffect(() => {
-    if (!document) loadTemplate(EDITOR_TEMPLATES[0]!.document);
+    if (!document) {
+      loadTemplate(
+        required(EDITOR_TEMPLATES[0], "the first editor template").document
+      );
+    }
   }, [document, loadTemplate]);
 
   return (
     <div>
       <span data-testid="transaction-autosave-status">{status}</span>
-      <button type="button" onClick={beginDocumentTransaction}>
+      <button onClick={beginDocumentTransaction} type="button">
         Begin document transaction
       </button>
       <button
-        type="button"
         onClick={() => {
           updateComponentInTransaction("headline", (node) =>
             node.type === "text"
@@ -133,10 +149,11 @@ function TransactionAutosaveHarness() {
               : node
           );
         }}
+        type="button"
       >
         Update headline in transaction
       </button>
-      <button type="button" onClick={commitDocumentTransaction}>
+      <button onClick={commitDocumentTransaction} type="button">
         Commit document transaction
       </button>
     </div>
@@ -356,8 +373,9 @@ describe("draft autosave", () => {
     );
     const saved = readLocalProjectResult();
     expect(saved.status).toBe("valid");
-    if (saved.status !== "valid")
+    if (saved.status !== "valid") {
       throw new Error("Expected a valid local project");
+    }
     expect(findNode(saved.project.document, "headline")).toMatchObject({
       value: { default: "Committed headline" },
     });

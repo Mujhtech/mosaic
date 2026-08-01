@@ -1,17 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-
-import { RequestIdCopy } from "@/features/auth/components/hosted-resource-boundary";
 import { Button } from "@/components/ui/button";
 import { dashboardBuildInfo, dashboardEnvironment } from "@/config/environment";
-import { apiHealthQueryOptions } from "@/features/diagnostics/queries/api-health-query";
+import { RequestIdCopy } from "@/features/auth/components/hosted-resource-boundary";
 import { sessionQueryOptions } from "@/features/auth/queries/session-query";
+import { apiHealthQueryOptions } from "@/features/diagnostics/queries/api-health-query";
 import { ApiError, describeApiError } from "@/lib/api/errors";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-0.5 py-2 sm:grid-cols-[14rem_1fr] sm:gap-4">
-      <dt className="text-muted-foreground text-xs font-medium">{label}</dt>
-      <dd className="font-mono text-xs break-all">{value}</dd>
+      <dt className="font-medium text-muted-foreground text-xs">{label}</dt>
+      <dd className="break-all font-mono text-xs">{value}</dd>
     </div>
   );
 }
@@ -25,41 +24,45 @@ export function DiagnosticsPanel() {
   const session = useQuery(sessionQueryOptions());
   const health = useQuery({ ...apiHealthQueryOptions(), enabled: false });
 
-  const sessionState =
-    session.isPending && session.fetchStatus !== "idle"
-      ? "Checking…"
-      : session.isSuccess
-        ? `Signed in as ${session.data.email}`
-        : session.error instanceof ApiError && session.error.status === 401
-          ? "Not signed in"
-          : session.error
-            ? describeApiError(session.error).description
-            : "Unknown";
+  let sessionState = "Unknown";
+  if (session.isPending && session.fetchStatus !== "idle") {
+    sessionState = "Checking…";
+  } else if (session.isSuccess) {
+    sessionState = `Signed in as ${session.data.email}`;
+  } else if (
+    session.error instanceof ApiError &&
+    session.error.status === 401
+  ) {
+    sessionState = "Not signed in";
+  } else if (session.error) {
+    sessionState = describeApiError(session.error).description;
+  }
 
-  const healthState = health.isFetching
-    ? "Probing…"
-    : health.isSuccess
-      ? `Reachable (status ${health.data.status})`
-      : health.isError
-        ? describeApiError(health.error).description
-        : "Not probed yet";
+  let healthState = "Not probed yet";
+  if (health.isFetching) {
+    healthState = "Probing…";
+  } else if (health.isSuccess) {
+    healthState = `Reachable (status ${health.data.status})`;
+  } else if (health.isError) {
+    healthState = describeApiError(health.error).description;
+  }
 
+  // Health is asked first because probing it is the deliberate act; a stale
+  // session error should not shadow the identifier for the probe just run.
+  const failed =
+    health.error instanceof ApiError ? health.error : session.error;
   const correlationId =
-    health.error instanceof ApiError
-      ? health.error.correlationId
-      : session.error instanceof ApiError
-        ? session.error.correlationId
-        : undefined;
+    failed instanceof ApiError ? failed.correlationId : undefined;
 
   return (
     <section
       aria-labelledby="diagnostics-title"
-      className="border-border rounded border p-5"
+      className="rounded border border-border p-5"
     >
-      <h2 className="text-base font-semibold" id="diagnostics-title">
+      <h2 className="font-semibold text-base" id="diagnostics-title">
         Dashboard diagnostics
       </h2>
-      <p className="text-muted-foreground mt-1 text-sm leading-6">
+      <p className="mt-1 text-muted-foreground text-sm leading-6">
         Quote these values when reporting a problem. Mosaic does not send
         browser errors anywhere.
       </p>

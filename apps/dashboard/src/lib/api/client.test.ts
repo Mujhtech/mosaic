@@ -144,17 +144,20 @@ describe("createApiClient", () => {
     "%252e%252e%252foutside",
     "/outside",
     "\\\\untrusted.example/outside",
-  ])("rejects a path that can escape the configured API boundary: %s", async (path) => {
-    const fetchImplementation = vi.fn<typeof fetch>();
-    const client = createApiClient({
-      baseUrl: "https://api.example.test/api/v1/dashboard",
-      fetchImplementation,
-      getAccessToken: () => "session-token",
-    });
+  ])(
+    "rejects a path that can escape the configured API boundary: %s",
+    async (path) => {
+      const fetchImplementation = vi.fn<typeof fetch>();
+      const client = createApiClient({
+        baseUrl: "https://api.example.test/api/v1/dashboard",
+        fetchImplementation,
+        getAccessToken: () => "session-token",
+      });
 
-    await expect(client.request(path)).rejects.toBeInstanceOf(TypeError);
-    expect(fetchImplementation).not.toHaveBeenCalled();
-  });
+      await expect(client.request(path)).rejects.toBeInstanceOf(TypeError);
+      expect(fetchImplementation).not.toHaveBeenCalled();
+    }
+  );
 
   it("distinguishes cancellation from a network failure", async () => {
     const abortedFetch = vi.fn<typeof fetch>();

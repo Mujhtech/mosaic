@@ -204,27 +204,30 @@ describe("property inspector safety", () => {
     ["carousel", "Initial page", "Content"],
     ["switch", "Switch label", "Content"],
     ["countdown", "Ends at", "Content"],
-  ] as const)("provides contextual Protocol 0.2 coverage for %s", async (type, fieldLabel, primarySection) => {
-    const fixture = documentWithBlock(type);
-    render(
-      <StudioWorkspaceStoreProvider storage={null}>
-        <EditorStoreProvider>
-          <InspectorHarness
-            initialDocument={fixture.document}
-            selection={fixture.nodeId}
-          />
-        </EditorStoreProvider>
-      </StudioWorkspaceStoreProvider>
-    );
+  ] as const)(
+    "provides contextual Protocol 0.2 coverage for %s",
+    async (type, fieldLabel, primarySection) => {
+      const fixture = documentWithBlock(type);
+      render(
+        <StudioWorkspaceStoreProvider storage={null}>
+          <EditorStoreProvider>
+            <InspectorHarness
+              initialDocument={fixture.document}
+              selection={fixture.nodeId}
+            />
+          </EditorStoreProvider>
+        </StudioWorkspaceStoreProvider>
+      );
 
-    await waitFor(() =>
-      expect(getInspectorSection(primarySection)).toBeInTheDocument()
-    );
-    expect(screen.getByLabelText(fieldLabel)).toBeInTheDocument();
-    expect(getInspectorSection("Visibility")).toBeInTheDocument();
-    expect(getInspectorSection("Advanced")).not.toHaveAttribute("open");
-    expect(getInspectorSection(primarySection).className).not.toContain(
-      "rounded"
-    );
-  });
+      await waitFor(() =>
+        expect(getInspectorSection(primarySection)).toBeInTheDocument()
+      );
+      expect(screen.getByLabelText(fieldLabel)).toBeInTheDocument();
+      expect(getInspectorSection("Visibility")).toBeInTheDocument();
+      expect(getInspectorSection("Advanced")).not.toHaveAttribute("open");
+      expect(getInspectorSection(primarySection).className).not.toContain(
+        "rounded"
+      );
+    }
+  );
 });

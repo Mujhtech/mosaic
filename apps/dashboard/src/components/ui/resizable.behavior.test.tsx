@@ -322,37 +322,40 @@ describe("Resizable upstream behavior", () => {
   it.each([
     ["horizontal", { x: 300, y: 100 }, { x: 380, y: 100 }, 380],
     ["vertical", { x: 100, y: 500 }, { x: 100, y: 560 }, 560],
-  ] as const)("uses upstream %s pointer resizing and pointer capture", async (orientation, start, end, expected) => {
-    const panelRef = createRef<ResizablePanelImperativeHandle>();
-    const onLayoutChanged = vi.fn();
-    render(
-      <ResizeHarness
-        onLayoutChanged={onLayoutChanged}
-        orientation={orientation}
-        panelRef={panelRef}
-      />
-    );
-    const separator = screen.getByRole("separator", {
-      name: `Resize ${orientation} panels`,
-    });
-    await waitFor(() =>
-      expect(panelRef.current?.getSize().inPixels).toBe(
-        orientation === "horizontal" ? 300 : 500
-      )
-    );
-    onLayoutChanged.mockClear();
+  ] as const)(
+    "uses upstream %s pointer resizing and pointer capture",
+    async (orientation, start, end, expected) => {
+      const panelRef = createRef<ResizablePanelImperativeHandle>();
+      const onLayoutChanged = vi.fn();
+      render(
+        <ResizeHarness
+          onLayoutChanged={onLayoutChanged}
+          orientation={orientation}
+          panelRef={panelRef}
+        />
+      );
+      const separator = screen.getByRole("separator", {
+        name: `Resize ${orientation} panels`,
+      });
+      await waitFor(() =>
+        expect(panelRef.current?.getSize().inPixels).toBe(
+          orientation === "horizontal" ? 300 : 500
+        )
+      );
+      onLayoutChanged.mockClear();
 
-    dragSeparator(separator, start, end);
+      dragSeparator(separator, start, end);
 
-    await waitFor(() =>
-      expect(panelRef.current?.getSize().inPixels).toBeCloseTo(expected, 0)
-    );
-    expect(HTMLElement.prototype.setPointerCapture).toHaveBeenCalledWith(7);
-    expect(onLayoutChanged).toHaveBeenLastCalledWith(
-      expect.any(Object),
-      expect.objectContaining({ isUserInteraction: true })
-    );
-  });
+      await waitFor(() =>
+        expect(panelRef.current?.getSize().inPixels).toBeCloseTo(expected, 0)
+      );
+      expect(HTMLElement.prototype.setPointerCapture).toHaveBeenCalledWith(7);
+      expect(onLayoutChanged).toHaveBeenLastCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ isUserInteraction: true })
+      );
+    }
+  );
 
   it("uses upstream keyboard resizing with enforced minimum and maximum sizes", async () => {
     const panelRef = createRef<ResizablePanelImperativeHandle>();

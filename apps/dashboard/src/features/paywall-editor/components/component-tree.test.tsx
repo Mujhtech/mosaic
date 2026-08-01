@@ -764,42 +764,45 @@ describe("ComponentTree", () => {
       clientY: 39,
       expected: /restore@paywall-content:4.*plans@paywall-content:5/,
     },
-  ])("applies a native row $placement drop as exactly one history edit", async (scenario) => {
-    renderTree();
-    await waitFor(() =>
-      expect(screen.getByTitle(scenario.source)).toBeVisible()
-    );
-    const baselineUndo = Number(screen.getByTestId("undo-count").textContent);
-    const transfer = createDataTransfer();
+  ])(
+    "applies a native row $placement drop as exactly one history edit",
+    async (scenario) => {
+      renderTree();
+      await waitFor(() =>
+        expect(screen.getByTitle(scenario.source)).toBeVisible()
+      );
+      const baselineUndo = Number(screen.getByTestId("undo-count").textContent);
+      const transfer = createDataTransfer();
 
-    const sourceRow = screen.getByTitle(scenario.source);
-    fireEvent.dragStart(within(sourceRow).getByText(scenario.source), {
-      dataTransfer: transfer.transfer,
-    });
-    const targetRow = screen.getByTitle(scenario.target);
-    setRowBounds(targetRow);
-    fireRowDragEvent(
-      "dragOver",
-      targetRow,
-      transfer.transfer,
-      scenario.clientY
-    );
-    expect(targetRow).toHaveAttribute(
-      "data-drop-placement",
-      scenario.placement
-    );
-    fireRowDragEvent("drop", targetRow, transfer.transfer, scenario.clientY);
+      const sourceRow = screen.getByTitle(scenario.source);
+      fireEvent.dragStart(within(sourceRow).getByText(scenario.source), {
+        dataTransfer: transfer.transfer,
+      });
+      const targetRow = screen.getByTitle(scenario.target);
+      setRowBounds(targetRow);
+      fireRowDragEvent(
+        "dragOver",
+        targetRow,
+        transfer.transfer,
+        scenario.clientY
+      );
+      expect(targetRow).toHaveAttribute(
+        "data-drop-placement",
+        scenario.placement
+      );
+      fireRowDragEvent("drop", targetRow, transfer.transfer, scenario.clientY);
 
-    await waitFor(() =>
-      expect(screen.getByTestId("tree-layout")).toHaveTextContent(
-        scenario.expected
-      )
-    );
-    expect(screen.getByTestId("undo-count")).toHaveTextContent(
-      String(baselineUndo + 1)
-    );
-    expect(screen.getByText("Layer moved")).toBeVisible();
-  });
+      await waitFor(() =>
+        expect(screen.getByTestId("tree-layout")).toHaveTextContent(
+          scenario.expected
+        )
+      );
+      expect(screen.getByTestId("undo-count")).toHaveTextContent(
+        String(baselineUndo + 1)
+      );
+      expect(screen.getByText("Layer moved")).toBeVisible();
+    }
+  );
 
   it("reorders by pointer from the label area without requiring the grip", async () => {
     renderTree();

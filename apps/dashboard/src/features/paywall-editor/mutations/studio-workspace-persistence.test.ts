@@ -244,24 +244,27 @@ describe("Studio workspace preference persistence", () => {
     ["iphone", "iphone-17-pro"],
     ["android", "pixel-10-pro"],
     ["tablet", "ipad-pro-11"],
-  ])("migrates the legacy %s device without discarding workspace state", (legacy, current) => {
-    const value = mutableDefaults();
-    value.canvas.device = legacy;
-    value.panels.left = { size: 420, collapsed: true };
-    value.selectedTool = "assets";
+  ])(
+    "migrates the legacy %s device without discarding workspace state",
+    (legacy, current) => {
+      const value = mutableDefaults();
+      value.canvas.device = legacy;
+      value.panels.left = { size: 420, collapsed: true };
+      value.selectedTool = "assets";
 
-    const result = readValue(value);
+      const result = readValue(value);
 
-    expect(result).toMatchObject({
-      status: "valid",
-      source: "persisted",
-      preferences: {
-        canvas: { device: current },
-        panels: { left: { size: 420, collapsed: true } },
-        selectedTool: "assets",
-      },
-    });
-  });
+      expect(result).toMatchObject({
+        status: "valid",
+        source: "persisted",
+        preferences: {
+          canvas: { device: current },
+          panels: { left: { size: 420, collapsed: true } },
+          selectedTool: "assets",
+        },
+      });
+    }
+  );
 
   it("adds the frozen Countdown preview instant to legacy workspace canvas preferences", () => {
     const value = mutableDefaults();

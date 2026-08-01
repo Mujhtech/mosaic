@@ -33,20 +33,17 @@ describe("customer lookup identifier gating", () => {
     ]);
   });
 
-  it.each([
-    "email",
-    "name",
-    "display_name",
-    "receipt",
-    "",
-  ])("refuses the unsupported identifier type %j", (identifierType) => {
-    expect(
-      validateCustomerSearch({
-        identifierType,
-        identifierValue: "someone@example.com",
-      })
-    ).toBe("unsupported_type");
-  });
+  it.each(["email", "name", "display_name", "receipt", ""])(
+    "refuses the unsupported identifier type %j",
+    (identifierType) => {
+      expect(
+        validateCustomerSearch({
+          identifierType,
+          identifierValue: "someone@example.com",
+        })
+      ).toBe("unsupported_type");
+    }
+  );
 
   it("requires a non-empty value within the contract's bound", () => {
     expect(

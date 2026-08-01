@@ -1,5 +1,5 @@
-import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
 import { StatusMessage } from "@mosaic/design-system";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
 import { lazy, Suspense, useCallback, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,8 @@ import {
   StudioResizableWorkspace,
   type StudioResizableWorkspaceHandle,
 } from "@/features/paywall-editor/components/studio-resizable-workspace";
-import { StudioToolbar } from "@/features/paywall-editor/components/studio-toolbar";
 import { StudioToolPanel } from "@/features/paywall-editor/components/studio-tool-panel";
+import { StudioToolbar } from "@/features/paywall-editor/components/studio-toolbar";
 import { ValidationPanel } from "@/features/paywall-editor/components/validation-panel";
 import { useDraftAutosaveController } from "@/features/paywall-editor/hooks/use-draft-autosave";
 import { useEditorHistory } from "@/features/paywall-editor/hooks/use-editor-history";
@@ -27,17 +27,18 @@ import {
   useEditorActions,
   useEditorStoreSelector,
 } from "@/features/paywall-editor/stores/editor-store-context";
-import { useStudioSource } from "@/features/paywall-editor/stores/use-studio-source";
+import type { StudioWorkspaceSnapshot } from "@/features/paywall-editor/stores/studio-workspace-store";
 import {
   useStudioWorkspaceActions,
   useStudioWorkspaceSelector,
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
-import type { StudioWorkspaceSnapshot } from "@/features/paywall-editor/stores/studio-workspace-store";
+import { useStudioSource } from "@/features/paywall-editor/stores/use-studio-source";
 import type {
   MockProductDefinition,
   MockPurchaseState,
   ValidationIssue,
 } from "@/features/paywall-editor/types/editor";
+import { hostedStudioBackHref } from "@/features/paywall-editor/types/studio-source";
 import {
   focusDocumentValidationIssue,
   focusInspectorValidationIssue,
@@ -48,7 +49,6 @@ import { useHostedDraftRecovery } from "@/features/paywalls/hooks/use-hosted-dra
 import { serializeHostedRecoveryDocument } from "@/features/paywalls/mutations/hosted-draft-recovery";
 import { useHostedDraftSession } from "@/features/paywalls/stores/use-hosted-draft-session";
 import { HostedPublishPanel } from "@/features/publishing/components/hosted-publish-panel";
-import { hostedStudioBackHref } from "@/features/paywall-editor/types/studio-source";
 
 const selectDocument = (state: EditorState) => state.document;
 const selectEditableDocumentId = (state: EditorState) =>
@@ -79,12 +79,12 @@ function downloadStudioDocument(name: string, contents: string) {
 }
 
 export interface EditorShellProps {
+  readonly importError: string | null;
   readonly mockProducts: readonly MockProductDefinition[];
   readonly mockPurchaseState: MockPurchaseState;
-  readonly importError: string | null;
+  readonly onImport: (file: File) => void;
   readonly onProductsChange: (products: MockProductDefinition[]) => void;
   readonly onPurchaseStateChange: (state: MockPurchaseState) => void;
-  readonly onImport: (file: File) => void;
 }
 
 export function EditorShell({
@@ -156,6 +156,9 @@ export function EditorShell({
         : null,
     status: hostedAutosave.status,
   });
+  // Bound to a const so the render guard below narrows inside the button
+  // callbacks too: a property read would widen again at each call site.
+  const recoveryRecord = recovery.record;
   const viewportMode = useStudioViewportMode();
   const hostedEnvironmentName =
     source.kind === "hosted" ? source.environmentName : undefined;
@@ -189,20 +192,26 @@ export function EditorShell({
     onRevisionDispatched: editor.setLocalRevisionSequence,
   });
 
-  if (!document) return null;
+  if (!document) {
+    return null;
+  }
   const activeDocument = document;
 
   function navigateToValidationIssue(issue: ValidationIssue) {
     selectComponent(issue.componentId ?? null);
-    if (!issue.componentId) {
+    if (issue.componentId) {
+      workspaceControllerRef.current?.expand("properties");
+    } else {
       workspaceActions.setSelectedTool("localization");
       workspaceControllerRef.current?.expand("left");
-    } else {
-      workspaceControllerRef.current?.expand("properties");
     }
     window.setTimeout(() => {
-      if (issue.componentId && focusInspectorValidationIssue(issue)) return;
-      if (!issue.componentId && focusDocumentValidationIssue(issue)) return;
+      if (issue.componentId && focusInspectorValidationIssue(issue)) {
+        return;
+      }
+      if (!issue.componentId && focusDocumentValidationIssue(issue)) {
+        return;
+      }
       const fallback = issue.componentId
         ? window.document.querySelector<HTMLElement>(
             "#property-inspector-title"
@@ -216,8 +225,10 @@ export function EditorShell({
   function exportDocument() {
     if (!validation.isValid) {
       workspaceControllerRef.current?.expand("diagnostics");
-      const firstIssue = validation.errors[0];
-      if (firstIssue) navigateToValidationIssue(firstIssue);
+      const [firstIssue] = validation.errors;
+      if (firstIssue) {
+        navigateToValidationIssue(firstIssue);
+      }
       return;
     }
 
@@ -263,6 +274,11 @@ export function EditorShell({
       case "reset":
         workspaceControllerRef.current?.reset();
         break;
+      default:
+        // Unreachable for StudioWorkspaceCommand: the cases above are the whole
+        // union. It stands guard for a command arriving from outside the type,
+        // where ignoring it beats acting on a command nobody defined.
+        break;
     }
   }
 
@@ -272,12 +288,12 @@ export function EditorShell({
   const diagnosticsPanel = (
     <section
       aria-label="Studio diagnostics"
-      className="bg-card h-full overflow-hidden"
+      className="h-full overflow-hidden bg-card"
       data-slot="studio-diagnostics"
     >
-      <div className="border-border flex h-8 items-center justify-between gap-3 border-b px-3 text-xs">
+      <div className="flex h-8 items-center justify-between gap-3 border-border border-b px-3 text-xs">
         <span className="font-semibold">Diagnostics</span>
-        <span className="text-muted-foreground truncate">
+        <span className="truncate text-muted-foreground">
           {validationSummary} · Preview clients · {preview.aggregate.total}
         </span>
       </div>
@@ -306,26 +322,26 @@ export function EditorShell({
           </div>
         ) : null}
         {source.kind === "hosted" &&
-        recovery.record &&
+        recoveryRecord &&
         !hostedAutosave.conflict ? (
           <StatusMessage
-            className="border-border bg-muted/35 mb-4 rounded border p-3 text-sm"
+            className="mb-4 rounded border border-border bg-muted/35 p-3 text-sm"
             tone="warning"
           >
             <p className="font-semibold">
               A browser recovery copy is available
             </p>
-            <p className="text-muted-foreground mt-1 leading-6">
+            <p className="mt-1 text-muted-foreground leading-6">
               Mosaic preserved edits from{" "}
-              {new Date(recovery.record.savedAt).toLocaleString()}. Restore them
+              {new Date(recoveryRecord.savedAt).toLocaleString()}. Restore them
               to the canvas or download them before dismissing this copy.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
                 onClick={() =>
                   editor.openHostedDraft(
-                    recovery.record!.document,
-                    recovery.record!.draftId
+                    recoveryRecord.document,
+                    recoveryRecord.draftId
                   )
                 }
                 size="sm"
@@ -336,8 +352,8 @@ export function EditorShell({
               <Button
                 onClick={() =>
                   downloadStudioDocument(
-                    `${recovery.record!.document.id}-recovery`,
-                    serializeHostedRecoveryDocument(recovery.record!)
+                    `${recoveryRecord.document.id}-recovery`,
+                    serializeHostedRecoveryDocument(recoveryRecord)
                   )
                 }
                 size="sm"
@@ -361,7 +377,7 @@ export function EditorShell({
           <div className="mb-4">
             {source.initialReview === "publish" ? (
               <StatusMessage
-                className="border-primary/20 bg-primary/5 mb-3 rounded border p-3 text-sm"
+                className="mb-3 rounded border border-primary/20 bg-primary/5 p-3 text-sm"
                 tone="info"
               >
                 Returned to Publish review. Mosaic is checking the current Draft
@@ -379,12 +395,12 @@ export function EditorShell({
         ) : null}
         {importError ? (
           <StatusMessage
-            className="border-destructive/25 bg-destructive/5 mb-4 rounded border p-3 text-sm"
+            className="mb-4 rounded border border-destructive/25 bg-destructive/5 p-3 text-sm"
             tone="danger"
           >
             <p className="font-semibold">Import was not applied</p>
-            <p className="text-muted-foreground mt-1">{importError}</p>
-            <p className="text-muted-foreground mt-1 text-xs">
+            <p className="mt-1 text-muted-foreground">{importError}</p>
+            <p className="mt-1 text-muted-foreground text-xs">
               Your open paywall is unchanged.
             </p>
           </StatusMessage>
@@ -414,19 +430,19 @@ export function EditorShell({
 
   return (
     <div
-      className="bg-background flex h-full min-h-0 flex-col"
+      className="flex h-full min-h-0 flex-col bg-background"
       data-studio-mode={source.kind}
       data-testid="studio-editor-shell"
     >
       <StudioToolbar
         autosave={autosave}
-        canRedo={canRedo}
-        canUndo={canUndo}
-        documentIdentity={document.id}
         backHref={
           source.kind === "hosted" ? hostedStudioBackHref(source) : "/workspace"
         }
         backLabel={source.kind === "hosted" ? "Paywall" : "Workspace"}
+        canRedo={canRedo}
+        canUndo={canUndo}
+        documentIdentity={document.id}
         environmentLabel={
           source.kind === "hosted"
             ? `Environment · ${hostedEnvironmentName}`
@@ -447,8 +463,8 @@ export function EditorShell({
               }
             : undefined
         }
-        onRequestImport={() => importInputRef.current?.click()}
         onRedo={redo}
+        onRequestImport={() => importInputRef.current?.click()}
         onUndo={undo}
         previewClientCount={preview.aggregate.total}
         previewSummary={preview.aggregate.label}
@@ -460,15 +476,17 @@ export function EditorShell({
         }
       />
       <input
-        ref={importInputRef}
         accept="application/json,.json"
         aria-label="Import Mosaic JSON file"
         className="sr-only"
         onChange={(event) => {
           const file = event.target.files?.[0];
-          if (file) onImport(file);
+          if (file) {
+            onImport(file);
+          }
           event.target.value = "";
         }}
+        ref={importInputRef}
         type="file"
       />
 
@@ -492,7 +510,6 @@ export function EditorShell({
 
       <div className="min-h-0 flex-1">
         <StudioResizableWorkspace
-          ref={workspaceControllerRef}
           canvas={
             <section
               aria-labelledby="studio-canvas-title"
@@ -529,7 +546,6 @@ export function EditorShell({
             </div>
           }
           diagnosticsPanel={diagnosticsPanel}
-          onOpenCommands={() => setCommandPaletteOpen(true)}
           leftPanel={
             <StudioToolPanel
               assets={document.assets}
@@ -542,14 +558,16 @@ export function EditorShell({
               workspaceControllerRef={workspaceControllerRef}
             />
           }
+          onOpenCommands={() => setCommandPaletteOpen(true)}
           propertiesPanel={
             <aside
               aria-label="Component properties"
-              className="bg-card h-full overflow-y-auto p-4 scrollbar-thin scrollbar-gutter-stable"
+              className="scrollbar-thin scrollbar-gutter-stable h-full overflow-y-auto bg-card p-4"
             >
               <PropertyInspector issues={validation.issues} />
             </aside>
           }
+          ref={workspaceControllerRef}
           viewportMode={viewportMode}
         />
       </div>

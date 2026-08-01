@@ -155,11 +155,16 @@ describe("property inspector safety", () => {
         "Advanced",
       ],
     ],
-  ] as const)("uses the frozen progressive section model for %s", async (selection, templateIndex, sections) => {
-    const view = renderInspector(selection, templateIndex);
-    await waitFor(() => expect(renderedSectionTitles()).toEqual([...sections]));
-    view.unmount();
-  });
+  ] as const)(
+    "uses the frozen progressive section model for %s",
+    async (selection, templateIndex, sections) => {
+      const view = renderInspector(selection, templateIndex);
+      await waitFor(() =>
+        expect(renderedSectionTitles()).toEqual([...sections])
+      );
+      view.unmount();
+    }
+  );
 
   it.each([
     [
@@ -224,21 +229,26 @@ describe("property inspector safety", () => {
         "Advanced",
       ],
     ],
-  ] as const)("uses the frozen progressive section model for %s", async (type, sections) => {
-    const fixture = documentWithBlock(type);
-    const view = render(
-      <StudioWorkspaceStoreProvider storage={null}>
-        <EditorStoreProvider>
-          <InspectorHarness
-            initialDocument={fixture.document}
-            selection={fixture.nodeId}
-          />
-        </EditorStoreProvider>
-      </StudioWorkspaceStoreProvider>
-    );
-    await waitFor(() => expect(renderedSectionTitles()).toEqual([...sections]));
-    view.unmount();
-  });
+  ] as const)(
+    "uses the frozen progressive section model for %s",
+    async (type, sections) => {
+      const fixture = documentWithBlock(type);
+      const view = render(
+        <StudioWorkspaceStoreProvider storage={null}>
+          <EditorStoreProvider>
+            <InspectorHarness
+              initialDocument={fixture.document}
+              selection={fixture.nodeId}
+            />
+          </EditorStoreProvider>
+        </StudioWorkspaceStoreProvider>
+      );
+      await waitFor(() =>
+        expect(renderedSectionTitles()).toEqual([...sections])
+      );
+      view.unmount();
+    }
+  );
 
   it("refreshes a localized form value after undo on the same selection", () => {
     render(
@@ -266,20 +276,25 @@ describe("property inspector safety", () => {
   it.each([
     ["feature", "Add benefit"],
     ["hint", "Add accessibility hint"],
-  ] as const)("seeds every locale and stays valid when creating %s localized text", async (mode, action) => {
-    renderSeedMode(mode);
-    if (mode === "hint") {
+  ] as const)(
+    "seeds every locale and stays valid when creating %s localized text",
+    async (mode, action) => {
+      renderSeedMode(mode);
+      if (mode === "hint") {
+        await waitFor(() =>
+          expect(getInspectorSection("Accessibility")).toBeInTheDocument()
+        );
+        openInspectorSection("Accessibility");
+      }
+      fireEvent.click(await screen.findByRole("button", { name: action }));
       await waitFor(() =>
-        expect(getInspectorSection("Accessibility")).toBeInTheDocument()
+        expect(screen.getByTestId("all-locales-seeded")).toHaveTextContent(
+          "true"
+        )
       );
-      openInspectorSection("Accessibility");
+      expect(screen.getByTestId("validation-count")).toHaveTextContent("0");
     }
-    fireEvent.click(await screen.findByRole("button", { name: action }));
-    await waitFor(() =>
-      expect(screen.getByTestId("all-locales-seeded")).toHaveTextContent("true")
-    );
-    expect(screen.getByTestId("validation-count")).toHaveTextContent("0");
-  });
+  );
 
   it.each([
     [
@@ -429,17 +444,20 @@ describe("property inspector safety", () => {
         "accessibility.label.localizationKey",
       ],
     ],
-  ] as const)("renders contextual Protocol 0.2 property coverage for %s", async (selection, templateIndex, expectedAddresses) => {
-    renderInspector(selection, templateIndex);
-    await waitFor(() =>
-      expect(
-        document.getElementById(getInspectorFieldId(selection, "id"))
-      ).toBeInTheDocument()
-    );
-    expect(renderedPropertyAddresses()).toEqual(
-      expect.arrayContaining([...expectedAddresses])
-    );
-  });
+  ] as const)(
+    "renders contextual Protocol 0.2 property coverage for %s",
+    async (selection, templateIndex, expectedAddresses) => {
+      renderInspector(selection, templateIndex);
+      await waitFor(() =>
+        expect(
+          document.getElementById(getInspectorFieldId(selection, "id"))
+        ).toBeInTheDocument()
+      );
+      expect(renderedPropertyAddresses()).toEqual(
+        expect.arrayContaining([...expectedAddresses])
+      );
+    }
+  );
 
   it("seeds every locale and stays valid when an image becomes non-decorative", async () => {
     renderSeedMode("image");
@@ -515,22 +533,25 @@ describe("property inspector safety", () => {
       selection: "close",
       templateIndex: 0,
     },
-  ])("progressively discloses Protocol 0.2 fields for $selection", async ({
-    advancedAddress,
-    advancedValue,
-    primarySection,
-    selection,
-    templateIndex,
-  }) => {
-    renderInspector(selection, templateIndex);
+  ])(
+    "progressively discloses Protocol 0.2 fields for $selection",
+    async ({
+      advancedAddress,
+      advancedValue,
+      primarySection,
+      selection,
+      templateIndex,
+    }) => {
+      renderInspector(selection, templateIndex);
 
-    await waitFor(() =>
-      expect(getInspectorSection(primarySection)).toBeInTheDocument()
-    );
-    expectSectionsOpen(primarySection, "Layout");
-    openInspectorSection("Advanced");
-    expectReadOnlyField(selection, advancedAddress, advancedValue);
-  });
+      await waitFor(() =>
+        expect(getInspectorSection(primarySection)).toBeInTheDocument()
+      );
+      expectSectionsOpen(primarySection, "Layout");
+      openInspectorSection("Advanced");
+      expectReadOnlyField(selection, advancedAddress, advancedValue);
+    }
+  );
 
   it("inspects the immutable Scroll Container without exposing structural actions", async () => {
     renderInspector("paywall-scroll");

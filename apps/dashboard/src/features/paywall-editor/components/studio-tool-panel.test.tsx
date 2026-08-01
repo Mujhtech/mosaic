@@ -161,19 +161,22 @@ describe("StudioToolPanel", () => {
     ["products", "Test purchase", "Test purchase"],
     ["localization", "Preview context", "Preview context"],
     ["assets", "Assets", "No assets"],
-  ] as const)("renders the owned %s surface", async (tool, panelName, content) => {
-    renderTool(tool);
+  ] as const)(
+    "renders the owned %s surface",
+    async (tool, panelName, content) => {
+      renderTool(tool);
 
-    await waitFor(() => expect(screen.getByText(content)).toBeVisible());
-    expect(
-      screen.getByRole("complementary", { name: panelName })
-    ).toBeVisible();
-    if (tool === "templates") {
+      await waitFor(() => expect(screen.getByText(content)).toBeVisible());
       expect(
-        screen.getByRole("list", { name: "Bundled templates" })
+        screen.getByRole("complementary", { name: panelName })
       ).toBeVisible();
+      if (tool === "templates") {
+        expect(
+          screen.getByRole("list", { name: "Bundled templates" })
+        ).toBeVisible();
+      }
     }
-  });
+  );
 
   it("authors a reusable design-system colour as an undoable document change", async () => {
     renderTool("designSystem");

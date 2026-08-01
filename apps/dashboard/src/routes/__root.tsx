@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { Outlet, createRootRouteWithContext } from "@tanstack/react-router";
+import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 
 import { RootErrorComponent } from "@/components/feedback/root-error-component";
 import { RouteNotFoundState } from "@/components/feedback/route-feedback";

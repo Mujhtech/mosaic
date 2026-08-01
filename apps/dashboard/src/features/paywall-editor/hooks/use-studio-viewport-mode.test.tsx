@@ -41,14 +41,12 @@ describe("classifyStudioViewport", () => {
     expect(classifyStudioViewport(width)).toBe(expectedMode);
   });
 
-  it.each([
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    Number.NEGATIVE_INFINITY,
-    -1,
-  ])("safely treats invalid width %s as desktop-required", (width) => {
-    expect(classifyStudioViewport(width)).toBe("desktop-required");
-  });
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1])(
+    "safely treats invalid width %s as desktop-required",
+    (width) => {
+      expect(classifyStudioViewport(width)).toBe("desktop-required");
+    }
+  );
 });
 
 describe("useStudioViewportMode", () => {

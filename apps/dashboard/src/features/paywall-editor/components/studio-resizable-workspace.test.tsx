@@ -139,37 +139,37 @@ describe("StudioResizableWorkspace", () => {
   beforeEach(() => vi.stubGlobal("ResizeObserver", ResizeObserverStub));
   afterEach(() => vi.unstubAllGlobals());
 
-  it.each([
-    "large",
-    "medium",
-  ] as const)("renders the exact nested desktop structure in %s mode", (viewportMode) => {
-    renderWorkspace(viewportMode);
+  it.each(["large", "medium"] as const)(
+    "renders the exact nested desktop structure in %s mode",
+    (viewportMode) => {
+      renderWorkspace(viewportMode);
 
-    const workspace = screen.getByTestId("studio-resizable-workspace");
-    const rail = screen.getByRole("navigation", { name: "Studio activity" });
-    const rootGroup = screen.getByTestId("studio-root-group");
-    const horizontalGroup = screen.getByTestId("studio-horizontal-group");
+      const workspace = screen.getByTestId("studio-resizable-workspace");
+      const rail = screen.getByRole("navigation", { name: "Studio activity" });
+      const rootGroup = screen.getByTestId("studio-root-group");
+      const horizontalGroup = screen.getByTestId("studio-horizontal-group");
 
-    expect(workspace).toHaveAttribute(
-      "data-studio-viewport-mode",
-      viewportMode
-    );
-    expect(workspace.firstElementChild).toBe(rail);
-    expect(rail).toHaveAttribute("data-rail-width", "52");
-    expect(rail.contains(rootGroup)).toBe(false);
-    expect(childIds(rootGroup)).toEqual([
-      "studio-main-panel",
-      "studio-diagnostics-handle",
-      "studio-diagnostics-panel",
-    ]);
-    expect(childIds(horizontalGroup)).toEqual([
-      "studio-left-panel",
-      "studio-left-handle",
-      "studio-canvas-panel",
-      "studio-right-handle",
-      "studio-properties-panel",
-    ]);
-  });
+      expect(workspace).toHaveAttribute(
+        "data-studio-viewport-mode",
+        viewportMode
+      );
+      expect(workspace.firstElementChild).toBe(rail);
+      expect(rail).toHaveAttribute("data-rail-width", "52");
+      expect(rail.contains(rootGroup)).toBe(false);
+      expect(childIds(rootGroup)).toEqual([
+        "studio-main-panel",
+        "studio-diagnostics-handle",
+        "studio-diagnostics-panel",
+      ]);
+      expect(childIds(horizontalGroup)).toEqual([
+        "studio-left-panel",
+        "studio-left-handle",
+        "studio-canvas-panel",
+        "studio-right-handle",
+        "studio-properties-panel",
+      ]);
+    }
+  );
 
   it("uses explicit unit props and imports the resizable implementation only through its wrapper", () => {
     renderWorkspace("large");

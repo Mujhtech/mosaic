@@ -377,23 +377,26 @@ describe("property inspector safety", () => {
     ["purchase", 0, "action.productSelectorId"],
     ["restore", 0, "action.type"],
     ["close", 0, "accessibility.label"],
-  ] as const)("renders a stable Protocol 0.2 field for %s", async (selection, templateIndex, address) => {
-    render(
-      <StudioWorkspaceStoreProvider storage={null}>
-        <EditorStoreProvider>
-          <InspectorHarness
-            selection={selection}
-            templateIndex={templateIndex}
-          />
-        </EditorStoreProvider>
-      </StudioWorkspaceStoreProvider>
-    );
-    await waitFor(() =>
-      expect(
-        document.getElementById(getInspectorFieldId(selection, address))
-      ).toBeInTheDocument()
-    );
-  });
+  ] as const)(
+    "renders a stable Protocol 0.2 field for %s",
+    async (selection, templateIndex, address) => {
+      render(
+        <StudioWorkspaceStoreProvider storage={null}>
+          <EditorStoreProvider>
+            <InspectorHarness
+              selection={selection}
+              templateIndex={templateIndex}
+            />
+          </EditorStoreProvider>
+        </StudioWorkspaceStoreProvider>
+      );
+      await waitFor(() =>
+        expect(
+          document.getElementById(getInspectorFieldId(selection, address))
+        ).toBeInTheDocument()
+      );
+    }
+  );
 
   it("commits a multi-event numeric editing session as one undo step", async () => {
     render(

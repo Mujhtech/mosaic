@@ -28,15 +28,17 @@ describe("entitlement access vocabulary", () => {
     expect(new Set(labels).size).toBe(accessStates.length);
   });
 
-  it.each([
-    "unknown",
-    "unavailable",
-  ])("never renders %s with the inactive label, copy, or a destructive tone", (state) => {
-    expect(accessStateLabel(state)).not.toBe(inactiveLabel);
-    expect(accessStateExplanation(state)).not.toBe(inactiveExplanation);
-    expect(accessStateTone(state)).toBe("attention");
-    expect(accessStateExplanation(state)).toContain("not the same as inactive");
-  });
+  it.each(["unknown", "unavailable"])(
+    "never renders %s with the inactive label, copy, or a destructive tone",
+    (state) => {
+      expect(accessStateLabel(state)).not.toBe(inactiveLabel);
+      expect(accessStateExplanation(state)).not.toBe(inactiveExplanation);
+      expect(accessStateTone(state)).toBe("attention");
+      expect(accessStateExplanation(state)).toContain(
+        "not the same as inactive"
+      );
+    }
+  );
 
   it("treats a determined absence of access as an answer rather than a fault", () => {
     // Destructive tone on `inactive` is what trains an operator to read every
@@ -45,16 +47,14 @@ describe("entitlement access vocabulary", () => {
     expect(accessStateTone("active")).toBe("positive");
   });
 
-  it.each([
-    "",
-    "provisionally_active",
-    "suspended",
-    "INACTIVE",
-  ])("degrades the unrecognised member %j to attention rather than to inactive", (state) => {
-    expect(accessStateTone(state)).toBe("attention");
-    expect(accessStateLabel(state)).not.toBe(inactiveLabel);
-    expect(accessStateExplanation(state)).not.toBe(inactiveExplanation);
-  });
+  it.each(["", "provisionally_active", "suspended", "INACTIVE"])(
+    "degrades the unrecognised member %j to attention rather than to inactive",
+    (state) => {
+      expect(accessStateTone(state)).toBe("attention");
+      expect(accessStateLabel(state)).not.toBe(inactiveLabel);
+      expect(accessStateExplanation(state)).not.toBe(inactiveExplanation);
+    }
+  );
 
   it("names the reason inside the undetermined sentence", () => {
     const sentence = accessStateExplanation("unknown", {
