@@ -122,11 +122,15 @@ function BindPlacementAction({
         size="sm"
         type="submit"
       >
-        {mutation.isPending
-          ? "Binding…"
-          : placement.binding
-            ? "Change binding"
-            : "Bind"}
+        {(() => {
+          if (mutation.isPending) {
+            return "Binding…";
+          }
+          if (placement.binding) {
+            return "Change binding";
+          }
+          return "Bind";
+        })()}
       </Button>
       {mutation.error ? (
         <p className="basis-full text-destructive text-sm" role="alert">
@@ -307,11 +311,15 @@ function CreatePlacementForm({
           Cancel
         </DialogClose>
         <Button disabled={mutation.isPending} type="submit">
-          {mutation.isPending
-            ? "Creating…"
-            : mutation.error instanceof PlacementCreatedWithoutBindingError
-              ? "Retry binding"
-              : "Create Placement"}
+          {(() => {
+            if (mutation.isPending) {
+              return "Creating…";
+            }
+            if (mutation.error instanceof PlacementCreatedWithoutBindingError) {
+              return "Retry binding";
+            }
+            return "Create Placement";
+          })()}
         </Button>
       </DialogFooter>
     </form>

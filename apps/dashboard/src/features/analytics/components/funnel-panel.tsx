@@ -29,14 +29,20 @@ export function FunnelPanel({
       isPending={query.isPending}
       onRetry={handleRetry}
     >
-      {query.data?.steps.length === 0 ? (
-        <EmptyState
-          description="No correlated events match this Environment and filter range."
-          title="No funnel data"
-        />
-      ) : query.data ? (
-        <FunnelTable report={query.data} />
-      ) : null}
+      {(() => {
+        if (query.data?.steps.length === 0) {
+          return (
+            <EmptyState
+              description="No correlated events match this Environment and filter range."
+              title="No funnel data"
+            />
+          );
+        }
+        if (query.data) {
+          return <FunnelTable report={query.data} />;
+        }
+        return null;
+      })()}
     </AnalyticsQueryResult>
   );
 }

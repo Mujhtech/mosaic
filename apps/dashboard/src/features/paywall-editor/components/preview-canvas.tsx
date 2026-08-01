@@ -485,15 +485,20 @@ export function PreviewCanvas({
       selectedComponentId ?? ""
     );
     const offset = event.key === "ArrowDown" ? 1 : -1;
-    const nextIndex =
-      currentIndex < 0
-        ? offset > 0
-          ? 0
-          : visibleSelectableIds.length - 1
-        : Math.min(
-            visibleSelectableIds.length - 1,
-            Math.max(0, currentIndex + offset)
-          );
+    const nextIndex = (() => {
+      if (currentIndex < 0) {
+        return (() => {
+          if (offset > 0) {
+            return 0;
+          }
+          return visibleSelectableIds.length - 1;
+        })();
+      }
+      return Math.min(
+        visibleSelectableIds.length - 1,
+        Math.max(0, currentIndex + offset)
+      );
+    })();
     editor.selectComponent(visibleSelectableIds[nextIndex] ?? null);
   }
 

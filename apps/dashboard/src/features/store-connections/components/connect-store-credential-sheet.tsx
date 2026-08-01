@@ -214,11 +214,14 @@ export function ConnectStoreCredentialSheet({
               name="name"
               validators={{
                 onSubmit: ({ value }) =>
-                  value.trim().length === 0
-                    ? "Enter a name for this connection."
-                    : value.length > 120
-                      ? "Use 120 characters or fewer."
-                      : undefined,
+                  (() => {
+                    if (value.trim().length === 0) {
+                      return "Enter a name for this connection.";
+                    }
+                    if (value.length > 120) {
+                      return "Use 120 characters or fewer.";
+                    }
+                  })(),
               }}
             >
               {(field) => (

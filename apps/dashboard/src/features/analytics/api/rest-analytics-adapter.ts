@@ -72,12 +72,15 @@ function normalizeFreshness(freshness: AnalyticsFreshness): Freshness {
     latestReceivedAt: freshness.latestReceivedAt,
     latestAggregatedAt: freshness.latestAggregatedAt,
     lateEventPolicy: freshness.lateEventPolicy,
-    aggregateState:
-      latestAggregated === undefined
-        ? "unavailable"
-        : latestReceived !== undefined && latestReceived > latestAggregated
-          ? "delayed"
-          : "current",
+    aggregateState: (() => {
+      if (latestAggregated === undefined) {
+        return "unavailable";
+      }
+      if (latestReceived !== undefined && latestReceived > latestAggregated) {
+        return "delayed";
+      }
+      return "current";
+    })(),
   };
 }
 
@@ -98,18 +101,24 @@ function normalizeMetric(metric: AnalyticsMetric): MetricValue {
 }
 
 function normalizeJob(job: AnalyticsJob): AsyncJob {
-  const type =
-    job.kind === "events"
-      ? "event_export"
-      : job.format
-        ? "identity_export"
-        : "identity_deletion";
-  const state =
-    job.status === "recomputing"
-      ? "leased"
-      : job.status === "expired"
-        ? "failed"
-        : job.status;
+  const type = (() => {
+    if (job.kind === "events") {
+      return "event_export";
+    }
+    if (job.format) {
+      return "identity_export";
+    }
+    return "identity_deletion";
+  })();
+  const state = (() => {
+    if (job.status === "recomputing") {
+      return "leased";
+    }
+    if (job.status === "expired") {
+      return "failed";
+    }
+    return job.status;
+  })();
   return {
     id: job.id,
     type,

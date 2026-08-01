@@ -57,14 +57,19 @@ export function CreatePaywallDraftForm({
   const form = useForm({
     defaultValues: { key: "", name: "", source: "template" as DraftSource },
     onSubmit: async ({ value }) => {
-      const document =
-        value.source === "local" &&
-        (localProject.status === "valid" ||
-          localProject.status === "recoverable")
-          ? localProject.project.document
-          : value.source === "file"
-            ? fileDocument
-            : starterDocument;
+      const document = (() => {
+        if (
+          value.source === "local" &&
+          (localProject.status === "valid" ||
+            localProject.status === "recoverable")
+        ) {
+          return localProject.project.document;
+        }
+        if (value.source === "file") {
+          return fileDocument;
+        }
+        return starterDocument;
+      })();
       if (!document) {
         setFileError(
           "Choose a valid Mosaic JSON file before creating this Draft."
@@ -300,11 +305,15 @@ export function CreatePaywallDraftForm({
             disabled={!canSubmit || isSubmitting || mutation.isPending}
             type="submit"
           >
-            {mutation.isPending
-              ? "Creating hosted Draft…"
-              : mutation.error instanceof PaywallCreatedWithoutDraftError
-                ? "Retry first Draft"
-                : "Create paywall and hosted Draft"}
+            {(() => {
+              if (mutation.isPending) {
+                return "Creating hosted Draft…";
+              }
+              if (mutation.error instanceof PaywallCreatedWithoutDraftError) {
+                return "Retry first Draft";
+              }
+              return "Create paywall and hosted Draft";
+            })()}
           </Button>
         )}
       </form.Subscribe>

@@ -704,14 +704,18 @@ export function createGeneratedExperimentAdapter(
         target === "completed" ||
         target === "archived"
       ) {
-        action =
-          target === "stopped"
-            ? "stop"
-            : target === "paused"
-              ? "pause"
-              : target === "completed"
-                ? "complete"
-                : "archive";
+        action = (() => {
+          if (target === "stopped") {
+            return "stop";
+          }
+          if (target === "paused") {
+            return "pause";
+          }
+          if (target === "completed") {
+            return "complete";
+          }
+          return "archive";
+        })();
       } else {
         throw new Error("Draft is not a lifecycle action.");
       }

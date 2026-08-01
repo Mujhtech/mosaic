@@ -240,173 +240,219 @@ function HostedCatalogProductBindingsContent({
           preview prices and outcomes remain separate below.
         </p>
       </div>
-      {catalog.isPending ? (
-        <p aria-live="polite" className="text-muted-foreground text-xs">
-          Loading Project Products…
-        </p>
-      ) : catalog.error ? (
-        <div
-          className="rounded border border-destructive/25 bg-destructive/5 p-3"
-          role="alert"
-        >
-          <p className="text-destructive text-xs">
-            {catalog.error instanceof ApiError && catalog.error.status === 403
-              ? "You do not have permission to view this Project’s Products. Your Draft remains editable."
-              : catalog.error.message}
-          </p>
-          <Button
-            className="mt-2"
-            onClick={() => {
-              catalog.refetch();
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Retry Products
-          </Button>
-        </div>
-      ) : products.length === 0 ? (
-        <div className="rounded border border-border border-dashed p-3 text-xs">
-          <p className="font-medium">No active Project Products</p>
-          <p className="mt-1 text-muted-foreground leading-5">
-            Create a Product, then return here to bind its stable Mosaic Product
-            ID.
-          </p>
-        </div>
-      ) : document ? (
-        <div className="space-y-2">
-          {applications.isPending ? (
-            <p className="text-muted-foreground text-xs" role="status">
-              Loading Applications
-              {source.environmentName ? ` for ${source.environmentName}` : ""}…
+      {(() => {
+        if (catalog.isPending) {
+          return (
+            <p aria-live="polite" className="text-muted-foreground text-xs">
+              Loading Project Products…
             </p>
-          ) : applications.error ? (
+          );
+        }
+        if (catalog.error) {
+          return (
             <div
               className="rounded border border-destructive/25 bg-destructive/5 p-3"
               role="alert"
             >
               <p className="text-destructive text-xs">
-                {studioApplicationsErrorMessage(applications.error)}
+                {catalog.error instanceof ApiError &&
+                catalog.error.status === 403
+                  ? "You do not have permission to view this Project’s Products. Your Draft remains editable."
+                  : catalog.error.message}
               </p>
               <Button
                 className="mt-2"
                 onClick={() => {
-                  applications.refetch();
+                  catalog.refetch();
                 }}
                 size="sm"
                 type="button"
                 variant="outline"
               >
-                Retry Applications
+                Retry Products
               </Button>
             </div>
-          ) : applications.data?.items.length === 0 ? (
-            <div className="rounded border border-dashed p-3 text-xs">
-              <p className="font-medium">No registered Applications</p>
-              <a
-                className="mt-2 inline-flex font-semibold text-primary"
-                href={`/orgs/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/apps`}
-              >
-                Register Application
-              </a>
+          );
+        }
+        if (products.length === 0) {
+          return (
+            <div className="rounded border border-border border-dashed p-3 text-xs">
+              <p className="font-medium">No active Project Products</p>
+              <p className="mt-1 text-muted-foreground leading-5">
+                Create a Product, then return here to bind its stable Mosaic
+                Product ID.
+              </p>
             </div>
-          ) : null}
-          <div className="mb-3 block font-medium text-xs">
-            <label htmlFor="provider-preview-application">
-              Provider preview Application
-            </label>
-            <Select
-              items={applicationOptions}
-              onValueChange={(value) => setApplicationId(value)}
-              value={selectedApplicationId}
-            >
-              <SelectTrigger
-                className="mt-1"
-                disabled={
-                  applications.isPending ||
-                  Boolean(applications.error) ||
-                  applications.data?.items.length === 0
+          );
+        }
+        if (document) {
+          return (
+            <div className="space-y-2">
+              {(() => {
+                if (applications.isPending) {
+                  return (
+                    <p className="text-muted-foreground text-xs" role="status">
+                      Loading Applications
+                      {source.environmentName
+                        ? ` for ${source.environmentName}`
+                        : ""}
+                      …
+                    </p>
+                  );
                 }
-                id="provider-preview-application"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {applicationOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span className="mt-1 block text-[11px] text-muted-foreground leading-5">
-              Hosted Environment:{" "}
-              {source.environmentName ?? source.environmentId}. Mosaic does not
-              silently choose an Application or another platform for commerce
-              readiness.
-            </span>
-          </div>
-          {document.products.map((reference) => {
-            const selected = products.find(
-              (product) => product.id === reference.productId
-            );
-            const label = resolveLocalizedText(
-              document,
-              reference.label,
-              currentLocale
-            );
-            return (
-              <div
-                className="grid gap-1 rounded border border-border p-3"
-                key={reference.id}
-              >
-                <span className="font-medium text-xs">{label}</span>
+                if (applications.error) {
+                  return (
+                    <div
+                      className="rounded border border-destructive/25 bg-destructive/5 p-3"
+                      role="alert"
+                    >
+                      <p className="text-destructive text-xs">
+                        {studioApplicationsErrorMessage(applications.error)}
+                      </p>
+                      <Button
+                        className="mt-2"
+                        onClick={() => {
+                          applications.refetch();
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        Retry Applications
+                      </Button>
+                    </div>
+                  );
+                }
+                if (applications.data?.items.length === 0) {
+                  return (
+                    <div className="rounded border border-dashed p-3 text-xs">
+                      <p className="font-medium">No registered Applications</p>
+                      <a
+                        className="mt-2 inline-flex font-semibold text-primary"
+                        href={`/orgs/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/apps`}
+                      >
+                        Register Application
+                      </a>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              <div className="mb-3 block font-medium text-xs">
+                <label htmlFor="provider-preview-application">
+                  Provider preview Application
+                </label>
                 <Select
-                  items={bindingOptions(reference.productId, Boolean(selected))}
-                  onValueChange={(value) => onBind(reference.id, value)}
-                  value={reference.productId}
+                  items={applicationOptions}
+                  onValueChange={(value) => setApplicationId(value)}
+                  value={selectedApplicationId}
                 >
-                  <SelectTrigger aria-label={`Catalog Product for ${label}`}>
+                  <SelectTrigger
+                    className="mt-1"
+                    disabled={
+                      applications.isPending ||
+                      Boolean(applications.error) ||
+                      applications.data?.items.length === 0
+                    }
+                    id="provider-preview-application"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {bindingOptions(reference.productId, Boolean(selected)).map(
-                      (option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      )
-                    )}
+                    {applicationOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                <span className="break-all font-mono text-[10px] text-muted-foreground">
-                  {reference.productId}
+                <span className="mt-1 block text-[11px] text-muted-foreground leading-5">
+                  Hosted Environment:{" "}
+                  {source.environmentName ?? source.environmentId}. Mosaic does
+                  not silently choose an Application or another platform for
+                  commerce readiness.
                 </span>
-                {selected?.metadataSource === "mock" ? (
-                  <span className="text-[11px] text-muted-foreground">
-                    Simulated metadata only; publishing requires
-                    acknowledgement.
-                  </span>
-                ) : selected && selectedApplicationId ? (
-                  <ConnectedProductBindingContext
-                    applicationId={selectedApplicationId}
-                    connections={connections.data?.items ?? []}
-                    environmentId={source.environmentId}
-                    productId={selected.id}
-                  />
-                ) : selected ? (
-                  <span className="text-[11px] text-muted-foreground leading-5">
-                    Select an Application to inspect its active provider,
-                    mapping, and readiness. Simulated preview remains active and
-                    is not store verification.
-                  </span>
-                ) : null}
               </div>
-            );
-          })}
-        </div>
-      ) : null}
+              {document.products.map((reference) => {
+                const selected = products.find(
+                  (product) => product.id === reference.productId
+                );
+                const label = resolveLocalizedText(
+                  document,
+                  reference.label,
+                  currentLocale
+                );
+                return (
+                  <div
+                    className="grid gap-1 rounded border border-border p-3"
+                    key={reference.id}
+                  >
+                    <span className="font-medium text-xs">{label}</span>
+                    <Select
+                      items={bindingOptions(
+                        reference.productId,
+                        Boolean(selected)
+                      )}
+                      onValueChange={(value) => onBind(reference.id, value)}
+                      value={reference.productId}
+                    >
+                      <SelectTrigger
+                        aria-label={`Catalog Product for ${label}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bindingOptions(
+                          reference.productId,
+                          Boolean(selected)
+                        ).map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="break-all font-mono text-[10px] text-muted-foreground">
+                      {reference.productId}
+                    </span>
+                    {(() => {
+                      if (selected?.metadataSource === "mock") {
+                        return (
+                          <span className="text-[11px] text-muted-foreground">
+                            Simulated metadata only; publishing requires
+                            acknowledgement.
+                          </span>
+                        );
+                      }
+                      if (selected && selectedApplicationId) {
+                        return (
+                          <ConnectedProductBindingContext
+                            applicationId={selectedApplicationId}
+                            connections={connections.data?.items ?? []}
+                            environmentId={source.environmentId}
+                            productId={selected.id}
+                          />
+                        );
+                      }
+                      if (selected) {
+                        return (
+                          <span className="text-[11px] text-muted-foreground leading-5">
+                            Select an Application to inspect its active
+                            provider, mapping, and readiness. Simulated preview
+                            remains active and is not store verification.
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        }
+        return null;
+      })()}
       <a
         className={buttonVariants({ size: "sm", variant: "outline" })}
         href={catalogHref}
@@ -498,11 +544,15 @@ function ConnectedProductBindingContext({
   });
   const providerLabel =
     profile.data?.displayName ??
-    (nativeProvider === "app_store"
-      ? "StoreKit"
-      : nativeProvider === "google_play"
-        ? "Google Play Billing"
-        : connection?.name);
+    (() => {
+      if (nativeProvider === "app_store") {
+        return "StoreKit";
+      }
+      if (nativeProvider === "google_play") {
+        return "Google Play Billing";
+      }
+      return connection?.name;
+    })();
   const capabilityWarnings =
     profile.data?.capabilities.filter(
       (capability) => capability.support !== "supported"
@@ -511,16 +561,27 @@ function ConnectedProductBindingContext({
     typeof snapshot?.metadata.displayName === "string"
       ? snapshot.metadata.displayName
       : undefined;
-  const state =
-    mappings.isPending || readiness.isPending || activeAssignment.isPending
-      ? "Checking provider context…"
-      : activeAssignment.data
-        ? scopedMappings.length > 1
-          ? "Ambiguous provider mappings block publishing."
-          : mapping
-            ? `${providerLabel ?? "Provider"} · ${mapping.availability} · ${mapping.syncState.replaceAll("_", " ")} · readiness ${readiness.data?.state ?? "unavailable"}`
-            : "No scoped provider mapping. Mock preview is the safe fallback."
-        : "No active provider is selected for this Application and Environment.";
+  const state = (() => {
+    if (
+      mappings.isPending ||
+      readiness.isPending ||
+      activeAssignment.isPending
+    ) {
+      return "Checking provider context…";
+    }
+    if (activeAssignment.data) {
+      return (() => {
+        if (scopedMappings.length > 1) {
+          return "Ambiguous provider mappings block publishing.";
+        }
+        if (mapping) {
+          return `${providerLabel ?? "Provider"} · ${mapping.availability} · ${mapping.syncState.replaceAll("_", " ")} · readiness ${readiness.data?.state ?? "unavailable"}`;
+        }
+        return "No scoped provider mapping. Mock preview is the safe fallback.";
+      })();
+    }
+    return "No active provider is selected for this Application and Environment.";
+  })();
   const diagnosticsHref =
     source.kind === "hosted"
       ? `/orgs/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/catalog/products/${encodeURIComponent(productId)}?environmentId=${encodeURIComponent(environmentId)}&applicationId=${encodeURIComponent(applicationId)}&returnTo=${encodeURIComponent(hostedStudioHref(source))}`
@@ -531,11 +592,15 @@ function ConnectedProductBindingContext({
       <span className="block">
         {displayName ? `Observed connected Product: ${displayName}. ` : ""}
         {state}
-        {latestObservation
-          ? ` Test evidence: ${latestObservation.storeContext}, ${latestObservation.result}, observed ${latestObservation.observedAt}.`
-          : snapshot
-            ? ` Metadata source ${snapshot.source}; observed ${snapshot.observedAt}; stale after ${snapshot.staleAt}.`
-            : " Observed/runtime metadata is unavailable; simulated preview remains active and is not store verification."}
+        {(() => {
+          if (latestObservation) {
+            return ` Test evidence: ${latestObservation.storeContext}, ${latestObservation.result}, observed ${latestObservation.observedAt}.`;
+          }
+          if (snapshot) {
+            return ` Metadata source ${snapshot.source}; observed ${snapshot.observedAt}; stale after ${snapshot.staleAt}.`;
+          }
+          return " Observed/runtime metadata is unavailable; simulated preview remains active and is not store verification.";
+        })()}
       </span>
       {profile.data ? (
         <span className="mt-1 block">

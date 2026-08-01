@@ -182,94 +182,104 @@ export function BillingCustomersPage({
       </WorkflowPanel>
 
       <HostedResourceBoundary state={state}>
-        {billingEnabled ? (
-          items.length === 0 ? (
-            <>
-              <EmptyState
-                description={
-                  conflictedOnly
-                    ? "No Billing Customer in this Mosaic Environment is party to an open identity conflict. That is the healthy state."
-                    : "No Billing Customer exists in this Mosaic Environment yet. One comes into existence when your backend identifies a user, or when a validated purchase needs somewhere to attach — never when an SDK merely starts up."
-                }
-                title={
-                  conflictedOnly
-                    ? "No conflicted customers"
-                    : "No Billing Customers recorded yet"
-                }
-              />
-              <LedgerPaging
-                cursor={cursor}
-                endLabel="End of the customer list."
-                nextCursor={customers.data?.nextCursor}
-                onCursorChange={(next) =>
-                  onFiltersChange({
-                    ...(conflictedOnly ? { conflictedOnly } : {}),
-                    cursor: next,
-                  })
-                }
-              />
-            </>
-          ) : (
-            <WorkflowPanel
-              description="Identified means a person your backend named is attached. Purchase-anchored means revenue is attached but nobody has been named yet — the correct resting state for an anonymous purchase, not a defect."
-              title={pagedListHeading({
-                count: items.length,
-                cursor,
-                nextCursor: customers.data?.nextCursor,
-                noun: "Billing Customer(s)",
-              })}
-            >
-              <label className="mb-4 flex items-center gap-2 text-sm">
-                <input
-                  checked={conflictedOnly === true}
-                  onChange={(event) => {
-                    const { checked } = event.currentTarget;
-                    onFiltersChange(checked ? { conflictedOnly: true } : {});
-                  }}
-                  type="checkbox"
-                />
-                Show only customers party to an open identity conflict
-              </label>
+        {(() => {
+          if (billingEnabled) {
+            return (() => {
+              if (items.length === 0) {
+                return (
+                  <>
+                    <EmptyState
+                      description={
+                        conflictedOnly
+                          ? "No Billing Customer in this Mosaic Environment is party to an open identity conflict. That is the healthy state."
+                          : "No Billing Customer exists in this Mosaic Environment yet. One comes into existence when your backend identifies a user, or when a validated purchase needs somewhere to attach — never when an SDK merely starts up."
+                      }
+                      title={
+                        conflictedOnly
+                          ? "No conflicted customers"
+                          : "No Billing Customers recorded yet"
+                      }
+                    />
+                    <LedgerPaging
+                      cursor={cursor}
+                      endLabel="End of the customer list."
+                      nextCursor={customers.data?.nextCursor}
+                      onCursorChange={(next) =>
+                        onFiltersChange({
+                          ...(conflictedOnly ? { conflictedOnly } : {}),
+                          cursor: next,
+                        })
+                      }
+                    />
+                  </>
+                );
+              }
+              return (
+                <WorkflowPanel
+                  description="Identified means a person your backend named is attached. Purchase-anchored means revenue is attached but nobody has been named yet — the correct resting state for an anonymous purchase, not a defect."
+                  title={pagedListHeading({
+                    count: items.length,
+                    cursor,
+                    nextCursor: customers.data?.nextCursor,
+                    noun: "Billing Customer(s)",
+                  })}
+                >
+                  <label className="mb-4 flex items-center gap-2 text-sm">
+                    <input
+                      checked={conflictedOnly === true}
+                      onChange={(event) => {
+                        const { checked } = event.currentTarget;
+                        onFiltersChange(
+                          checked ? { conflictedOnly: true } : {}
+                        );
+                      }}
+                      type="checkbox"
+                    />
+                    Show only customers party to an open identity conflict
+                  </label>
 
-              <ul className="space-y-2">
-                {items.map((customer) => (
-                  <CustomerRow
-                    customer={customer}
-                    href={
-                      billingCustomerHref(
-                        scope,
-                        customer.billingCustomerId ?? ""
-                      ) ?? "#"
+                  <ul className="space-y-2">
+                    {items.map((customer) => (
+                      <CustomerRow
+                        customer={customer}
+                        href={
+                          billingCustomerHref(
+                            scope,
+                            customer.billingCustomerId ?? ""
+                          ) ?? "#"
+                        }
+                        key={customer.billingCustomerId}
+                      />
+                    ))}
+                  </ul>
+
+                  <LedgerPaging
+                    cursor={cursor}
+                    endLabel="End of the customer list."
+                    nextCursor={customers.data?.nextCursor}
+                    onCursorChange={(next) =>
+                      onFiltersChange({
+                        ...(conflictedOnly ? { conflictedOnly } : {}),
+                        cursor: next,
+                      })
                     }
-                    key={customer.billingCustomerId}
                   />
-                ))}
-              </ul>
-
-              <LedgerPaging
-                cursor={cursor}
-                endLabel="End of the customer list."
-                nextCursor={customers.data?.nextCursor}
-                onCursorChange={(next) =>
-                  onFiltersChange({
-                    ...(conflictedOnly ? { conflictedOnly } : {}),
-                    cursor: next,
-                  })
-                }
-              />
-            </WorkflowPanel>
-          )
-        ) : (
-          <EmptyState
-            action={
-              <a className={buttonVariants()} href={connectionsHref}>
-                Set up Mosaic Billing
-              </a>
-            }
-            description={`Mosaic Billing is turned off for this Project, so no purchase is recorded and no access is computed. Every Entitlement read answers "Mosaic cannot answer" rather than inactive. ${BILLING_OPTIONAL_NOTE}`}
-            title="Mosaic Billing is not enabled for this Project"
-          />
-        )}
+                </WorkflowPanel>
+              );
+            })();
+          }
+          return (
+            <EmptyState
+              action={
+                <a className={buttonVariants()} href={connectionsHref}>
+                  Set up Mosaic Billing
+                </a>
+              }
+              description={`Mosaic Billing is turned off for this Project, so no purchase is recorded and no access is computed. Every Entitlement read answers "Mosaic cannot answer" rather than inactive. ${BILLING_OPTIONAL_NOTE}`}
+              title="Mosaic Billing is not enabled for this Project"
+            />
+          );
+        })()}
       </HostedResourceBoundary>
     </WorkspacePage>
   );

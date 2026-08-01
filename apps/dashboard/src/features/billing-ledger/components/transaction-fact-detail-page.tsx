@@ -250,13 +250,15 @@ export function TransactionFactDetailPage({
                 />
                 <DefinitionRow
                   label="Renewal expected by the store"
-                  value={
-                    record.renewalExpected === undefined
-                      ? "Not stated"
-                      : record.renewalExpected
-                        ? "Yes"
-                        : "No"
-                  }
+                  value={(() => {
+                    if (record.renewalExpected === undefined) {
+                      return "Not stated";
+                    }
+                    if (record.renewalExpected) {
+                      return "Yes";
+                    }
+                    return "No";
+                  })()}
                 />
                 <DefinitionRow
                   label="Revoked"

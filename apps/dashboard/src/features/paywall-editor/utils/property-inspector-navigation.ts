@@ -248,12 +248,15 @@ export function focusDocumentValidationIssue(issue: ValidationIssue) {
   if (typeof window === "undefined") {
     return false;
   }
-  const fieldId =
-    issue.property === "defaultLocale"
-      ? "document-default-locale"
-      : issue.property === "fallbackLocale"
-        ? "document-fallback-locale"
-        : null;
+  const fieldId = (() => {
+    if (issue.property === "defaultLocale") {
+      return "document-default-locale";
+    }
+    if (issue.property === "fallbackLocale") {
+      return "document-fallback-locale";
+    }
+    return null;
+  })();
   const target = fieldId ? window.document.getElementById(fieldId) : null;
   if (!target) {
     return false;

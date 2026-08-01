@@ -96,11 +96,15 @@ function elementWidth(element: HTMLElement) {
   }
   if (element.hasAttribute("data-panel")) {
     const group = element.parentElement;
-    return group && groupOrientation(group) === "horizontal"
-      ? panelAxisSize(element, "horizontal")
-      : group
-        ? groupWidth(group)
-        : 0;
+    return (() => {
+      if (group && groupOrientation(group) === "horizontal") {
+        return panelAxisSize(element, "horizontal");
+      }
+      if (group) {
+        return groupWidth(group);
+      }
+      return 0;
+    })();
   }
   return 0;
 }
@@ -116,11 +120,15 @@ function elementHeight(element: HTMLElement) {
   }
   if (element.hasAttribute("data-panel")) {
     const group = element.parentElement;
-    return group && groupOrientation(group) === "vertical"
-      ? panelAxisSize(element, "vertical")
-      : group
-        ? groupHeight(group)
-        : 0;
+    return (() => {
+      if (group && groupOrientation(group) === "vertical") {
+        return panelAxisSize(element, "vertical");
+      }
+      if (group) {
+        return groupHeight(group);
+      }
+      return 0;
+    })();
   }
   return 0;
 }

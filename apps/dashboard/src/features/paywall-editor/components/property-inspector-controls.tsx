@@ -147,31 +147,42 @@ export function ButtonInspector({
           Button content is made from child nodes. Add, reorder, and edit its
           Text or Icon children directly in Layers.
         </p>
-        {node.action.type === "purchase" || node.action.type === "restore" ? (
-          node.inProgressChildren?.length ? (
-            <p className="text-muted-foreground text-xs leading-5">
-              In-progress children appear as labelled layers and preview
-              automatically when selected.
-            </p>
-          ) : (
-            <Button
-              className="w-full justify-start"
-              disabled={disabled}
-              onClick={() =>
-                editor.insertComponentAt("text", {
-                  parentId: node.id,
-                  index: 0,
-                  collection: "inProgressChildren",
-                })
+        {(() => {
+          if (
+            node.action.type === "purchase" ||
+            node.action.type === "restore"
+          ) {
+            return (() => {
+              if (node.inProgressChildren?.length) {
+                return (
+                  <p className="text-muted-foreground text-xs leading-5">
+                    In-progress children appear as labelled layers and preview
+                    automatically when selected.
+                  </p>
+                );
               }
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <PlusIcon aria-hidden /> Add in-progress content
-            </Button>
-          )
-        ) : null}
+              return (
+                <Button
+                  className="w-full justify-start"
+                  disabled={disabled}
+                  onClick={() =>
+                    editor.insertComponentAt("text", {
+                      parentId: node.id,
+                      index: 0,
+                      collection: "inProgressChildren",
+                    })
+                  }
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <PlusIcon aria-hidden /> Add in-progress content
+                </Button>
+              );
+            })();
+          }
+          return null;
+        })()}
       </InspectorSection>
       <InspectorSection title="Actions">
         <SelectField

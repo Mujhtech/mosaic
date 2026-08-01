@@ -106,12 +106,15 @@ export function useComponentTreeModel({
     () => new Map(rows.map((row) => [row.id, row])),
     [rows]
   );
-  const activeRovingId =
-    rovingId && rowIndexById.has(rovingId)
-      ? rovingId
-      : selectedComponentId && rowIndexById.has(selectedComponentId)
-        ? selectedComponentId
-        : document?.screens[0]?.layout.id;
+  const activeRovingId = (() => {
+    if (rovingId && rowIndexById.has(rovingId)) {
+      return rovingId;
+    }
+    if (selectedComponentId && rowIndexById.has(selectedComponentId)) {
+      return selectedComponentId;
+    }
+    return document?.screens[0]?.layout.id;
+  })();
   const lockedIds = useMemo(
     () => new Set(layerMetadata.lockedIds),
     [layerMetadata.lockedIds]

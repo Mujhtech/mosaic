@@ -103,14 +103,18 @@ function insertionPreview(
     const root = document.screens.some(
       (screen) => selected.id === screen.layout.content.id
     );
-    const fallback =
-      selected.type === "button"
-        ? "Button"
-        : selected.type === "productCard"
-          ? "Product Card"
-          : selected.type === "productBadge"
-            ? "Product Badge"
-            : "Stack";
+    const fallback = (() => {
+      if (selected.type === "button") {
+        return "Button";
+      }
+      if (selected.type === "productCard") {
+        return "Product Card";
+      }
+      if (selected.type === "productBadge") {
+        return "Product Badge";
+      }
+      return "Stack";
+    })();
     return `Inside ${labels[selected.id]?.trim() || (root ? "Content Stack" : fallback)}, after its current content.`;
   }
   if (selected) {
@@ -516,17 +520,23 @@ export function ComponentLibrary() {
         disabled={insertionDisabled}
         onClick={() => insert(selectedType)}
         size="sm"
-        title={
-          insertionDisabled
-            ? isDocumentTransactionActive
-              ? "Finish the active edit first"
-              : destinationLocked
-                ? "Unlock the destination Stack in Layers"
-                : countdownDeadlineReady
-                  ? "Choose a valid insertion container"
-                  : "Enter a valid UTC deadline"
-            : `Insert ${selectedEntry?.label ?? selectedType}`
-        }
+        title={(() => {
+          if (insertionDisabled) {
+            return (() => {
+              if (isDocumentTransactionActive) {
+                return "Finish the active edit first";
+              }
+              if (destinationLocked) {
+                return "Unlock the destination Stack in Layers";
+              }
+              if (countdownDeadlineReady) {
+                return "Choose a valid insertion container";
+              }
+              return "Enter a valid UTC deadline";
+            })();
+          }
+          return `Insert ${selectedEntry?.label ?? selectedType}`;
+        })()}
         type="button"
       >
         <PlusIcon aria-hidden />

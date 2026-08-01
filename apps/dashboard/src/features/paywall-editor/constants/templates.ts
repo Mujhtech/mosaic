@@ -95,9 +95,24 @@ function text(
     value: { default: defaultValue, localizationKey },
     typography: {
       style,
-      fontSize: style === "title" ? 32 : style === "caption" ? 13 : 16,
-      lineHeightMultiplier:
-        style === "title" ? 1.2 : style === "caption" ? 1.4 : 1.5,
+      fontSize: (() => {
+        if (style === "title") {
+          return 32;
+        }
+        if (style === "caption") {
+          return 13;
+        }
+        return 16;
+      })(),
+      lineHeightMultiplier: (() => {
+        if (style === "title") {
+          return 1.2;
+        }
+        if (style === "caption") {
+          return 1.4;
+        }
+        return 1.5;
+      })(),
       weight: style === "title" ? "bold" : "regular",
       color: style === "caption" ? "text.secondary" : "text.primary",
       alignment: "center",

@@ -214,12 +214,17 @@ export function StudioCommandPalette({
     const currentIndex = from
       ? commands.indexOf(from as HTMLButtonElement)
       : -1;
-    const nextIndex =
-      currentIndex < 0
-        ? relativeIndex < 0
-          ? commands.length - 1
-          : 0
-        : (currentIndex + relativeIndex + commands.length) % commands.length;
+    const nextIndex = (() => {
+      if (currentIndex < 0) {
+        return (() => {
+          if (relativeIndex < 0) {
+            return commands.length - 1;
+          }
+          return 0;
+        })();
+      }
+      return (currentIndex + relativeIndex + commands.length) % commands.length;
+    })();
     commands[nextIndex]?.focus();
   }
 
@@ -581,13 +586,15 @@ export function StudioCommandPalette({
           {/* Filtering happens without any visible focus change, so the result
               count is announced instead. */}
           <LiveAnnouncer
-            message={
-              query.trim().length === 0
-                ? undefined
-                : visibleCommands.length === 1
-                  ? "1 command matches."
-                  : `${visibleCommands.length} commands match.`
-            }
+            message={(() => {
+              if (query.trim().length === 0) {
+                return;
+              }
+              if (visibleCommands.length === 1) {
+                return "1 command matches.";
+              }
+              return `${visibleCommands.length} commands match.`;
+            })()}
           />
 
           <div className="min-h-0 flex-1 overflow-y-auto p-2" ref={listRef}>
@@ -617,15 +624,18 @@ export function StudioCommandPalette({
                         type="button"
                       >
                         <span className="grid size-7 shrink-0 place-items-center text-muted-foreground">
-                          {command.group === "Edit" ? (
-                            commandIconForEdit(command.id)
-                          ) : command.id === "import-document" ? (
-                            <UploadSimpleIcon aria-hidden />
-                          ) : command.id === "toggle-diagnostics" ? (
-                            <WarningCircleIcon aria-hidden />
-                          ) : (
-                            <PaletteIcon name={command.icon} />
-                          )}
+                          {(() => {
+                            if (command.group === "Edit") {
+                              return commandIconForEdit(command.id);
+                            }
+                            if (command.id === "import-document") {
+                              return <UploadSimpleIcon aria-hidden />;
+                            }
+                            if (command.id === "toggle-diagnostics") {
+                              return <WarningCircleIcon aria-hidden />;
+                            }
+                            return <PaletteIcon name={command.icon} />;
+                          })()}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block font-medium text-sm">

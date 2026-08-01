@@ -160,13 +160,15 @@ function resolvedChannels(
   document?: MosaicDocument
 ): ColorChannels {
   const resolved = document ? resolveColorToken(document, value) : value;
-  const literal =
-    typeof resolved === "string" && resolved.startsWith("#")
-      ? resolved
-      : typeof resolved === "string"
-        ? SEMANTIC_COLOR_BY_VALUE.get(resolved as SemanticProtocolColor)
-            ?.fallback
-        : undefined;
+  const literal = (() => {
+    if (typeof resolved === "string" && resolved.startsWith("#")) {
+      return resolved;
+    }
+    if (typeof resolved === "string") {
+      return SEMANTIC_COLOR_BY_VALUE.get(resolved as SemanticProtocolColor)
+        ?.fallback;
+    }
+  })();
   return (
     parseLiteralColor(literal ?? "#172033FF") ?? {
       red: 23,
@@ -761,13 +763,15 @@ export function InspectorColorControl({
           readOnly={isColorTokenReference(value)}
           spellCheck={false}
           type="text"
-          value={
-            document
-              ? protocolColorLabel(document, value)
-              : typeof value === "string"
-                ? value
-                : value.id
-          }
+          value={(() => {
+            if (document) {
+              return protocolColorLabel(document, value);
+            }
+            if (typeof value === "string") {
+              return value;
+            }
+            return value.id;
+          })()}
         />
         <span aria-hidden className="my-1.5 w-px shrink-0 bg-border" />
         <input

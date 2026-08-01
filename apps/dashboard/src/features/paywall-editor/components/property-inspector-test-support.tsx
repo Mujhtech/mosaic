@@ -147,18 +147,25 @@ export function SeededLocalizedTextHarness({ mode }: { mode: SeedMode }) {
   }, [document, editor, mode, selectedComponentId]);
 
   const selected = document ? findNode(document, selectedComponentId) : null;
-  const createdText =
-    mode === "feature" &&
-    selected?.type === "featureList" &&
-    selected.items.length > 2
-      ? selected.items.at(-1)?.text
-      : mode === "hint" && selected?.type === "button"
-        ? selected.accessibility.hint
-        : mode === "image" &&
-            selected?.type === "image" &&
-            !selected.accessibility.hidden
-          ? selected.accessibility.label
-          : undefined;
+  const createdText = (() => {
+    if (
+      mode === "feature" &&
+      selected?.type === "featureList" &&
+      selected.items.length > 2
+    ) {
+      return selected.items.at(-1)?.text;
+    }
+    if (mode === "hint" && selected?.type === "button") {
+      return selected.accessibility.hint;
+    }
+    if (
+      mode === "image" &&
+      selected?.type === "image" &&
+      !selected.accessibility.hidden
+    ) {
+      return selected.accessibility.label;
+    }
+  })();
   const seeded =
     createdText && document
       ? Object.values(document.localization.locales).every((catalog) =>

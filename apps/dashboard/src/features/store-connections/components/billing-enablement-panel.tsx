@@ -50,15 +50,20 @@ export function BillingEnablementPanel({
       title="Mosaic Billing"
     >
       <div className="flex flex-wrap items-center gap-3">
-        {isPending ? (
-          <StatusPill label="Checking…" tone="neutral" />
-        ) : billingEnabled === null ? (
-          <StatusPill label="State unavailable" tone="attention" />
-        ) : billingEnabled ? (
-          <StatusPill label="Enabled for this Project" tone="positive" />
-        ) : (
-          <StatusPill label="Not enabled" tone="attention" />
-        )}
+        {(() => {
+          if (isPending) {
+            return <StatusPill label="Checking…" tone="neutral" />;
+          }
+          if (billingEnabled === null) {
+            return <StatusPill label="State unavailable" tone="attention" />;
+          }
+          if (billingEnabled) {
+            return (
+              <StatusPill label="Enabled for this Project" tone="positive" />
+            );
+          }
+          return <StatusPill label="Not enabled" tone="attention" />;
+        })()}
 
         {canManage && billingEnabled === false ? (
           <Button
@@ -157,34 +162,43 @@ export function BillingEnablementPanel({
         </div>
       ) : null}
 
-      {credentialsStillActive ? (
-        <div
-          className="mt-4 rounded border border-destructive/25 bg-destructive/5 p-4"
-          role="alert"
-        >
-          <p className="font-semibold text-destructive text-sm">
-            Revoke the active Store Server Credentials first
-          </p>
-          <p className="mt-1 text-muted-foreground text-sm leading-6">
-            Turning billing off would not stop the store. Apple keeps posting to
-            an endpoint whose intake token still resolves, and every refusal
-            spends one of its five non-renewable delivery attempts — so a
-            transaction can be lost permanently. Revoking the credential is what
-            actually stops the store, so Mosaic requires it first and the switch
-            then means exactly what it says.
-          </p>
-          <p className="mt-2 text-muted-foreground text-sm leading-6">
-            Revoke each active credential in the list below, then turn billing
-            off.
-          </p>
-        </div>
-      ) : error ? (
-        <p className="mt-3 text-destructive text-sm" role="alert">
-          {error instanceof Error
-            ? error.message
-            : "Mosaic could not change this setting."}
-        </p>
-      ) : null}
+      {(() => {
+        if (credentialsStillActive) {
+          return (
+            <div
+              className="mt-4 rounded border border-destructive/25 bg-destructive/5 p-4"
+              role="alert"
+            >
+              <p className="font-semibold text-destructive text-sm">
+                Revoke the active Store Server Credentials first
+              </p>
+              <p className="mt-1 text-muted-foreground text-sm leading-6">
+                Turning billing off would not stop the store. Apple keeps
+                posting to an endpoint whose intake token still resolves, and
+                every refusal spends one of its five non-renewable delivery
+                attempts — so a transaction can be lost permanently. Revoking
+                the credential is what actually stops the store, so Mosaic
+                requires it first and the switch then means exactly what it
+                says.
+              </p>
+              <p className="mt-2 text-muted-foreground text-sm leading-6">
+                Revoke each active credential in the list below, then turn
+                billing off.
+              </p>
+            </div>
+          );
+        }
+        if (error) {
+          return (
+            <p className="mt-3 text-destructive text-sm" role="alert">
+              {error instanceof Error
+                ? error.message
+                : "Mosaic could not change this setting."}
+            </p>
+          );
+        }
+        return null;
+      })()}
     </WorkflowPanel>
   );
 }

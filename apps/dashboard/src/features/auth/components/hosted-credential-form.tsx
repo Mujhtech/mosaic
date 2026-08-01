@@ -218,13 +218,20 @@ export function HostedCredentialForm({
                   }
                   type="submit"
                 >
-                  {authenticate.isPending
-                    ? isSignup
-                      ? "Creating account…"
-                      : "Signing in…"
-                    : isSignup
-                      ? "Create account"
-                      : "Sign in"}
+                  {(() => {
+                    if (authenticate.isPending) {
+                      return (() => {
+                        if (isSignup) {
+                          return "Creating account…";
+                        }
+                        return "Signing in…";
+                      })();
+                    }
+                    if (isSignup) {
+                      return "Create account";
+                    }
+                    return "Sign in";
+                  })()}
                 </Button>
               )}
             </form.Subscribe>

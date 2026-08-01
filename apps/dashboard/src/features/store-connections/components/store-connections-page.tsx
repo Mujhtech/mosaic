@@ -232,13 +232,15 @@ export function StoreConnectionsPage({
                 <div className="flex items-center gap-2">
                   <StatusPill
                     label={storeCredentialHealthLabel(credential.healthStatus)}
-                    tone={
-                      credential.healthStatus === "healthy"
-                        ? "positive"
-                        : credential.healthStatus === "untested"
-                          ? "neutral"
-                          : "negative"
-                    }
+                    tone={(() => {
+                      if (credential.healthStatus === "healthy") {
+                        return "positive";
+                      }
+                      if (credential.healthStatus === "untested") {
+                        return "neutral";
+                      }
+                      return "negative";
+                    })()}
                   />
                   {credential.status === "revoked" ? (
                     <StatusPill label="Revoked" tone="negative" />

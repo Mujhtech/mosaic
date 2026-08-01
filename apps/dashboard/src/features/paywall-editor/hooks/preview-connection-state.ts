@@ -110,14 +110,18 @@ export function derivePreviewAggregate(options: {
     accepted,
     rejected,
     pending,
-    label:
-      total === 0
-        ? "No native previews connected"
-        : rejected > 0
-          ? `${rejected} of ${total} previews need attention`
-          : pending > 0
-            ? `${accepted} of ${total} previews updated`
-            : `${accepted} of ${total} previews updated`,
+    label: (() => {
+      if (total === 0) {
+        return "No native previews connected";
+      }
+      if (rejected > 0) {
+        return `${rejected} of ${total} previews need attention`;
+      }
+      if (pending > 0) {
+        return `${accepted} of ${total} previews updated`;
+      }
+      return `${accepted} of ${total} previews updated`;
+    })(),
   };
 }
 

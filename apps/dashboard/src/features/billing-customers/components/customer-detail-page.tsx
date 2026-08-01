@@ -654,41 +654,49 @@ function CustomerSubscriptionsPanel({
         </p>
       ) : null}
 
-      {expanded && paged.isPending ? (
-        <p className="text-sm leading-6" role="status">
-          Loading every Subscription Instance for this customer.
-        </p>
-      ) : items.length === 0 ? (
-        <p className="text-sm leading-6">
-          {cursor
-            ? "No Subscription Instance is on this page. Return to the first page to read from the newest."
-            : "No Subscription Instance is projected for this customer in this Mosaic Environment."}
-        </p>
-      ) : (
-        <ul className="space-y-3">
-          {items.map((subscription) => (
-            <li
-              className="rounded border p-4"
-              key={subscription.subscriptionInstanceId}
-            >
-              <a
-                className="break-all font-mono font-semibold text-primary text-sm"
-                href={
-                  billingSubscriptionHref(
-                    scope,
-                    subscription.subscriptionInstanceId ?? ""
-                  ) ?? "#"
-                }
+      {(() => {
+        if (expanded && paged.isPending) {
+          return (
+            <p className="text-sm leading-6" role="status">
+              Loading every Subscription Instance for this customer.
+            </p>
+          );
+        }
+        if (items.length === 0) {
+          return (
+            <p className="text-sm leading-6">
+              {cursor
+                ? "No Subscription Instance is on this page. Return to the first page to read from the newest."
+                : "No Subscription Instance is projected for this customer in this Mosaic Environment."}
+            </p>
+          );
+        }
+        return (
+          <ul className="space-y-3">
+            {items.map((subscription) => (
+              <li
+                className="rounded border p-4"
+                key={subscription.subscriptionInstanceId}
               >
-                {subscription.subscriptionInstanceId}
-              </a>
-              <div className="mt-2">
-                <SubscriptionStateAxes subscription={subscription} />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+                <a
+                  className="break-all font-mono font-semibold text-primary text-sm"
+                  href={
+                    billingSubscriptionHref(
+                      scope,
+                      subscription.subscriptionInstanceId ?? ""
+                    ) ?? "#"
+                  }
+                >
+                  {subscription.subscriptionInstanceId}
+                </a>
+                <div className="mt-2">
+                  <SubscriptionStateAxes subscription={subscription} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        );
+      })()}
 
       {expanded ? (
         <LedgerPaging

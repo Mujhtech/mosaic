@@ -338,13 +338,18 @@ export function NodeFrame({
   const appearance = "appearance" in node ? node.appearance : undefined;
   const background = resolvedBackground(document, appearance?.background);
   const locked = inheritedLocked || lockedIds.has(node.id);
-  const stateClass = locked
-    ? "cursor-not-allowed opacity-65 ring-slate-300 ring-1"
-    : selected
-      ? "ring-primary ring-2 ring-offset-2 ring-offset-white"
-      : hovered
-        ? "ring-primary/40 ring-1"
-        : "hover:ring-primary/35 hover:ring-1";
+  const stateClass = (() => {
+    if (locked) {
+      return "cursor-not-allowed opacity-65 ring-slate-300 ring-1";
+    }
+    if (selected) {
+      return "ring-primary ring-2 ring-offset-2 ring-offset-white";
+    }
+    if (hovered) {
+      return "ring-primary/40 ring-1";
+    }
+    return "hover:ring-primary/35 hover:ring-1";
+  })();
   return (
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a direct-manipulation canvas surface; selection is also reachable from the Layers tree and the command palette
     <fieldset

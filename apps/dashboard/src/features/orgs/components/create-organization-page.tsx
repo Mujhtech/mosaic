@@ -56,11 +56,14 @@ export function CreateOrganizationPage() {
             name="name"
             validators={{
               onBlur: ({ value }) =>
-                value.trim().length === 0
-                  ? "Enter an organization name."
-                  : value.trim().length > 120
-                    ? "Use 120 characters or fewer."
-                    : undefined,
+                (() => {
+                  if (value.trim().length === 0) {
+                    return "Enter an organization name.";
+                  }
+                  if (value.trim().length > 120) {
+                    return "Use 120 characters or fewer.";
+                  }
+                })(),
             }}
           >
             {(field) => (

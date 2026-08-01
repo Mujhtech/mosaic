@@ -181,13 +181,15 @@ export function QuarantineDetailPage({
               />
               <StatusPill
                 label={quarantineSeverityLabel(data.severity)}
-                tone={
-                  data.severity === "security"
-                    ? "negative"
-                    : data.severity === "error"
-                      ? "attention"
-                      : "neutral"
-                }
+                tone={(() => {
+                  if (data.severity === "security") {
+                    return "negative";
+                  }
+                  if (data.severity === "error") {
+                    return "attention";
+                  }
+                  return "neutral";
+                })()}
               />
             </div>
 

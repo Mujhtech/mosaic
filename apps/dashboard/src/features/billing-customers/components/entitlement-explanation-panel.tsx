@@ -158,13 +158,15 @@ function EntitlementRow({
         />
         <DefinitionRow
           label="Effective until"
-          value={
-            entry.effectiveEnd
-              ? formatEntitlementInstant(entry.effectiveEnd)
-              : entry.endKnown === false
-                ? "Not known — an active source has an uncertain end"
-                : "No finite end — a permanent source grants this"
-          }
+          value={(() => {
+            if (entry.effectiveEnd) {
+              return formatEntitlementInstant(entry.effectiveEnd);
+            }
+            if (entry.endKnown === false) {
+              return "Not known — an active source has an uncertain end";
+            }
+            return "No finite end — a permanent source grants this";
+          })()}
         />
         <DefinitionRow
           label="Contributing sources"

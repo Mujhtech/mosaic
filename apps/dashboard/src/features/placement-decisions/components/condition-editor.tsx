@@ -297,15 +297,20 @@ function LeafEditor({
   ];
   const noOperand =
     value.operator === "exists" || value.operator === "does_not_exist";
-  const referenceLabel =
-    value.source === "entitlement_state"
-      ? "Access key"
-      : value.source === "product_availability" ||
-          value.source === "product_readiness"
-        ? "Product ID"
-        : value.source === "provider_capability"
-          ? "Capability"
-          : undefined;
+  const referenceLabel = (() => {
+    if (value.source === "entitlement_state") {
+      return "Access key";
+    }
+    if (
+      value.source === "product_availability" ||
+      value.source === "product_readiness"
+    ) {
+      return "Product ID";
+    }
+    if (value.source === "provider_capability") {
+      return "Capability";
+    }
+  })();
   return (
     <div className="grid gap-2 rounded border bg-muted/25 p-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-start">
       <div className="grid gap-1 font-medium text-xs">
@@ -356,49 +361,60 @@ function LeafEditor({
           </SelectContent>
         </Select>
       </div>
-      {value.source === "user_attribute" ? (
-        <div className="grid gap-1 font-medium text-xs">
-          <label htmlFor={`condition-attribute-${fieldId}`}>Attribute</label>
-          <Select
-            items={attributeOptions}
-            onValueChange={(referenceKey) => {
-              const next = { ...value, referenceKey };
-              const nextOperators = operatorsFor(next, attributes);
-              onChange({
-                ...next,
-                operator: nextOperators.includes(value.operator)
-                  ? value.operator
-                  : (nextOperators[0] ?? "equals"),
-              });
-            }}
-            value={value.referenceKey ?? ""}
-          >
-            <SelectTrigger id={`condition-attribute-${fieldId}`} size="sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {attributeOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ) : referenceLabel ? (
-        <label className="grid gap-1 font-medium text-xs">
-          {referenceLabel}
-          <input
-            className="h-8 rounded border border-input bg-background px-2 text-sm"
-            onChange={(event) =>
-              onChange({ ...value, referenceKey: event.currentTarget.value })
-            }
-            value={value.referenceKey ?? ""}
-          />
-        </label>
-      ) : (
-        <span />
-      )}
+      {(() => {
+        if (value.source === "user_attribute") {
+          return (
+            <div className="grid gap-1 font-medium text-xs">
+              <label htmlFor={`condition-attribute-${fieldId}`}>
+                Attribute
+              </label>
+              <Select
+                items={attributeOptions}
+                onValueChange={(referenceKey) => {
+                  const next = { ...value, referenceKey };
+                  const nextOperators = operatorsFor(next, attributes);
+                  onChange({
+                    ...next,
+                    operator: nextOperators.includes(value.operator)
+                      ? value.operator
+                      : (nextOperators[0] ?? "equals"),
+                  });
+                }}
+                value={value.referenceKey ?? ""}
+              >
+                <SelectTrigger id={`condition-attribute-${fieldId}`} size="sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {attributeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          );
+        }
+        if (referenceLabel) {
+          return (
+            <label className="grid gap-1 font-medium text-xs">
+              {referenceLabel}
+              <input
+                className="h-8 rounded border border-input bg-background px-2 text-sm"
+                onChange={(event) =>
+                  onChange({
+                    ...value,
+                    referenceKey: event.currentTarget.value,
+                  })
+                }
+                value={value.referenceKey ?? ""}
+              />
+            </label>
+          );
+        }
+        return <span />;
+      })()}
       {noOperand ? (
         <span />
       ) : (

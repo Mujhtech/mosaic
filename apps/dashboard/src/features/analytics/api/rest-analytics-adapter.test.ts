@@ -174,8 +174,9 @@ describe("analytics dimension mapping", () => {
       (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
     >((input) => {
       const url = input instanceof Request ? input.url : String(input);
-      const metrics = url.includes("paywall-version-comparison")
-        ? [
+      const metrics = (() => {
+        if (url.includes("paywall-version-comparison")) {
+          return [
             {
               id: "paywall_presentations",
               value: 2,
@@ -187,22 +188,25 @@ describe("analytics dimension mapping", () => {
               definition: "Presentations",
               dimensions: { paywall_version_id: "version_01" },
             },
-          ]
-        : url.includes("provider-errors")
-          ? [
-              {
-                id: "provider_errors",
-                value: 1,
-                numerator: 1,
-                basis: "event_count",
-                authority: "client_observed",
-                attributionWindow: "24h",
-                timezone: "UTC",
-                definition: "Provider errors",
-                dimensions: { provider: "app_store" },
-              },
-            ]
-          : [];
+          ];
+        }
+        if (url.includes("provider-errors")) {
+          return [
+            {
+              id: "provider_errors",
+              value: 1,
+              numerator: 1,
+              basis: "event_count",
+              authority: "client_observed",
+              attributionWindow: "24h",
+              timezone: "UTC",
+              definition: "Provider errors",
+              dimensions: { provider: "app_store" },
+            },
+          ];
+        }
+        return [];
+      })();
       return Promise.resolve(
         new Response(JSON.stringify({ data: { metrics, freshness: {} } }), {
           status: 200,

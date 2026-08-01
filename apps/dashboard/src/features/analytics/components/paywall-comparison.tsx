@@ -28,90 +28,98 @@ export function PaywallComparison({
       isPending={query.isPending}
       onRetry={handleRetry}
     >
-      {query.data?.length === 0 ? (
-        <EmptyState
-          description="No immutable Paywall Versions have comparable data for these filters."
-          title="No versions to compare"
-        />
-      ) : query.data ? (
-        <div className="space-y-4">
-          <div
-            className="rounded border border-primary/20 bg-primary/5 p-3 text-sm"
-            role="status"
-          >
-            Versions are immutable and compared on the same event-count basis,
-            filters, timezone, and 24-hour correlation window. Results below the
-            data threshold are descriptive only.
-          </div>
-          <div className="overflow-x-auto rounded border">
-            <table className="w-full min-w-180 text-left text-sm">
-              <caption className="sr-only">
-                Immutable Paywall Version comparison
-              </caption>
-              <thead className="bg-muted/40 text-muted-foreground text-xs uppercase">
-                <tr>
-                  <th className="px-4 py-3" scope="col">
-                    Paywall Version
-                  </th>
-                  <th className="px-4 py-3" scope="col">
-                    Presentations
-                  </th>
-                  <th className="px-4 py-3" scope="col">
-                    Metric
-                  </th>
-                  <th className="px-4 py-3" scope="col">
-                    Authority
-                  </th>
-                  <th className="px-4 py-3" scope="col">
-                    Data quality
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {query.data.map((row) => (
-                  <tr key={row.paywallVersionId}>
-                    <th className="px-4 py-4" scope="row">
-                      <span className="font-medium">
-                        {row.paywallName}
-                        {row.versionNumber > 0
-                          ? ` · v${row.versionNumber}`
-                          : ""}
-                      </span>
-                      <code className="mt-0.5 block text-muted-foreground text-xs">
-                        {row.paywallVersionId}
-                      </code>
-                    </th>
-                    <td className="px-4 py-4 tabular-nums">
-                      {row.presentations.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-4 font-semibold tabular-nums">
-                      {formatAnalyticsMetric(row.metric)}
-                      <span className="mt-1 block font-mono font-normal text-muted-foreground text-xs">
-                        {row.metric.metricId}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      {row.metric.authority.replace("_", "-")}
-                    </td>
-                    <td className="px-4 py-4">
-                      {row.presentations < 100
-                        ? "Low data — no winner"
-                        : "Meets display threshold"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {query.data.length > 0 ? (
-            <LowDataNotice
-              sampleSize={Math.min(
-                ...query.data.map((row) => row.presentations)
-              )}
+      {(() => {
+        if (query.data?.length === 0) {
+          return (
+            <EmptyState
+              description="No immutable Paywall Versions have comparable data for these filters."
+              title="No versions to compare"
             />
-          ) : null}
-        </div>
-      ) : null}
+          );
+        }
+        if (query.data) {
+          return (
+            <div className="space-y-4">
+              <div
+                className="rounded border border-primary/20 bg-primary/5 p-3 text-sm"
+                role="status"
+              >
+                Versions are immutable and compared on the same event-count
+                basis, filters, timezone, and 24-hour correlation window.
+                Results below the data threshold are descriptive only.
+              </div>
+              <div className="overflow-x-auto rounded border">
+                <table className="w-full min-w-180 text-left text-sm">
+                  <caption className="sr-only">
+                    Immutable Paywall Version comparison
+                  </caption>
+                  <thead className="bg-muted/40 text-muted-foreground text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-3" scope="col">
+                        Paywall Version
+                      </th>
+                      <th className="px-4 py-3" scope="col">
+                        Presentations
+                      </th>
+                      <th className="px-4 py-3" scope="col">
+                        Metric
+                      </th>
+                      <th className="px-4 py-3" scope="col">
+                        Authority
+                      </th>
+                      <th className="px-4 py-3" scope="col">
+                        Data quality
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {query.data.map((row) => (
+                      <tr key={row.paywallVersionId}>
+                        <th className="px-4 py-4" scope="row">
+                          <span className="font-medium">
+                            {row.paywallName}
+                            {row.versionNumber > 0
+                              ? ` · v${row.versionNumber}`
+                              : ""}
+                          </span>
+                          <code className="mt-0.5 block text-muted-foreground text-xs">
+                            {row.paywallVersionId}
+                          </code>
+                        </th>
+                        <td className="px-4 py-4 tabular-nums">
+                          {row.presentations.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-4 font-semibold tabular-nums">
+                          {formatAnalyticsMetric(row.metric)}
+                          <span className="mt-1 block font-mono font-normal text-muted-foreground text-xs">
+                            {row.metric.metricId}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4">
+                          {row.metric.authority.replace("_", "-")}
+                        </td>
+                        <td className="px-4 py-4">
+                          {row.presentations < 100
+                            ? "Low data — no winner"
+                            : "Meets display threshold"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {query.data.length > 0 ? (
+                <LowDataNotice
+                  sampleSize={Math.min(
+                    ...query.data.map((row) => row.presentations)
+                  )}
+                />
+              ) : null}
+            </div>
+          );
+        }
+        return null;
+      })()}
     </AnalyticsQueryResult>
   );
 }

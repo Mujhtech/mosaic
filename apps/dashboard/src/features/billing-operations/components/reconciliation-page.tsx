@@ -247,15 +247,18 @@ export function ReconciliationPage({
                     <TableCell>
                       <StatusPill
                         label={runStatusLabel(run.status)}
-                        tone={
-                          run.status === "completed"
-                            ? "positive"
-                            : run.status === "failed"
-                              ? "negative"
-                              : run.status === "partial"
-                                ? "attention"
-                                : "neutral"
-                        }
+                        tone={(() => {
+                          if (run.status === "completed") {
+                            return "positive";
+                          }
+                          if (run.status === "failed") {
+                            return "negative";
+                          }
+                          if (run.status === "partial") {
+                            return "attention";
+                          }
+                          return "neutral";
+                        })()}
                       />
                     </TableCell>
                     <TableCell>{run.examinedCount ?? 0}</TableCell>

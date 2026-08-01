@@ -447,24 +447,39 @@ export function MigrationLifecycleOperations({
     "complete",
     "observe_stabilization",
   ].includes(name);
-  const disabledReason = granted
-    ? needsReason && reason.trim().length < 8
-      ? "Enter a specific operational reason of at least 8 characters."
-      : boundInputsPresent
-        ? name === "complete" && completionBlockers.length > 0
-          ? `Completion is blocked: ${completionBlockers.join(", ")}`
-          : [
+  const disabledReason = (() => {
+    if (granted) {
+      return (() => {
+        if (needsReason && reason.trim().length < 8) {
+          return "Enter a specific operational reason of at least 8 characters.";
+        }
+        if (boundInputsPresent) {
+          return (() => {
+            if (name === "complete" && completionBlockers.length > 0) {
+              return `Completion is blocked: ${completionBlockers.join(", ")}`;
+            }
+            if (
+              [
                 "propose_cutover",
                 "propose_rollback",
                 "preview_repair",
                 "propose_legal_hold",
-              ].includes(name) && !expiresAt
-            ? "Enter the explicit approval or preview expiry time."
-            : name === "remove_credential" && !acknowledged
-              ? "Acknowledge that credential removal is irreversible and can prevent rollback."
-              : null
-        : "Enter every reference and expected digest required to bind this command to reviewed server state."
-    : `The server has not granted ${capability}. Organization role ${organizationRole ?? "unknown"} is explanatory only.`;
+              ].includes(name) &&
+              !expiresAt
+            ) {
+              return "Enter the explicit approval or preview expiry time.";
+            }
+            if (name === "remove_credential" && !acknowledged) {
+              return "Acknowledge that credential removal is irreversible and can prevent rollback.";
+            }
+            return null;
+          })();
+        }
+        return "Enter every reference and expected digest required to bind this command to reviewed server state.";
+      })();
+    }
+    return `The server has not granted ${capability}. Organization role ${organizationRole ?? "unknown"} is explanatory only.`;
+  })();
 
   const submit = useCallback(async () => {
     const expectedStateVersion = program.stateVersion;

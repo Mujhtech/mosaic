@@ -230,39 +230,75 @@ export function MigrationProgramDetailPage({
     dryRun.isPending ||
     shadowRun.isPending ||
     assess.isPending;
-  const importDisabledReason = canRunMigrationCommand(detail, "run-import")
-    ? current?.state === "importing"
-      ? latestManifest
-        ? latestMapping?.status === "frozen"
-          ? importCount < 0 || importCount > 1000
-            ? "Record count must be between 0 and 1,000."
-            : null
-          : "Choose and freeze a mapping set before importing."
-        : "A source manifest is required before importing."
-      : "Freeze a reviewed mapping set before importing."
-    : "The server has not granted the run-import command. Organization role is not command authority.";
-  const dryRunDisabledReason = canRunMigrationCommand(detail, "run-import")
-    ? current && journey?.canQueueDryRun
-      ? latestManifest && latestMapping
-        ? null
-        : "A source manifest and mapping set are required for comparison."
-      : "Complete a bounded import before starting the dry run."
-    : "The server has not granted the run-import command. Organization role is not command authority.";
-  const shadowDisabledReason = canRunMigrationCommand(detail, "run-import")
-    ? current && journey?.canQueueShadow
-      ? latestManifest && latestMapping
-        ? null
-        : "A source manifest and mapping set are required for comparison."
-      : "Complete the dry run before starting shadow comparison."
-    : "The server has not granted the run-import command. Organization role is not command authority.";
-  const readinessDisabledReason = canRunMigrationCommand(
-    detail,
-    "assess-readiness"
-  )
-    ? current && journey?.canAssess
-      ? null
-      : "Complete shadow comparison before assessing readiness."
-    : "The server has not granted the assess-readiness command. Organization role is explanatory only.";
+  const importDisabledReason = (() => {
+    if (canRunMigrationCommand(detail, "run-import")) {
+      return (() => {
+        if (current?.state === "importing") {
+          return (() => {
+            if (latestManifest) {
+              return (() => {
+                if (latestMapping?.status === "frozen") {
+                  return (() => {
+                    if (importCount < 0 || importCount > 1000) {
+                      return "Record count must be between 0 and 1,000.";
+                    }
+                    return null;
+                  })();
+                }
+                return "Choose and freeze a mapping set before importing.";
+              })();
+            }
+            return "A source manifest is required before importing.";
+          })();
+        }
+        return "Freeze a reviewed mapping set before importing.";
+      })();
+    }
+    return "The server has not granted the run-import command. Organization role is not command authority.";
+  })();
+  const dryRunDisabledReason = (() => {
+    if (canRunMigrationCommand(detail, "run-import")) {
+      return (() => {
+        if (current && journey?.canQueueDryRun) {
+          return (() => {
+            if (latestManifest && latestMapping) {
+              return null;
+            }
+            return "A source manifest and mapping set are required for comparison.";
+          })();
+        }
+        return "Complete a bounded import before starting the dry run.";
+      })();
+    }
+    return "The server has not granted the run-import command. Organization role is not command authority.";
+  })();
+  const shadowDisabledReason = (() => {
+    if (canRunMigrationCommand(detail, "run-import")) {
+      return (() => {
+        if (current && journey?.canQueueShadow) {
+          return (() => {
+            if (latestManifest && latestMapping) {
+              return null;
+            }
+            return "A source manifest and mapping set are required for comparison.";
+          })();
+        }
+        return "Complete the dry run before starting shadow comparison.";
+      })();
+    }
+    return "The server has not granted the run-import command. Organization role is not command authority.";
+  })();
+  const readinessDisabledReason = (() => {
+    if (canRunMigrationCommand(detail, "assess-readiness")) {
+      return (() => {
+        if (current && journey?.canAssess) {
+          return null;
+        }
+        return "Complete shadow comparison before assessing readiness.";
+      })();
+    }
+    return "The server has not granted the assess-readiness command. Organization role is explanatory only.";
+  })();
   const commonError =
     project.error ??
     access.error ??
@@ -638,13 +674,15 @@ export function MigrationProgramDetailPage({
                       </a>
                       <StatusPill
                         label={item.status}
-                        tone={
-                          item.status === "failed"
-                            ? "negative"
-                            : item.status === "completed"
-                              ? "positive"
-                              : "neutral"
-                        }
+                        tone={(() => {
+                          if (item.status === "failed") {
+                            return "negative";
+                          }
+                          if (item.status === "completed") {
+                            return "positive";
+                          }
+                          return "neutral";
+                        })()}
                       />
                       <span>
                         {item.validatedCount}/{item.recordCount} validated ·{" "}
@@ -885,61 +923,76 @@ export function MigrationProgramDetailPage({
                 title="Review readiness impact"
               />
             ) : null}
-            {readiness.data ? (
-              <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                <div>
-                  <dt className="text-muted-foreground">Ready</dt>
-                  <dd className="font-semibold">
-                    {readiness.data.ready ? "Yes" : "No"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">
-                    Current-access mapping
-                  </dt>
-                  <dd>{readiness.data.currentAccessMappingPercent}%</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Validated evidence</dt>
-                  <dd>{readiness.data.currentAccessEvidencePercent}%</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Critical / blocking</dt>
-                  <dd>
-                    {readiness.data.unresolved.critical} /{" "}
-                    {readiness.data.unresolved.blocking}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Final delta</dt>
-                  <dd>
-                    {readiness.data.finalDeltaCompleted
-                      ? "Complete"
-                      : "Pending"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">
-                    Fresh watermarks / aware versions
-                  </dt>
-                  <dd>
-                    {readiness.data.watermarksFresh ? "Fresh" : "Pending"} /{" "}
-                    {readiness.data.supportedVersionsAuthorityAware
-                      ? "Ready"
-                      : "Pending"}
-                  </dd>
-                </div>
-              </dl>
-            ) : readinessMissing ? (
-              <p className="mt-4 text-muted-foreground text-sm">
-                No readiness assessment exists yet.
-              </p>
-            ) : readiness.error ? (
-              <p className="mt-4 text-destructive text-sm" role="alert">
-                Mosaic could not load the latest readiness assessment. Refresh
-                this view and try again.
-              </p>
-            ) : null}
+            {(() => {
+              if (readiness.data) {
+                return (
+                  <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                    <div>
+                      <dt className="text-muted-foreground">Ready</dt>
+                      <dd className="font-semibold">
+                        {readiness.data.ready ? "Yes" : "No"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">
+                        Current-access mapping
+                      </dt>
+                      <dd>{readiness.data.currentAccessMappingPercent}%</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">
+                        Validated evidence
+                      </dt>
+                      <dd>{readiness.data.currentAccessEvidencePercent}%</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">
+                        Critical / blocking
+                      </dt>
+                      <dd>
+                        {readiness.data.unresolved.critical} /{" "}
+                        {readiness.data.unresolved.blocking}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">Final delta</dt>
+                      <dd>
+                        {readiness.data.finalDeltaCompleted
+                          ? "Complete"
+                          : "Pending"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">
+                        Fresh watermarks / aware versions
+                      </dt>
+                      <dd>
+                        {readiness.data.watermarksFresh ? "Fresh" : "Pending"} /{" "}
+                        {readiness.data.supportedVersionsAuthorityAware
+                          ? "Ready"
+                          : "Pending"}
+                      </dd>
+                    </div>
+                  </dl>
+                );
+              }
+              if (readinessMissing) {
+                return (
+                  <p className="mt-4 text-muted-foreground text-sm">
+                    No readiness assessment exists yet.
+                  </p>
+                );
+              }
+              if (readiness.error) {
+                return (
+                  <p className="mt-4 text-destructive text-sm" role="alert">
+                    Mosaic could not load the latest readiness assessment.
+                    Refresh this view and try again.
+                  </p>
+                );
+              }
+              return null;
+            })()}
           </WorkflowPanel>
         ) : null}
         {tab === "lifecycle" && detail ? (

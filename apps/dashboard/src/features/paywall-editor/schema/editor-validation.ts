@@ -459,15 +459,20 @@ function horizontalMinimumWidth(
     0
   );
   const gaps = "gap" in node ? node.gap * Math.max(0, children.length - 1) : 0;
-  const padding =
-    node.type === "stack"
-      ? node.padding.start + node.padding.end
-      : "appearance" in node &&
-          node.appearance &&
-          "padding" in node.appearance &&
-          node.appearance.padding
-        ? node.appearance.padding.start + node.appearance.padding.end
-        : 0;
+  const padding = (() => {
+    if (node.type === "stack") {
+      return node.padding.start + node.padding.end;
+    }
+    if (
+      "appearance" in node &&
+      node.appearance &&
+      "padding" in node.appearance &&
+      node.appearance.padding
+    ) {
+      return node.appearance.padding.start + node.appearance.padding.end;
+    }
+    return 0;
+  })();
   return childWidths + gaps + padding;
 }
 

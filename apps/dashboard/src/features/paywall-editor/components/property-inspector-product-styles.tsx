@@ -304,19 +304,25 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
         onChange={(type) =>
           setValue(
             "shadow",
-            type === "none"
-              ? undefined
-              : type === "shadowToken"
-                ? document.designSystem.shadows[0]
-                  ? { type, id: document.designSystem.shadows[0].id }
-                  : undefined
-                : {
-                    type: "shadow",
-                    color: "#00000033",
-                    offsetX: 0,
-                    offsetY: 8,
-                    blurRadius: 24,
+            (() => {
+              if (type === "none") {
+                return;
+              }
+              if (type === "shadowToken") {
+                return (() => {
+                  if (document.designSystem.shadows[0]) {
+                    return { type, id: document.designSystem.shadows[0].id };
                   }
+                })();
+              }
+              return {
+                type: "shadow",
+                color: "#00000033",
+                offsetX: 0,
+                offsetY: 8,
+                blurRadius: 24,
+              };
+            })()
           )
         }
         value={resolved.shadow?.type ?? "none"}

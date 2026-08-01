@@ -233,13 +233,15 @@ export function BillingHealthPage({
                       label={storeCredentialHealthLabel(
                         credential.healthStatus
                       )}
-                      tone={
-                        credential.healthStatus === "healthy"
-                          ? "positive"
-                          : credential.healthStatus === "untested"
-                            ? "neutral"
-                            : "negative"
-                      }
+                      tone={(() => {
+                        if (credential.healthStatus === "healthy") {
+                          return "positive";
+                        }
+                        if (credential.healthStatus === "untested") {
+                          return "neutral";
+                        }
+                        return "negative";
+                      })()}
                     />
                   </div>
                   <p className="mt-1 text-muted-foreground text-xs">

@@ -153,32 +153,44 @@ export function PlacementDecisionPage({
     >
       {/* Loading and error are mutually exclusive: a failed reference query
           previously left the spinner mounted next to the error. */}
-      {detail.error ||
-      paywalls.error ||
-      paywallVersions.error ||
-      attributes.error ? (
-        <ErrorState
-          description={
-            describeApiError(
-              detail.error ??
-                paywalls.error ??
-                paywallVersions.error ??
-                attributes.error
-            ).description
-          }
-          onRetry={() => {
-            detail.refetch();
-            paywalls.refetch();
-            paywallVersions.refetch();
-            attributes.refetch();
-          }}
-        />
-      ) : detail.isPending ||
-        paywalls.isPending ||
-        paywallVersions.isPending ||
-        attributes.isPending ? (
-        <LoadingState description="Loading the Placement decision settings and their references." />
-      ) : null}
+      {(() => {
+        if (
+          detail.error ||
+          paywalls.error ||
+          paywallVersions.error ||
+          attributes.error
+        ) {
+          return (
+            <ErrorState
+              description={
+                describeApiError(
+                  detail.error ??
+                    paywalls.error ??
+                    paywallVersions.error ??
+                    attributes.error
+                ).description
+              }
+              onRetry={() => {
+                detail.refetch();
+                paywalls.refetch();
+                paywallVersions.refetch();
+                attributes.refetch();
+              }}
+            />
+          );
+        }
+        if (
+          detail.isPending ||
+          paywalls.isPending ||
+          paywallVersions.isPending ||
+          attributes.isPending
+        ) {
+          return (
+            <LoadingState description="Loading the Placement decision settings and their references." />
+          );
+        }
+        return null;
+      })()}
       {detail.data && paywallVersions.data && attributes.data ? (
         <DecisionWorkspace
           adapter={adapter}
@@ -387,44 +399,52 @@ function DecisionWorkspace({
               : "Archive Placement"}
           </Button>
         </div>
-        {detail.status === "archived" ? (
-          <p className="mt-3 text-muted-foreground text-sm" role="status">
-            This Placement is archived and cannot receive decision changes.
-          </p>
-        ) : detail.usage.ruleSetCount > 0 ? (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded border border-border bg-muted/30 p-3">
-            <div>
-              <p className="font-medium text-sm">
-                Archive the active decision settings first
+        {(() => {
+          if (detail.status === "archived") {
+            return (
+              <p className="mt-3 text-muted-foreground text-sm" role="status">
+                This Placement is archived and cannot receive decision changes.
               </p>
-              <p className="mt-1 text-muted-foreground text-xs">
-                This preserves published version history and removes the active
-                decision settings so the Placement can then be archived.
-                Archiving decision settings cannot be undone; rebuilding them
-                means recreating every rule by hand.
-              </p>
-            </div>
-            <Button
-              disabled={archiveRuleSet.isPending}
-              onClick={handleClick2}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <ArchiveIcon aria-hidden />
-              {archiveRuleSet.isPending
-                ? "Archiving decision settings…"
-                : "Archive settings"}
-            </Button>
-            <ArchiveRuleSetConfirmation
-              onConfirm={handleConfirm}
-              onOpenChange={setConfirmingRuleSetArchive}
-              open={confirmingRuleSetArchive}
-              pending={archiveRuleSet.isPending}
-              placementKey={detail.key}
-            />
-          </div>
-        ) : null}
+            );
+          }
+          if (detail.usage.ruleSetCount > 0) {
+            return (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded border border-border bg-muted/30 p-3">
+                <div>
+                  <p className="font-medium text-sm">
+                    Archive the active decision settings first
+                  </p>
+                  <p className="mt-1 text-muted-foreground text-xs">
+                    This preserves published version history and removes the
+                    active decision settings so the Placement can then be
+                    archived. Archiving decision settings cannot be undone;
+                    rebuilding them means recreating every rule by hand.
+                  </p>
+                </div>
+                <Button
+                  disabled={archiveRuleSet.isPending}
+                  onClick={handleClick2}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <ArchiveIcon aria-hidden />
+                  {archiveRuleSet.isPending
+                    ? "Archiving decision settings…"
+                    : "Archive settings"}
+                </Button>
+                <ArchiveRuleSetConfirmation
+                  onConfirm={handleConfirm}
+                  onOpenChange={setConfirmingRuleSetArchive}
+                  open={confirmingRuleSetArchive}
+                  pending={archiveRuleSet.isPending}
+                  placementKey={detail.key}
+                />
+              </div>
+            );
+          }
+          return null;
+        })()}
         {archiveFailure ? (
           <div className="mt-3 space-y-2">
             <p className="text-destructive text-sm" role="alert">
@@ -939,21 +959,27 @@ export function ValidationSummary({
   const warningCount = issues.length - errorCount;
   return (
     <div
-      className={
-        errorCount > 0 || !valid
-          ? "mt-3 rounded border border-destructive/25 bg-destructive/5 p-3"
-          : warningCount > 0
-            ? "mt-3 rounded border border-amber-500/35 bg-amber-500/10 p-3"
-            : "mt-3 rounded border border-primary/25 bg-primary/5 p-3"
-      }
+      className={(() => {
+        if (errorCount > 0 || !valid) {
+          return "mt-3 rounded border border-destructive/25 bg-destructive/5 p-3";
+        }
+        if (warningCount > 0) {
+          return "mt-3 rounded border border-amber-500/35 bg-amber-500/10 p-3";
+        }
+        return "mt-3 rounded border border-primary/25 bg-primary/5 p-3";
+      })()}
       role={errorCount > 0 || !valid ? "alert" : "status"}
     >
       <p className="font-semibold">
-        {errorCount > 0 || !valid
-          ? "Publishing is blocked."
-          : warningCount > 0
-            ? `Ready to publish with ${warningCount} ${warningCount === 1 ? "warning" : "warnings"}.`
-            : "Decision rules are ready for the next Configuration Release."}
+        {(() => {
+          if (errorCount > 0 || !valid) {
+            return "Publishing is blocked.";
+          }
+          if (warningCount > 0) {
+            return `Ready to publish with ${warningCount} ${warningCount === 1 ? "warning" : "warnings"}.`;
+          }
+          return "Decision rules are ready for the next Configuration Release.";
+        })()}
       </p>
       {issues.length > 0 ? (
         <ul className="mt-2 space-y-2 text-sm">
@@ -970,24 +996,32 @@ export function ValidationSummary({
                 {issue.severity === "warning" ? "Warning: " : "Error: "}
               </span>
               <span>{issue.message}</span>
-              {issue.ruleId ? (
-                <Button
-                  className="ms-2"
-                  onClick={() => onOpenRule(issue.ruleId!)}
-                  size="sm"
-                  type="button"
-                  variant="link"
-                >
-                  Open Rule
-                </Button>
-              ) : issue.recoveryHref ? (
-                <a
-                  className="ms-2 font-medium text-primary"
-                  href={issue.recoveryHref}
-                >
-                  {issue.recoveryLabel ?? "Resolve"}
-                </a>
-              ) : null}
+              {(() => {
+                if (issue.ruleId) {
+                  return (
+                    <Button
+                      className="ms-2"
+                      onClick={() => onOpenRule(issue.ruleId!)}
+                      size="sm"
+                      type="button"
+                      variant="link"
+                    >
+                      Open Rule
+                    </Button>
+                  );
+                }
+                if (issue.recoveryHref) {
+                  return (
+                    <a
+                      className="ms-2 font-medium text-primary"
+                      href={issue.recoveryHref}
+                    >
+                      {issue.recoveryLabel ?? "Resolve"}
+                    </a>
+                  );
+                }
+                return null;
+              })()}
             </li>
           ))}
         </ul>

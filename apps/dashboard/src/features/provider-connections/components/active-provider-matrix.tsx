@@ -136,13 +136,20 @@ export function ActiveProviderMatrix({
                 )}
               </td>
               <td className="border-b px-3 py-3 text-muted-foreground text-xs">
-                {assignmentView?.connection
-                  ? `${assignmentView.connection.status} · ${assignmentView.connection.healthStatus}`
-                  : assignmentView?.assignment.activationKind === "native_store"
-                    ? "Built in · no server credentials"
-                    : assignmentView
-                      ? "Assignment references an unavailable connection"
-                      : "No active assignment"}
+                {(() => {
+                  if (assignmentView?.connection) {
+                    return `${assignmentView.connection.status} · ${assignmentView.connection.healthStatus}`;
+                  }
+                  if (
+                    assignmentView?.assignment.activationKind === "native_store"
+                  ) {
+                    return "Built in · no server credentials";
+                  }
+                  if (assignmentView) {
+                    return "Assignment references an unavailable connection";
+                  }
+                  return "No active assignment";
+                })()}
               </td>
               <td className="border-b px-3 py-3 text-right">
                 {managementEnabled ? (
@@ -271,11 +278,17 @@ function ProviderAssignmentControl({
   const handleClick2 = useCallback(() => setReviewAction("set"), []);
   const handleClick = useCallback(() => setReviewAction(null), []);
   const queryClient = useQueryClient();
-  const currentChoiceId = currentAssignment
-    ? currentAssignment.activationKind === "native_store"
-      ? `native:${currentAssignment.provider}`
-      : `connection:${currentAssignment.connectionId}`
-    : "";
+  const currentChoiceId = (() => {
+    if (currentAssignment) {
+      return (() => {
+        if (currentAssignment.activationKind === "native_store") {
+          return `native:${currentAssignment.provider}`;
+        }
+        return `connection:${currentAssignment.connectionId}`;
+      })();
+    }
+    return "";
+  })();
   const [selectedChoiceId, setSelectedChoiceId] = useState(currentChoiceId);
   const [reviewAction, setReviewAction] = useState<"clear" | "set" | null>(
     null
@@ -340,11 +353,15 @@ function ProviderAssignmentControl({
     return (
       <div className="ml-auto max-w-xs rounded border p-3 text-left">
         <p className="font-semibold text-xs">
-          {isClearing
-            ? `Clear ${providerChoiceLabel(currentAssignment, current)}`
-            : currentAssignment
-              ? `Replace ${providerChoiceLabel(currentAssignment, current)}`
-              : "Select active provider"}
+          {(() => {
+            if (isClearing) {
+              return `Clear ${providerChoiceLabel(currentAssignment, current)}`;
+            }
+            if (currentAssignment) {
+              return `Replace ${providerChoiceLabel(currentAssignment, current)}`;
+            }
+            return "Select active provider";
+          })()}
         </p>
         <p className="mt-1 text-muted-foreground text-xs leading-5">
           {isClearing
@@ -457,11 +474,15 @@ function ProviderAssignmentControl({
               size="sm"
               type="button"
             >
-              {mutation.isPending
-                ? "Saving…"
-                : isClearing
-                  ? "Confirm clear"
-                  : "Confirm selection"}
+              {(() => {
+                if (mutation.isPending) {
+                  return "Saving…";
+                }
+                if (isClearing) {
+                  return "Confirm clear";
+                }
+                return "Confirm selection";
+              })()}
             </Button>
           ) : null}
           <Button

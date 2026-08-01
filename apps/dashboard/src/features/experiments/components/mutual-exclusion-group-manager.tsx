@@ -388,11 +388,15 @@ export function MutualExclusionGroupManager({
             disabled={pending || eligible.length < 2}
             type="submit"
           >
-            {pending
-              ? "Creating…"
-              : selectedGroup
-                ? "Create next immutable Version"
-                : "Create group and first Version"}
+            {(() => {
+              if (pending) {
+                return "Creating…";
+              }
+              if (selectedGroup) {
+                return "Create next immutable Version";
+              }
+              return "Create group and first Version";
+            })()}
           </Button>
         </form>
       </details>

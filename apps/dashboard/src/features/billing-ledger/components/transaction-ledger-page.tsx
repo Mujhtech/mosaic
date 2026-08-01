@@ -131,81 +131,91 @@ export function TransactionLedgerPage({
 
       <HostedResourceBoundary state={state}>
         {billingEnabled ? (
-          loaded.length === 0 && !hasActiveTransactionFilters(filters) ? (
-            <>
-              <EmptyState
-                action={
-                  <a
-                    className={buttonVariants({ variant: "outline" })}
-                    href={`${base}/health`}
-                  >
-                    Check intake health
-                  </a>
-                }
-                description="No Store Notification or Transaction Observation has produced a validated fact in this Mosaic Environment yet. Confirm the store-side notification setup, then watch billing health for the first accepted input."
-                title="No Transaction Facts recorded yet"
-              />
-              <LedgerPaging
-                cursor={filters.cursor}
-                endLabel="End of the ledger for these filters."
-                nextCursor={facts.data?.nextCursor}
-                onCursorChange={(cursor) =>
-                  onFiltersChange({ ...filters, cursor })
-                }
-              />
-            </>
-          ) : visible.length === 0 ? (
-            <>
-              <EmptyState
-                action={
-                  <Button
-                    onClick={() => onFiltersChange({ limit: filters.limit })}
-                    type="button"
-                  >
-                    Clear filters
-                  </Button>
-                }
-                description="Facts exist in this Mosaic Environment, but none on the loaded page matches the current filters. Application, Product, Store Environment, resolution, and reference narrow the loaded page only — matches further back in the ledger are on later pages."
-                title="No Transaction Facts match these filters"
-              />
-              {/* Paging has to survive the filtered-empty branch. Without it, an
+          (() => {
+            if (loaded.length === 0 && !hasActiveTransactionFilters(filters)) {
+              return (
+                <>
+                  <EmptyState
+                    action={
+                      <a
+                        className={buttonVariants({ variant: "outline" })}
+                        href={`${base}/health`}
+                      >
+                        Check intake health
+                      </a>
+                    }
+                    description="No Store Notification or Transaction Observation has produced a validated fact in this Mosaic Environment yet. Confirm the store-side notification setup, then watch billing health for the first accepted input."
+                    title="No Transaction Facts recorded yet"
+                  />
+                  <LedgerPaging
+                    cursor={filters.cursor}
+                    endLabel="End of the ledger for these filters."
+                    nextCursor={facts.data?.nextCursor}
+                    onCursorChange={(cursor) =>
+                      onFiltersChange({ ...filters, cursor })
+                    }
+                  />
+                </>
+              );
+            }
+            if (visible.length === 0) {
+              return (
+                <>
+                  <EmptyState
+                    action={
+                      <Button
+                        onClick={() =>
+                          onFiltersChange({ limit: filters.limit })
+                        }
+                        type="button"
+                      >
+                        Clear filters
+                      </Button>
+                    }
+                    description="Facts exist in this Mosaic Environment, but none on the loaded page matches the current filters. Application, Product, Store Environment, resolution, and reference narrow the loaded page only — matches further back in the ledger are on later pages."
+                    title="No Transaction Facts match these filters"
+                  />
+                  {/* Paging has to survive the filtered-empty branch. Without it, an
                 operator filtering for an Application whose facts start on page
                 three has no way forward and discarding the filter is the only
                 exit. */}
-              <LedgerPaging
-                cursor={filters.cursor}
-                endLabel="End of the ledger for these filters."
-                nextCursor={facts.data?.nextCursor}
-                onCursorChange={(cursor) =>
-                  onFiltersChange({ ...filters, cursor })
-                }
-              />
-            </>
-          ) : (
-            <WorkflowPanel
-              description="Occurred at is the store's own clock. Recorded at is when Mosaic durably accepted the input. They are never the same."
-              title={`${visible.length} Transaction Fact(s) on this page`}
-            >
-              <TransactionLedgerTable
-                applications={applications.data?.items ?? []}
-                environmentName={environmentName}
-                factHref={(factId) =>
-                  `${base}/transactions/${encodeURIComponent(factId)}`
-                }
-                isPending={facts.isPending}
-                items={visible}
-                products={products.data?.items ?? []}
-              />
-              <LedgerPaging
-                cursor={filters.cursor}
-                endLabel="End of the ledger for these filters."
-                nextCursor={facts.data?.nextCursor}
-                onCursorChange={(cursor) =>
-                  onFiltersChange({ ...filters, cursor })
-                }
-              />
-            </WorkflowPanel>
-          )
+                  <LedgerPaging
+                    cursor={filters.cursor}
+                    endLabel="End of the ledger for these filters."
+                    nextCursor={facts.data?.nextCursor}
+                    onCursorChange={(cursor) =>
+                      onFiltersChange({ ...filters, cursor })
+                    }
+                  />
+                </>
+              );
+            }
+            return (
+              <WorkflowPanel
+                description="Occurred at is the store's own clock. Recorded at is when Mosaic durably accepted the input. They are never the same."
+                title={`${visible.length} Transaction Fact(s) on this page`}
+              >
+                <TransactionLedgerTable
+                  applications={applications.data?.items ?? []}
+                  environmentName={environmentName}
+                  factHref={(factId) =>
+                    `${base}/transactions/${encodeURIComponent(factId)}`
+                  }
+                  isPending={facts.isPending}
+                  items={visible}
+                  products={products.data?.items ?? []}
+                />
+                <LedgerPaging
+                  cursor={filters.cursor}
+                  endLabel="End of the ledger for these filters."
+                  nextCursor={facts.data?.nextCursor}
+                  onCursorChange={(cursor) =>
+                    onFiltersChange({ ...filters, cursor })
+                  }
+                />
+              </WorkflowPanel>
+            );
+          })()
         ) : (
           <EmptyState
             action={

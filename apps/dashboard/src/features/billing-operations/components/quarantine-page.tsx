@@ -255,13 +255,15 @@ export function QuarantinePage({
                   </a>
                 )
               }
-              description={
-                filters.cursor
-                  ? "This page of the quarantine history is empty. Return to the first page, or continue forward."
-                  : filtered
-                    ? "Quarantine records exist in this Mosaic Environment, but none matches the current filters."
-                    : "Every input Mosaic has accepted in this Mosaic Environment either produced a fact or is still being validated."
-              }
+              description={(() => {
+                if (filters.cursor) {
+                  return "This page of the quarantine history is empty. Return to the first page, or continue forward.";
+                }
+                if (filtered) {
+                  return "Quarantine records exist in this Mosaic Environment, but none matches the current filters.";
+                }
+                return "Every input Mosaic has accepted in this Mosaic Environment either produced a fact or is still being validated.";
+              })()}
               title={
                 filtered
                   ? "No quarantine records match these filters"
@@ -325,13 +327,15 @@ export function QuarantinePage({
                     <TableCell>
                       <StatusPill
                         label={quarantineSeverityLabel(record.severity)}
-                        tone={
-                          record.severity === "security"
-                            ? "negative"
-                            : record.severity === "error"
-                              ? "attention"
-                              : "neutral"
-                        }
+                        tone={(() => {
+                          if (record.severity === "security") {
+                            return "negative";
+                          }
+                          if (record.severity === "error") {
+                            return "attention";
+                          }
+                          return "neutral";
+                        })()}
                       />
                     </TableCell>
                     <TableCell>

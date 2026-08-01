@@ -136,12 +136,15 @@ function validation(value: PlacementValidation): DecisionValidation {
     issues: value.issues.map((issue) => ({
       code: issue.code,
       conditionId: issue.conditionPath,
-      message:
-        issue.code === "duplicate_leaf_condition"
-          ? "This condition duplicates another condition in the same Rule."
-          : issue.code === "rule_shadowed_by_earlier_equivalent"
-            ? "An earlier enabled Rule has the same conditions and will always win first."
-            : issue.recoveryAction.replaceAll("_", " "),
+      message: (() => {
+        if (issue.code === "duplicate_leaf_condition") {
+          return "This condition duplicates another condition in the same Rule.";
+        }
+        if (issue.code === "rule_shadowed_by_earlier_equivalent") {
+          return "An earlier enabled Rule has the same conditions and will always win first.";
+        }
+        return issue.recoveryAction.replaceAll("_", " ");
+      })(),
       recoveryLabel: "Resolve",
       resourceId: issue.resourceId,
       resourceType: issue.resourceType,
@@ -236,22 +239,29 @@ function trace(
               .join(" · ") || kind,
       id: `trace-${index}`,
       label: kind.replaceAll("_", " "),
-      result:
-        resultValue === "true" ||
-        resultValue === "false" ||
-        resultValue === "unknown"
-          ? resultValue
-          : kind === "final"
-            ? "selected"
-            : "skipped",
+      result: (() => {
+        if (
+          resultValue === "true" ||
+          resultValue === "false" ||
+          resultValue === "unknown"
+        ) {
+          return resultValue;
+        }
+        if (kind === "final") {
+          return "selected";
+        }
+        return "skipped";
+      })(),
       ruleId: typeof raw.ruleId === "string" ? raw.ruleId : undefined,
       sensitive: raw.redacted === true,
-      source:
-        typeof raw.inputSource === "string"
-          ? raw.inputSource
-          : typeof raw.source === "string"
-            ? raw.source
-            : undefined,
+      source: (() => {
+        if (typeof raw.inputSource === "string") {
+          return raw.inputSource;
+        }
+        if (typeof raw.source === "string") {
+          return raw.source;
+        }
+      })(),
     };
   });
 }

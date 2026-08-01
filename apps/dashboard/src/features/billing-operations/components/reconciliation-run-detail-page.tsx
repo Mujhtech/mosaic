@@ -138,15 +138,18 @@ export function ReconciliationRunDetailPage({
               />
               <StatusPill
                 label={runStatusLabel(data.status)}
-                tone={
-                  data.status === "completed"
-                    ? "positive"
-                    : data.status === "failed"
-                      ? "negative"
-                      : data.status === "partial"
-                        ? "attention"
-                        : "neutral"
-                }
+                tone={(() => {
+                  if (data.status === "completed") {
+                    return "positive";
+                  }
+                  if (data.status === "failed") {
+                    return "negative";
+                  }
+                  if (data.status === "partial") {
+                    return "attention";
+                  }
+                  return "neutral";
+                })()}
               />
             </div>
 

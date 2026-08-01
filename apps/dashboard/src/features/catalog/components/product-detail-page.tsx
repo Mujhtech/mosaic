@@ -398,13 +398,15 @@ export function ProductDetailPage({
           />
           <Metric
             label="Readiness"
-            value={
-              readiness.data
-                ? readinessStateLabel(readiness.data.state)
-                : hasExplicitReadinessScope
-                  ? "Checking…"
-                  : "Select scope"
-            }
+            value={(() => {
+              if (readiness.data) {
+                return readinessStateLabel(readiness.data.state);
+              }
+              if (hasExplicitReadinessScope) {
+                return "Checking…";
+              }
+              return "Select scope";
+            })()}
           />
         </div>
 
@@ -678,29 +680,37 @@ export function ProductDetailPage({
           description="Archive removes this Product from future selection without deleting history. Restore preserves the same ID."
           title="Lifecycle"
         >
-          {access.canManage ? (
-            isArchived ? (
-              <Button
-                onClick={() => restore.mutate(productId)}
-                variant="outline"
+          {(() => {
+            if (access.canManage) {
+              return (() => {
+                if (isArchived) {
+                  return (
+                    <Button
+                      onClick={() => restore.mutate(productId)}
+                      variant="outline"
+                    >
+                      <ArrowCounterClockwiseIcon aria-hidden size={16} />
+                      Restore Product
+                    </Button>
+                  );
+                }
+                return (
+                  <Button onClick={handleClick} variant="outline">
+                    <ArchiveIcon aria-hidden size={16} />
+                    Review archive
+                  </Button>
+                );
+              })();
+            }
+            return (
+              <a
+                className="font-semibold text-primary text-sm"
+                href={`/orgs/${encodeURIComponent(organizationId)}/members`}
               >
-                <ArrowCounterClockwiseIcon aria-hidden size={16} />
-                Restore Product
-              </Button>
-            ) : (
-              <Button onClick={handleClick} variant="outline">
-                <ArchiveIcon aria-hidden size={16} />
-                Review archive
-              </Button>
-            )
-          ) : (
-            <a
-              className="font-semibold text-primary text-sm"
-              href={`/orgs/${encodeURIComponent(organizationId)}/members`}
-            >
-              Ask an Owner or Admin to change Product lifecycle
-            </a>
-          )}
+                Ask an Owner or Admin to change Product lifecycle
+              </a>
+            );
+          })()}
           {showLifecycle && !isArchived ? (
             <div className="mt-4 rounded border border-border bg-muted/35 p-4">
               <p className="font-semibold text-sm">
@@ -767,13 +777,18 @@ export function ProductDetailPage({
                   }
                   onClick={handleClick2}
                 >
-                  {setReplacement.isPending
-                    ? "Saving replacement…"
-                    : archive.isPending
-                      ? "Archiving…"
-                      : replacementNeedsSave
-                        ? "Save replacement and archive"
-                        : "Archive Product"}
+                  {(() => {
+                    if (setReplacement.isPending) {
+                      return "Saving replacement…";
+                    }
+                    if (archive.isPending) {
+                      return "Archiving…";
+                    }
+                    if (replacementNeedsSave) {
+                      return "Save replacement and archive";
+                    }
+                    return "Archive Product";
+                  })()}
                 </Button>
                 <Button
                   disabled={archive.isPending || setReplacement.isPending}

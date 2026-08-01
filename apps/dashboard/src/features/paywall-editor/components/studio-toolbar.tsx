@@ -44,11 +44,15 @@ function AutosaveStatus({
       >
         <WarningCircleIcon aria-hidden weight="fill" />
         <span>
-          {offline
-            ? "Offline · edits kept"
-            : mode === "local"
-              ? "Autosave failed"
-              : "Save failed"}
+          {(() => {
+            if (offline) {
+              return "Offline · edits kept";
+            }
+            if (mode === "local") {
+              return "Autosave failed";
+            }
+            return "Save failed";
+          })()}
         </span>
         <Button
           className="ml-0.5 h-5 px-1.5 transition-none motion-reduce:transition-none"
@@ -75,20 +79,29 @@ function AutosaveStatus({
     );
   }
 
-  const label =
-    mode === "local"
-      ? controller.status === "saving"
-        ? "Saving locally"
-        : controller.status === "saved"
-          ? "Saved locally"
-          : "Local draft"
-      : controller.status === "saving"
-        ? "Saving hosted Draft"
-        : controller.status === "saved"
-          ? "Hosted Draft saved"
-          : controller.status === "unsaved"
-            ? "Unsaved changes"
-            : "Hosted Draft";
+  const label = (() => {
+    if (mode === "local") {
+      return (() => {
+        if (controller.status === "saving") {
+          return "Saving locally";
+        }
+        if (controller.status === "saved") {
+          return "Saved locally";
+        }
+        return "Local draft";
+      })();
+    }
+    if (controller.status === "saving") {
+      return "Saving hosted Draft";
+    }
+    if (controller.status === "saved") {
+      return "Hosted Draft saved";
+    }
+    if (controller.status === "unsaved") {
+      return "Unsaved changes";
+    }
+    return "Hosted Draft";
+  })();
 
   return (
     <StatusMessage

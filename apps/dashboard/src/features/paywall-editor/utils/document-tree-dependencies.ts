@@ -62,11 +62,15 @@ export function productCardBoundsAreValid(document: MosaicDocument) {
 
 export function subtreeIdentifiers(node: ProtocolNode): string[] {
   const identifiers = subtreeNodes(node).flatMap((candidate) =>
-    candidate.type === "featureList"
-      ? [candidate.id, ...candidate.items.map((item) => item.id)]
-      : candidate.type === "carousel"
-        ? [candidate.id, ...candidate.pages.map((page) => page.id)]
-        : [candidate.id]
+    (() => {
+      if (candidate.type === "featureList") {
+        return [candidate.id, ...candidate.items.map((item) => item.id)];
+      }
+      if (candidate.type === "carousel") {
+        return [candidate.id, ...candidate.pages.map((page) => page.id)];
+      }
+      return [candidate.id];
+    })()
   );
   return identifiers;
 }

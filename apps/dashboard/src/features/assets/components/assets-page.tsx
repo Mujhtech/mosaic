@@ -94,16 +94,24 @@ function AssetRow({
           >
             {asset.id}
           </p>
-          {asset.status === "ready" ? (
-            <p className="mt-2 text-primary text-xs">
-              Ready to select from hosted Studio Assets.
-            </p>
-          ) : asset.status === "failed" ? (
-            <p className="mt-2 text-destructive text-xs">
-              Validation failed. Upload a corrected source file; Drafts remain
-              unchanged.
-            </p>
-          ) : null}
+          {(() => {
+            if (asset.status === "ready") {
+              return (
+                <p className="mt-2 text-primary text-xs">
+                  Ready to select from hosted Studio Assets.
+                </p>
+              );
+            }
+            if (asset.status === "failed") {
+              return (
+                <p className="mt-2 text-destructive text-xs">
+                  Validation failed. Upload a corrected source file; Drafts
+                  remain unchanged.
+                </p>
+              );
+            }
+            return null;
+          })()}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -129,45 +137,58 @@ function AssetRow({
 
       {showUsage ? (
         <div aria-live="polite" className="mt-4 rounded bg-muted/35 p-3">
-          {usage.isPending ? (
-            <p className="text-muted-foreground text-sm">Loading usage…</p>
-          ) : usage.error ? (
-            <div role="alert">
-              <p className="text-destructive text-sm">{usage.error.message}</p>
-              <Button
-                className="mt-2"
-                onClick={() => {
-                  usage.refetch();
-                }}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <ArrowClockwiseIcon aria-hidden /> Retry usage
-              </Button>
-            </div>
-          ) : usage.data ? (
-            <dl className="grid grid-cols-3 gap-3 text-center text-sm">
-              <div>
-                <dt className="text-muted-foreground text-xs">Drafts</dt>
-                <dd className="mt-1 font-semibold">
-                  {usage.data.draftReferences}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs">Versions</dt>
-                <dd className="mt-1 font-semibold">
-                  {usage.data.versionReferences}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs">Releases</dt>
-                <dd className="mt-1 font-semibold">
-                  {usage.data.releaseReferences}
-                </dd>
-              </div>
-            </dl>
-          ) : null}
+          {(() => {
+            if (usage.isPending) {
+              return (
+                <p className="text-muted-foreground text-sm">Loading usage…</p>
+              );
+            }
+            if (usage.error) {
+              return (
+                <div role="alert">
+                  <p className="text-destructive text-sm">
+                    {usage.error.message}
+                  </p>
+                  <Button
+                    className="mt-2"
+                    onClick={() => {
+                      usage.refetch();
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <ArrowClockwiseIcon aria-hidden /> Retry usage
+                  </Button>
+                </div>
+              );
+            }
+            if (usage.data) {
+              return (
+                <dl className="grid grid-cols-3 gap-3 text-center text-sm">
+                  <div>
+                    <dt className="text-muted-foreground text-xs">Drafts</dt>
+                    <dd className="mt-1 font-semibold">
+                      {usage.data.draftReferences}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground text-xs">Versions</dt>
+                    <dd className="mt-1 font-semibold">
+                      {usage.data.versionReferences}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground text-xs">Releases</dt>
+                    <dd className="mt-1 font-semibold">
+                      {usage.data.releaseReferences}
+                    </dd>
+                  </div>
+                </dl>
+              );
+            }
+            return null;
+          })()}
         </div>
       ) : null}
 
@@ -293,21 +314,29 @@ export function AssetsPage({
         ref={inputRef}
         type="file"
       />
-      {upload.isPending ? (
-        <p
-          className="rounded border border-border bg-muted/35 p-3 text-sm"
-          role="status"
-        >
-          Uploading and validating Asset…
-        </p>
-      ) : upload.data ? (
-        <p
-          className="rounded border border-primary/25 bg-primary/5 p-3 text-sm"
-          role="status"
-        >
-          {upload.data.name} uploaded with status {upload.data.status}.
-        </p>
-      ) : null}
+      {(() => {
+        if (upload.isPending) {
+          return (
+            <p
+              className="rounded border border-border bg-muted/35 p-3 text-sm"
+              role="status"
+            >
+              Uploading and validating Asset…
+            </p>
+          );
+        }
+        if (upload.data) {
+          return (
+            <p
+              className="rounded border border-primary/25 bg-primary/5 p-3 text-sm"
+              role="status"
+            >
+              {upload.data.name} uploaded with status {upload.data.status}.
+            </p>
+          );
+        }
+        return null;
+      })()}
       {upload.error ? (
         <div
           className="rounded border border-destructive/25 bg-destructive/5 p-3"

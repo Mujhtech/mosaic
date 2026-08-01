@@ -520,41 +520,55 @@ export function ProviderConnectionDetailPage({
           title="Catalog import"
         >
           {catalogRequested ? (
-            catalog.isPending ? (
-              <p aria-live="polite" className="text-muted-foreground text-sm">
-                Loading normalized provider catalog…
-              </p>
-            ) : catalog.error ? (
-              <div role="alert">
-                <p className="text-destructive text-sm">
-                  {catalog.error.message}
-                </p>
-                <Button
-                  className="mt-2"
-                  onClick={() => {
-                    catalog.refetch();
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  Retry catalog preview
-                </Button>
-              </div>
-            ) : catalog.data ? (
-              <ProviderCatalogImport
-                applications={scopedApplications}
-                catalogProductsHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`}
-                entitlements={entitlements.data?.items ?? []}
-                environments={scopedEnvironments}
-                onImport={(items, idempotencyKey) =>
-                  importProducts.mutateAsync({ idempotencyKey, items })
-                }
-                preview={catalog.data}
-                products={products.data?.items ?? []}
-                providersHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
-              />
-            ) : null
+            (() => {
+              if (catalog.isPending) {
+                return (
+                  <p
+                    aria-live="polite"
+                    className="text-muted-foreground text-sm"
+                  >
+                    Loading normalized provider catalog…
+                  </p>
+                );
+              }
+              if (catalog.error) {
+                return (
+                  <div role="alert">
+                    <p className="text-destructive text-sm">
+                      {catalog.error.message}
+                    </p>
+                    <Button
+                      className="mt-2"
+                      onClick={() => {
+                        catalog.refetch();
+                      }}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      Retry catalog preview
+                    </Button>
+                  </div>
+                );
+              }
+              if (catalog.data) {
+                return (
+                  <ProviderCatalogImport
+                    applications={scopedApplications}
+                    catalogProductsHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`}
+                    entitlements={entitlements.data?.items ?? []}
+                    environments={scopedEnvironments}
+                    onImport={(items, idempotencyKey) =>
+                      importProducts.mutateAsync({ idempotencyKey, items })
+                    }
+                    preview={catalog.data}
+                    products={products.data?.items ?? []}
+                    providersHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
+                  />
+                );
+              }
+              return null;
+            })()
           ) : (
             <Button
               disabled={connection.data?.status === "revoked"}

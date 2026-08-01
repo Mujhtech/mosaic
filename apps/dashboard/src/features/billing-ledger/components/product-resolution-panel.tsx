@@ -40,13 +40,15 @@ export function ProductResolutionPanel({
       <div className="flex flex-wrap items-center gap-2">
         <StatusPill
           label={resolutionStateLabel(fact.resolutionState)}
-          tone={
-            unresolved
-              ? "attention"
-              : fact.resolutionState === "active_mapping"
-                ? "positive"
-                : "neutral"
-          }
+          tone={(() => {
+            if (unresolved) {
+              return "attention";
+            }
+            if (fact.resolutionState === "active_mapping") {
+              return "positive";
+            }
+            return "neutral";
+          })()}
         />
       </div>
       <p className="mt-3 text-muted-foreground text-sm leading-6">

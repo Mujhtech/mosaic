@@ -671,11 +671,15 @@ export function ShadowEditor({
         {(["offsetX", "offsetY", "blurRadius"] as const).map((property) => (
           <label className="grid gap-1 text-[11px]" key={property}>
             <span className="text-muted-foreground">
-              {property === "offsetX"
-                ? "X"
-                : property === "offsetY"
-                  ? "Y"
-                  : "Blur"}
+              {(() => {
+                if (property === "offsetX") {
+                  return "X";
+                }
+                if (property === "offsetY") {
+                  return "Y";
+                }
+                return "Blur";
+              })()}
             </span>
             <input
               className={FIELD_CLASS}

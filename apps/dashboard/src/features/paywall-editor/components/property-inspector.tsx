@@ -165,17 +165,25 @@ export function PropertyInspector({
             </div>
           ) : null}
           <div className="-mx-4 mt-4 border-t">
-            {selectedScrollContainer ? (
-              <ScrollContainerInspector
-                key={selectedScrollContainer.id}
-                layout={selectedScrollContainer}
-              />
-            ) : selectedComponent ? (
-              <InspectorForNode
-                key={selectedComponent.id}
-                node={selectedComponent}
-              />
-            ) : null}
+            {(() => {
+              if (selectedScrollContainer) {
+                return (
+                  <ScrollContainerInspector
+                    key={selectedScrollContainer.id}
+                    layout={selectedScrollContainer}
+                  />
+                );
+              }
+              if (selectedComponent) {
+                return (
+                  <InspectorForNode
+                    key={selectedComponent.id}
+                    node={selectedComponent}
+                  />
+                );
+              }
+              return null;
+            })()}
           </div>
         </InspectorContext.Provider>
       ) : (

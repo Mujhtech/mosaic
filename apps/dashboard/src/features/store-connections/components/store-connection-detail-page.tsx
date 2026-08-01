@@ -189,13 +189,15 @@ export function StoreConnectionDetailPage({
               />
               <StatusPill
                 label={storeCredentialHealthLabel(record.healthStatus)}
-                tone={
-                  record.healthStatus === "healthy"
-                    ? "positive"
-                    : record.healthStatus === "untested"
-                      ? "neutral"
-                      : "negative"
-                }
+                tone={(() => {
+                  if (record.healthStatus === "healthy") {
+                    return "positive";
+                  }
+                  if (record.healthStatus === "untested") {
+                    return "neutral";
+                  }
+                  return "negative";
+                })()}
               />
               {record.status === "revoked" ? (
                 <StatusPill label="Revoked" tone="negative" />

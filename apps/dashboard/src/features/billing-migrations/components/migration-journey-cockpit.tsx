@@ -97,21 +97,27 @@ export function MigrationJourneyCockpit({
           <li key={step.key}>
             <a
               aria-current={index === active ? "step" : undefined}
-              className={
-                index === active
-                  ? "block rounded border border-primary bg-primary/5 p-3 font-semibold text-sm"
-                  : index < active
-                    ? "block rounded border bg-muted/60 p-3 text-sm"
-                    : "block rounded border p-3 text-muted-foreground text-sm"
-              }
+              className={(() => {
+                if (index === active) {
+                  return "block rounded border border-primary bg-primary/5 p-3 font-semibold text-sm";
+                }
+                if (index < active) {
+                  return "block rounded border bg-muted/60 p-3 text-sm";
+                }
+                return "block rounded border p-3 text-muted-foreground text-sm";
+              })()}
               href={`${baseHref}?tab=${step.tab}`}
             >
               <span className="block text-[11px] uppercase">
-                {index < active
-                  ? "Complete"
-                  : index === active
-                    ? "Current"
-                    : "Later"}
+                {(() => {
+                  if (index < active) {
+                    return "Complete";
+                  }
+                  if (index === active) {
+                    return "Current";
+                  }
+                  return "Later";
+                })()}
               </span>
               {step.label}
             </a>

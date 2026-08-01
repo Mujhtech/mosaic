@@ -303,21 +303,30 @@ function SystemStatusBar({
   const isLandscape = orientation === "landscape";
   const dark = appearance === "dark";
   const time = preset.platform === "ios" ? "9:41" : "12:45";
-  const statusBarHeight = isTablet
-    ? 26
-    : isLandscape
-      ? 28
-      : preset.platform === "ios"
-        ? 62
-        : 34;
-  const inlinePadding =
-    preset.id === "iphone-17-pro-max"
-      ? 40
-      : preset.id === "iphone-17-pro"
-        ? 35
-        : isTablet
-          ? 18
-          : 22;
+  const statusBarHeight = (() => {
+    if (isTablet) {
+      return 26;
+    }
+    if (isLandscape) {
+      return 28;
+    }
+    if (preset.platform === "ios") {
+      return 62;
+    }
+    return 34;
+  })();
+  const inlinePadding = (() => {
+    if (preset.id === "iphone-17-pro-max") {
+      return 40;
+    }
+    if (preset.id === "iphone-17-pro") {
+      return 35;
+    }
+    if (isTablet) {
+      return 18;
+    }
+    return 22;
+  })();
 
   return (
     <div
@@ -330,24 +339,31 @@ function SystemStatusBar({
       dir="ltr"
       style={{
         height: statusBarHeight,
-        paddingBlockStart: isTablet
-          ? 7
-          : isLandscape
-            ? 7
-            : preset.platform === "ios"
-              ? 18
-              : 9,
+        paddingBlockStart: (() => {
+          if (isTablet) {
+            return 7;
+          }
+          if (isLandscape) {
+            return 7;
+          }
+          if (preset.platform === "ios") {
+            return 18;
+          }
+          return 9;
+        })(),
         paddingInline: inlinePadding,
       }}
     >
       <span
-        className={
-          isTablet
-            ? "text-[11px] leading-none"
-            : preset.platform === "ios"
-              ? "text-[15px] leading-none"
-              : "text-[13px] leading-none"
-        }
+        className={(() => {
+          if (isTablet) {
+            return "text-[11px] leading-none";
+          }
+          if (preset.platform === "ios") {
+            return "text-[15px] leading-none";
+          }
+          return "text-[13px] leading-none";
+        })()}
         style={{
           fontFamily:
             "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif",
@@ -583,13 +599,19 @@ export function CanvasPreviewDevice({
               ...rootBackground.style,
               backgroundColor:
                 rootBackground.style.backgroundColor ??
-                (rootBackground.style.background
-                  ? undefined
-                  : presentation === "sheet"
-                    ? canvas.appearance === "dark"
-                      ? "#020617"
-                      : "#ffffff"
-                    : undefined),
+                (() => {
+                  if (rootBackground.style.background) {
+                    return;
+                  }
+                  if (presentation === "sheet") {
+                    return (() => {
+                      if (canvas.appearance === "dark") {
+                        return "#020617";
+                      }
+                      return "#ffffff";
+                    })();
+                  }
+                })(),
               borderColor: resolvedProtocolColor(
                 document,
                 root.appearance?.border?.color

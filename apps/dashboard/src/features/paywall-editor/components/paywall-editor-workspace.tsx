@@ -82,11 +82,15 @@ function presetForProject(project: LocalProjectFile): MockPurchaseState {
     case "purchaseFailed":
       return "purchaseFailure";
     case "purchased":
-      return project.mockCommerce.state.restoreOutcome === "restored"
-        ? "restoreSuccess"
-        : project.mockCommerce.state.restoreOutcome === "restoreFailed"
-          ? "restoreFailure"
-          : "purchaseSuccess";
+      return (() => {
+        if (project.mockCommerce.state.restoreOutcome === "restored") {
+          return "restoreSuccess";
+        }
+        if (project.mockCommerce.state.restoreOutcome === "restoreFailed") {
+          return "restoreFailure";
+        }
+        return "purchaseSuccess";
+      })();
     default: {
       const unhandled: never = project.mockCommerce.state.purchaseOutcome;
       throw new Error(

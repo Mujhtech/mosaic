@@ -81,11 +81,15 @@ export function OrganizationSwitcher({
     [current, projectId]
   );
 
-  const organizationLabel = current
-    ? current.organization.name
-    : bootstrap.isPending
-      ? "Loading organizations"
-      : "Select organization";
+  const organizationLabel = (() => {
+    if (current) {
+      return current.organization.name;
+    }
+    if (bootstrap.isPending) {
+      return "Loading organizations";
+    }
+    return "Select organization";
+  })();
   const triggerLabel = currentProject ? currentProject.name : organizationLabel;
   const canCreateProject =
     current?.role === "owner" || current?.role === "admin";
@@ -156,62 +160,70 @@ export function OrganizationSwitcher({
                 </p>
               ) : (
                 (failure ??
-                (current ? (
-                  current.projects.length === 0 ? (
+                (() => {
+                  if (current) {
+                    return (() => {
+                      if (current.projects.length === 0) {
+                        return (
+                          <p className="p-2 text-muted-foreground text-xs">
+                            {current.organization.name} has no projects yet.
+                          </p>
+                        );
+                      }
+                      return (
+                        <>
+                          {current.projects.map((project) => (
+                            <DropdownMenuItem
+                              className="gap-2 p-2"
+                              key={project.id}
+                              render={
+                                <Link
+                                  params={(prev) => ({
+                                    ...prev,
+                                    ...workspaceScopeParamsWithDefault(prev),
+                                    // Each entry names its own Project; inheriting
+                                    // it from the address pointed every row at
+                                    // whichever Project was already in scope.
+                                    organizationId: current.organization.id,
+                                    projectId: project.id,
+                                  })}
+                                  to="/orgs/$organizationId/projects/$projectId/env/$environmentKey"
+                                />
+                              }
+                            >
+                              <Initial value={project.name} />
+                              <span className="truncate">{project.name}</span>
+                            </DropdownMenuItem>
+                          ))}
+                          {current.projectsTruncated ? (
+                            // Presenting a capped list as the whole list would hide
+                            // Projects the operator owns.
+                            <DropdownMenuItem
+                              className="gap-2 p-2"
+                              render={
+                                <Link
+                                  params={{
+                                    organizationId: current.organization.id,
+                                  }}
+                                  to="/orgs/$organizationId"
+                                />
+                              }
+                            >
+                              <span className="truncate text-muted-foreground text-xs">
+                                View all {current.projectCount} projects
+                              </span>
+                            </DropdownMenuItem>
+                          ) : null}
+                        </>
+                      );
+                    })();
+                  }
+                  return (
                     <p className="p-2 text-muted-foreground text-xs">
-                      {current.organization.name} has no projects yet.
+                      Choose an organization to see its projects.
                     </p>
-                  ) : (
-                    <>
-                      {current.projects.map((project) => (
-                        <DropdownMenuItem
-                          className="gap-2 p-2"
-                          key={project.id}
-                          render={
-                            <Link
-                              params={(prev) => ({
-                                ...prev,
-                                ...workspaceScopeParamsWithDefault(prev),
-                                // Each entry names its own Project; inheriting
-                                // it from the address pointed every row at
-                                // whichever Project was already in scope.
-                                organizationId: current.organization.id,
-                                projectId: project.id,
-                              })}
-                              to="/orgs/$organizationId/projects/$projectId/env/$environmentKey"
-                            />
-                          }
-                        >
-                          <Initial value={project.name} />
-                          <span className="truncate">{project.name}</span>
-                        </DropdownMenuItem>
-                      ))}
-                      {current.projectsTruncated ? (
-                        // Presenting a capped list as the whole list would hide
-                        // Projects the operator owns.
-                        <DropdownMenuItem
-                          className="gap-2 p-2"
-                          render={
-                            <Link
-                              params={{
-                                organizationId: current.organization.id,
-                              }}
-                              to="/orgs/$organizationId"
-                            />
-                          }
-                        >
-                          <span className="truncate text-muted-foreground text-xs">
-                            View all {current.projectCount} projects
-                          </span>
-                        </DropdownMenuItem>
-                      ) : null}
-                    </>
-                  )
-                ) : (
-                  <p className="p-2 text-muted-foreground text-xs">
-                    Choose an organization to see its projects.
-                  </p>
-                )))
+                  );
+                })())
               )}
 
               {/* Only owners and admins may create a Project, so offering the

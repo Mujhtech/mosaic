@@ -133,13 +133,15 @@ export function TransactionLedgerTable({
                   <TableCell>
                     <StatusPill
                       label={resolutionStateLabel(fact.resolutionState)}
-                      tone={
-                        fact.resolutionState === "unresolved"
-                          ? "attention"
-                          : fact.resolutionState === "active_mapping"
-                            ? "positive"
-                            : "neutral"
-                      }
+                      tone={(() => {
+                        if (fact.resolutionState === "unresolved") {
+                          return "attention";
+                        }
+                        if (fact.resolutionState === "active_mapping") {
+                          return "positive";
+                        }
+                        return "neutral";
+                      })()}
                     />
                   </TableCell>
                   <TableCell>{factKindLabel(fact.factKind)}</TableCell>

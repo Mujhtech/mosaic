@@ -36,28 +36,36 @@ export function OverviewPanel({
       isPending={overview.isPending}
       onRetry={handleRetry}
     >
-      {overview.data?.metrics.length === 0 ? (
-        <EmptyState
-          description="No accepted analytics events match this Environment and filter range."
-          title="No analytics data"
-        />
-      ) : overview.data ? (
-        <div className="space-y-4">
-          <FreshnessBanner freshness={overview.data.freshness} />
-          <WarningList warnings={overview.data.warnings} />
-          <MetricGrid metrics={overview.data.metrics} />
-          <MetricDictionary metrics={overview.data.metrics} />
-          <AnalyticsQueryResult
-            error={breakdowns.error}
-            isPending={breakdowns.isPending}
-            onRetry={handleRetry2}
-          >
-            {breakdowns.data ? (
-              <BreakdownTables breakdowns={breakdowns.data} />
-            ) : null}
-          </AnalyticsQueryResult>
-        </div>
-      ) : null}
+      {(() => {
+        if (overview.data?.metrics.length === 0) {
+          return (
+            <EmptyState
+              description="No accepted analytics events match this Environment and filter range."
+              title="No analytics data"
+            />
+          );
+        }
+        if (overview.data) {
+          return (
+            <div className="space-y-4">
+              <FreshnessBanner freshness={overview.data.freshness} />
+              <WarningList warnings={overview.data.warnings} />
+              <MetricGrid metrics={overview.data.metrics} />
+              <MetricDictionary metrics={overview.data.metrics} />
+              <AnalyticsQueryResult
+                error={breakdowns.error}
+                isPending={breakdowns.isPending}
+                onRetry={handleRetry2}
+              >
+                {breakdowns.data ? (
+                  <BreakdownTables breakdowns={breakdowns.data} />
+                ) : null}
+              </AnalyticsQueryResult>
+            </div>
+          );
+        }
+        return null;
+      })()}
     </AnalyticsQueryResult>
   );
 }

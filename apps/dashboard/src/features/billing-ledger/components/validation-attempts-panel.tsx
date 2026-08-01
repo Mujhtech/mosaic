@@ -55,15 +55,18 @@ export function ValidationAttemptsPanel({
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusPill
                       label={validationOutcomeLabel(attempt.outcome)}
-                      tone={
-                        attempt.outcome === "validated"
-                          ? "positive"
-                          : attempt.outcome === "retryable_failure"
-                            ? "attention"
-                            : attempt.outcome === "recorded_no_fact"
-                              ? "neutral"
-                              : "negative"
-                      }
+                      tone={(() => {
+                        if (attempt.outcome === "validated") {
+                          return "positive";
+                        }
+                        if (attempt.outcome === "retryable_failure") {
+                          return "attention";
+                        }
+                        if (attempt.outcome === "recorded_no_fact") {
+                          return "neutral";
+                        }
+                        return "negative";
+                      })()}
                     />
                     {superseded ? (
                       <StatusPill

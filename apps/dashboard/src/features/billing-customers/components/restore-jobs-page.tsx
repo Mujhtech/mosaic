@@ -141,58 +141,70 @@ export function RestoreJobsPage({
       </WorkflowPanel>
 
       <HostedResourceBoundary state={state}>
-        {billingEnabled ? (
-          items.length === 0 ? (
-            <>
-              <EmptyState
-                description="No SDK has reported a restore in this Mosaic Environment. Restores appear here once an app calls the restore API on a device."
-                title="No restores recorded yet"
-              />
-              <LedgerPaging
-                cursor={cursor}
-                endLabel="End of the restore list."
-                nextCursor={restores.data?.nextCursor}
-                onCursorChange={onCursorChange}
-              />
-            </>
-          ) : (
-            <WorkflowPanel title={`${items.length} restore(s) on this page`}>
-              <ul className="space-y-3">
-                {items.map((job) => (
-                  <RestoreRow
-                    customerHref={
-                      job.billingCustomerId
-                        ? (billingCustomerHref(scope, job.billingCustomerId) ??
-                          "#")
-                        : undefined
-                    }
-                    job={job}
-                    key={job.restoreId}
+        {(() => {
+          if (billingEnabled) {
+            return (() => {
+              if (items.length === 0) {
+                return (
+                  <>
+                    <EmptyState
+                      description="No SDK has reported a restore in this Mosaic Environment. Restores appear here once an app calls the restore API on a device."
+                      title="No restores recorded yet"
+                    />
+                    <LedgerPaging
+                      cursor={cursor}
+                      endLabel="End of the restore list."
+                      nextCursor={restores.data?.nextCursor}
+                      onCursorChange={onCursorChange}
+                    />
+                  </>
+                );
+              }
+              return (
+                <WorkflowPanel
+                  title={`${items.length} restore(s) on this page`}
+                >
+                  <ul className="space-y-3">
+                    {items.map((job) => (
+                      <RestoreRow
+                        customerHref={
+                          job.billingCustomerId
+                            ? (billingCustomerHref(
+                                scope,
+                                job.billingCustomerId
+                              ) ?? "#")
+                            : undefined
+                        }
+                        job={job}
+                        key={job.restoreId}
+                      />
+                    ))}
+                  </ul>
+                  <LedgerPaging
+                    cursor={cursor}
+                    endLabel="End of the restore list."
+                    nextCursor={restores.data?.nextCursor}
+                    onCursorChange={onCursorChange}
                   />
-                ))}
-              </ul>
-              <LedgerPaging
-                cursor={cursor}
-                endLabel="End of the restore list."
-                nextCursor={restores.data?.nextCursor}
-                onCursorChange={onCursorChange}
-              />
-            </WorkflowPanel>
-          )
-        ) : (
-          <EmptyState
-            action={
-              <a
-                className={buttonVariants()}
-                href={storeConnectionsHref(scope) ?? "#"}
-              >
-                Set up Mosaic Billing
-              </a>
-            }
-            description={`Mosaic Billing is turned off for this Project, so restore submissions are rejected and none is recorded. ${BILLING_OPTIONAL_NOTE}`}
-            title="Mosaic Billing is not enabled for this Project"
-          />
-        )}
+                </WorkflowPanel>
+              );
+            })();
+          }
+          return (
+            <EmptyState
+              action={
+                <a
+                  className={buttonVariants()}
+                  href={storeConnectionsHref(scope) ?? "#"}
+                >
+                  Set up Mosaic Billing
+                </a>
+              }
+              description={`Mosaic Billing is turned off for this Project, so restore submissions are rejected and none is recorded. ${BILLING_OPTIONAL_NOTE}`}
+              title="Mosaic Billing is not enabled for this Project"
+            />
+          );
+        })()}
       </HostedResourceBoundary>
     </WorkspacePage>
   );

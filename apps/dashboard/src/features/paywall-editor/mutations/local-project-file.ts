@@ -154,22 +154,30 @@ export function mockCommerceState(
       preset === "productUnavailable"
         ? unavailableProducts
         : cloneValue([...products]),
-    purchaseOutcome:
-      preset === "alreadyEntitled"
-        ? "alreadyEntitled"
-        : preset === "purchaseCancellation"
-          ? "cancelled"
-          : preset === "purchaseFailure"
-            ? "purchaseFailed"
-            : "purchased",
-    restoreOutcome:
-      preset === "alreadyEntitled"
-        ? "alreadyEntitled"
-        : preset === "restoreSuccess"
-          ? "restored"
-          : preset === "restoreFailure"
-            ? "restoreFailed"
-            : "restoreNoPurchases",
+    purchaseOutcome: (() => {
+      if (preset === "alreadyEntitled") {
+        return "alreadyEntitled";
+      }
+      if (preset === "purchaseCancellation") {
+        return "cancelled";
+      }
+      if (preset === "purchaseFailure") {
+        return "purchaseFailed";
+      }
+      return "purchased";
+    })(),
+    restoreOutcome: (() => {
+      if (preset === "alreadyEntitled") {
+        return "alreadyEntitled";
+      }
+      if (preset === "restoreSuccess") {
+        return "restored";
+      }
+      if (preset === "restoreFailure") {
+        return "restoreFailed";
+      }
+      return "restoreNoPurchases";
+    })(),
     entitlement:
       preset === "alreadyEntitled" && selectedId
         ? { status: "active", productReferenceId: selectedId }

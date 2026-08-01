@@ -126,11 +126,17 @@ function TreeProbe({ serializePortable }: { serializePortable: boolean }) {
           .join("|") ?? "none"}
       </output>
       <output data-testid="portable-document">
-        {document
-          ? serializePortable
-            ? serializeDocument(document)
-            : "invalid"
-          : "none"}
+        {(() => {
+          if (document) {
+            return (() => {
+              if (serializePortable) {
+                return serializeDocument(document);
+              }
+              return "invalid";
+            })();
+          }
+          return "none";
+        })()}
       </output>
       <output data-testid="tree-layout">
         {entries

@@ -250,15 +250,18 @@ function ReplayJobStatus({
           {job.status === "completed" ? (
             <StatusPill
               label={replayComparisonLabel(job.comparisonResult)}
-              tone={
-                job.comparisonResult === "conflicting"
-                  ? "negative"
-                  : job.comparisonResult === "still_failing"
-                    ? "attention"
-                    : job.comparisonResult === "new_facts"
-                      ? "positive"
-                      : "neutral"
-              }
+              tone={(() => {
+                if (job.comparisonResult === "conflicting") {
+                  return "negative";
+                }
+                if (job.comparisonResult === "still_failing") {
+                  return "attention";
+                }
+                if (job.comparisonResult === "new_facts") {
+                  return "positive";
+                }
+                return "neutral";
+              })()}
             />
           ) : null}
           {conflicts > 0 ? (
@@ -267,36 +270,44 @@ function ReplayJobStatus({
         </div>
       </div>
 
-      {running ? (
-        <p className="mt-1 text-muted-foreground text-sm leading-6">
-          Mosaic is re-running this input against the store. This status
-          refreshes automatically and stops polling once the job finishes.
-        </p>
-      ) : job.status === "failed" ? (
-        <>
-          <p className="mt-1 text-destructive text-sm" role="alert">
-            The replay failed safely with code{" "}
-            {job.lastErrorCode ?? "unknown_error"}. No attempt or fact already
-            on record was changed.
-          </p>
-          <p className="mt-1 text-muted-foreground text-sm leading-6">
-            Re-running is safe: replay is idempotent, and an unchanged outcome
-            recomputes the same fact digest and writes nothing.
-          </p>
-        </>
-      ) : (
-        <>
-          <p className="mt-1 text-muted-foreground text-sm leading-6">
-            {replayComparisonExplanation(job.comparisonResult)}
-          </p>
-          <dl className="mt-3 grid gap-x-6 gap-y-1 text-muted-foreground text-xs sm:grid-cols-2">
-            <Count label="Inputs examined" value={job.examinedCount} />
-            <Count label="Unchanged" value={job.unchangedCount} />
-            <Count label="New facts appended" value={job.newFactCount} />
-            <Count label="Conflicts detected" value={job.conflictCount} />
-          </dl>
-        </>
-      )}
+      {(() => {
+        if (running) {
+          return (
+            <p className="mt-1 text-muted-foreground text-sm leading-6">
+              Mosaic is re-running this input against the store. This status
+              refreshes automatically and stops polling once the job finishes.
+            </p>
+          );
+        }
+        if (job.status === "failed") {
+          return (
+            <>
+              <p className="mt-1 text-destructive text-sm" role="alert">
+                The replay failed safely with code{" "}
+                {job.lastErrorCode ?? "unknown_error"}. No attempt or fact
+                already on record was changed.
+              </p>
+              <p className="mt-1 text-muted-foreground text-sm leading-6">
+                Re-running is safe: replay is idempotent, and an unchanged
+                outcome recomputes the same fact digest and writes nothing.
+              </p>
+            </>
+          );
+        }
+        return (
+          <>
+            <p className="mt-1 text-muted-foreground text-sm leading-6">
+              {replayComparisonExplanation(job.comparisonResult)}
+            </p>
+            <dl className="mt-3 grid gap-x-6 gap-y-1 text-muted-foreground text-xs sm:grid-cols-2">
+              <Count label="Inputs examined" value={job.examinedCount} />
+              <Count label="Unchanged" value={job.unchangedCount} />
+              <Count label="New facts appended" value={job.newFactCount} />
+              <Count label="Conflicts detected" value={job.conflictCount} />
+            </dl>
+          </>
+        );
+      })()}
 
       <p className="mt-3 text-muted-foreground text-xs">
         Validator version {job.validatorVersion ?? "—"} ·{" "}

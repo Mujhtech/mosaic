@@ -189,13 +189,20 @@ export function expectedCapabilities(document: MosaicDocument) {
   }
   for (const asset of document.assets) {
     capabilities.add(
-      asset.type === "image"
-        ? asset.source.type === "remote"
-          ? "asset.remoteImage"
-          : "asset.bundledImage"
-        : asset.source.type === "remote"
-          ? "asset.remoteVideo"
-          : "asset.bundledVideo"
+      (() => {
+        if (asset.type === "image") {
+          return (() => {
+            if (asset.source.type === "remote") {
+              return "asset.remoteImage";
+            }
+            return "asset.bundledImage";
+          })();
+        }
+        if (asset.source.type === "remote") {
+          return "asset.remoteVideo";
+        }
+        return "asset.bundledVideo";
+      })()
     );
     if (asset.type === "image") {
       capabilities.add("fallback.asset");

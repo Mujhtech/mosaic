@@ -219,11 +219,14 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
             node?.type === "productBadge";
           const expandable =
             isScroll || isStack || isButton || isCarousel || isProductContainer;
-          const expanded = isScroll
-            ? !collapsedScreenIds.has(row.screenId)
-            : isStack || isButton || isCarousel || isProductContainer
-              ? expandedTreeNodes.has(row.id)
-              : undefined;
+          const expanded = (() => {
+            if (isScroll) {
+              return !collapsedScreenIds.has(row.screenId);
+            }
+            if (isStack || isButton || isCarousel || isProductContainer) {
+              return expandedTreeNodes.has(row.id);
+            }
+          })();
           const selected = selectedComponentId === row.id;
           const hovered = !isScroll && hoveredComponentId === row.id;
           const directlyLocked = lockedIds.has(row.id);
@@ -236,11 +239,14 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
             ? issueSummaries.documentSummary
             : (issueSummaries.byComponent.get(row.id) ??
               EMPTY_LAYER_ISSUE_SUMMARY);
-          const capability = isScroll
-            ? CAPABILITY_BY_TYPE.scrollContainer
-            : node
-              ? CAPABILITY_BY_TYPE[node.type]
-              : undefined;
+          const capability = (() => {
+            if (isScroll) {
+              return CAPABILITY_BY_TYPE.scrollContainer;
+            }
+            if (node) {
+              return CAPABILITY_BY_TYPE[node.type];
+            }
+          })();
           const capabilityRequirement = capability
             ? requiredCapabilities.get(capability)
             : undefined;
@@ -372,19 +378,25 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
                   aria-expanded={expandable ? expanded : undefined}
                   aria-level={row.depth}
                   aria-selected={selected}
-                  className={`group relative flex min-h-9 items-center gap-1 rounded border pr-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                    activeRowDrop
-                      ? dropPreview.result.status === "accepted"
-                        ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
-                        : "border-destructive/50 bg-destructive/5 ring-1 ring-destructive/30"
-                      : "border-transparent"
-                  } ${
-                    selected
-                      ? "border-primary/15 bg-primary/10 text-primary"
-                      : hovered
-                        ? "border-border bg-muted"
-                        : "hover:bg-muted/70"
-                  } ${effectivelyHidden ? "text-muted-foreground opacity-65" : ""} ${draggable ? "cursor-grab touch-none select-none active:cursor-grabbing" : ""}`}
+                  className={`group relative flex min-h-9 items-center gap-1 rounded border pr-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring ${(() => {
+                    if (activeRowDrop) {
+                      return (() => {
+                        if (dropPreview.result.status === "accepted") {
+                          return "border-primary/50 bg-primary/10 ring-1 ring-primary/30";
+                        }
+                        return "border-destructive/50 bg-destructive/5 ring-1 ring-destructive/30";
+                      })();
+                    }
+                    return "border-transparent";
+                  })()} ${(() => {
+                    if (selected) {
+                      return "border-primary/15 bg-primary/10 text-primary";
+                    }
+                    if (hovered) {
+                      return "border-border bg-muted";
+                    }
+                    return "hover:bg-muted/70";
+                  })()} ${effectivelyHidden ? "text-muted-foreground opacity-65" : ""} ${draggable ? "cursor-grab touch-none select-none active:cursor-grabbing" : ""}`}
                   data-drop-placement={
                     activeRowDrop ? dropPreview?.target.placement : undefined
                   }
@@ -466,13 +478,15 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
                     paddingInlineStart: `${4 + (row.depth - 1) * 14}px`,
                   }}
                   tabIndex={activeRovingId === row.id ? 0 : -1}
-                  title={
-                    effectivelyLocked
-                      ? `${label} is locked from canvas selection and structural controls`
-                      : effectivelyHidden
-                        ? `${label} is hidden on the canvas only`
-                        : label
-                  }
+                  title={(() => {
+                    if (effectivelyLocked) {
+                      return `${label} is locked from canvas selection and structural controls`;
+                    }
+                    if (effectivelyHidden) {
+                      return `${label} is hidden on the canvas only`;
+                    }
+                    return label;
+                  })()}
                 >
                   {draggable ? (
                     <span
@@ -554,25 +568,36 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
                       className="shrink-0 text-muted-foreground"
                     />
                   ) : null}
-                  {issueSummary.errorCount > 0 ? (
-                    <XCircleIcon
-                      aria-label={validationStatusLabel(issueSummary)}
-                      className="shrink-0 text-destructive"
-                      data-slot="layer-status"
-                    />
-                  ) : issueSummary.warningCount > 0 ? (
-                    <WarningCircleIcon
-                      aria-label={`${issueSummary.warningCount} validation ${issueSummary.warningCount === 1 ? "warning" : "warnings"}`}
-                      className="shrink-0 text-amber-600"
-                      data-slot="layer-status"
-                    />
-                  ) : incompatibleClientCount > 0 && capabilityRequirement ? (
-                    <DevicesIcon
-                      aria-label={`${capabilityRequirement.name} support differs on ${incompatibleClientCount} connected ${incompatibleClientCount === 1 ? "preview" : "previews"}`}
-                      className="shrink-0 text-amber-600"
-                      data-slot="layer-status"
-                    />
-                  ) : null}
+                  {(() => {
+                    if (issueSummary.errorCount > 0) {
+                      return (
+                        <XCircleIcon
+                          aria-label={validationStatusLabel(issueSummary)}
+                          className="shrink-0 text-destructive"
+                          data-slot="layer-status"
+                        />
+                      );
+                    }
+                    if (issueSummary.warningCount > 0) {
+                      return (
+                        <WarningCircleIcon
+                          aria-label={`${issueSummary.warningCount} validation ${issueSummary.warningCount === 1 ? "warning" : "warnings"}`}
+                          className="shrink-0 text-amber-600"
+                          data-slot="layer-status"
+                        />
+                      );
+                    }
+                    if (incompatibleClientCount > 0 && capabilityRequirement) {
+                      return (
+                        <DevicesIcon
+                          aria-label={`${capabilityRequirement.name} support differs on ${incompatibleClientCount} connected ${incompatibleClientCount === 1 ? "preview" : "previews"}`}
+                          className="shrink-0 text-amber-600"
+                          data-slot="layer-status"
+                        />
+                      );
+                    }
+                    return null;
+                  })()}
                   {node && layerActions ? (
                     <DropdownMenu onOpenChangeComplete={finishMenuInteraction}>
                       <DropdownMenuTrigger

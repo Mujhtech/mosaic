@@ -193,29 +193,37 @@ function HostedManagedAssets({
 
   return (
     <div className="space-y-3 rounded border border-border bg-muted/35 p-3 text-xs">
-      {managedAssets.isPending ? (
-        <p className="text-muted-foreground">Loading managed Assets…</p>
-      ) : managedAssets.error ? (
-        <div role="alert">
-          <p className="text-destructive">{managedAssets.error.message}</p>
-          <Button
-            className="mt-2"
-            onClick={() => {
-              managedAssets.refetch();
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Retry Assets
-          </Button>
-        </div>
-      ) : (
-        <p className="text-muted-foreground">
-          {readyManagedAssets.length} ready managed{" "}
-          {readyManagedAssets.length === 1 ? "Asset" : "Assets"}
-        </p>
-      )}
+      {(() => {
+        if (managedAssets.isPending) {
+          return (
+            <p className="text-muted-foreground">Loading managed Assets…</p>
+          );
+        }
+        if (managedAssets.error) {
+          return (
+            <div role="alert">
+              <p className="text-destructive">{managedAssets.error.message}</p>
+              <Button
+                className="mt-2"
+                onClick={() => {
+                  managedAssets.refetch();
+                }}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Retry Assets
+              </Button>
+            </div>
+          );
+        }
+        return (
+          <p className="text-muted-foreground">
+            {readyManagedAssets.length} ready managed{" "}
+            {readyManagedAssets.length === 1 ? "Asset" : "Assets"}
+          </p>
+        );
+      })()}
       {readyManagedAssets.length > 0 && assets.length > 0 ? (
         <div className="space-y-2">
           {assets.map((asset) => (
@@ -596,33 +604,44 @@ export function StudioToolPanel({
       className="scrollbar-thin scrollbar-gutter-stable h-full overflow-y-auto bg-card"
     >
       <div className="p-4">
-        {selectedTool === "layers" ? (
-          <ComponentTree previewClients={previewClients} />
-        ) : selectedTool === "components" ? (
-          <ComponentLibrary />
-        ) : selectedTool === "templates" ? (
-          <TemplatesPanel />
-        ) : selectedTool === "designSystem" ? (
-          <DesignSystemPanel />
-        ) : selectedTool === "products" ? (
-          <MockCommercePanel
-            mockProducts={mockProducts}
-            mockPurchaseState={mockPurchaseState}
-            onProductsChange={onProductsChange}
-            onPurchaseStateChange={onPurchaseStateChange}
-          />
-        ) : selectedTool === "localization" ? (
-          <PreviewControls />
-        ) : selectedTool === "assets" ? (
-          <AssetsPanel assets={assets} />
-        ) : (
-          <SettingsPanel
-            canToggleProperties={
-              viewportMode === "large" || viewportMode === "medium"
-            }
-            workspaceControllerRef={workspaceControllerRef}
-          />
-        )}
+        {(() => {
+          if (selectedTool === "layers") {
+            return <ComponentTree previewClients={previewClients} />;
+          }
+          if (selectedTool === "components") {
+            return <ComponentLibrary />;
+          }
+          if (selectedTool === "templates") {
+            return <TemplatesPanel />;
+          }
+          if (selectedTool === "designSystem") {
+            return <DesignSystemPanel />;
+          }
+          if (selectedTool === "products") {
+            return (
+              <MockCommercePanel
+                mockProducts={mockProducts}
+                mockPurchaseState={mockPurchaseState}
+                onProductsChange={onProductsChange}
+                onPurchaseStateChange={onPurchaseStateChange}
+              />
+            );
+          }
+          if (selectedTool === "localization") {
+            return <PreviewControls />;
+          }
+          if (selectedTool === "assets") {
+            return <AssetsPanel assets={assets} />;
+          }
+          return (
+            <SettingsPanel
+              canToggleProperties={
+                viewportMode === "large" || viewportMode === "medium"
+              }
+              workspaceControllerRef={workspaceControllerRef}
+            />
+          );
+        })()}
       </div>
     </aside>
   );

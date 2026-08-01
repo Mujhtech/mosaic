@@ -203,16 +203,24 @@ export function DocumentBackgroundEditor({
       : undefined;
   const visibleBackground =
     tokenBackground ?? (type === "none" ? undefined : value);
-  const fillKind =
-    visibleBackground?.type === "linearGradient" ||
-    visibleBackground?.type === "radialGradient"
-      ? "gradient"
-      : visibleBackground?.type === "image" ||
-          visibleBackground?.type === "video"
-        ? "image"
-        : visibleBackground
-          ? "color"
-          : "none";
+  const fillKind = (() => {
+    if (
+      visibleBackground?.type === "linearGradient" ||
+      visibleBackground?.type === "radialGradient"
+    ) {
+      return "gradient";
+    }
+    if (
+      visibleBackground?.type === "image" ||
+      visibleBackground?.type === "video"
+    ) {
+      return "image";
+    }
+    if (visibleBackground) {
+      return "color";
+    }
+    return "none";
+  })();
 
   function selectFillKind(nextKind: "color" | "gradient" | "image") {
     if (nextKind === fillKind) {
@@ -631,19 +639,25 @@ export function ShadowSection({ node }: { node: ProtocolNode }) {
         label="Style"
         onChange={(type) =>
           update(
-            type === "none"
-              ? undefined
-              : type === "shadowToken"
-                ? document.designSystem.shadows[0]
-                  ? { type, id: document.designSystem.shadows[0].id }
-                  : undefined
-                : {
-                    type: "shadow",
-                    color: "#00000033",
-                    offsetX: 0,
-                    offsetY: 8,
-                    blurRadius: 24,
+            (() => {
+              if (type === "none") {
+                return;
+              }
+              if (type === "shadowToken") {
+                return (() => {
+                  if (document.designSystem.shadows[0]) {
+                    return { type, id: document.designSystem.shadows[0].id };
                   }
+                })();
+              }
+              return {
+                type: "shadow",
+                color: "#00000033",
+                offsetX: 0,
+                offsetY: 8,
+                blurRadius: 24,
+              };
+            })()
           )
         }
         value={shadow?.type ?? "none"}
@@ -692,13 +706,15 @@ export function ShadowSection({ node }: { node: ProtocolNode }) {
               <NumberField
                 address={`appearance.shadow.${property}`}
                 key={property}
-                label={
-                  property === "offsetX"
-                    ? "X"
-                    : property === "offsetY"
-                      ? "Y"
-                      : "Blur"
-                }
+                label={(() => {
+                  if (property === "offsetX") {
+                    return "X";
+                  }
+                  if (property === "offsetY") {
+                    return "Y";
+                  }
+                  return "Blur";
+                })()}
                 max={4096}
                 min={property === "blurRadius" ? 0 : -4096}
                 onChange={(value) => update({ ...shadow, [property]: value })}

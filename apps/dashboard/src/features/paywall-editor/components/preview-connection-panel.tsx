@@ -353,23 +353,31 @@ export function PreviewConnectionPanel({
                       </p>
                     </div>
                     <span
-                      className={`rounded-full px-2 py-1 font-medium text-[11px] ${
-                        hasCompatibilityWarning
-                          ? "bg-amber-100 text-amber-900"
-                          : acknowledgement?.status === "accepted"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : acknowledgement?.status === "rejected"
-                              ? "bg-red-100 text-red-800"
-                              : "bg-amber-100 text-amber-900"
-                      }`}
+                      className={`rounded-full px-2 py-1 font-medium text-[11px] ${(() => {
+                        if (hasCompatibilityWarning) {
+                          return "bg-amber-100 text-amber-900";
+                        }
+                        if (acknowledgement?.status === "accepted") {
+                          return "bg-emerald-100 text-emerald-800";
+                        }
+                        if (acknowledgement?.status === "rejected") {
+                          return "bg-red-100 text-red-800";
+                        }
+                        return "bg-amber-100 text-amber-900";
+                      })()}`}
                     >
-                      {hasCompatibilityWarning
-                        ? "Compatibility issue"
-                        : acknowledgement?.status === "accepted"
-                          ? "Updated"
-                          : acknowledgement?.status === "rejected"
-                            ? "Needs attention"
-                            : "Waiting"}
+                      {(() => {
+                        if (hasCompatibilityWarning) {
+                          return "Compatibility issue";
+                        }
+                        if (acknowledgement?.status === "accepted") {
+                          return "Updated";
+                        }
+                        if (acknowledgement?.status === "rejected") {
+                          return "Needs attention";
+                        }
+                        return "Waiting";
+                      })()}
                     </span>
                   </div>
                   {acknowledgement ? (

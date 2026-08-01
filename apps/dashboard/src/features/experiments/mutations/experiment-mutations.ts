@@ -130,11 +130,20 @@ export function transitionExperimentMutationOptions(
 ) {
   return mutationOptions({
     mutationFn: (input: { reason: string; target: ExperimentStatus }) =>
-      input.target === "archived"
-        ? adapter.archive(scope, experimentId, input.reason)
-        : input.target === "completed"
-          ? adapter.complete(scope, experimentId, input.reason)
-          : adapter.transition(scope, experimentId, input.target, input.reason),
+      (() => {
+        if (input.target === "archived") {
+          return adapter.archive(scope, experimentId, input.reason);
+        }
+        if (input.target === "completed") {
+          return adapter.complete(scope, experimentId, input.reason);
+        }
+        return adapter.transition(
+          scope,
+          experimentId,
+          input.target,
+          input.reason
+        );
+      })(),
     onSuccess: () => invalidateExperiment(queryClient, scope, experimentId),
   });
 }

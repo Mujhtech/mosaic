@@ -311,11 +311,15 @@ export function ApiKeysPage({
                       {apiKey.prefix}••••••••
                     </p>
                     <p className="mt-1 text-muted-foreground text-xs">
-                      {revoked
-                        ? "Revoked"
-                        : apiKey.lastUsedAt
-                          ? `Last used ${apiKey.lastUsedAt}`
-                          : "Never used"}
+                      {(() => {
+                        if (revoked) {
+                          return "Revoked";
+                        }
+                        if (apiKey.lastUsedAt) {
+                          return `Last used ${apiKey.lastUsedAt}`;
+                        }
+                        return "Never used";
+                      })()}
                     </p>
                     {apiKey.kind === "public_sdk" ? (
                       <p className="mt-1 text-muted-foreground text-xs">

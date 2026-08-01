@@ -19,11 +19,15 @@ export function FreshnessBanner({ freshness }: { freshness: Freshness }) {
       <ClockCountdownIcon aria-hidden className="mt-0.5 shrink-0" size={18} />
       <div>
         <p className="font-medium">
-          {unavailable
-            ? "Freshness unavailable"
-            : delayed
-              ? "Aggregates are delayed"
-              : "Data is current"}
+          {(() => {
+            if (unavailable) {
+              return "Freshness unavailable";
+            }
+            if (delayed) {
+              return "Aggregates are delayed";
+            }
+            return "Data is current";
+          })()}
         </p>
         <p className="mt-0.5 text-muted-foreground text-xs">
           Latest aggregate {formatTimestamp(freshness.latestAggregatedAt)} ·

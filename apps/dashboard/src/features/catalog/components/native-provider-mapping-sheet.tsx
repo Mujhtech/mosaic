@@ -390,11 +390,15 @@ export function NativeProviderMappingSheet({
                   disabled={isSubmitting || !platformCompatible}
                   type="submit"
                 >
-                  {isSubmitting
-                    ? "Saving mapping…"
-                    : mode === "replace"
-                      ? "Create replacement mapping"
-                      : "Save configured mapping"}
+                  {(() => {
+                    if (isSubmitting) {
+                      return "Saving mapping…";
+                    }
+                    if (mode === "replace") {
+                      return "Create replacement mapping";
+                    }
+                    return "Save configured mapping";
+                  })()}
                 </Button>
               )}
             </form.Subscribe>

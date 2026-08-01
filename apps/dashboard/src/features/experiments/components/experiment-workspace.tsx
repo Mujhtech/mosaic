@@ -162,11 +162,15 @@ function ImmutableActiveDefinition({
           <div>
             <dt className="text-muted-foreground">QA policy at publication</dt>
             <dd>
-              {definition.qaPolicyEnabled === undefined
-                ? "Not exposed by the active Version contract"
-                : definition.qaPolicyEnabled
-                  ? "Enabled"
-                  : "Disabled"}
+              {(() => {
+                if (definition.qaPolicyEnabled === undefined) {
+                  return "Not exposed by the active Version contract";
+                }
+                if (definition.qaPolicyEnabled) {
+                  return "Enabled";
+                }
+                return "Disabled";
+              })()}
             </dd>
           </div>
         </dl>
@@ -328,82 +332,95 @@ function LifecyclePanel({
       description="Each action preserves the immutable Version, records actor and reason, and publishes a new Configuration Release snapshot."
       title="Lifecycle"
     >
-      {canManage ? (
-        actions.length ? (
-          <form
-            className="grid gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              form.handleSubmit();
-            }}
-          >
-            <div className="flex flex-wrap gap-2">
-              {actions.map((action) => (
-                <Button
-                  key={action}
-                  onClick={() => setTarget(action)}
-                  type="button"
-                  variant={target === action ? "default" : "outline"}
-                >
-                  {action === "running" && status === "paused"
-                    ? "Resume"
-                    : action === "running"
-                      ? "Start"
-                      : action}
-                </Button>
-              ))}
-            </div>
-            {target ? (
-              <>
-                <form.Field
-                  name="reason"
-                  validators={{
-                    onSubmit: ({ value }) =>
-                      value.trim().length >= 8
-                        ? undefined
-                        : "Provide a safe reason (at least 8 characters).",
+      {(() => {
+        if (canManage) {
+          return (() => {
+            if (actions.length) {
+              return (
+                <form
+                  className="grid gap-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    form.handleSubmit();
                   }}
                 >
-                  {(field) => (
-                    <Field>
-                      <FieldLabel htmlFor="transition-reason">
-                        Reason for {target}
-                      </FieldLabel>
-                      <Input
-                        id="transition-reason"
-                        onChange={(event) =>
-                          field.handleChange(event.currentTarget.value)
-                        }
-                        value={field.state.value}
-                      />
-                    </Field>
-                  )}
-                </form.Field>
-                <p className="text-muted-foreground text-xs">
-                  Offline devices apply this state only after accepting the new
-                  release. Mosaic does not claim universal immediate delivery.
-                </p>
-                <Button disabled={mutation.isPending} type="submit">
-                  {mutation.isPending ? "Applying…" : `Confirm ${target}`}
-                </Button>
-              </>
-            ) : null}
-            {mutation.error ? (
-              <p className="text-destructive text-sm" role="alert">
-                {mutation.error.message}
+                  <div className="flex flex-wrap gap-2">
+                    {actions.map((action) => (
+                      <Button
+                        key={action}
+                        onClick={() => setTarget(action)}
+                        type="button"
+                        variant={target === action ? "default" : "outline"}
+                      >
+                        {(() => {
+                          if (action === "running" && status === "paused") {
+                            return "Resume";
+                          }
+                          if (action === "running") {
+                            return "Start";
+                          }
+                          return action;
+                        })()}
+                      </Button>
+                    ))}
+                  </div>
+                  {target ? (
+                    <>
+                      <form.Field
+                        name="reason"
+                        validators={{
+                          onSubmit: ({ value }) =>
+                            value.trim().length >= 8
+                              ? undefined
+                              : "Provide a safe reason (at least 8 characters).",
+                        }}
+                      >
+                        {(field) => (
+                          <Field>
+                            <FieldLabel htmlFor="transition-reason">
+                              Reason for {target}
+                            </FieldLabel>
+                            <Input
+                              id="transition-reason"
+                              onChange={(event) =>
+                                field.handleChange(event.currentTarget.value)
+                              }
+                              value={field.state.value}
+                            />
+                          </Field>
+                        )}
+                      </form.Field>
+                      <p className="text-muted-foreground text-xs">
+                        Offline devices apply this state only after accepting
+                        the new release. Mosaic does not claim universal
+                        immediate delivery.
+                      </p>
+                      <Button disabled={mutation.isPending} type="submit">
+                        {mutation.isPending ? "Applying…" : `Confirm ${target}`}
+                      </Button>
+                    </>
+                  ) : null}
+                  {mutation.error ? (
+                    <p className="text-destructive text-sm" role="alert">
+                      {mutation.error.message}
+                    </p>
+                  ) : null}
+                </form>
+              );
+            }
+            return (
+              <p className="text-muted-foreground text-sm">
+                This terminal state cannot return to Running.
               </p>
-            ) : null}
-          </form>
-        ) : (
+            );
+          })();
+        }
+        return (
           <p className="text-muted-foreground text-sm">
-            This terminal state cannot return to Running.
+            Owner or admin access is required for lifecycle actions.
           </p>
-        )
-      ) : (
-        <p className="text-muted-foreground text-sm">
-          Owner or admin access is required for lifecycle actions.
-        </p>
-      )}
+        );
+      })()}
     </WorkflowPanel>
   );
 }
@@ -456,13 +473,16 @@ function ValidationPanel({
       {/* The outcome is announced from a region that is always in the tree,
           because the validation result replaces content without moving focus. */}
       <LiveAnnouncer
-        message={
-          validation.data
-            ? validation.data.issues.length
-              ? `Validation found ${validation.data.issues.length} issue${validation.data.issues.length === 1 ? "" : "s"}.`
-              : "Validation passed."
-            : undefined
-        }
+        message={(() => {
+          if (validation.data) {
+            return (() => {
+              if (validation.data.issues.length) {
+                return `Validation found ${validation.data.issues.length} issue${validation.data.issues.length === 1 ? "" : "s"}.`;
+              }
+              return "Validation passed.";
+            })();
+          }
+        })()}
       />
       {validation.data ? (
         <div className="mt-4 grid gap-3">
@@ -1033,24 +1053,32 @@ export function ExperimentWorkspace({
           />
         </div>
       ) : null}
-      {tab === "variants" || tab === "metrics" || tab === "schedule" ? (
-        draft && item.status === "draft" ? (
-          <ExperimentBuilder
-            environmentId={environmentId}
-            experiment={item}
-            organizationId={organizationId}
-            projectId={projectId}
-          />
-        ) : (
-          <ImmutableActiveDefinition
-            environmentId={environmentId}
-            experiment={item}
-            organizationId={organizationId}
-            projectId={projectId}
-            scope={scope}
-          />
-        )
-      ) : null}
+      {(() => {
+        if (tab === "variants" || tab === "metrics" || tab === "schedule") {
+          return (() => {
+            if (draft && item.status === "draft") {
+              return (
+                <ExperimentBuilder
+                  environmentId={environmentId}
+                  experiment={item}
+                  organizationId={organizationId}
+                  projectId={projectId}
+                />
+              );
+            }
+            return (
+              <ImmutableActiveDefinition
+                environmentId={environmentId}
+                experiment={item}
+                organizationId={organizationId}
+                projectId={projectId}
+                scope={scope}
+              />
+            );
+          })();
+        }
+        return null;
+      })()}
       {tab === "results" ? (
         <ExperimentResultsPanel experimentId={experimentId} scope={scope} />
       ) : null}

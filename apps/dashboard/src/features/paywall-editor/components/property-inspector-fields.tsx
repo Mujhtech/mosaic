@@ -355,17 +355,22 @@ export function SelectField({
   value: string;
 }) {
   const { disabled } = useInspectorContext();
-  const leadingIcon = address.includes("direction") ? (
-    value === "horizontal" ? (
-      <ColumnsIcon aria-hidden className="size-3.5" />
-    ) : (
-      <RowsIcon aria-hidden className="size-3.5" />
-    )
-  ) : address.includes("width") ? (
-    <ArrowsHorizontalIcon aria-hidden className="size-3.5" />
-  ) : address.includes("height") ? (
-    <ArrowsVerticalIcon aria-hidden className="size-3.5" />
-  ) : null;
+  const leadingIcon = (() => {
+    if (address.includes("direction")) {
+      return value === "horizontal" ? (
+        <ColumnsIcon aria-hidden className="size-3.5" />
+      ) : (
+        <RowsIcon aria-hidden className="size-3.5" />
+      );
+    }
+    if (address.includes("width")) {
+      return <ArrowsHorizontalIcon aria-hidden className="size-3.5" />;
+    }
+    if (address.includes("height")) {
+      return <ArrowsVerticalIcon aria-hidden className="size-3.5" />;
+    }
+    return null;
+  })();
   return (
     <Field address={address} description={description} label={label}>
       {(fieldProps) => (

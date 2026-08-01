@@ -554,14 +554,18 @@ export function ExperimentBuilder({
                 | "controlVersionId"
                 | "treatment1VersionId"
                 | "treatment2VersionId"
-                | "treatment3VersionId" =
-                index === 0
-                  ? "controlVersionId"
-                  : index === 1
-                    ? "treatment1VersionId"
-                    : index === 2
-                      ? "treatment2VersionId"
-                      : "treatment3VersionId";
+                | "treatment3VersionId" = (() => {
+                if (index === 0) {
+                  return "controlVersionId";
+                }
+                if (index === 1) {
+                  return "treatment1VersionId";
+                }
+                if (index === 2) {
+                  return "treatment2VersionId";
+                }
+                return "treatment3VersionId";
+              })();
               const allocationField = `allocation${index}` as "allocation0";
               const role =
                 index === 0
@@ -935,31 +939,39 @@ export function ExperimentBuilder({
             </p>
           </div>
         </WorkflowPanel>
-        {conflict ? (
-          <div
-            className="rounded border border-destructive/40 bg-destructive/5 p-4"
-            role="alert"
-          >
-            <h2 className="font-semibold">Draft changed on the server</h2>
-            <p className="mt-1 text-muted-foreground text-sm">
-              Your unsaved input is preserved. The server is at revision{" "}
-              {conflict.currentRevision}. Your unsaved input is preserved.
-              Review it, then retry against the latest revision in place.
-            </p>
-            <Button
-              className="mt-3"
-              onClick={handleClick}
-              type="button"
-              variant="outline"
-            >
-              Save my input against revision {conflict.currentRevision}
-            </Button>
-          </div>
-        ) : error || localError ? (
-          <p className="text-destructive" role="alert">
-            {error?.message ?? localError}
-          </p>
-        ) : null}
+        {(() => {
+          if (conflict) {
+            return (
+              <div
+                className="rounded border border-destructive/40 bg-destructive/5 p-4"
+                role="alert"
+              >
+                <h2 className="font-semibold">Draft changed on the server</h2>
+                <p className="mt-1 text-muted-foreground text-sm">
+                  Your unsaved input is preserved. The server is at revision{" "}
+                  {conflict.currentRevision}. Your unsaved input is preserved.
+                  Review it, then retry against the latest revision in place.
+                </p>
+                <Button
+                  className="mt-3"
+                  onClick={handleClick}
+                  type="button"
+                  variant="outline"
+                >
+                  Save my input against revision {conflict.currentRevision}
+                </Button>
+              </div>
+            );
+          }
+          if (error || localError) {
+            return (
+              <p className="text-destructive" role="alert">
+                {error?.message ?? localError}
+              </p>
+            );
+          }
+          return null;
+        })()}
         <div className="sticky bottom-3 flex justify-end rounded border bg-background/95 p-3 shadow-sm backdrop-blur">
           <Button
             disabled={
@@ -969,13 +981,19 @@ export function ExperimentBuilder({
             }
             type="submit"
           >
-            {saveMutation.isPending ||
-            createMutation.isPending ||
-            isSavingCreatedDraft
-              ? "Saving…"
-              : experiment
-                ? "Save Draft revision"
-                : "Create Experiment Draft"}
+            {(() => {
+              if (
+                saveMutation.isPending ||
+                createMutation.isPending ||
+                isSavingCreatedDraft
+              ) {
+                return "Saving…";
+              }
+              if (experiment) {
+                return "Save Draft revision";
+              }
+              return "Create Experiment Draft";
+            })()}
           </Button>
         </div>
       </form>

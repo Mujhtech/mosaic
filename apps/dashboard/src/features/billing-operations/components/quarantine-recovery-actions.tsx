@@ -57,61 +57,69 @@ export function QuarantineRecoveryActionsPanel({
       description="A quarantined input becomes a Transaction Fact only by asking the store again and succeeding. There is deliberately no control that records a validated fact from an operator's judgement."
       title="Recovery"
     >
-      {canManage ? (
-        actions.length === 0 ? (
-          <div className="rounded border border-border bg-muted/30 p-4 text-sm leading-6">
-            <p className="font-medium">
-              No recovery action applies to this record.
-            </p>
-            <p className="mt-1 text-muted-foreground">
-              {quarantineNoActionExplanation(record.reasonCode)}
-            </p>
-            <a
-              className="mt-2 inline-flex font-semibold text-primary text-sm"
-              href={storeConnectionsHref}
-            >
-              Review Store Server Credentials
+      {(() => {
+        if (canManage) {
+          return (() => {
+            if (actions.length === 0) {
+              return (
+                <div className="rounded border border-border bg-muted/30 p-4 text-sm leading-6">
+                  <p className="font-medium">
+                    No recovery action applies to this record.
+                  </p>
+                  <p className="mt-1 text-muted-foreground">
+                    {quarantineNoActionExplanation(record.reasonCode)}
+                  </p>
+                  <a
+                    className="mt-2 inline-flex font-semibold text-primary text-sm"
+                    href={storeConnectionsHref}
+                  >
+                    Review Store Server Credentials
+                  </a>
+                </div>
+              );
+            }
+            return (
+              <ul className="space-y-3">
+                {actions.map((action) => (
+                  <li className="rounded border p-4" key={action.kind}>
+                    <p className="font-semibold text-sm">{action.label}</p>
+                    <p className="mt-1 text-muted-foreground text-sm leading-6">
+                      {action.description}
+                    </p>
+                    <ActionControl
+                      action={action}
+                      closeError={closeError}
+                      isClosing={isClosing}
+                      isRetrying={isRetrying}
+                      onCloseSuperseded={() =>
+                        onCloseSuperseded(supersededBy.trim())
+                      }
+                      onRetryValidation={onRetryValidation}
+                      productMappingHref={productMappingHref}
+                      {...(providerProductIdentifier
+                        ? { providerProductIdentifier }
+                        : {})}
+                      retryError={retryError}
+                      setSupersededBy={setSupersededBy}
+                      storeConnectionsHref={storeConnectionsHref}
+                      supersededBy={supersededBy}
+                    />
+                  </li>
+                ))}
+              </ul>
+            );
+          })();
+        }
+        return (
+          <p className="text-muted-foreground text-sm">
+            Organization owner or admin permission is required to run a recovery
+            action.{" "}
+            <a className="font-semibold text-primary" href={membersHref}>
+              Ask an Owner or Admin
             </a>
-          </div>
-        ) : (
-          <ul className="space-y-3">
-            {actions.map((action) => (
-              <li className="rounded border p-4" key={action.kind}>
-                <p className="font-semibold text-sm">{action.label}</p>
-                <p className="mt-1 text-muted-foreground text-sm leading-6">
-                  {action.description}
-                </p>
-                <ActionControl
-                  action={action}
-                  closeError={closeError}
-                  isClosing={isClosing}
-                  isRetrying={isRetrying}
-                  onCloseSuperseded={() =>
-                    onCloseSuperseded(supersededBy.trim())
-                  }
-                  onRetryValidation={onRetryValidation}
-                  productMappingHref={productMappingHref}
-                  {...(providerProductIdentifier
-                    ? { providerProductIdentifier }
-                    : {})}
-                  retryError={retryError}
-                  setSupersededBy={setSupersededBy}
-                  storeConnectionsHref={storeConnectionsHref}
-                  supersededBy={supersededBy}
-                />
-              </li>
-            ))}
-          </ul>
-        )
-      ) : (
-        <p className="text-muted-foreground text-sm">
-          Organization owner or admin permission is required to run a recovery
-          action.{" "}
-          <a className="font-semibold text-primary" href={membersHref}>
-            Ask an Owner or Admin
-          </a>
-        </p>
-      )}
+          </p>
+        );
+      })()}
     </WorkflowPanel>
   );
 }

@@ -31,41 +31,49 @@ export function IssuesPanel({
       isPending={query.isPending}
       onRetry={handleRetry}
     >
-      {query.data?.length === 0 ? (
-        <EmptyState
-          description="No safe Product, provider, or Placement failure codes were recorded for these filters."
-          title="No issues detected"
-        />
-      ) : query.data ? (
-        <div className="overflow-x-auto rounded border">
-          <table className="w-full min-w-160 text-left text-sm">
-            <caption className="sr-only">
-              Product, provider, and Placement recovery issues
-            </caption>
-            <thead className="bg-muted/40 text-muted-foreground text-xs uppercase">
-              <tr>
-                <th className="px-4 py-3" scope="col">
-                  Issue
-                </th>
-                <th className="px-4 py-3" scope="col">
-                  Safe code
-                </th>
-                <th className="px-4 py-3" scope="col">
-                  Count
-                </th>
-                <th className="px-4 py-3" scope="col">
-                  Recovery
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {query.data.map((issue) => (
-                <IssueTableRow issue={issue} key={issue.id} scope={scope} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
+      {(() => {
+        if (query.data?.length === 0) {
+          return (
+            <EmptyState
+              description="No safe Product, provider, or Placement failure codes were recorded for these filters."
+              title="No issues detected"
+            />
+          );
+        }
+        if (query.data) {
+          return (
+            <div className="overflow-x-auto rounded border">
+              <table className="w-full min-w-160 text-left text-sm">
+                <caption className="sr-only">
+                  Product, provider, and Placement recovery issues
+                </caption>
+                <thead className="bg-muted/40 text-muted-foreground text-xs uppercase">
+                  <tr>
+                    <th className="px-4 py-3" scope="col">
+                      Issue
+                    </th>
+                    <th className="px-4 py-3" scope="col">
+                      Safe code
+                    </th>
+                    <th className="px-4 py-3" scope="col">
+                      Count
+                    </th>
+                    <th className="px-4 py-3" scope="col">
+                      Recovery
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {query.data.map((issue) => (
+                    <IssueTableRow issue={issue} key={issue.id} scope={scope} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        return null;
+      })()}
     </AnalyticsQueryResult>
   );
 }
@@ -77,12 +85,15 @@ function IssueTableRow({
   issue: IssueRow;
   scope: AnalyticsScope;
 }) {
-  const href =
-    issue.kind === "provider"
-      ? `/orgs/${scope.organizationId}/projects/${scope.projectId}/catalog/providers?environmentId=${scope.environmentId}`
-      : issue.kind === "product"
-        ? `/orgs/${scope.organizationId}/projects/${scope.projectId}/catalog/products`
-        : `/orgs/${scope.organizationId}/projects/${scope.projectId}/monetization/${scope.environmentId}/placements${issue.recoveryId ? `/${issue.recoveryId}` : ""}`;
+  const href = (() => {
+    if (issue.kind === "provider") {
+      return `/orgs/${scope.organizationId}/projects/${scope.projectId}/catalog/providers?environmentId=${scope.environmentId}`;
+    }
+    if (issue.kind === "product") {
+      return `/orgs/${scope.organizationId}/projects/${scope.projectId}/catalog/products`;
+    }
+    return `/orgs/${scope.organizationId}/projects/${scope.projectId}/monetization/${scope.environmentId}/placements${issue.recoveryId ? `/${issue.recoveryId}` : ""}`;
+  })();
   return (
     <tr>
       <th className="px-4 py-4 font-medium" scope="row">
