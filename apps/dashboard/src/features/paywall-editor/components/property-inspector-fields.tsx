@@ -1,42 +1,41 @@
 /* eslint-disable react-refresh/only-export-components -- internal inspector modules colocate private controls with their supporting types and transforms. */
-import { ArrowsHorizontalIcon } from "@phosphor-icons/react/dist/ssr/ArrowsHorizontal"
-import { ArrowsVerticalIcon } from "@phosphor-icons/react/dist/ssr/ArrowsVertical"
-import { ColumnsIcon } from "@phosphor-icons/react/dist/ssr/Columns"
-import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut"
-import { LineSegmentIcon } from "@phosphor-icons/react/dist/ssr/LineSegment"
-import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent"
-import { RowsIcon } from "@phosphor-icons/react/dist/ssr/Rows"
-import { TextTIcon } from "@phosphor-icons/react/dist/ssr/TextT"
-import { Children, isValidElement, type ReactNode } from "react"
+import { ArrowsHorizontalIcon } from "@phosphor-icons/react/dist/ssr/ArrowsHorizontal";
+import { ArrowsVerticalIcon } from "@phosphor-icons/react/dist/ssr/ArrowsVertical";
+import { ColumnsIcon } from "@phosphor-icons/react/dist/ssr/Columns";
+import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut";
+import { LineSegmentIcon } from "@phosphor-icons/react/dist/ssr/LineSegment";
+import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
+import { RowsIcon } from "@phosphor-icons/react/dist/ssr/Rows";
+import { TextTIcon } from "@phosphor-icons/react/dist/ssr/TextT";
+import { Children, isValidElement, type ReactNode } from "react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { InspectorColorControl } from "@/features/paywall-editor/components/inspector-color-control"
-import type {
-  LocalizedText,
-  MosaicDocument,
-  ProtocolColor,
-} from "@/features/paywall-editor/types/editor"
-import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree"
-import { updateLocalizedTextByKey } from "@/features/paywall-editor/utils/editor-transforms"
-import type { MosaicPaywallV02EdgeInsets } from "@/lib/mosaic-protocol"
-
+} from "@/components/ui/select";
+import { InspectorColorControl } from "@/features/paywall-editor/components/inspector-color-control";
 import {
   CONTROL_CLASS,
   Field,
-  InspectorNode,
+  type InspectorNode,
   TEXTAREA_CLASS,
   TwoColumn,
   transactionEscape,
   useDocumentTransaction,
   useInspectorContext,
-} from "@/features/paywall-editor/components/property-inspector-core"
+} from "@/features/paywall-editor/components/property-inspector-core";
+import type {
+  LocalizedText,
+  MosaicDocument,
+  ProtocolColor,
+} from "@/features/paywall-editor/types/editor";
+import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
+import { updateLocalizedTextByKey } from "@/features/paywall-editor/utils/editor-transforms";
+import type { MosaicPaywallV02EdgeInsets } from "@/lib/mosaic-protocol";
 
 export function LocalizedField({
   address,
@@ -45,26 +44,28 @@ export function LocalizedField({
   text,
   tokens,
 }: {
-  address: string
-  label: string
-  multiline?: boolean
-  text: LocalizedText
-  tokens?: readonly { readonly label: string; readonly value: string }[]
+  address: string;
+  label: string;
+  multiline?: boolean;
+  text: LocalizedText;
+  tokens?: readonly { readonly label: string; readonly value: string }[];
 }) {
-  const { disabled, document, locale } = useInspectorContext()
-  const transaction = useDocumentTransaction()
-  const value = resolveLocalizedText(document, text, locale)
+  const { disabled, document, locale } = useInspectorContext();
+  const transaction = useDocumentTransaction();
+  const value = resolveLocalizedText(document, text, locale);
 
-  function update(value: string) {
-    if (disabled || (!transaction.isActive() && !transaction.begin())) return
+  function update(valueValue: string) {
+    if (disabled || !(transaction.isActive() || transaction.begin())) {
+      return;
+    }
     transaction.editor.updateDocumentInTransaction((current) =>
       updateLocalizedTextByKey({
         document: current,
         locale,
         localizationKey: text.localizationKey,
-        value,
-      }),
-    )
+        value: valueValue,
+      })
+    );
   }
 
   return (
@@ -83,7 +84,9 @@ export function LocalizedField({
               onBlur={transaction.commit}
               onChange={(event) => update(event.target.value)}
               onFocus={transaction.begin}
-              onKeyDown={(event) => transactionEscape(event, transaction.cancel)}
+              onKeyDown={(event) =>
+                transactionEscape(event, transaction.cancel)
+              }
               value={value}
             />
           ) : (
@@ -94,27 +97,33 @@ export function LocalizedField({
               onBlur={transaction.commit}
               onChange={(event) => update(event.target.value)}
               onFocus={transaction.begin}
-              onKeyDown={(event) => transactionEscape(event, transaction.cancel)}
+              onKeyDown={(event) =>
+                transactionEscape(event, transaction.cancel)
+              }
               type="text"
               value={value}
             />
           )}
           {tokens?.length ? (
-            <div aria-label={`${label} variables`} className="flex flex-wrap gap-1.5">
+            <fieldset
+              aria-label={`${label} variables`}
+              className="flex min-w-0 flex-wrap gap-1.5"
+            >
               {tokens.map((token) => (
                 <Button
                   disabled={disabled}
                   key={token.value}
                   onClick={() => {
-                    const separator = value.length === 0 || value.endsWith(" ") ? "" : " "
+                    const separator =
+                      value.length === 0 || value.endsWith(" ") ? "" : " ";
                     transaction.editor.updateDocument((current) =>
                       updateLocalizedTextByKey({
                         document: current,
                         locale,
                         localizationKey: text.localizationKey,
                         value: `${value}${separator}${token.value}`,
-                      }),
-                    )
+                      })
+                    );
                   }}
                   size="xs"
                   type="button"
@@ -123,12 +132,12 @@ export function LocalizedField({
                   {token.label}
                 </Button>
               ))}
-            </div>
+            </fieldset>
           ) : null}
         </>
       )}
     </Field>
-  )
+  );
 }
 
 export function ComponentTextField({
@@ -139,21 +148,23 @@ export function ComponentTextField({
   suggestions,
   value,
 }: {
-  address: string
-  description?: string
-  label: string
-  onUpdate: (node: InspectorNode, value: string) => InspectorNode
-  suggestions?: readonly string[]
-  value: string
+  address: string;
+  description?: string;
+  label: string;
+  onUpdate: (node: InspectorNode, value: string) => InspectorNode;
+  suggestions?: readonly string[];
+  value: string;
 }) {
-  const { componentId, disabled } = useInspectorContext()
-  const transaction = useDocumentTransaction()
+  const { componentId, disabled } = useInspectorContext();
+  const transaction = useDocumentTransaction();
 
   function update(nextValue: string) {
-    if (disabled || (!transaction.isActive() && !transaction.begin())) return
+    if (disabled || !(transaction.isActive() || transaction.begin())) {
+      return;
+    }
     transaction.editor.updateComponentInTransaction(componentId, (node) =>
-      onUpdate(node, nextValue),
-    )
+      onUpdate(node, nextValue)
+    );
   }
 
   return (
@@ -182,33 +193,36 @@ export function ComponentTextField({
         </>
       )}
     </Field>
-  )
+  );
 }
 
 export function numberFieldLeadingIcon(address: string, label: string) {
-  const iconClass = "size-3.5"
+  const iconClass = "size-3.5";
   if (address.includes("cornerRadius")) {
-    return <CornersOutIcon aria-hidden className={iconClass} />
+    return <CornersOutIcon aria-hidden className={iconClass} />;
   }
   if (address.includes("opacity")) {
-    return <PercentIcon aria-hidden className={iconClass} />
+    return <PercentIcon aria-hidden className={iconClass} />;
   }
-  if (address.endsWith("border.width") || label.toLowerCase().includes("weight")) {
-    return <LineSegmentIcon aria-hidden className={iconClass} />
+  if (
+    address.endsWith("border.width") ||
+    label.toLowerCase().includes("weight")
+  ) {
+    return <LineSegmentIcon aria-hidden className={iconClass} />;
   }
   if (address.endsWith("gap") || label.toLowerCase().includes("spacing")) {
-    return <RowsIcon aria-hidden className={iconClass} />
+    return <RowsIcon aria-hidden className={iconClass} />;
   }
   if (address.includes("fontSize")) {
-    return <TextTIcon aria-hidden className={iconClass} />
+    return <TextTIcon aria-hidden className={iconClass} />;
   }
   if (address.includes("lineHeight") || address.includes("height.value")) {
-    return <ArrowsVerticalIcon aria-hidden className={iconClass} />
+    return <ArrowsVerticalIcon aria-hidden className={iconClass} />;
   }
   if (address.includes("width.value")) {
-    return <ArrowsHorizontalIcon aria-hidden className={iconClass} />
+    return <ArrowsHorizontalIcon aria-hidden className={iconClass} />;
   }
-  return null
+  return null;
 }
 
 export function NumberField({
@@ -224,21 +238,21 @@ export function NumberField({
   unit,
   value,
 }: {
-  address: string
-  description?: string
-  exclusiveMin?: boolean
-  integer?: boolean
-  label: string
-  max?: number
-  min?: number
-  onChange: (value: number) => void
-  step?: number
-  unit?: string
-  value: number
+  address: string;
+  description?: string;
+  exclusiveMin?: boolean;
+  integer?: boolean;
+  label: string;
+  max?: number;
+  min?: number;
+  onChange: (value: number) => void;
+  step?: number;
+  unit?: string;
+  value: number;
 }) {
-  const { disabled } = useInspectorContext()
-  const transaction = useDocumentTransaction()
-  const leadingIcon = numberFieldLeadingIcon(address, label)
+  const { disabled } = useInspectorContext();
+  const transaction = useDocumentTransaction();
+  const leadingIcon = numberFieldLeadingIcon(address, label);
 
   function update(next: number) {
     if (
@@ -247,11 +261,11 @@ export function NumberField({
       (integer && !Number.isInteger(next)) ||
       (min !== undefined && (exclusiveMin ? next <= min : next < min)) ||
       (max !== undefined && next > max) ||
-      (!transaction.isActive() && !transaction.begin())
+      !(transaction.isActive() || transaction.begin())
     ) {
-      return
+      return;
     }
-    onChange(next)
+    onChange(next);
   }
 
   return (
@@ -261,7 +275,7 @@ export function NumberField({
           {leadingIcon ? (
             <span
               aria-hidden
-              className="text-muted-foreground pointer-events-none absolute inset-y-0 start-2 flex items-center"
+              className="pointer-events-none absolute inset-y-0 start-2 flex items-center text-muted-foreground"
             >
               {leadingIcon}
             </span>
@@ -284,7 +298,7 @@ export function NumberField({
           {unit ? (
             <span
               aria-hidden
-              className="text-muted-foreground pointer-events-none absolute inset-y-0 end-2 flex items-center text-[11px]"
+              className="pointer-events-none absolute inset-y-0 end-2 flex items-center text-[11px] text-muted-foreground"
             >
               {unit}
             </span>
@@ -292,15 +306,21 @@ export function NumberField({
         </div>
       )}
     </Field>
-  )
+  );
 }
 
 /** Flattens an item's children into the plain string the trigger shows. */
 function optionText(node: ReactNode): string {
-  if (typeof node === "string" || typeof node === "number") return String(node)
-  if (Array.isArray(node)) return node.map(optionText).join("")
-  if (isValidElement<{ children?: ReactNode }>(node)) return optionText(node.props.children)
-  return ""
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map(optionText).join("");
+  }
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return optionText(node.props.children);
+  }
+  return "";
 }
 
 /**
@@ -311,10 +331,12 @@ function optionText(node: ReactNode): string {
  */
 function optionsFromChildren(children: ReactNode) {
   return Children.toArray(children).flatMap((child) =>
-    isValidElement<{ children?: ReactNode; value?: string }>(child) && child.props.value != null
+    isValidElement<{ children?: ReactNode; value?: string }>(child) &&
+    child.props.value !== undefined &&
+    child.props.value !== null
       ? [{ label: optionText(child.props.children), value: child.props.value }]
-      : [],
-  )
+      : []
+  );
 }
 
 export function SelectField({
@@ -325,25 +347,30 @@ export function SelectField({
   onChange,
   value,
 }: {
-  address: string
-  children: ReactNode
-  description?: string
-  label: string
-  onChange: (value: string) => void
-  value: string
+  address: string;
+  children: ReactNode;
+  description?: string;
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
 }) {
-  const { disabled } = useInspectorContext()
-  const leadingIcon = address.includes("direction") ? (
-    value === "horizontal" ? (
-      <ColumnsIcon aria-hidden className="size-3.5" />
-    ) : (
-      <RowsIcon aria-hidden className="size-3.5" />
-    )
-  ) : address.includes("width") ? (
-    <ArrowsHorizontalIcon aria-hidden className="size-3.5" />
-  ) : address.includes("height") ? (
-    <ArrowsVerticalIcon aria-hidden className="size-3.5" />
-  ) : null
+  const { disabled } = useInspectorContext();
+  const leadingIcon = (() => {
+    if (address.includes("direction")) {
+      return value === "horizontal" ? (
+        <ColumnsIcon aria-hidden className="size-3.5" />
+      ) : (
+        <RowsIcon aria-hidden className="size-3.5" />
+      );
+    }
+    if (address.includes("width")) {
+      return <ArrowsHorizontalIcon aria-hidden className="size-3.5" />;
+    }
+    if (address.includes("height")) {
+      return <ArrowsVerticalIcon aria-hidden className="size-3.5" />;
+    }
+    return null;
+  })();
   return (
     <Field address={address} description={description} label={label}>
       {(fieldProps) => (
@@ -351,7 +378,7 @@ export function SelectField({
           {leadingIcon ? (
             <span
               aria-hidden
-              className="text-muted-foreground pointer-events-none absolute inset-y-0 start-2 flex items-center"
+              className="pointer-events-none absolute inset-y-0 start-2 flex items-center text-muted-foreground"
             >
               {leadingIcon}
             </span>
@@ -374,7 +401,7 @@ export function SelectField({
         </div>
       )}
     </Field>
-  )
+  );
 }
 
 export function CheckboxField({
@@ -384,13 +411,13 @@ export function CheckboxField({
   label,
   onChange,
 }: {
-  address: string
-  checked: boolean
-  description?: string
-  label: string
-  onChange: (checked: boolean) => void
+  address: string;
+  checked: boolean;
+  description?: string;
+  label: string;
+  onChange: (checked: boolean) => void;
 }) {
-  const { disabled } = useInspectorContext()
+  const { disabled } = useInspectorContext();
   return (
     <Field address={address} description={description} label={label}>
       {(fieldProps) => (
@@ -404,7 +431,7 @@ export function CheckboxField({
         />
       )}
     </Field>
-  )
+  );
 }
 
 export function ColorField({
@@ -413,19 +440,21 @@ export function ColorField({
   onUpdate,
   value,
 }: {
-  address: string
-  label: string
-  onUpdate: (node: InspectorNode, value: ProtocolColor) => InspectorNode
-  value: ProtocolColor
+  address: string;
+  label: string;
+  onUpdate: (node: InspectorNode, value: ProtocolColor) => InspectorNode;
+  value: ProtocolColor;
 }) {
-  const { componentId, disabled, document } = useInspectorContext()
-  const transaction = useDocumentTransaction()
+  const { componentId, disabled, document } = useInspectorContext();
+  const transaction = useDocumentTransaction();
 
   function update(nextValue: ProtocolColor) {
-    if (disabled || (!transaction.isActive() && !transaction.begin())) return
+    if (disabled || !(transaction.isActive() || transaction.begin())) {
+      return;
+    }
     transaction.editor.updateComponentInTransaction(componentId, (node) =>
-      onUpdate(node, nextValue),
-    )
+      onUpdate(node, nextValue)
+    );
   }
 
   return (
@@ -439,20 +468,20 @@ export function ColorField({
           invalid={fieldProps["aria-invalid"] === true}
           label={label}
           onBegin={() => {
-            transaction.begin()
+            transaction.begin();
           }}
           onCancel={() => {
-            transaction.cancel()
+            transaction.cancel();
           }}
           onChange={update}
           onCommit={() => {
-            transaction.commit()
+            transaction.commit();
           }}
           value={value}
         />
       )}
     </Field>
-  )
+  );
 }
 
 export function DocumentColorField({
@@ -461,17 +490,21 @@ export function DocumentColorField({
   onUpdate,
   value,
 }: {
-  address: string
-  label: string
-  onUpdate: (document: MosaicDocument, value: ProtocolColor) => MosaicDocument
-  value: ProtocolColor
+  address: string;
+  label: string;
+  onUpdate: (document: MosaicDocument, value: ProtocolColor) => MosaicDocument;
+  value: ProtocolColor;
 }) {
-  const { disabled, document } = useInspectorContext()
-  const transaction = useDocumentTransaction()
+  const { disabled, document } = useInspectorContext();
+  const transaction = useDocumentTransaction();
 
   function update(nextValue: ProtocolColor) {
-    if (disabled || (!transaction.isActive() && !transaction.begin())) return
-    transaction.editor.updateDocumentInTransaction((document) => onUpdate(document, nextValue))
+    if (disabled || !(transaction.isActive() || transaction.begin())) {
+      return;
+    }
+    transaction.editor.updateDocumentInTransaction((documentValue) =>
+      onUpdate(documentValue, nextValue)
+    );
   }
 
   return (
@@ -485,20 +518,20 @@ export function DocumentColorField({
           invalid={fieldProps["aria-invalid"] === true}
           label={label}
           onBegin={() => {
-            transaction.begin()
+            transaction.begin();
           }}
           onCancel={() => {
-            transaction.cancel()
+            transaction.cancel();
           }}
           onChange={update}
           onCommit={() => {
-            transaction.commit()
+            transaction.commit();
           }}
           value={value}
         />
       )}
     </Field>
-  )
+  );
 }
 
 export function EdgeInsetsFields({
@@ -507,10 +540,13 @@ export function EdgeInsetsFields({
   onEdgeChange,
   value,
 }: {
-  address: string
-  onChange?: (value: MosaicPaywallV02EdgeInsets) => void
-  onEdgeChange?: (edge: keyof MosaicPaywallV02EdgeInsets, value: number) => void
-  value: MosaicPaywallV02EdgeInsets
+  address: string;
+  onChange?: (value: MosaicPaywallV02EdgeInsets) => void;
+  onEdgeChange?: (
+    edge: keyof MosaicPaywallV02EdgeInsets,
+    value: number
+  ) => void;
+  value: MosaicPaywallV02EdgeInsets;
 }) {
   return (
     <TwoColumn>
@@ -529,12 +565,14 @@ export function EdgeInsetsFields({
           max={4096}
           min={0}
           onChange={(next) =>
-            onEdgeChange ? onEdgeChange(edge, next) : onChange?.({ ...value, [edge]: next })
+            onEdgeChange
+              ? onEdgeChange(edge, next)
+              : onChange?.({ ...value, [edge]: next })
           }
           unit="lu"
           value={value[edge]}
         />
       ))}
     </TwoColumn>
-  )
+  );
 }

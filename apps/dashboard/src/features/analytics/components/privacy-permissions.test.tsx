@@ -1,15 +1,15 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
-import type { AnalyticsAdapter } from "../api/analytics-adapter"
-import { DataPrivacyPanel, JobStatus } from "./data-privacy-panel"
+import type { AnalyticsAdapter } from "../api/analytics-adapter";
+import { DataPrivacyPanel, JobStatus } from "./data-privacy-panel";
 
 const scope = {
   organizationId: "org_01",
   projectId: "project_01",
   environmentId: "environment_01",
-}
+};
 
 describe("privacy permissions and recovery", () => {
   it("does not expose identity search controls to members", async () => {
@@ -21,19 +21,23 @@ describe("privacy permissions and recovery", () => {
         auditRetentionMonths: 24,
         exportExpiryDays: 7,
       })),
-    } as unknown as AnalyticsAdapter
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    } as unknown as AnalyticsAdapter;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     render(
       <QueryClientProvider client={queryClient}>
-        <DataPrivacyPanel adapter={adapter} role="member" scope={scope} />
-      </QueryClientProvider>,
-    )
-    expect(await screen.findByText(/Only organization owners/)).toBeInTheDocument()
-    expect(screen.queryByLabelText("Opaque identity")).not.toBeInTheDocument()
-  })
+        <DataPrivacyPanel adapter={adapter} scope={scope} />
+      </QueryClientProvider>
+    );
+    expect(
+      await screen.findByText(/Only organization owners/)
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Opaque identity")).not.toBeInTheDocument();
+  });
 
   it("offers an explicit recovery action for a failed asynchronous job", () => {
-    const onRetry = vi.fn()
+    const onRetry = vi.fn();
     render(
       <JobStatus
         job={{
@@ -45,10 +49,12 @@ describe("privacy permissions and recovery", () => {
         }}
         onDownload={() => undefined}
         onRetry={onRetry}
-      />,
-    )
-    screen.getByRole("button", { name: "Start recovery" }).click()
-    expect(onRetry).toHaveBeenCalledOnce()
-    expect(screen.getByRole("alert")).toHaveTextContent("storage_temporarily_unavailable")
-  })
-})
+      />
+    );
+    screen.getByRole("button", { name: "Start recovery" }).click();
+    expect(onRetry).toHaveBeenCalledOnce();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "storage_temporarily_unavailable"
+    );
+  });
+});

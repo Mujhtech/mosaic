@@ -1,25 +1,28 @@
 /* eslint-disable react-refresh/only-export-components -- internal tree support deliberately colocates private menu components with the rules they render. */
-import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu"
-import { ArrowDownIcon } from "@phosphor-icons/react/dist/ssr/ArrowDown"
-import { ArrowLineLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLineLeft"
-import { ArrowLineRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowLineRight"
-import { ArrowUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowUp"
-import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy"
-import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye"
-import { EyeSlashIcon } from "@phosphor-icons/react/dist/ssr/EyeSlash"
-import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock"
-import { LockOpenIcon } from "@phosphor-icons/react/dist/ssr/LockOpen"
-import { PencilSimpleIcon } from "@phosphor-icons/react/dist/ssr/PencilSimple"
-import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash"
-import type { DragEvent } from "react"
+import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
+import { ArrowDownIcon } from "@phosphor-icons/react/dist/ssr/ArrowDown";
+import { ArrowLineLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLineLeft";
+import { ArrowLineRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowLineRight";
+import { ArrowUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowUp";
+import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy";
+import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
+import { EyeSlashIcon } from "@phosphor-icons/react/dist/ssr/EyeSlash";
+import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
+import { LockOpenIcon } from "@phosphor-icons/react/dist/ssr/LockOpen";
+import { PencilSimpleIcon } from "@phosphor-icons/react/dist/ssr/PencilSimple";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
+import type { DragEvent } from "react";
 
-import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import {
   COMPONENT_LIBRARY_DRAG_TYPE,
   LAYER_TYPE_LABELS,
-} from "@/features/paywall-editor/components/component-catalog"
-import type { EditorState } from "@/features/paywall-editor/stores/editor-store"
-import type { StudioWorkspaceSnapshot } from "@/features/paywall-editor/stores/studio-workspace-store"
+} from "@/features/paywall-editor/components/component-catalog";
+import type { EditorState } from "@/features/paywall-editor/stores/editor-store";
+import type { StudioWorkspaceSnapshot } from "@/features/paywall-editor/stores/studio-workspace-store";
 import type {
   MosaicDocument,
   PreviewClient,
@@ -28,17 +31,18 @@ import type {
   TreeInsertionLocation,
   TreeMoveTarget,
   TreeOperationResult,
-} from "@/features/paywall-editor/types/editor"
-import { findAncestorNodeIds } from "@/features/paywall-editor/utils/document-tree"
+} from "@/features/paywall-editor/types/editor";
+import { findAncestorNodeIds } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 export function hasCatalogPayload(event: DragEvent<HTMLDivElement>) {
   return (
-    Array.from(event.dataTransfer.types ?? []).includes(COMPONENT_LIBRARY_DRAG_TYPE) ||
-    Boolean(event.dataTransfer.getData(COMPONENT_LIBRARY_DRAG_TYPE))
-  )
+    Array.from(event.dataTransfer.types ?? []).includes(
+      COMPONENT_LIBRARY_DRAG_TYPE
+    ) || Boolean(event.dataTransfer.getData(COMPONENT_LIBRARY_DRAG_TYPE))
+  );
 }
 
-export const LAYER_DRAG_TYPE = "application/x-mosaic-layer-id"
+export const LAYER_DRAG_TYPE = "application/x-mosaic-layer-id";
 
 export const CAPABILITY_BY_TYPE = {
   scrollContainer: "layout.scrollContainer",
@@ -54,7 +58,7 @@ export const CAPABILITY_BY_TYPE = {
   carousel: "component.carousel",
   switch: "component.switch",
   countdown: "component.countdown",
-} as const
+} as const;
 
 export const selectTreeState = (state: EditorState) => ({
   document: state.document,
@@ -62,141 +66,167 @@ export const selectTreeState = (state: EditorState) => ({
   hoveredComponentId: state.hoveredComponentId,
   isDocumentTransactionActive: state.isDocumentTransactionActive,
   selectedComponentId: state.selectedComponentId,
-})
+});
 export const selectLayerMetadata = (snapshot: StudioWorkspaceSnapshot) =>
-  snapshot.preferences.layerMetadata
+  snapshot.preferences.layerMetadata;
 
 export type TreeRow =
   | {
-      readonly kind: "scroll"
-      readonly id: string
-      readonly screenId: string
-      readonly presentation: "screen" | "sheet"
-      readonly depth: number
-      readonly parentId: null
+      readonly kind: "scroll";
+      readonly id: string;
+      readonly screenId: string;
+      readonly presentation: "screen" | "sheet";
+      readonly depth: number;
+      readonly parentId: null;
     }
   | {
-      readonly kind: "component"
-      readonly id: string
-      readonly depth: number
-      readonly parentId: string
-      readonly node: ProtocolNode
-      readonly progress?: boolean
-    }
+      readonly kind: "component";
+      readonly id: string;
+      readonly depth: number;
+      readonly parentId: string;
+      readonly node: ProtocolNode;
+      readonly progress?: boolean;
+    };
 
 export interface DropPreview {
-  readonly key: string
-  readonly target: TreeMoveTarget
-  readonly result: TreeOperationResult
+  readonly key: string;
+  readonly result: TreeOperationResult;
+  readonly target: TreeMoveTarget;
 }
 
 export interface RowDropTarget {
-  readonly key: string
-  readonly target: TreeMoveTarget
+  readonly key: string;
+  readonly target: TreeMoveTarget;
 }
 
 export interface PointerLayerDrag {
-  active: boolean
-  readonly pointerId: number
-  readonly sourceId: string
-  readonly startX: number
-  readonly startY: number
+  active: boolean;
+  readonly pointerId: number;
+  readonly sourceId: string;
+  readonly startX: number;
+  readonly startY: number;
 }
 
 export interface OperationNotice {
-  readonly tone: "success" | "danger"
-  readonly title: string
-  readonly detail: string
+  readonly detail: string;
+  readonly title: string;
+  readonly tone: "success" | "danger";
 }
 
 export interface CatalogDropPreview {
-  readonly rowId: string
-  readonly location: TreeInsertionLocation | null
-  readonly blocked: boolean
-  readonly label: string
+  readonly blocked: boolean;
+  readonly label: string;
+  readonly location: TreeInsertionLocation | null;
+  readonly rowId: string;
 }
 
 export interface LayerIssueSummary {
-  errorCount: number
-  warningCount: number
+  errorCount: number;
+  warningCount: number;
 }
 
 export interface LayerActionItemsProps {
   readonly availability: {
-    readonly delete: boolean
-    readonly duplicate: boolean
-    readonly indent: boolean
-    readonly moveDown: boolean
-    readonly moveUp: boolean
-    readonly outdent: boolean
-  }
-  readonly state: { readonly hidden: boolean; readonly locked: boolean }
-  readonly onDelete: () => void
-  readonly onDuplicate: () => void
-  readonly onIndent: () => void
-  readonly onMoveDown: () => void
-  readonly onMoveUp: () => void
-  readonly onOutdent: () => void
-  readonly onRename: () => void
-  readonly onToggleHidden: () => void
-  readonly onToggleLocked: () => void
+    readonly delete: boolean;
+    readonly duplicate: boolean;
+    readonly indent: boolean;
+    readonly moveDown: boolean;
+    readonly moveUp: boolean;
+    readonly outdent: boolean;
+  };
+  readonly onDelete: () => void;
+  readonly onDuplicate: () => void;
+  readonly onIndent: () => void;
+  readonly onMoveDown: () => void;
+  readonly onMoveUp: () => void;
+  readonly onOutdent: () => void;
+  readonly onRename: () => void;
+  readonly onToggleHidden: () => void;
+  readonly onToggleLocked: () => void;
+  readonly state: { readonly hidden: boolean; readonly locked: boolean };
 }
 
-export const EMPTY_LAYER_ISSUE_SUMMARY: LayerIssueSummary = { errorCount: 0, warningCount: 0 }
+export const EMPTY_LAYER_ISSUE_SUMMARY: LayerIssueSummary = {
+  errorCount: 0,
+  warningCount: 0,
+};
 
-export function supportsCapability(client: PreviewClient, requirement: RequiredCapability) {
+export function supportsCapability(
+  client: PreviewClient,
+  requirement: RequiredCapability
+) {
   return client.supportedCapabilities.some(
     (capability) =>
-      capability.name === requirement.name && capability.version === requirement.version,
-  )
+      capability.name === requirement.name &&
+      capability.version === requirement.version
+  );
 }
 
 export function validationStatusLabel(summary: LayerIssueSummary) {
-  const errors = `${summary.errorCount} validation ${summary.errorCount === 1 ? "error" : "errors"}`
-  if (summary.warningCount === 0) return errors
-  return `${errors} and ${summary.warningCount} ${summary.warningCount === 1 ? "warning" : "warnings"}`
+  const errors = `${summary.errorCount} validation ${summary.errorCount === 1 ? "error" : "errors"}`;
+  if (summary.warningCount === 0) {
+    return errors;
+  }
+  return `${errors} and ${summary.warningCount} ${summary.warningCount === 1 ? "warning" : "warnings"}`;
 }
 
-export function rowLabel(row: TreeRow, labels: Readonly<Record<string, string>>) {
+export function rowLabel(
+  row: TreeRow,
+  labels: Readonly<Record<string, string>>
+) {
   if (row.kind === "scroll") {
     return (
       labels[row.screenId]?.trim() ||
       `${row.presentation === "sheet" ? "Sheet" : "Screen"} · ${row.screenId}`
-    )
+    );
   }
-  const customLabel = labels[row.id]?.trim()
-  if (customLabel) return row.progress ? `In progress · ${customLabel}` : customLabel
-  if (row.parentId === row.id) return "Content Stack"
-  const label = defaultNodeLabel(row.node)
-  return row.progress ? `In progress · ${label}` : label
+  const customLabel = labels[row.id]?.trim();
+  if (customLabel) {
+    return row.progress ? `In progress · ${customLabel}` : customLabel;
+  }
+  if (row.parentId === row.id) {
+    return "Content Stack";
+  }
+  const label = defaultNodeLabel(row.node);
+  return row.progress ? `In progress · ${label}` : label;
 }
 
 export function defaultNodeLabel(node: ProtocolNode) {
-  if (node.type !== "button") return LAYER_TYPE_LABELS[node.type]
+  if (node.type !== "button") {
+    return LAYER_TYPE_LABELS[node.type];
+  }
   switch (node.action.type) {
     case "purchase":
-      return "Purchase"
+      return "Purchase";
     case "restore":
-      return "Restore"
+      return "Restore";
     case "close":
-      return "Close"
+      return "Close";
     case "navigateTo":
-      return "Navigate to screen"
+      return "Navigate to screen";
     case "navigateBack":
-      return "Navigate back"
+      return "Navigate back";
     case "openExternalUrl":
-      return "Open external URL"
+      return "Open external URL";
+    default: {
+      const unhandled: never = node.action;
+      throw new Error(
+        `Unhandled node.action.type: ${JSON.stringify(unhandled)}`
+      );
+    }
   }
 }
 
 export function componentLabel(
   node: ProtocolNode,
   rootContentIds: ReadonlySet<string>,
-  labels: Readonly<Record<string, string>>,
+  labels: Readonly<Record<string, string>>
 ) {
-  const customLabel = labels[node.id]?.trim()
-  if (customLabel) return customLabel
-  return rootContentIds.has(node.id) ? "Content Stack" : defaultNodeLabel(node)
+  const customLabel = labels[node.id]?.trim();
+  if (customLabel) {
+    return customLabel;
+  }
+  return rootContentIds.has(node.id) ? "Content Stack" : defaultNodeLabel(node);
 }
 
 export function LayerActionItems({
@@ -234,7 +264,10 @@ export function LayerActionItems({
           <ArrowLineLeftIcon aria-hidden /> Outdent
         </DropdownMenuItem>
       ) : null}
-      <DropdownMenuItem disabled={!availability.duplicate} onClick={onDuplicate}>
+      <DropdownMenuItem
+        disabled={!availability.duplicate}
+        onClick={onDuplicate}
+      >
         <CopyIcon aria-hidden /> Duplicate
       </DropdownMenuItem>
       <DropdownMenuSeparator />
@@ -247,23 +280,30 @@ export function LayerActionItems({
         {state.hidden ? "Show on canvas" : "Hide on canvas"}
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem disabled={!availability.delete} onClick={onDelete} variant="destructive">
+      <DropdownMenuItem
+        disabled={!availability.delete}
+        onClick={onDelete}
+        variant="destructive"
+      >
         <TrashIcon aria-hidden /> Delete
       </DropdownMenuItem>
     </>
-  )
+  );
 }
 
 export const contextMenuItemClass =
-  "focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 relative flex cursor-default items-center gap-1.5 rounded px-1.5 py-1 text-sm outline-none select-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0"
+  "focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 relative flex cursor-default items-center gap-1.5 rounded px-1.5 py-1 text-sm outline-none select-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0";
 
 export function ContextLayerActionItems(props: LayerActionItemsProps) {
   return (
     <>
-      <ContextMenuPrimitive.Item className={contextMenuItemClass} onClick={props.onRename}>
+      <ContextMenuPrimitive.Item
+        className={contextMenuItemClass}
+        onClick={props.onRename}
+      >
         <PencilSimpleIcon aria-hidden /> Rename layer
       </ContextMenuPrimitive.Item>
-      <ContextMenuPrimitive.Separator className="bg-border -mx-1 my-1 h-px" />
+      <ContextMenuPrimitive.Separator className="-mx-1 my-1 h-px bg-border" />
       <ContextMenuPrimitive.Item
         className={contextMenuItemClass}
         disabled={!props.availability.moveUp}
@@ -279,12 +319,18 @@ export function ContextLayerActionItems(props: LayerActionItemsProps) {
         <ArrowDownIcon aria-hidden /> Move down
       </ContextMenuPrimitive.Item>
       {props.availability.indent ? (
-        <ContextMenuPrimitive.Item className={contextMenuItemClass} onClick={props.onIndent}>
+        <ContextMenuPrimitive.Item
+          className={contextMenuItemClass}
+          onClick={props.onIndent}
+        >
           <ArrowLineRightIcon aria-hidden /> Indent
         </ContextMenuPrimitive.Item>
       ) : null}
       {props.availability.outdent ? (
-        <ContextMenuPrimitive.Item className={contextMenuItemClass} onClick={props.onOutdent}>
+        <ContextMenuPrimitive.Item
+          className={contextMenuItemClass}
+          onClick={props.onOutdent}
+        >
           <ArrowLineLeftIcon aria-hidden /> Outdent
         </ContextMenuPrimitive.Item>
       ) : null}
@@ -295,16 +341,30 @@ export function ContextLayerActionItems(props: LayerActionItemsProps) {
       >
         <CopyIcon aria-hidden /> Duplicate
       </ContextMenuPrimitive.Item>
-      <ContextMenuPrimitive.Separator className="bg-border -mx-1 my-1 h-px" />
-      <ContextMenuPrimitive.Item className={contextMenuItemClass} onClick={props.onToggleLocked}>
-        {props.state.locked ? <LockOpenIcon aria-hidden /> : <LockIcon aria-hidden />}
+      <ContextMenuPrimitive.Separator className="-mx-1 my-1 h-px bg-border" />
+      <ContextMenuPrimitive.Item
+        className={contextMenuItemClass}
+        onClick={props.onToggleLocked}
+      >
+        {props.state.locked ? (
+          <LockOpenIcon aria-hidden />
+        ) : (
+          <LockIcon aria-hidden />
+        )}
         {props.state.locked ? "Unlock canvas layer" : "Lock canvas layer"}
       </ContextMenuPrimitive.Item>
-      <ContextMenuPrimitive.Item className={contextMenuItemClass} onClick={props.onToggleHidden}>
-        {props.state.hidden ? <EyeIcon aria-hidden /> : <EyeSlashIcon aria-hidden />}
+      <ContextMenuPrimitive.Item
+        className={contextMenuItemClass}
+        onClick={props.onToggleHidden}
+      >
+        {props.state.hidden ? (
+          <EyeIcon aria-hidden />
+        ) : (
+          <EyeSlashIcon aria-hidden />
+        )}
         {props.state.hidden ? "Show on canvas" : "Hide on canvas"}
       </ContextMenuPrimitive.Item>
-      <ContextMenuPrimitive.Separator className="bg-border -mx-1 my-1 h-px" />
+      <ContextMenuPrimitive.Separator className="-mx-1 my-1 h-px bg-border" />
       <ContextMenuPrimitive.Item
         className={`${contextMenuItemClass} text-destructive focus:bg-destructive/10 focus:text-destructive`}
         disabled={!props.availability.delete}
@@ -313,41 +373,46 @@ export function ContextLayerActionItems(props: LayerActionItemsProps) {
         <TrashIcon aria-hidden /> Delete
       </ContextMenuPrimitive.Item>
     </>
-  )
+  );
 }
 
 export function LayerContextMenuContent({
   actions,
   finalFocus,
 }: {
-  actions: LayerActionItemsProps
-  finalFocus: boolean
+  actions: LayerActionItemsProps;
+  finalFocus: boolean;
 }) {
   return (
     <ContextMenuPrimitive.Portal>
-      <ContextMenuPrimitive.Positioner className="isolate z-50 outline-none" sideOffset={2}>
+      <ContextMenuPrimitive.Positioner
+        className="isolate z-50 outline-none"
+        sideOffset={2}
+      >
         <ContextMenuPrimitive.Popup
-          className="bg-popover text-popover-foreground ring-foreground/10 z-50 w-52 min-w-32 rounded p-1 shadow-md ring-1 outline-none"
+          className="z-50 w-52 min-w-32 rounded bg-popover p-1 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10"
           finalFocus={finalFocus}
         >
           <ContextLayerActionItems {...actions} />
         </ContextMenuPrimitive.Popup>
       </ContextMenuPrimitive.Positioner>
     </ContextMenuPrimitive.Portal>
-  )
+  );
 }
 
 export function visibleRows(
   document: MosaicDocument,
   expandedTreeNodes: ReadonlySet<string>,
-  collapsedScreenIds: ReadonlySet<string>,
+  collapsedScreenIds: ReadonlySet<string>
 ) {
-  const rows: TreeRow[] = []
+  const rows: TreeRow[] = [];
 
   function visitChildren(node: ProtocolNode, depth: number, progress: boolean) {
     if (node.type === "productSelector") {
-      node.cards.forEach((card) => visit(card, depth, node.id, progress))
-      return
+      for (const card of node.cards) {
+        visit(card, depth, node.id, progress);
+      }
+      return;
     }
     if (
       node.type === "stack" ||
@@ -355,23 +420,43 @@ export function visibleRows(
       node.type === "productCard" ||
       node.type === "productBadge"
     ) {
-      node.children.forEach((child) => visit(child, depth, node.id, progress))
-      if (node.type === "button") {
-        node.inProgressChildren?.forEach((child) => visit(child, depth, node.id, true))
+      for (const child of node.children) {
+        visit(child, depth, node.id, progress);
       }
-      return
+      if (node.type === "button") {
+        for (const child of node.inProgressChildren ?? []) {
+          visit(child, depth, node.id, true);
+        }
+      }
+      return;
     }
     if (node.type === "carousel") {
-      node.pages.forEach((page) => visit(page.content, depth, node.id, progress))
+      for (const page of node.pages) {
+        visit(page.content, depth, node.id, progress);
+      }
     }
   }
 
-  function visit(node: ProtocolNode, depth: number, parentId: string, progress = false) {
-    rows.push({ kind: "component", id: node.id, depth, parentId, node, progress })
-    if (expandedTreeNodes.has(node.id)) visitChildren(node, depth + 1, progress)
+  function visit(
+    node: ProtocolNode,
+    depth: number,
+    parentId: string,
+    progress = false
+  ) {
+    rows.push({
+      kind: "component",
+      id: node.id,
+      depth,
+      parentId,
+      node,
+      progress,
+    });
+    if (expandedTreeNodes.has(node.id)) {
+      visitChildren(node, depth + 1, progress);
+    }
   }
 
-  document.screens.forEach((screen) => {
+  for (const screen of document.screens) {
     rows.push({
       kind: "scroll",
       id: screen.layout.id,
@@ -379,32 +464,44 @@ export function visibleRows(
       presentation: screen.presentation.type,
       depth: 1,
       parentId: null,
-    })
+    });
     if (!collapsedScreenIds.has(screen.id)) {
-      visit(screen.layout.content, 2, screen.layout.content.id)
+      visit(screen.layout.content, 2, screen.layout.content.id);
     }
-  })
-  return rows
+  }
+  return rows;
 }
 
 export function isRootContentId(document: MosaicDocument, id: string) {
-  return document.screens.some((screen) => screen.layout.content.id === id)
+  return document.screens.some((screen) => screen.layout.content.id === id);
 }
 
-export function isMarked(document: MosaicDocument, id: string, markedIds: ReadonlySet<string>) {
+export function isMarked(
+  document: MosaicDocument,
+  id: string,
+  markedIds: ReadonlySet<string>
+) {
   return (
     markedIds.has(id) ||
-    findAncestorNodeIds(document, id).some((ancestorId) => markedIds.has(ancestorId))
-  )
+    findAncestorNodeIds(document, id).some((ancestorId) =>
+      markedIds.has(ancestorId)
+    )
+  );
 }
 
 export function actionDisabledReason(
   document: MosaicDocument,
   selectedComponentId: string | null,
-  effectivelyLocked: boolean,
+  effectivelyLocked: boolean
 ) {
-  if (!selectedComponentId) return "Select a component first"
-  if (isRootContentId(document, selectedComponentId)) return "The root content Stack is fixed"
-  if (effectivelyLocked) return "Unlock this layer before changing its structure"
-  return null
+  if (!selectedComponentId) {
+    return "Select a component first";
+  }
+  if (isRootContentId(document, selectedComponentId)) {
+    return "The root content Stack is fixed";
+  }
+  if (effectivelyLocked) {
+    return "Unlock this layer before changing its structure";
+  }
+  return null;
 }

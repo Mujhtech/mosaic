@@ -1,45 +1,45 @@
-import { CodeIcon } from "@phosphor-icons/react/dist/ssr/Code"
-import { ChartLineUpIcon } from "@phosphor-icons/react/dist/ssr/ChartLineUp"
-import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix"
-import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key"
-import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package"
-import { ReceiptIcon } from "@phosphor-icons/react/dist/ssr/Receipt"
-import { StorefrontIcon } from "@phosphor-icons/react/dist/ssr/Storefront"
-import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour"
-import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree"
-import { useQuery } from "@tanstack/react-query"
-import { Link, useRouterState } from "@tanstack/react-router"
-
-import { NavMain } from "@/components/navigation/nav-main"
-import { dashboardBuildInfo } from "@/config/environment"
+import { ChartLineUpIcon } from "@phosphor-icons/react/dist/ssr/ChartLineUp";
+import { CodeIcon } from "@phosphor-icons/react/dist/ssr/Code";
+import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
+import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
+import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package";
+import { ReceiptIcon } from "@phosphor-icons/react/dist/ssr/Receipt";
+import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
+import { StorefrontIcon } from "@phosphor-icons/react/dist/ssr/Storefront";
+import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useRouterState } from "@tanstack/react-router";
+import type { NavigationItem } from "@/components/navigation/nav-main";
+import { NavMain } from "@/components/navigation/nav-main";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
   SidebarRail,
-} from "@/components/ui/sidebar"
-import { readWorkspaceScope } from "@/features/orgs/types/workspace-navigation"
-import { UserMenu } from "@/features/auth/components/user-menu"
-import { billingSettingsQueryOptions } from "@/features/store-connections/queries/billing-settings-queries"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { useActiveEnvironment } from "@/features/environments/hooks/use-active-environment"
-import { EnvironmentSwitcher } from "@/features/environments/components/environment-switcher"
-import { useOrganizationAccess } from "@/hooks/use-organization-access"
-import type { NavigationItem } from "@/components/navigation/nav-main"
-import { OrganizationSwitcher } from "./organization-switcher"
+} from "@/components/ui/sidebar";
+import { dashboardBuildInfo } from "@/config/environment";
+import { UserMenu } from "@/features/auth/components/user-menu";
+import { EnvironmentSwitcher } from "@/features/environments/components/environment-switcher";
+import { useActiveEnvironment } from "@/features/environments/hooks/use-active-environment";
+import { readWorkspaceScope } from "@/features/orgs/types/workspace-navigation";
+import { billingSettingsQueryOptions } from "@/features/store-connections/queries/billing-settings-queries";
+import { useOrganizationAccess } from "@/hooks/use-organization-access";
+import { OrganizationSwitcher } from "./organization-switcher";
 
 export function CloudWorkspaceShell() {
-  const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const scope = readWorkspaceScope(pathname)
-  const access = useOrganizationAccess(scope.organizationId ?? "")
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  const scope = readWorkspaceScope(pathname);
+  const access = useOrganizationAccess(scope.organizationId ?? "");
   // The address names the Environment by alias; the id stays internal.
-  const { activeId, alias } = useActiveEnvironment()
-  const projectBase = `/orgs/${scope.organizationId}/projects/${scope.projectId}/env/${alias}`
+  const { activeId, alias } = useActiveEnvironment();
+  const projectBase = `/orgs/${scope.organizationId}/projects/${scope.projectId}/env/${alias}`;
 
   // Administrative surfaces are hidden until membership confirms management
   // rights. The API remains the authority; this only prevents dead-end links.
-  const canManage = access.canManage
+  const { canManage } = access;
 
   // Mosaic Billing is per-Project opt-in. While it is off, its Environment
   // surfaces have nothing to show, so the group collapses to the one page that
@@ -48,17 +48,18 @@ export function CloudWorkspaceShell() {
   //   ...environmentsQueryOptions(scope.projectId ?? ""),
   //   enabled: canManage && Boolean(scope.projectId),
   // })
-  const probeEnvironmentId = activeId ?? ""
+  const probeEnvironmentId = activeId ?? "";
   const billingSettings = useQuery({
     ...billingSettingsQueryOptions(scope.projectId ?? "", probeEnvironmentId),
-    enabled: canManage && Boolean(scope.projectId) && probeEnvironmentId.length > 0,
-  })
+    enabled:
+      canManage && Boolean(scope.projectId) && probeEnvironmentId.length > 0,
+  });
   // Unknown state shows the full group: a nav that hides itself because a probe
   // failed is worse than one item too many.
-  const billingEnabled = billingSettings.data?.billingEnabled !== false
+  const billingEnabled = billingSettings.data?.billingEnabled !== false;
 
   function withManagement(items: NavigationItem[]) {
-    return canManage ? items : []
+    return canManage ? items : [];
   }
 
   return (
@@ -68,9 +69,8 @@ export function CloudWorkspaceShell() {
         <EnvironmentSwitcher />
       </SidebarHeader>
       <SidebarContent className="scrollbar-thin scrollbar-gutter-stable">
-        {scope.projectId && (
+        {scope.projectId ? (
           <NavMain
-            label="Workspace"
             items={[
               {
                 to: `${projectBase}`,
@@ -84,27 +84,27 @@ export function CloudWorkspaceShell() {
                   {
                     to: `${projectBase}/monetization/paywalls`,
                     title: "Paywalls",
-                    icon: <></>
+                    icon: <></>,
                   },
                   {
                     to: `${projectBase}/monetization/experiments`,
                     title: "Experiments",
-                    icon: <></>
+                    icon: <></>,
                   },
                   {
                     to: `${projectBase}/monetization/placements`,
                     title: "Placements",
-                    icon: <></>
+                    icon: <></>,
                   },
                   {
                     to: `${projectBase}/monetization/assets`,
                     title: "Assets",
-                    icon: <></>
+                    icon: <></>,
                   },
                   {
                     to: `${projectBase}/monetization/releases`,
                     title: "Publish history",
-                    icon: <></>
+                    icon: <></>,
                   },
                 ],
               },
@@ -249,11 +249,11 @@ export function CloudWorkspaceShell() {
                 },
               ]),
             ]}
+            label="Workspace"
           />
-        )}
-        {scope.organizationId && canManage && (
+        ) : null}
+        {scope.organizationId && canManage ? (
           <NavMain
-            label="Organization"
             items={[
               {
                 to: `/orgs/${scope.organizationId}/members`,
@@ -261,13 +261,14 @@ export function CloudWorkspaceShell() {
                 title: "Members",
               },
             ]}
+            label="Organization"
           />
-        )}
+        ) : null}
       </SidebarContent>
       <SidebarFooter>
         <UserMenu />
         <Link
-          className="text-muted-foreground hover:text-foreground px-2 pb-1 text-[11px] group-data-[collapsible=icon]:hidden"
+          className="px-2 pb-1 text-[11px] text-muted-foreground hover:text-foreground group-data-[collapsible=icon]:hidden"
           to="/diagnostics"
         >
           Mosaic {dashboardBuildInfo.version} · diagnostics
@@ -275,5 +276,5 @@ export function CloudWorkspaceShell() {
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
-  )
+  );
 }

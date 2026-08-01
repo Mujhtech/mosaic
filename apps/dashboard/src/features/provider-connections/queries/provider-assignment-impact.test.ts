@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest";
 
-import { providerDocumentReferencesProducts } from "@/features/provider-connections/queries/provider-connection-queries"
+import { providerDocumentReferencesProducts } from "@/features/provider-connections/queries/provider-connection-queries";
 
 describe("provider assignment Paywall impact", () => {
   it("finds stable Mosaic Product IDs without treating provider identifiers as bindings", () => {
@@ -13,10 +13,16 @@ describe("provider assignment Paywall impact", () => {
           },
         },
       ],
-    }
+    };
 
-    expect(providerDocumentReferencesProducts(document, new Set(["product_monthly"]))).toBe(true)
-    expect(providerDocumentReferencesProducts(document, new Set(["rc_resource_123"]))).toBe(false)
-    expect(providerDocumentReferencesProducts(document, new Set(["product_yearly"]))).toBe(false)
-  })
-})
+    expect(
+      providerDocumentReferencesProducts(document, new Set(["product_monthly"]))
+    ).toBe(true);
+    expect(
+      providerDocumentReferencesProducts(document, new Set(["rc_resource_123"]))
+    ).toBe(false);
+    expect(
+      providerDocumentReferencesProducts(document, new Set(["product_yearly"]))
+    ).toBe(false);
+  });
+});

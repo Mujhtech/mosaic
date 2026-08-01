@@ -1,32 +1,33 @@
-import { PlusIcon } from "@phosphor-icons/react"
-import { useQuery } from "@tanstack/react-query"
-import { Link } from "@tanstack/react-router"
+import { PlusIcon } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 
-import { EmptyState } from "@/components/feedback/empty-state"
-import { buttonVariants } from "@/components/ui/button-variants"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace"
-import { useOrganizationAccess } from "@/hooks/use-organization-access"
-import { cn } from "@/lib/utils"
-import { useExperimentAdapter } from "../api/use-experiment-adapter"
-import { experimentsQueryOptions } from "../queries/experiment-queries"
-import { ExperimentStatusBadge } from "./experiment-status"
-import { MutualExclusionGroupManager } from "./mutual-exclusion-group-manager"
+import { EmptyState } from "@/components/feedback/empty-state";
+import { buttonVariants } from "@/components/ui/button-variants";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace";
+import { useOrganizationAccess } from "@/hooks/use-organization-access";
+import { workspaceScopeParams } from "@/lib/routing/workspace-params";
+import { cn } from "@/lib/utils";
+import { useExperimentAdapter } from "../api/use-experiment-adapter";
+import { experimentsQueryOptions } from "../queries/experiment-queries";
+import { ExperimentStatusBadge } from "./experiment-status";
+import { MutualExclusionGroupManager } from "./mutual-exclusion-group-manager";
 
 export function ExperimentsPage({
   environmentId,
   organizationId,
   projectId,
 }: {
-  environmentId: string
-  organizationId: string
-  projectId: string
+  environmentId: string;
+  organizationId: string;
+  projectId: string;
 }) {
-  const scope = { environmentId, projectId }
-  const adapter = useExperimentAdapter()
-  const experiments = useQuery(experimentsQueryOptions(scope, adapter))
-  const access = useOrganizationAccess(organizationId)
+  const scope = { environmentId, projectId };
+  const adapter = useExperimentAdapter();
+  const experiments = useQuery(experimentsQueryOptions(scope, adapter));
+  const access = useOrganizationAccess(organizationId);
   const state = resolveHostedQueryState({
     emptyDescription: "Create the first Experiment for this Environment.",
     emptyTitle: "No Experiments",
@@ -34,19 +35,25 @@ export function ExperimentsPage({
     isEmpty: false,
     isPending: experiments.isPending,
     loadingDescription: "Loading Environment-scoped Experiments.",
-    onRetry: () => void experiments.refetch(),
-    permissionDescription: "Environment access is required to inspect Experiments.",
+    onRetry: () => {
+      experiments.refetch();
+    },
+    permissionDescription:
+      "Environment access is required to inspect Experiments.",
     scope: { environmentId, organizationId, projectId },
-  })
+  });
   const createLink = access.canManage ? (
     <Link
       className={buttonVariants()}
-      params={(prev) => prev}
+      params={(prev) => ({
+        ...prev,
+        ...workspaceScopeParams(prev),
+      })}
       to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new"
     >
       <PlusIcon aria-hidden size={16} /> New Experiment
     </Link>
-  ) : undefined
+  ) : undefined;
 
   return (
     <MonetizationWorkspace
@@ -59,14 +66,20 @@ export function ExperimentsPage({
       title="Experiments"
     >
       <HostedResourceBoundary state={state}>
-        {access.canManage ? <MutualExclusionGroupManager scope={scope} /> : null}
+        {access.canManage ? (
+          <MutualExclusionGroupManager scope={scope} />
+        ) : null}
         {experiments.data?.length ? (
           <div className="grid gap-3">
             {experiments.data.map((experiment) => (
               <Link
-                className="hover:border-primary/40 focus-visible:ring-ring grid gap-3 rounded border p-4 transition-colors focus-visible:ring-3 focus-visible:outline-none md:grid-cols-[1fr_auto]"
+                className="grid gap-3 rounded border p-4 transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring md:grid-cols-[1fr_auto]"
                 key={experiment.id}
-                params={(prev) => ({ ...prev, experimentId: experiment.id })}
+                params={(prev) => ({
+                  ...prev,
+                  ...workspaceScopeParams(prev),
+                  experimentId: experiment.id,
+                })}
                 to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId"
               >
                 <div>
@@ -74,14 +87,14 @@ export function ExperimentsPage({
                     <h2 className="font-semibold">{experiment.name}</h2>
                     <ExperimentStatusBadge status={experiment.status} />
                   </div>
-                  <p className="text-muted-foreground mt-1 text-sm">
+                  <p className="mt-1 text-muted-foreground text-sm">
                     {experiment.placementName} ·{" "}
                     {experiment.activeVersionNumber
                       ? `Version ${experiment.activeVersionNumber}`
                       : "Unpublished Draft"}
                   </p>
                 </div>
-                <p className="text-muted-foreground self-center text-xs">
+                <p className="self-center text-muted-foreground text-xs">
                   Updated {new Date(experiment.updatedAt).toLocaleString()}
                 </p>
               </Link>
@@ -94,13 +107,19 @@ export function ExperimentsPage({
             title="No Experiments in this Environment"
           />
         )}
-        {!access.canManage && !access.isPending ? (
-          <p className={cn("text-muted-foreground text-sm", experiments.data?.length && "mt-3")}>
-            Members can inspect setup and aggregate results. Owner or admin access is required to
-            mutate Experiments or request ordinary raw export.
+        {access.canManage || access.isPending ? null : (
+          <p
+            className={cn(
+              "text-muted-foreground text-sm",
+              experiments.data?.length && "mt-3"
+            )}
+          >
+            Members can inspect setup and aggregate results. Owner or admin
+            access is required to mutate Experiments or request ordinary raw
+            export.
           </p>
-        ) : null}
+        )}
       </HostedResourceBoundary>
     </MonetizationWorkspace>
-  )
+  );
 }

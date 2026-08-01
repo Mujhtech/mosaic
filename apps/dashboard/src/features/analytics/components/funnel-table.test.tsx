@@ -1,7 +1,7 @@
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
-import { FunnelTable } from "./funnel-table"
+import { FunnelTable } from "./funnel-table";
 
 describe("FunnelTable", () => {
   it("renders provider-confirmed unavailability without a false zero or drop-off bar", () => {
@@ -37,14 +37,18 @@ describe("FunnelTable", () => {
             },
           ],
         }}
-      />,
-    )
+      />
+    );
 
-    expect(screen.getByText("Provider-confirmed · Unavailable")).toBeInTheDocument()
-    expect(screen.getAllByText("Unavailable")).toHaveLength(2)
-    expect(screen.getByText("provider_confirmed_unavailable")).toBeInTheDocument()
-    expect(screen.queryByText("100.0%")).not.toBeInTheDocument()
-    expect(screen.getAllByText("—")).toHaveLength(2)
-    expect(screen.getAllByRole("img")).toHaveLength(1)
-  })
-})
+    expect(
+      screen.getByText("Provider-confirmed · Unavailable")
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Unavailable")).toHaveLength(2);
+    expect(
+      screen.getByText("provider_confirmed_unavailable")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("100.0%")).not.toBeInTheDocument();
+    expect(screen.getAllByText("—")).toHaveLength(2);
+    expect(screen.getAllByRole("img")).toHaveLength(1);
+  });
+});

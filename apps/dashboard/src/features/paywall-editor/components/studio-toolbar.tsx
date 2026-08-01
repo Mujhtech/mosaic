@@ -1,48 +1,58 @@
-import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft"
-import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise"
-import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise"
-import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle"
-import { CloudArrowUpIcon } from "@phosphor-icons/react/dist/ssr/CloudArrowUp"
-import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple"
-import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/ssr/PlugsConnected"
-import { RocketLaunchIcon } from "@phosphor-icons/react/dist/ssr/RocketLaunch"
-import { UploadSimpleIcon } from "@phosphor-icons/react/dist/ssr/UploadSimple"
-import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle"
-import { StatusMessage, ToolbarGroup } from "@mosaic/design-system"
+import { StatusMessage, ToolbarGroup } from "@mosaic/design-system";
+import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { CloudArrowUpIcon } from "@phosphor-icons/react/dist/ssr/CloudArrowUp";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
+import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/ssr/PlugsConnected";
+import { RocketLaunchIcon } from "@phosphor-icons/react/dist/ssr/RocketLaunch";
+import { UploadSimpleIcon } from "@phosphor-icons/react/dist/ssr/UploadSimple";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 
-import { Button } from "@/components/ui/button"
-import { buttonVariants } from "@/components/ui/button-variants"
-import type { DraftAutosaveController } from "@/features/paywall-editor/hooks/use-draft-autosave"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
+import type { DraftAutosaveController } from "@/features/paywall-editor/hooks/use-draft-autosave";
+import { cn } from "@/lib/utils";
 
 function humanizeDocumentIdentity(identity: string) {
   const words = identity
     .trim()
     .replace(/([a-z\d])([A-Z])/g, "$1 $2")
     .replace(/[-_]+/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/\s+/g, " ");
 
-  if (!words) return "Untitled paywall"
-  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`
+  if (!words) {
+    return "Untitled paywall";
+  }
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
 function AutosaveStatus({
   controller,
   mode,
 }: {
-  controller: DraftAutosaveController
-  mode: "hosted" | "local"
+  controller: DraftAutosaveController;
+  mode: "hosted" | "local";
 }) {
   if (controller.status === "failed" || controller.status === "offline") {
-    const offline = controller.status === "offline"
+    const offline = controller.status === "offline";
     return (
       <StatusMessage
-        className="border-destructive/25 bg-destructive/5 flex h-7 items-center gap-1.5 rounded border px-2 text-xs"
+        className="flex h-7 items-center gap-1.5 rounded border border-destructive/25 bg-destructive/5 px-2 text-xs"
         tone="danger"
       >
         <WarningCircleIcon aria-hidden weight="fill" />
         <span>
-          {offline ? "Offline · edits kept" : mode === "local" ? "Autosave failed" : "Save failed"}
+          {(() => {
+            if (offline) {
+              return "Offline · edits kept";
+            }
+            if (mode === "local") {
+              return "Autosave failed";
+            }
+            return "Save failed";
+          })()}
         </span>
         <Button
           className="ml-0.5 h-5 px-1.5 transition-none motion-reduce:transition-none"
@@ -54,71 +64,82 @@ function AutosaveStatus({
           {offline ? "Try again" : "Retry"}
         </Button>
       </StatusMessage>
-    )
+    );
   }
 
   if (controller.status === "conflict") {
     return (
       <StatusMessage
-        className="border-destructive/25 bg-destructive/5 flex h-7 items-center gap-1.5 rounded border px-2 text-xs"
+        className="flex h-7 items-center gap-1.5 rounded border border-destructive/25 bg-destructive/5 px-2 text-xs"
         tone="danger"
       >
         <WarningCircleIcon aria-hidden weight="fill" />
         <span>Save conflict · edits kept</span>
       </StatusMessage>
-    )
+    );
   }
 
-  const label =
-    mode === "local"
-      ? controller.status === "saving"
-        ? "Saving locally"
-        : controller.status === "saved"
-          ? "Saved locally"
-          : "Local draft"
-      : controller.status === "saving"
-        ? "Saving hosted Draft"
-        : controller.status === "saved"
-          ? "Hosted Draft saved"
-          : controller.status === "unsaved"
-            ? "Unsaved changes"
-            : "Hosted Draft"
+  const label = (() => {
+    if (mode === "local") {
+      return (() => {
+        if (controller.status === "saving") {
+          return "Saving locally";
+        }
+        if (controller.status === "saved") {
+          return "Saved locally";
+        }
+        return "Local draft";
+      })();
+    }
+    if (controller.status === "saving") {
+      return "Saving hosted Draft";
+    }
+    if (controller.status === "saved") {
+      return "Hosted Draft saved";
+    }
+    if (controller.status === "unsaved") {
+      return "Unsaved changes";
+    }
+    return "Hosted Draft";
+  })();
 
   return (
     <StatusMessage
-      className="text-muted-foreground flex h-7 items-center gap-1.5 px-1 text-xs whitespace-nowrap"
+      className="flex h-7 items-center gap-1.5 whitespace-nowrap px-1 text-muted-foreground text-xs"
       tone={controller.status === "saved" ? "success" : "info"}
     >
-      {controller.status === "saved" ? <CheckCircleIcon aria-hidden weight="fill" /> : null}
+      {controller.status === "saved" ? (
+        <CheckCircleIcon aria-hidden weight="fill" />
+      ) : null}
       <span>{label}</span>
     </StatusMessage>
-  )
+  );
 }
 
 export interface StudioToolbarProps {
-  readonly autosave: DraftAutosaveController
-  readonly canRedo: boolean
-  readonly canUndo: boolean
-  readonly documentIdentity: string
-  readonly previewClientCount: number
-  readonly previewSummary: string
-  readonly onBack: () => boolean
-  readonly onConnectHosted?: () => boolean
-  readonly onExport: () => void
-  readonly onRequestImport: () => void
-  readonly onOpenPreviewConnections: () => void
-  readonly onRedo: () => void
-  readonly onUndo: () => void
-  readonly mode?: "hosted" | "local"
-  readonly backHref?: string
-  readonly backLabel?: string
-  readonly environmentLabel?: string
-  readonly onPublish?: () => void
-  readonly publishDisabled?: boolean
-  readonly connectHostedHref?: string
+  readonly autosave: DraftAutosaveController;
+  readonly backHref?: string;
+  readonly backLabel?: string;
+  readonly canRedo: boolean;
+  readonly canUndo: boolean;
+  readonly connectHostedHref?: string;
+  readonly documentIdentity: string;
+  readonly environmentLabel?: string;
+  readonly mode?: "hosted" | "local";
+  readonly onBack: () => boolean;
+  readonly onConnectHosted?: () => boolean;
+  readonly onExport: () => void;
+  readonly onOpenPreviewConnections: () => void;
+  readonly onPublish?: () => void;
+  readonly onRedo: () => void;
+  readonly onRequestImport: () => void;
+  readonly onUndo: () => void;
+  readonly previewClientCount: number;
+  readonly previewSummary: string;
+  readonly publishDisabled?: boolean;
 }
 
-const TOOLBAR_BUTTON_CLASS = "transition-none motion-reduce:transition-none"
+const TOOLBAR_BUTTON_CLASS = "transition-none motion-reduce:transition-none";
 
 export function StudioToolbar({
   autosave,
@@ -143,14 +164,19 @@ export function StudioToolbar({
   connectHostedHref = "/workspace",
 }: StudioToolbarProps) {
   return (
-    <header className="border-border bg-background flex min-h-12 shrink-0 items-center gap-2 border-b px-2 py-2 lg:px-3">
+    <header className="flex min-h-12 shrink-0 items-center gap-2 border-border border-b bg-background px-2 py-2 lg:px-3">
       <ToolbarGroup aria-label="Studio navigation" className="shrink-0">
         <a
           aria-label={`Back to ${backLabel}`}
-          className={cn(buttonVariants({ size: "sm", variant: "ghost" }), TOOLBAR_BUTTON_CLASS)}
+          className={cn(
+            buttonVariants({ size: "sm", variant: "ghost" }),
+            TOOLBAR_BUTTON_CLASS
+          )}
           href={backHref}
           onClick={(event) => {
-            if (!onBack()) event.preventDefault()
+            if (!onBack()) {
+              event.preventDefault();
+            }
           }}
           title={`Back to ${backLabel}`}
         >
@@ -159,24 +185,30 @@ export function StudioToolbar({
         </a>
       </ToolbarGroup>
 
-      <div className="min-w-24 shrink overflow-hidden px-1" data-readonly-document-identity="true">
+      <div
+        className="min-w-24 shrink overflow-hidden px-1"
+        data-readonly-document-identity="true"
+      >
         <h1
-          className="truncate text-sm font-semibold"
+          className="truncate font-semibold text-sm"
           title={humanizeDocumentIdentity(documentIdentity)}
         >
           {humanizeDocumentIdentity(documentIdentity)}
         </h1>
       </div>
 
-      <div className="ml-auto flex min-w-0 [scrollbar-width:none] items-center gap-1 overflow-x-auto">
+      <div className="ml-auto flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
         {environmentLabel ? (
-          <span className="border-border bg-muted/55 text-muted-foreground hidden rounded-full border px-2.5 py-1 text-xs font-medium xl:inline-flex">
+          <span className="hidden rounded-full border border-border bg-muted/55 px-2.5 py-1 font-medium text-muted-foreground text-xs xl:inline-flex">
             {environmentLabel}
           </span>
         ) : null}
         <AutosaveStatus controller={autosave} mode={mode} />
 
-        <ToolbarGroup aria-label="Edit history" className="flex shrink-0 items-center gap-0.5">
+        <ToolbarGroup
+          aria-label="Edit history"
+          className="flex shrink-0 items-center gap-0.5"
+        >
           <Button
             aria-label="Undo"
             className={TOOLBAR_BUTTON_CLASS}
@@ -203,7 +235,10 @@ export function StudioToolbar({
           </Button>
         </ToolbarGroup>
 
-        <ToolbarGroup aria-label="Preview connections" className="flex shrink-0 items-center gap-1">
+        <ToolbarGroup
+          aria-label="Preview connections"
+          className="flex shrink-0 items-center gap-1"
+        >
           <Button
             aria-controls="connected-preview-panel"
             aria-describedby="studio-preview-summary"
@@ -230,11 +265,13 @@ export function StudioToolbar({
             <a
               className={cn(
                 buttonVariants({ size: "sm", variant: "outline" }),
-                TOOLBAR_BUTTON_CLASS,
+                TOOLBAR_BUTTON_CLASS
               )}
               href={connectHostedHref}
               onClick={(event) => {
-                if (!onConnectHosted()) event.preventDefault()
+                if (!onConnectHosted()) {
+                  event.preventDefault();
+                }
               }}
               title="Save this local document and choose a hosted Project and Environment"
             >
@@ -280,5 +317,5 @@ export function StudioToolbar({
         </ToolbarGroup>
       </div>
     </header>
-  )
+  );
 }

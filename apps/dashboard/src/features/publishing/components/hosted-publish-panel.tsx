@@ -1,21 +1,22 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link } from "@tanstack/react-router"
-import { useEffect, useRef, useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
 
-import { EmptyState } from "@/components/feedback/empty-state"
-import { Button } from "@/components/ui/button"
-import { describeApiError } from "@/lib/api/errors"
-import { buttonVariants } from "@/components/ui/button-variants"
-import { PublishReview } from "@/features/publishing/components/publish-review"
-import { publishDraftMutationOptions } from "@/features/publishing/mutations/publish-mutation"
-import { publishValidationQueryOptions } from "@/features/publishing/queries/publish-validation-query"
-import { useHostedDraftSession } from "@/features/paywalls/stores/use-hosted-draft-session"
-import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter"
+import { EmptyState } from "@/components/feedback/empty-state";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
+import { hostedStudioPublishReviewHref } from "@/features/paywall-editor/types/studio-source";
+import { useHostedDraftSession } from "@/features/paywalls/stores/use-hosted-draft-session";
+import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter";
+import { PublishReview } from "@/features/publishing/components/publish-review";
+import { publishDraftMutationOptions } from "@/features/publishing/mutations/publish-mutation";
+import { publishValidationQueryOptions } from "@/features/publishing/queries/publish-validation-query";
 import {
   publishRecoveryHref,
   publishRecoveryLabel,
-} from "@/features/publishing/types/publish-recovery"
-import { hostedStudioPublishReviewHref } from "@/features/paywall-editor/types/studio-source"
+} from "@/features/publishing/types/publish-recovery";
+import { describeApiError } from "@/lib/api/errors";
+import { workspaceScopeParams } from "@/lib/routing/workspace-params";
 
 export function HostedPublishPanel({
   environmentId,
@@ -24,36 +25,38 @@ export function HostedPublishPanel({
   paywallId,
   projectId,
 }: {
-  environmentId: string
-  environmentName: string
-  organizationId: string
-  paywallId: string
-  projectId: string
+  environmentId: string;
+  environmentName: string;
+  organizationId: string;
+  paywallId: string;
+  projectId: string;
 }) {
-  const adapter = useHostedPublishingAdapter()
-  const session = useHostedDraftSession()
-  const queryClient = useQueryClient()
-  const [acknowledgedRevision, setAcknowledgedRevision] = useState<number | null>(null)
-  const expectedRevision = session?.draft.revision ?? 0
-  const acknowledgeMockProducts = acknowledgedRevision === expectedRevision
+  const adapter = useHostedPublishingAdapter();
+  const session = useHostedDraftSession();
+  const queryClient = useQueryClient();
+  const [acknowledgedRevision, setAcknowledgedRevision] = useState<
+    number | null
+  >(null);
+  const expectedRevision = session?.draft.revision ?? 0;
+  const acknowledgeMockProducts = acknowledgedRevision === expectedRevision;
   const validationInput = {
     draftId: session?.draft.id ?? "unavailable",
     environmentId,
     expectedRevision,
     paywallId,
     projectId,
-  }
+  };
   const validation = useQuery({
     ...publishValidationQueryOptions(validationInput, adapter),
     enabled: adapter.status === "available" && !!session,
-  })
+  });
   const publish = useMutation(
     publishDraftMutationOptions(
       { ...validationInput, acknowledgeMockProducts },
       adapter,
-      queryClient,
-    ),
-  )
+      queryClient
+    )
+  );
 
   if (!session) {
     // A missing Draft session is a real, recoverable condition (the Draft was
@@ -64,12 +67,12 @@ export function HostedPublishPanel({
         description="Open or create a Draft for this Paywall to review and publish it."
         title="No Draft is loaded"
       />
-    )
+    );
   }
-  const assetsHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/assets`
-  const placementsHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/placements`
-  const catalogHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`
-  const providersHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
+  const assetsHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/assets`;
+  const placementsHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/placements`;
+  const catalogHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`;
+  const providersHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`;
   const returnTo = hostedStudioPublishReviewHref({
     draftId: session.draft.id,
     environmentId,
@@ -77,7 +80,7 @@ export function HostedPublishPanel({
     organizationId,
     paywallId,
     projectId,
-  })
+  });
   const validationResult = validation.data
     ? {
         ...validation.data,
@@ -96,7 +99,7 @@ export function HostedPublishPanel({
           recoveryLabel: publishRecoveryLabel(issue),
         })),
       }
-    : null
+    : null;
 
   if (publish.data) {
     return (
@@ -108,7 +111,7 @@ export function HostedPublishPanel({
         projectId={projectId}
         releaseNumber={publish.data.number}
       />
-    )
+    );
   }
 
   return (
@@ -126,25 +129,37 @@ export function HostedPublishPanel({
         validation={validationResult}
       />
       {validation.error ? (
-        <div className="border-destructive/25 bg-destructive/5 rounded border p-3" role="alert">
+        <div
+          className="rounded border border-destructive/25 bg-destructive/5 p-3"
+          role="alert"
+        >
           <p className="text-destructive text-sm">
             {describeApiError(validation.error).description}
           </p>
           <Button
             className="mt-2"
             disabled={validation.isFetching}
-            onClick={() => void validation.refetch()}
+            onClick={() => {
+              validation.refetch();
+            }}
             size="sm"
             type="button"
             variant="outline"
           >
-            {validation.isFetching ? "Checking again…" : "Retry readiness check"}
+            {validation.isFetching
+              ? "Checking again…"
+              : "Retry readiness check"}
           </Button>
         </div>
       ) : null}
       {publish.error ? (
-        <div className="border-destructive/25 bg-destructive/5 rounded border p-3" role="alert">
-          <p className="text-destructive text-sm">{describeApiError(publish.error).description}</p>
+        <div
+          className="rounded border border-destructive/25 bg-destructive/5 p-3"
+          role="alert"
+        >
+          <p className="text-destructive text-sm">
+            {describeApiError(publish.error).description}
+          </p>
           <Button
             className="mt-2"
             disabled={publish.isPending}
@@ -158,7 +173,7 @@ export function HostedPublishPanel({
         </div>
       ) : null}
     </div>
-  )
+  );
 }
 
 /**
@@ -167,56 +182,60 @@ export function HostedPublishPanel({
  * explicitly, keeping the follow-up actions reachable.
  */
 function PublishSuccessPanel({
-  environmentId,
   environmentName,
-  organizationId,
   paywallId,
-  projectId,
   releaseNumber,
 }: {
-  environmentId: string
-  environmentName: string
-  organizationId: string
-  paywallId: string
-  projectId: string
-  releaseNumber: number
+  environmentId: string;
+  environmentName: string;
+  organizationId: string;
+  paywallId: string;
+  projectId: string;
+  releaseNumber: number;
 }) {
-  const sectionRef = useRef<HTMLElement>(null)
+  const sectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    sectionRef.current?.focus()
-  }, [])
+    sectionRef.current?.focus();
+  }, []);
 
   return (
     <section
-      className="border-primary/25 bg-primary/5 rounded border p-4"
+      className="rounded border border-primary/25 bg-primary/5 p-4"
       ref={sectionRef}
       role="status"
       tabIndex={-1}
     >
-      <p className="text-sm font-semibold">
+      <p className="font-semibold text-sm">
         Release {releaseNumber} is live in {environmentName}
       </p>
-      <p className="text-muted-foreground mt-1 text-sm leading-6">
-        This immutable Release is now current. Continue editing by creating a new Draft; this
-        published snapshot will not change.
+      <p className="mt-1 text-muted-foreground text-sm leading-6">
+        This immutable Release is now current. Continue editing by creating a
+        new Draft; this published snapshot will not change.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <Link
           className={buttonVariants({ size: "sm" })}
-          params={(prev) => prev}
+          params={(prev) => ({
+            ...prev,
+            ...workspaceScopeParams(prev),
+          })}
           to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases"
         >
           View Publish history
         </Link>
         <Link
           className={buttonVariants({ size: "sm", variant: "outline" })}
-          params={(prev) => ({ ...prev, paywallId })}
+          params={(prev) => ({
+            ...prev,
+            ...workspaceScopeParams(prev),
+            paywallId,
+          })}
           to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId"
         >
           Open published Paywall
         </Link>
       </div>
     </section>
-  )
+  );
 }

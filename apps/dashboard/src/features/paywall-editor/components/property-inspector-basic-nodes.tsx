@@ -1,46 +1,34 @@
-import { ArrowDownIcon } from "@phosphor-icons/react/dist/ssr/ArrowDown"
-import { ArrowUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowUp"
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
-import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash"
+import { ArrowDownIcon } from "@phosphor-icons/react/dist/ssr/ArrowDown";
+import { ArrowUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowUp";
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 
-import { Button } from "@/components/ui/button"
-import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
-import type { ProtocolNode } from "@/features/paywall-editor/types/editor"
-import {
-  findAncestorNodes,
-  findNode,
-  updateNode,
-} from "@/features/paywall-editor/utils/document-tree"
-import { createSeededLocalizedText } from "@/features/paywall-editor/utils/editor-transforms"
-import type {
-  MosaicPaywallV02BaseTypography,
-  MosaicPaywallV02Typography,
-} from "@/lib/mosaic-protocol"
-
+import { Button } from "@/components/ui/button";
+import { SelectItem } from "@/components/ui/select";
 import {
   AdvancedPropertiesSection,
   AdvancedSection,
   ControlAccessibilitySection,
   ImageAccessibilitySection,
   TextAccessibilitySection,
-} from "@/features/paywall-editor/components/property-inspector-accessibility"
+} from "@/features/paywall-editor/components/property-inspector-accessibility";
 import {
   BackgroundSection,
   BorderSection,
   DocumentBackgroundEditor,
-} from "@/features/paywall-editor/components/property-inspector-background"
+} from "@/features/paywall-editor/components/property-inspector-background";
 import {
+  alignmentOptions,
   CompactOptionField,
-  FLOW_OPTIONS,
+  distributionOptions,
   Field,
+  FLOW_OPTIONS,
   InspectorSection,
   PRODUCT_VARIABLE_TOKENS,
-  ScrollContainer,
-  alignmentOptions,
-  distributionOptions,
+  type ScrollContainer,
   updateScrollContainer,
   useInspectorContext,
-} from "@/features/paywall-editor/components/property-inspector-core"
+} from "@/features/paywall-editor/components/property-inspector-core";
 import {
   CheckboxField,
   ColorField,
@@ -48,7 +36,7 @@ import {
   LocalizedField,
   NumberField,
   SelectField,
-} from "@/features/paywall-editor/components/property-inspector-fields"
+} from "@/features/paywall-editor/components/property-inspector-fields";
 import {
   AppearanceSection,
   SizingFields,
@@ -56,17 +44,37 @@ import {
   SpacingSection,
   TypographySection,
   VisibilitySection,
-} from "@/features/paywall-editor/components/property-inspector-layout"
-import { SelectItem } from "@/components/ui/select"
+} from "@/features/paywall-editor/components/property-inspector-layout";
+import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
+import type { ProtocolNode } from "@/features/paywall-editor/types/editor";
+import {
+  findAncestorNodes,
+  findNode,
+  updateNode,
+} from "@/features/paywall-editor/utils/document-tree-traversal";
+import { createSeededLocalizedText } from "@/features/paywall-editor/utils/editor-transforms";
+import type {
+  MosaicPaywallV02BaseTypography,
+  MosaicPaywallV02Typography,
+} from "@/lib/mosaic-protocol";
 
-export function ScrollContainerInspector({ layout }: { layout: ScrollContainer }) {
-  const { document } = useInspectorContext()
-  const editor = useEditorActions()
-  const screen = document.screens.find((candidate) => candidate.layout.id === layout.id)
+export function ScrollContainerInspector({
+  layout,
+}: {
+  layout: ScrollContainer;
+}) {
+  const { document } = useInspectorContext();
+  const editor = useEditorActions();
+  const screen = document.screens.find(
+    (candidate) => candidate.layout.id === layout.id
+  );
   const presentation =
-    (screen as (typeof screen & { presentation?: { type: "screen" | "sheet" } }) | undefined)
-      ?.presentation?.type ?? "screen"
-  const isInitial = screen?.id === document.initialScreenId
+    (
+      screen as
+        | (typeof screen & { presentation?: { type: "screen" | "sheet" } })
+        | undefined
+    )?.presentation?.type ?? "screen";
+  const isInitial = screen?.id === document.initialScreenId;
   return (
     <>
       <InspectorSection defaultOpen title="Layout">
@@ -79,15 +87,20 @@ export function ScrollContainerInspector({ layout }: { layout: ScrollContainer }
           }
           label="Presentation"
           onChange={(type) => {
-            if (!screen || (isInitial && type === "sheet")) return
+            if (!screen || (isInitial && type === "sheet")) {
+              return;
+            }
             editor.updateDocument((current) => ({
               ...current,
               screens: current.screens.map((candidate) =>
                 candidate.id === screen.id
-                  ? ({ ...candidate, presentation: { type } } as typeof candidate)
-                  : candidate,
+                  ? ({
+                      ...candidate,
+                      presentation: { type },
+                    } as typeof candidate)
+                  : candidate
               ),
-            }))
+            }));
           }}
           value={presentation}
         >
@@ -118,23 +131,24 @@ export function ScrollContainerInspector({ layout }: { layout: ScrollContainer }
           description="Controls the native scroll indicator."
           label="Show scroll indicators"
           onChange={(showsIndicators) =>
-            editor.updateDocument((document) =>
-              updateScrollContainer(document, layout.id, (current) => ({
+            editor.updateDocument((documentValue) =>
+              updateScrollContainer(documentValue, layout.id, (current) => ({
                 ...current,
                 showsIndicators,
-              })),
+              }))
             )
           }
         />
-        <p className="text-muted-foreground text-[11px] leading-4">
-          Select the Content Stack to change padding, flow, sizing, and appearance.
+        <p className="text-[11px] text-muted-foreground leading-4">
+          Select the Content Stack to change padding, flow, sizing, and
+          appearance.
         </p>
       </InspectorSection>
       <InspectorSection title="Background">
         <DocumentBackgroundEditor
           address="background"
-          onUpdate={(document, background) => ({
-            ...updateScrollContainer(document, layout.id, (current) => ({
+          onUpdate={(documentValue, background) => ({
+            ...updateScrollContainer(documentValue, layout.id, (current) => ({
               ...current,
               background,
             })),
@@ -147,16 +161,28 @@ export function ScrollContainerInspector({ layout }: { layout: ScrollContainer }
           { address: "id", label: "Component ID", value: layout.id },
           { address: "type", label: "Component type", value: layout.type },
           { address: "axis", label: "Scroll axis", value: layout.axis },
-          { address: "safeArea", label: "Safe-area policy", value: layout.safeArea },
-          { address: "content.id", label: "Content Stack", value: layout.content.id },
+          {
+            address: "safeArea",
+            label: "Safe-area policy",
+            value: layout.safeArea,
+          },
+          {
+            address: "content.id",
+            label: "Content Stack",
+            value: layout.content.id,
+          },
         ]}
       />
     </>
-  )
+  );
 }
 
-export function StackInspector({ node }: { node: Extract<ProtocolNode, { type: "stack" }> }) {
-  const editor = useEditorActions()
+export function StackInspector({
+  node,
+}: {
+  node: Extract<ProtocolNode, { type: "stack" }>;
+}) {
+  const editor = useEditorActions();
   return (
     <>
       <InspectorSection defaultOpen title="Layout">
@@ -165,7 +191,9 @@ export function StackInspector({ node }: { node: Extract<ProtocolNode, { type: "
           label="Flow"
           onChange={(direction) =>
             editor.updateComponent(node.id, (current) =>
-              current.type === "stack" ? ({ ...current, direction } as typeof current) : current,
+              current.type === "stack"
+                ? ({ ...current, direction } as typeof current)
+                : current
             )
           }
           options={FLOW_OPTIONS}
@@ -178,7 +206,7 @@ export function StackInspector({ node }: { node: Extract<ProtocolNode, { type: "
             editor.updateComponent(node.id, (current) =>
               current.type === "stack"
                 ? ({ ...current, mainAxisDistribution } as typeof current)
-                : current,
+                : current
             )
           }
           options={distributionOptions(node.direction)}
@@ -191,7 +219,7 @@ export function StackInspector({ node }: { node: Extract<ProtocolNode, { type: "
             editor.updateComponent(node.id, (current) =>
               current.type === "stack"
                 ? ({ ...current, crossAxisAlignment } as typeof current)
-                : current,
+                : current
             )
           }
           options={alignmentOptions(node.direction)}
@@ -207,7 +235,7 @@ export function StackInspector({ node }: { node: Extract<ProtocolNode, { type: "
           min={0}
           onChange={(gap) =>
             editor.updateComponent(node.id, (current) =>
-              current.type === "stack" ? { ...current, gap } : current,
+              current.type === "stack" ? { ...current, gap } : current
             )
           }
           unit="lu"
@@ -219,7 +247,7 @@ export function StackInspector({ node }: { node: Extract<ProtocolNode, { type: "
               address="padding"
               onChange={(padding) =>
                 editor.updateComponent(node.id, (current) =>
-                  current.type === "stack" ? { ...current, padding } : current,
+                  current.type === "stack" ? { ...current, padding } : current
                 )
               }
               value={node.padding}
@@ -233,14 +261,18 @@ export function StackInspector({ node }: { node: Extract<ProtocolNode, { type: "
       <VisibilitySection node={node} />
       <AdvancedSection node={node} />
     </>
-  )
+  );
 }
 
-export function TextInspector({ node }: { node: Extract<ProtocolNode, { type: "text" }> }) {
-  const { document } = useInspectorContext()
+export function TextInspector({
+  node,
+}: {
+  node: Extract<ProtocolNode, { type: "text" }>;
+}) {
+  const { document } = useInspectorContext();
   const productBound = findAncestorNodes(document, node.id).some(
-    (ancestor) => ancestor.type === "productCard",
-  )
+    (ancestor) => ancestor.type === "productCard"
+  );
   return (
     <>
       <InspectorSection defaultOpen title="Content">
@@ -252,9 +284,9 @@ export function TextInspector({ node }: { node: Extract<ProtocolNode, { type: "t
           tokens={productBound ? PRODUCT_VARIABLE_TOKENS : undefined}
         />
         {productBound ? (
-          <p className="text-muted-foreground text-[11px] leading-4">
-            Product variables resolve from this card&apos;s bound store product in Studio and every
-            native renderer.
+          <p className="text-[11px] text-muted-foreground leading-4">
+            Product variables resolve from this card&apos;s bound store product
+            in Studio and every native renderer.
           </p>
         ) : null}
       </InspectorSection>
@@ -262,7 +294,10 @@ export function TextInspector({ node }: { node: Extract<ProtocolNode, { type: "t
         node={node}
         onChange={(current, typography) =>
           current.type === "text"
-            ? { ...current, typography: typography as MosaicPaywallV02Typography }
+            ? {
+                ...current,
+                typography: typography as MosaicPaywallV02Typography,
+              }
             : current
         }
         supportsMaxLines
@@ -277,17 +312,21 @@ export function TextInspector({ node }: { node: Extract<ProtocolNode, { type: "t
       <TextAccessibilitySection node={node} />
       <AdvancedSection node={node} />
     </>
-  )
+  );
 }
 
-export function ImageInspector({ node }: { node: Extract<ProtocolNode, { type: "image" }> }) {
-  const { document } = useInspectorContext()
-  const editor = useEditorActions()
+export function ImageInspector({
+  node,
+}: {
+  node: Extract<ProtocolNode, { type: "image" }>;
+}) {
+  const { document } = useInspectorContext();
+  const editor = useEditorActions();
 
   function updateImage(updater: (image: typeof node) => ProtocolNode) {
     editor.updateComponent(node.id, (current) =>
-      current.type === "image" ? updater(current) : current,
-    )
+      current.type === "image" ? updater(current) : current
+    );
   }
 
   return (
@@ -296,7 +335,9 @@ export function ImageInspector({ node }: { node: Extract<ProtocolNode, { type: "
         <SelectField
           address="assetId"
           label="Asset"
-          onChange={(assetId) => updateImage((current) => ({ ...current, assetId }))}
+          onChange={(assetId) =>
+            updateImage((current) => ({ ...current, assetId }))
+          }
           value={node.assetId}
         >
           {document.assets.flatMap((asset) =>
@@ -306,14 +347,16 @@ export function ImageInspector({ node }: { node: Extract<ProtocolNode, { type: "
               </SelectItem>
             ) : (
               []
-            ),
+            )
           )}
         </SelectField>
         <SelectField
           address="contentMode"
           label="Content mode"
           onChange={(contentMode) =>
-            updateImage((current) => ({ ...current, contentMode }) as typeof current)
+            updateImage(
+              (current) => ({ ...current, contentMode }) as typeof current
+            )
           }
           value={node.contentMode}
         >
@@ -329,15 +372,19 @@ export function ImageInspector({ node }: { node: Extract<ProtocolNode, { type: "
           label="Preserve aspect ratio"
           onChange={(enabled) =>
             updateImage((current) => {
-              if (enabled)
-                return { ...current, aspectRatio: current.aspectRatio ?? 1.777_777_777_8 }
-              const next = { ...current }
-              delete next.aspectRatio
-              return next
+              if (enabled) {
+                return {
+                  ...current,
+                  aspectRatio: current.aspectRatio ?? 1.777_777_777_8,
+                };
+              }
+              const next = { ...current };
+              delete next.aspectRatio;
+              return next;
             })
           }
         />
-        {node.aspectRatio !== undefined ? (
+        {node.aspectRatio === undefined ? null : (
           <NumberField
             address="aspectRatio"
             exclusiveMin
@@ -345,12 +392,14 @@ export function ImageInspector({ node }: { node: Extract<ProtocolNode, { type: "
             max={10}
             min={0}
             onChange={(aspectRatio) =>
-              updateImage((current) => ({ ...current, aspectRatio }) as typeof current)
+              updateImage(
+                (current) => ({ ...current, aspectRatio }) as typeof current
+              )
             }
             step={0.01}
             value={node.aspectRatio}
           />
-        ) : null}
+        )}
       </InspectorSection>
       <SpacingSection box node={node} />
       <BackgroundSection node={node} />
@@ -360,11 +409,15 @@ export function ImageInspector({ node }: { node: Extract<ProtocolNode, { type: "
       <ImageAccessibilitySection node={node} />
       <AdvancedSection node={node} />
     </>
-  )
+  );
 }
 
-export function IconInspector({ node }: { node: Extract<ProtocolNode, { type: "icon" }> }) {
-  const editor = useEditorActions()
+export function IconInspector({
+  node,
+}: {
+  node: Extract<ProtocolNode, { type: "icon" }>;
+}) {
+  const editor = useEditorActions();
   return (
     <>
       <InspectorSection defaultOpen title="Icon">
@@ -373,7 +426,9 @@ export function IconInspector({ node }: { node: Extract<ProtocolNode, { type: "i
           label="Icon"
           onChange={(name) =>
             editor.updateComponent(node.id, (current) =>
-              current.type === "icon" ? { ...current, name: name as typeof current.name } : current,
+              current.type === "icon"
+                ? { ...current, name: name as typeof current.name }
+                : current
             )
           }
           value={node.name}
@@ -402,7 +457,7 @@ export function IconInspector({ node }: { node: Extract<ProtocolNode, { type: "i
           min={0}
           onChange={(size) =>
             editor.updateComponent(node.id, (current) =>
-              current.type === "icon" ? { ...current, size } : current,
+              current.type === "icon" ? { ...current, size } : current
             )
           }
           unit="lu"
@@ -411,7 +466,9 @@ export function IconInspector({ node }: { node: Extract<ProtocolNode, { type: "i
         <ColorField
           address="color"
           label="Colour"
-          onUpdate={(current, color) => (current.type === "icon" ? { ...current, color } : current)}
+          onUpdate={(current, color) =>
+            current.type === "icon" ? { ...current, color } : current
+          }
           value={node.color}
         />
       </InspectorSection>
@@ -424,52 +481,63 @@ export function IconInspector({ node }: { node: Extract<ProtocolNode, { type: "i
       <ImageAccessibilitySection node={node} />
       <AdvancedSection node={node} />
     </>
-  )
+  );
 }
 
 export function FeatureListInspector({
   node,
 }: {
-  node: Extract<ProtocolNode, { type: "featureList" }>
+  node: Extract<ProtocolNode, { type: "featureList" }>;
 }) {
-  const { disabled } = useInspectorContext()
-  const editor = useEditorActions()
+  const { disabled } = useInspectorContext();
+  const editor = useEditorActions();
 
   function moveItem(index: number, direction: -1 | 1) {
     editor.updateComponent(node.id, (current) => {
-      if (current.type !== "featureList") return current
-      const target = index + direction
-      if (target < 0 || target >= current.items.length) return current
-      const items = [...current.items]
-      const [item] = items.splice(index, 1)
-      if (!item) return current
-      items.splice(target, 0, item)
-      return { ...current, items }
-    })
+      if (current.type !== "featureList") {
+        return current;
+      }
+      const target = index + direction;
+      if (target < 0 || target >= current.items.length) {
+        return current;
+      }
+      const items = [...current.items];
+      const [item] = items.splice(index, 1);
+      if (!item) {
+        return current;
+      }
+      items.splice(target, 0, item);
+      return { ...current, items };
+    });
   }
 
   function addItem() {
     editor.updateDocument((document) => {
-      const current = findNode(document, node.id)
-      if (!current || current.type !== "featureList") return document
-      const existing = new Set(current.items.map((item) => item.id))
-      let sequence = current.items.length + 1
-      let id = `${current.id}-item-${sequence}`
+      const current = findNode(document, node.id);
+      if (current?.type !== "featureList") {
+        return document;
+      }
+      const existing = new Set(current.items.map((item) => item.id));
+      let sequence = current.items.length + 1;
+      let id = `${current.id}-item-${sequence}`;
       while (existing.has(id)) {
-        sequence += 1
-        id = `${current.id}-item-${sequence}`
+        sequence += 1;
+        id = `${current.id}-item-${sequence}`;
       }
       const seeded = createSeededLocalizedText({
         document,
         defaultValue: "New benefit",
         keyBase: `paywall.${current.id.replaceAll("-", "_")}.item_${sequence}`,
-      })
+      });
       return updateNode(seeded.document, current.id, (candidate) =>
         candidate.type === "featureList"
-          ? { ...candidate, items: [...candidate.items, { id, text: seeded.text }] }
-          : candidate,
-      )
-    })
+          ? {
+              ...candidate,
+              items: [...candidate.items, { id, text: seeded.text }],
+            }
+          : candidate
+      );
+    });
   }
 
   return (
@@ -477,7 +545,10 @@ export function FeatureListInspector({
       <InspectorSection defaultOpen title="Content">
         <div className="space-y-3">
           {node.items.map((item, index) => (
-            <div className="border-border bg-muted/30 rounded border p-2" key={item.id}>
+            <div
+              className="rounded border border-border bg-muted/30 p-2"
+              key={item.id}
+            >
               <LocalizedField
                 address={`items.${item.id}.text`}
                 label={`Benefit ${index + 1}`}
@@ -512,9 +583,11 @@ export function FeatureListInspector({
                       current.type === "featureList"
                         ? {
                             ...current,
-                            items: current.items.filter((candidate) => candidate.id !== item.id),
+                            items: current.items.filter(
+                              (candidate) => candidate.id !== item.id
+                            ),
                           }
-                        : current,
+                        : current
                     )
                   }
                   size="icon-xs"
@@ -543,7 +616,10 @@ export function FeatureListInspector({
         node={node}
         onChange={(current, typography) =>
           current.type === "featureList"
-            ? { ...current, typography: typography as MosaicPaywallV02BaseTypography }
+            ? {
+                ...current,
+                typography: typography as MosaicPaywallV02BaseTypography,
+              }
             : current
         }
         typography={node.typography}
@@ -557,7 +633,7 @@ export function FeatureListInspector({
           min={0}
           onChange={(gap) =>
             editor.updateComponent(node.id, (current) =>
-              current.type === "featureList" ? { ...current, gap } : current,
+              current.type === "featureList" ? { ...current, gap } : current
             )
           }
           unit="lu"
@@ -571,7 +647,9 @@ export function FeatureListInspector({
           address="markerColor"
           label="Marker colour"
           onUpdate={(current, markerColor) =>
-            current.type === "featureList" ? { ...current, markerColor } : current
+            current.type === "featureList"
+              ? { ...current, markerColor }
+              : current
           }
           value={node.markerColor}
         />
@@ -580,5 +658,5 @@ export function FeatureListInspector({
       <ControlAccessibilitySection node={node} />
       <AdvancedSection node={node} />
     </>
-  )
+  );
 }

@@ -1,29 +1,31 @@
-import { mutationOptions, type QueryClient } from "@tanstack/react-query"
-
+import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import {
+  invalidateCatalogImpact,
+  replacementImpactProductIds,
+} from "@/features/catalog/mutations/catalog-impact";
 import {
   addPlanProduct,
-  archiveProviderMapping,
   archiveProduct,
+  archiveProviderMapping,
+  type CreateCatalogResourceRequest,
+  type CreateProductRequest,
+  type CreateProviderMappingDraftRequest,
   createEntitlement,
   createPlan,
   createProduct,
   createProviderMappingDraft,
+  type ReplaceProviderMappingRequest,
   removePlanProduct,
   replaceProviderMapping,
   restoreProduct,
   setProductReplacement,
-  type CreateCatalogResourceRequest,
-  type CreateProductRequest,
-  type CreateProviderMappingDraftRequest,
-  type ReplaceProviderMappingRequest,
-} from "@/generated/api"
-import {
-  invalidateCatalogImpact,
-  replacementImpactProductIds,
-} from "@/features/catalog/mutations/catalog-impact"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
-export function createPlanMutationOptions(projectId: string, queryClient: QueryClient) {
+export function createPlanMutationOptions(
+  projectId: string,
+  queryClient: QueryClient
+) {
   return mutationOptions({
     mutationFn: async (body: CreateCatalogResourceRequest) => {
       const result = await createPlan({
@@ -31,17 +33,17 @@ export function createPlanMutationOptions(projectId: string, queryClient: QueryC
         client: generatedDashboardClient,
         path: { projectId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async () => invalidateCatalogImpact(queryClient, { projectId }),
-  })
+  });
 }
 
 export function archiveProviderMappingMutationOptions(
   productId: string,
   projectId: string,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
     mutationFn: async (mappingId: string) => {
@@ -49,44 +51,50 @@ export function archiveProviderMappingMutationOptions(
         client: generatedDashboardClient,
         path: { mappingId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async () =>
-      invalidateCatalogImpact(queryClient, { productIds: [productId], projectId }),
-  })
+      invalidateCatalogImpact(queryClient, {
+        productIds: [productId],
+        projectId,
+      }),
+  });
 }
 
 export function replaceProviderMappingMutationOptions(
   productId: string,
   projectId: string,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
     mutationFn: async ({
       body,
       mappingId,
     }: {
-      body: ReplaceProviderMappingRequest
-      mappingId: string
+      body: ReplaceProviderMappingRequest;
+      mappingId: string;
     }) => {
       const result = await replaceProviderMapping({
         body,
         client: generatedDashboardClient,
         path: { mappingId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async () =>
-      invalidateCatalogImpact(queryClient, { productIds: [productId], projectId }),
-  })
+      invalidateCatalogImpact(queryClient, {
+        productIds: [productId],
+        projectId,
+      }),
+  });
 }
 
 export function createProviderMappingDraftMutationOptions(
   productId: string,
   projectId: string,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
     mutationFn: async (body: CreateProviderMappingDraftRequest) => {
@@ -95,15 +103,21 @@ export function createProviderMappingDraftMutationOptions(
         client: generatedDashboardClient,
         path: { productId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async () =>
-      invalidateCatalogImpact(queryClient, { productIds: [productId], projectId }),
-  })
+      invalidateCatalogImpact(queryClient, {
+        productIds: [productId],
+        projectId,
+      }),
+  });
 }
 
-export function createProductMutationOptions(projectId: string, queryClient: QueryClient) {
+export function createProductMutationOptions(
+  projectId: string,
+  queryClient: QueryClient
+) {
   return mutationOptions({
     mutationFn: async (body: CreateProductRequest) => {
       const result = await createProduct({
@@ -111,14 +125,17 @@ export function createProductMutationOptions(projectId: string, queryClient: Que
         client: generatedDashboardClient,
         path: { projectId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async () => invalidateCatalogImpact(queryClient, { projectId }),
-  })
+  });
 }
 
-export function createEntitlementMutationOptions(projectId: string, queryClient: QueryClient) {
+export function createEntitlementMutationOptions(
+  projectId: string,
+  queryClient: QueryClient
+) {
   return mutationOptions({
     mutationFn: async (body: CreateCatalogResourceRequest) => {
       const result = await createEntitlement({
@@ -126,17 +143,17 @@ export function createEntitlementMutationOptions(projectId: string, queryClient:
         client: generatedDashboardClient,
         path: { projectId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async () => invalidateCatalogImpact(queryClient, { projectId }),
-  })
+  });
 }
 
 export function addPlanProductMutationOptions(
   planId: string,
   projectId: string,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
     mutationFn: async (productId: string) => {
@@ -145,8 +162,8 @@ export function addPlanProductMutationOptions(
         client: generatedDashboardClient,
         path: { planId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async (_, productId) =>
       invalidateCatalogImpact(queryClient, {
@@ -154,13 +171,13 @@ export function addPlanProductMutationOptions(
         productIds: [productId],
         projectId,
       }),
-  })
+  });
 }
 
 export function removePlanProductMutationOptions(
   planId: string,
   projectId: string,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
     mutationFn: async (productId: string) => {
@@ -168,8 +185,8 @@ export function removePlanProductMutationOptions(
         client: generatedDashboardClient,
         path: { planId, productId },
         throwOnError: true,
-      })
-      return productId
+      });
+      return productId;
     },
     onSuccess: async (productId) =>
       invalidateCatalogImpact(queryClient, {
@@ -177,7 +194,7 @@ export function removePlanProductMutationOptions(
         productIds: [productId],
         projectId,
       }),
-  })
+  });
 }
 
 /*
@@ -198,30 +215,35 @@ export function removePlanProductMutationOptions(
 
 export function productLifecycleMutationOptions(
   queryClient: QueryClient,
-  action: "archive" | "restore",
+  action: "archive" | "restore"
 ) {
   return mutationOptions({
     mutationFn: async (productId: string) => {
-      const request = action === "archive" ? archiveProduct : restoreProduct
+      const request = action === "archive" ? archiveProduct : restoreProduct;
       const result = await request({
         client: generatedDashboardClient,
         path: { productId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async (product) =>
       invalidateCatalogImpact(queryClient, {
         productIds: [
           product.id,
-          ...(product.replacementProductId ? [product.replacementProductId] : []),
+          ...(product.replacementProductId
+            ? [product.replacementProductId]
+            : []),
         ],
         projectId: product.projectId,
       }),
-  })
+  });
 }
 
-export function setProductReplacementMutationOptions(productId: string, queryClient: QueryClient) {
+export function setProductReplacementMutationOptions(
+  productId: string,
+  queryClient: QueryClient
+) {
   return mutationOptions({
     mutationFn: async ({ replacementProductId }: ReplacementSelection) => {
       const result = await setProductReplacement({
@@ -229,22 +251,22 @@ export function setProductReplacementMutationOptions(productId: string, queryCli
         client: generatedDashboardClient,
         path: { productId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async (product, selection) =>
       invalidateCatalogImpact(queryClient, {
         productIds: replacementImpactProductIds(
           productId,
           selection.previousReplacementProductId,
-          selection.replacementProductId,
+          selection.replacementProductId
         ),
         projectId: product.projectId,
       }),
-  })
+  });
 }
 
 interface ReplacementSelection {
-  previousReplacementProductId?: string
-  replacementProductId: string
+  previousReplacementProductId?: string;
+  replacementProductId: string;
 }

@@ -1,22 +1,22 @@
 interface ProjectScopeRecord {
-  id: string
-  organizationId: string
+  id: string;
+  organizationId: string;
 }
 
 interface ResourceScopeRecord {
-  id: string
-  projectId: string
+  id: string;
+  projectId: string;
 }
 
 interface NestedScopeInput {
-  expectedOrganizationId: string
-  expectedProjectId: string
-  expectedResourceId?: string
-  project?: ProjectScopeRecord
-  resource?: ResourceScopeRecord
+  expectedOrganizationId: string;
+  expectedProjectId: string;
+  expectedResourceId?: string;
+  project?: ProjectScopeRecord;
+  resource?: ResourceScopeRecord;
 }
 
-export type NestedScopeMismatch = "project" | "resource" | null
+export type NestedScopeMismatch = "project" | "resource" | null;
 
 export function detectNestedScopeMismatch({
   expectedOrganizationId,
@@ -27,9 +27,10 @@ export function detectNestedScopeMismatch({
 }: NestedScopeInput): NestedScopeMismatch {
   if (
     project &&
-    (project.id !== expectedProjectId || project.organizationId !== expectedOrganizationId)
+    (project.id !== expectedProjectId ||
+      project.organizationId !== expectedOrganizationId)
   ) {
-    return "project"
+    return "project";
   }
 
   if (
@@ -37,8 +38,8 @@ export function detectNestedScopeMismatch({
     (resource.projectId !== expectedProjectId ||
       (expectedResourceId !== undefined && resource.id !== expectedResourceId))
   ) {
-    return "resource"
+    return "resource";
   }
 
-  return null
+  return null;
 }

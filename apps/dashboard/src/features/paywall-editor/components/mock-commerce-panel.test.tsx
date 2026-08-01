@@ -1,59 +1,78 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { chooseSelectOption } from "@/test/select"
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { useEffect, useState } from "react"
-import { describe, expect, it } from "vitest"
-
-import { catalogKeys } from "@/features/catalog/queries/catalog-query"
-import { MockCommercePanel } from "@/features/paywall-editor/components/mock-commerce-panel"
-import { studioApplicationsErrorMessage } from "@/features/paywall-editor/utils/studio-applications-error"
-import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useEffect, useState } from "react";
+import { describe, expect, it } from "vitest";
+import { catalogKeys } from "@/features/catalog/queries/catalog-query";
+import { MockCommercePanel } from "@/features/paywall-editor/components/mock-commerce-panel";
+import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import {
   EditorStoreProvider,
   useEditorActions,
   useEditorStore,
-} from "@/features/paywall-editor/stores/editor-store-context"
-import { StudioSourceProvider } from "@/features/paywall-editor/stores/studio-source-context"
+} from "@/features/paywall-editor/stores/editor-store-context";
+import { StudioSourceProvider } from "@/features/paywall-editor/stores/studio-source-context";
 import type {
   MockProductDefinition,
   MockPurchaseState,
-} from "@/features/paywall-editor/types/editor"
-import type { ProductList } from "@/generated/api"
-import { projectKeys } from "@/features/projects/queries/projects-query"
-import { cloneValue } from "@/features/paywall-editor/utils/clone"
-import { findNode } from "@/features/paywall-editor/utils/document-tree"
-import { ApiError } from "@/lib/api/errors"
+} from "@/features/paywall-editor/types/editor";
+import { cloneValue } from "@/features/paywall-editor/utils/clone";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { studioApplicationsErrorMessage } from "@/features/paywall-editor/utils/studio-applications-error";
+import { projectKeys } from "@/features/projects/queries/projects-query";
+import type { ProductList } from "@/generated/api";
+import { ApiError } from "@/lib/api/errors";
+import { required } from "@/test/required";
+import { chooseSelectOption } from "@/test/select";
 
 function Harness() {
-  const { document } = useEditorStore()
-  const { replaceDocument } = useEditorActions()
+  const { document } = useEditorStore();
+  const { replaceDocument } = useEditorActions();
   const [products, setProducts] = useState<MockProductDefinition[]>([
     {
       productReferenceId: "starter-plan",
       availability: "unavailable",
       reason: "notConfigured",
     },
-  ])
-  const [purchaseState, setPurchaseState] = useState<MockPurchaseState>("productUnavailable")
+  ]);
+  const [purchaseState, setPurchaseState] =
+    useState<MockPurchaseState>("productUnavailable");
 
   useEffect(() => {
-    if (document) return
-    const imported = cloneValue(EDITOR_TEMPLATES[0]!.document)
+    if (document) {
+      return;
+    }
+    const imported = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     imported.products = [
       {
-        ...imported.products[0]!,
+        ...required(imported.products[0], "imported.products[0]"),
         id: "starter-plan",
-        label: { default: "Starter", localizationKey: "paywall.products.monthly" },
+        label: {
+          default: "Starter",
+          localizationKey: "paywall.products.monthly",
+        },
       },
-    ]
-    imported.localization.locales.en!.strings["paywall.products.monthly"] = "Starter"
-    const selector = findNode(imported, "plans")
+    ];
+    required(
+      imported.localization.locales.en,
+      "imported.localization.locales.en"
+    ).strings["paywall.products.monthly"] = "Starter";
+    const selector = findNode(imported, "plans");
     if (selector?.type === "productSelector") {
-      selector.cards = [{ ...selector.cards[0]!, productReferenceId: "starter-plan" }]
-      selector.initialProductCardId = selector.cards[0]!.id
+      selector.cards = [
+        {
+          ...required(selector.cards[0], "selector.cards[0]"),
+          productReferenceId: "starter-plan",
+        },
+      ];
+      selector.initialProductCardId = required(
+        selector.cards[0],
+        "selector.cards[0]"
+      ).id;
     }
-    replaceDocument(imported)
-  }, [document, replaceDocument])
+    replaceDocument(imported);
+  }, [document, replaceDocument]);
 
   return (
     <>
@@ -63,14 +82,16 @@ function Harness() {
         onProductsChange={setProducts}
         onPurchaseStateChange={setPurchaseState}
       />
-      <output aria-label="mock state">{JSON.stringify({ products, purchaseState })}</output>
+      <output aria-label="mock state">
+        {JSON.stringify({ products, purchaseState })}
+      </output>
     </>
-  )
+  );
 }
 
 function HostedHarness() {
-  const { document } = useEditorStore()
-  const { replaceDocument } = useEditorActions()
+  const { document } = useEditorStore();
+  const { replaceDocument } = useEditorActions();
   const [products, setProducts] = useState<MockProductDefinition[]>([
     {
       productReferenceId: "starter-plan",
@@ -80,28 +101,47 @@ function HostedHarness() {
       kind: "subscription",
       localizedPrice: "$4.99",
     },
-  ])
-  const [purchaseState, setPurchaseState] = useState<MockPurchaseState>("productAvailable")
+  ]);
+  const [purchaseState, setPurchaseState] =
+    useState<MockPurchaseState>("productAvailable");
 
   useEffect(() => {
-    if (document) return
-    const imported = cloneValue(EDITOR_TEMPLATES[0]!.document)
+    if (document) {
+      return;
+    }
+    const imported = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     imported.products = [
       {
-        ...imported.products[0]!,
+        ...required(imported.products[0], "imported.products[0]"),
         id: "starter-plan",
-        label: { default: "Starter", localizationKey: "paywall.products.monthly" },
+        label: {
+          default: "Starter",
+          localizationKey: "paywall.products.monthly",
+        },
         productId: "legacy-provider-id",
       },
-    ]
-    imported.localization.locales.en!.strings["paywall.products.monthly"] = "Starter"
-    const selector = findNode(imported, "plans")
+    ];
+    required(
+      imported.localization.locales.en,
+      "imported.localization.locales.en"
+    ).strings["paywall.products.monthly"] = "Starter";
+    const selector = findNode(imported, "plans");
     if (selector?.type === "productSelector") {
-      selector.cards = [{ ...selector.cards[0]!, productReferenceId: "starter-plan" }]
-      selector.initialProductCardId = selector.cards[0]!.id
+      selector.cards = [
+        {
+          ...required(selector.cards[0], "selector.cards[0]"),
+          productReferenceId: "starter-plan",
+        },
+      ];
+      selector.initialProductCardId = required(
+        selector.cards[0],
+        "selector.cards[0]"
+      ).id;
     }
-    replaceDocument(imported)
-  }, [document, replaceDocument])
+    replaceDocument(imported);
+  }, [document, replaceDocument]);
 
   return (
     <>
@@ -111,11 +151,15 @@ function HostedHarness() {
         onProductsChange={setProducts}
         onPurchaseStateChange={setPurchaseState}
       />
-      <output aria-label="hosted document product">{document?.products[0]?.productId}</output>
+      <output aria-label="hosted document product">
+        {document?.products[0]?.productId}
+      </output>
       <output aria-label="hosted document">{JSON.stringify(document)}</output>
-      <output aria-label="hosted mock state">{JSON.stringify({ products, purchaseState })}</output>
+      <output aria-label="hosted mock state">
+        {JSON.stringify({ products, purchaseState })}
+      </output>
     </>
-  )
+  );
 }
 
 describe("mock commerce controls", () => {
@@ -127,15 +171,19 @@ describe("mock commerce controls", () => {
           correlationId: "correlation_01",
           retryable: false,
           status: 403,
-        }),
-      ),
-    ).toBe("You can edit this Draft, but you do not have permission to inspect its Applications.")
-  })
+        })
+      )
+    ).toBe(
+      "You can edit this Draft, but you do not have permission to inspect its Applications."
+    );
+  });
 
   it("shows a named Studio scope and direct Application recovery when none are registered", async () => {
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
-    })
+      defaultOptions: {
+        queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+      },
+    });
     queryClient.setQueryData(catalogKeys.products("project_01"), {
       items: [
         {
@@ -152,8 +200,11 @@ describe("mock commerce controls", () => {
         },
       ],
       page: {},
-    } satisfies ProductList["data"])
-    queryClient.setQueryData(projectKeys.applications("project_01"), { items: [], page: {} })
+    } satisfies ProductList["data"]);
+    queryClient.setQueryData(projectKeys.applications("project_01"), {
+      items: [],
+      page: {},
+    });
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -172,62 +223,70 @@ describe("mock commerce controls", () => {
             <HostedHarness />
           </EditorStoreProvider>
         </StudioSourceProvider>
-      </QueryClientProvider>,
-    )
+      </QueryClientProvider>
+    );
 
-    expect(await screen.findByText("No registered Applications")).toBeVisible()
-    expect(screen.getByText(/Hosted Environment: Staging/)).toBeVisible()
-    expect(screen.getByRole("link", { name: "Register Application" })).toHaveAttribute(
-      "href",
-      "/orgs/org_01/projects/project_01/apps",
-    )
-    expect(screen.getByLabelText("Provider preview Application")).toBeDisabled()
-  })
+    expect(await screen.findByText("No registered Applications")).toBeVisible();
+    expect(screen.getByText(/Hosted Environment: Staging/)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Register Application" })
+    ).toHaveAttribute("href", "/orgs/org_01/projects/project_01/apps");
+    expect(
+      screen.getByLabelText("Provider preview Application")
+    ).toBeDisabled();
+  });
 
   it("binds an imported product and commits its local price on blur", async () => {
     render(
       <EditorStoreProvider>
         <Harness />
-      </EditorStoreProvider>,
-    )
+      </EditorStoreProvider>
+    );
 
-    await chooseSelectOption(screen.getByLabelText("Starter mock availability"), "Available")
-    const price = screen.getByLabelText("Starter local price")
-    fireEvent.change(price, { target: { value: "$4.99" } })
-    fireEvent.blur(price)
+    await chooseSelectOption(
+      screen.getByLabelText("Starter mock availability"),
+      "Available"
+    );
+    const price = screen.getByLabelText("Starter local price");
+    fireEvent.change(price, { target: { value: "$4.99" } });
+    fireEvent.blur(price);
 
     expect(screen.getByLabelText("mock state")).toHaveTextContent(
-      '"productReferenceId":"starter-plan","availability":"available"',
-    )
-    expect(screen.getByLabelText("mock state")).toHaveTextContent('"localizedPrice":"$4.99"')
+      '"productReferenceId":"starter-plan","availability":"available"'
+    );
     expect(screen.getByLabelText("mock state")).toHaveTextContent(
-      '"purchaseState":"productAvailable"',
-    )
-  })
+      '"localizedPrice":"$4.99"'
+    );
+    expect(screen.getByLabelText("mock state")).toHaveTextContent(
+      '"purchaseState":"productAvailable"'
+    );
+  });
 
   it("exposes deterministic empty and failed restore outcomes", async () => {
     render(
       <EditorStoreProvider>
         <Harness />
-      </EditorStoreProvider>,
-    )
+      </EditorStoreProvider>
+    );
 
-    const outcome = screen.getByLabelText("Preview state")
-    expect(outcome).toHaveTextContent("Product unavailable")
-    await chooseSelectOption(outcome, "Restore has no purchases")
+    const outcome = screen.getByLabelText("Preview state");
+    expect(outcome).toHaveTextContent("Product unavailable");
+    await chooseSelectOption(outcome, "Restore has no purchases");
     expect(screen.getByLabelText("mock state")).toHaveTextContent(
-      '"purchaseState":"restoreNoPurchases"',
-    )
-    await chooseSelectOption(outcome, "Restore failure")
+      '"purchaseState":"restoreNoPurchases"'
+    );
+    await chooseSelectOption(outcome, "Restore failure");
     expect(screen.getByLabelText("mock state")).toHaveTextContent(
-      '"purchaseState":"restoreFailure"',
-    )
-  })
+      '"purchaseState":"restoreFailure"'
+    );
+  });
 
   it("binds reachable Product identity without changing simulated preview metadata", async () => {
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
-    })
+      defaultOptions: {
+        queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+      },
+    });
     const connectedProducts = {
       items: [
         {
@@ -244,8 +303,11 @@ describe("mock commerce controls", () => {
         },
       ],
       page: {},
-    } satisfies ProductList["data"]
-    queryClient.setQueryData(catalogKeys.products("project_01"), connectedProducts)
+    } satisfies ProductList["data"];
+    queryClient.setQueryData(
+      catalogKeys.products("project_01"),
+      connectedProducts
+    );
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -263,27 +325,31 @@ describe("mock commerce controls", () => {
             <HostedHarness />
           </EditorStoreProvider>
         </StudioSourceProvider>
-      </QueryClientProvider>,
-    )
+      </QueryClientProvider>
+    );
 
-    const binding = await screen.findByLabelText("Catalog Product for Starter")
-    await chooseSelectOption(binding, "Monthly · connected")
+    const binding = await screen.findByLabelText("Catalog Product for Starter");
+    await chooseSelectOption(binding, "Monthly · connected");
 
     await waitFor(() =>
-      expect(screen.getByLabelText("hosted document product")).toHaveTextContent(
-        "product_mosaic_monthly",
-      ),
-    )
-    expect(screen.getByLabelText("Starter mock availability")).toBeVisible()
-    expect(screen.getByLabelText("Provider preview Application")).toHaveTextContent(
-      "Select Application",
-    )
+      expect(
+        screen.getByLabelText("hosted document product")
+      ).toHaveTextContent("product_mosaic_monthly")
+    );
+    expect(screen.getByLabelText("Starter mock availability")).toBeVisible();
+    expect(
+      screen.getByLabelText("Provider preview Application")
+    ).toHaveTextContent("Select Application");
     expect(
       screen.getByText(
-        /Select an Application to inspect its active provider, mapping, and readiness/,
-      ),
-    ).toBeVisible()
-    expect(screen.getByLabelText("hosted mock state")).toHaveTextContent('"localizedPrice":"$4.99"')
-    expect(screen.getByLabelText("hosted document")).not.toHaveTextContent("$4.99")
-  })
-})
+        /Select an Application to inspect its active provider, mapping, and readiness/
+      )
+    ).toBeVisible();
+    expect(screen.getByLabelText("hosted mock state")).toHaveTextContent(
+      '"localizedPrice":"$4.99"'
+    );
+    expect(screen.getByLabelText("hosted document")).not.toHaveTextContent(
+      "$4.99"
+    );
+  });
+});

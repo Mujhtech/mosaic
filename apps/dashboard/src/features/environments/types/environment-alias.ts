@@ -1,4 +1,4 @@
-import type { Environment } from "@/generated/api"
+import type { Environment } from "@/generated/api";
 
 /**
  * The Environment as it appears in an address: `prod`, `staging`, `dev` rather than
@@ -13,23 +13,23 @@ const ALIAS_BY_KEY: Record<string, string> = {
   development: "dev",
   production: "prod",
   staging: "staging",
-}
+};
 
 /**
  * Where a link lands when the linker has no Environment to go on — workspace entry,
  * for instance, which resolves before any Environment list is read. Development on
  * purpose: an address that guesses must never guess production.
  */
-export const DEFAULT_ENVIRONMENT_ALIAS = "dev"
+export const DEFAULT_ENVIRONMENT_ALIAS = "dev";
 
 const KEY_BY_ALIAS: Record<string, string> = {
   dev: "development",
   prod: "production",
   staging: "staging",
-}
+};
 
 export function environmentAlias(environment: Environment) {
-  return ALIAS_BY_KEY[environment.key] ?? environment.key
+  return ALIAS_BY_KEY[environment.key] ?? environment.key;
 }
 
 /**
@@ -39,15 +39,17 @@ export function environmentAlias(environment: Environment) {
  */
 export function environmentForAlias(
   environments: readonly Environment[],
-  alias: string | undefined,
+  alias: string | undefined
 ): Environment | undefined {
-  if (!alias) return undefined
+  if (!alias) {
+    return;
+  }
 
-  const key = KEY_BY_ALIAS[alias]
+  const key = KEY_BY_ALIAS[alias];
   return environments.find(
     (environment) =>
       environmentAlias(environment) === alias ||
       environment.key === alias ||
-      (key !== undefined && environment.key === key),
-  )
+      (key !== undefined && environment.key === key)
+  );
 }

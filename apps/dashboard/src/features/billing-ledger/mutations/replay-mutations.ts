@@ -1,9 +1,8 @@
-import { mutationOptions, type QueryClient } from "@tanstack/react-query"
-
-import { createReplayJob, type CreateReplayJobRequest } from "@/generated/api"
-import { replayKeys } from "@/features/billing-ledger/queries/replay-queries"
-import { transactionKeys } from "@/features/billing-ledger/queries/transaction-queries"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import { replayKeys } from "@/features/billing-ledger/queries/replay-queries";
+import { transactionKeys } from "@/features/billing-ledger/queries/transaction-queries";
+import { type CreateReplayJobRequest, createReplayJob } from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 /**
  * Replay and revalidation append. There is deliberately no mutation here that
@@ -13,7 +12,7 @@ import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
 export function createReplayJobMutationOptions(
   projectId: string,
   environmentId: string,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
     mutationFn: async (body: CreateReplayJobRequest) => {
@@ -22,16 +21,18 @@ export function createReplayJobMutationOptions(
         client: generatedDashboardClient,
         path: { environmentId, projectId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSettled: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: replayKeys.list(projectId, environmentId) }),
+        queryClient.invalidateQueries({
+          queryKey: replayKeys.list(projectId, environmentId),
+        }),
         queryClient.invalidateQueries({
           queryKey: transactionKeys.attemptsScope(projectId, environmentId),
         }),
-      ])
+      ]);
     },
-  })
+  });
 }

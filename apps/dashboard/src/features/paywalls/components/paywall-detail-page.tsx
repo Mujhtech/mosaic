@@ -1,34 +1,40 @@
-import { useQuery } from "@tanstack/react-query"
-import { Link, useNavigate } from "@tanstack/react-router"
-import { useEffect, useState } from "react"
+import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 
-import { buttonVariants } from "@/components/ui/button-variants"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace"
-import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { CreateDraftAction } from "@/features/paywalls/components/create-draft-action"
-import { EditPublishedVersionAction } from "@/features/paywalls/components/edit-published-version-action"
+import { buttonVariants } from "@/components/ui/button-variants";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace";
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page";
+import { CreateDraftAction } from "@/features/paywalls/components/create-draft-action";
+import { EditPublishedVersionAction } from "@/features/paywalls/components/edit-published-version-action";
 import {
+  type HostedDraftRecoveryRecord,
   listHostedDraftRecoveries,
   serializeHostedRecoveryDocument,
-  type HostedDraftRecoveryRecord,
-} from "@/features/paywalls/mutations/hosted-draft-recovery"
+} from "@/features/paywalls/mutations/hosted-draft-recovery";
 import {
   activeHostedDraftQueryOptions,
   paywallQueryOptions,
-} from "@/features/paywalls/queries/paywall-queries"
-import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter"
+} from "@/features/paywalls/queries/paywall-queries";
+import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter";
+import {
+  studioScopeParams,
+  workspaceScopeParams,
+} from "@/lib/routing/workspace-params";
 
 function downloadRecovery(record: HostedDraftRecoveryRecord) {
   const url = URL.createObjectURL(
-    new Blob([serializeHostedRecoveryDocument(record)], { type: "application/json" }),
-  )
-  const anchor = document.createElement("a")
-  anchor.href = url
-  anchor.download = `${record.document.id}-recovery.mosaic.json`
-  anchor.click()
-  URL.revokeObjectURL(url)
+    new Blob([serializeHostedRecoveryDocument(record)], {
+      type: "application/json",
+    })
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${record.document.id}-recovery.mosaic.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 export function PaywallDetailPage({
@@ -37,29 +43,41 @@ export function PaywallDetailPage({
   paywallId,
   projectId,
 }: {
-  environmentId: string
-  organizationId: string
-  paywallId: string
-  projectId: string
+  environmentId: string;
+  organizationId: string;
+  paywallId: string;
+  projectId: string;
 }) {
-  const adapter = useHostedPublishingAdapter()
-  const navigate = useNavigate()
-  const paywall = useQuery(paywallQueryOptions({ paywallId, projectId }, adapter))
+  const adapter = useHostedPublishingAdapter();
+  const navigate = useNavigate();
+  const paywall = useQuery(
+    paywallQueryOptions({ paywallId, projectId }, adapter)
+  );
   const activeDraft = useQuery(
-    activeHostedDraftQueryOptions({ environmentId, paywallId, projectId }, adapter),
-  )
-  const [recoveries, setRecoveries] = useState<readonly HostedDraftRecoveryRecord[]>([])
+    activeHostedDraftQueryOptions(
+      { environmentId, paywallId, projectId },
+      adapter
+    )
+  );
+  const [recoveries, setRecoveries] = useState<
+    readonly HostedDraftRecoveryRecord[]
+  >([]);
 
   useEffect(() => {
     const timer = window.setTimeout(
-      () => setRecoveries(listHostedDraftRecoveries({ environmentId, paywallId, projectId })),
-      0,
-    )
-    return () => window.clearTimeout(timer)
-  }, [environmentId, paywallId, projectId])
+      () =>
+        setRecoveries(
+          listHostedDraftRecoveries({ environmentId, paywallId, projectId })
+        ),
+      0
+    );
+    return () => window.clearTimeout(timer);
+  }, [environmentId, paywallId, projectId]);
 
   const versions =
-    paywall.data?.versions.filter((version) => version.environmentId === environmentId) ?? []
+    paywall.data?.versions.filter(
+      (version) => version.environmentId === environmentId
+    ) ?? [];
   const state = resolveHostedQueryState({
     emptyDescription: "This Paywall may have been archived or removed.",
     emptyTitle: "Paywall unavailable",
@@ -67,26 +85,35 @@ export function PaywallDetailPage({
     isEmpty: paywall.isSuccess && !paywall.data,
     isPending: paywall.isPending || activeDraft.isPending,
     loadingDescription: "Loading Paywall Draft and version history.",
-    onRetry: () => void Promise.all([paywall.refetch(), activeDraft.refetch()]),
+    onRetry: () => {
+      Promise.all([paywall.refetch(), activeDraft.refetch()]);
+    },
     permissionAction: (
       <Link
         className={buttonVariants({ variant: "outline" })}
-        params={(prev) => prev}
+        params={(prev) => ({
+          ...prev,
+          ...workspaceScopeParams(prev),
+        })}
         to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls"
       >
         Return to Paywalls
       </Link>
     ),
-    permissionDescription: "Project membership is required to open this Paywall.",
+    permissionDescription:
+      "Project membership is required to open this Paywall.",
     scope: { environmentId, organizationId, projectId },
-  })
+  });
 
   return (
     <MonetizationWorkspace
       actions={
         <Link
           className={buttonVariants({ variant: "outline" })}
-          params={(prev) => prev}
+          params={(prev) => ({
+            ...prev,
+            ...workspaceScopeParams(prev),
+          })}
           to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls"
         >
           Back to Paywalls
@@ -108,7 +135,9 @@ export function PaywallDetailPage({
                   ? "This Environment already has an active hosted Draft. Continue without losing its server revision."
                   : "Creating a Draft never changes an immutable published version."
               }
-              title={activeDraft.data ? "Continue active Draft" : "Open in Studio"}
+              title={
+                activeDraft.data ? "Continue active Draft" : "Open in Studio"
+              }
             >
               {activeDraft.data ? (
                 <div className="space-y-3">
@@ -118,7 +147,13 @@ export function PaywallDetailPage({
                   </p>
                   <Link
                     className={buttonVariants()}
-                    params={(prev) => ({ ...prev, environmentId, draftId: activeDraft.data?.id ?? "", paywallId })}
+                    params={(prev) => ({
+                      ...prev,
+                      ...studioScopeParams(prev),
+                      environmentId,
+                      draftId: activeDraft.data?.id ?? "",
+                      paywallId,
+                    })}
                     to="/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId"
                   >
                     Continue in Studio
@@ -156,23 +191,33 @@ export function PaywallDetailPage({
                   key={record.draftId}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">
+                    <p className="font-semibold text-sm">
                       Draft revision {record.expectedRevision}
                     </p>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      Saved {new Date(record.savedAt).toLocaleString()} after {record.reason}.
+                    <p className="mt-1 text-muted-foreground text-xs">
+                      Saved {new Date(record.savedAt).toLocaleString()} after{" "}
+                      {record.reason}.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Link
                       className={buttonVariants({ size: "sm" })}
-                      params={(prev) => ({ ...prev, environmentId, draftId: record.draftId, paywallId })}
+                      params={(prev) => ({
+                        ...prev,
+                        ...studioScopeParams(prev),
+                        environmentId,
+                        draftId: record.draftId,
+                        paywallId,
+                      })}
                       to="/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId"
                     >
                       Open recovery in Studio
                     </Link>
                     <button
-                      className={buttonVariants({ size: "sm", variant: "outline" })}
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
                       onClick={() => downloadRecovery(record)}
                       type="button"
                     >
@@ -191,8 +236,8 @@ export function PaywallDetailPage({
         >
           {versions.length === 0 ? (
             <p className="text-muted-foreground text-sm">
-              No published version exists in this Environment yet. Create a Draft, bind a Placement,
-              and publish from Studio.
+              No published version exists in this Environment yet. Create a
+              Draft, bind a Placement, and publish from Studio.
             </p>
           ) : (
             <ul className="space-y-3">
@@ -202,17 +247,26 @@ export function PaywallDetailPage({
                   key={version.id}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold">Version {version.versionNumber}</p>
-                    <p className="text-muted-foreground mt-1 text-xs">
+                    <p className="font-semibold">
+                      Version {version.versionNumber}
+                    </p>
+                    <p className="mt-1 text-muted-foreground text-xs">
                       Protocol {version.protocolVersion} · Draft revision{" "}
-                      {version.sourceDraftRevision}· {new Date(version.createdAt).toLocaleString()}
+                      {version.sourceDraftRevision}·{" "}
+                      {new Date(version.createdAt).toLocaleString()}
                     </p>
                   </div>
                   <EditPublishedVersionAction
                     environmentId={environmentId}
                     onDraftCreated={(draft) =>
-                      void navigate({
-                        params: (prev) => ({ ...prev, draftId: draft.id, paywallId, environmentId }),
+                      navigate({
+                        params: (prev) => ({
+                          ...prev,
+                          ...studioScopeParams(prev),
+                          draftId: draft.id,
+                          paywallId,
+                          environmentId,
+                        }),
                         to: "/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId",
                       })
                     }
@@ -227,5 +281,5 @@ export function PaywallDetailPage({
         </WorkflowPanel>
       </HostedResourceBoundary>
     </MonetizationWorkspace>
-  )
+  );
 }

@@ -1,7 +1,7 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
-import { getBillingProjectionHealth } from "@/generated/api"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { getBillingProjectionHealth } from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 /**
  * Projection health is a sibling of billing health, not a field on it.
@@ -18,9 +18,12 @@ export const projectionHealthKeys = {
     ["billing-projection", projectId, environmentId, "health"] as const,
   scope: (projectId: string, environmentId: string) =>
     ["billing-projection", projectId, environmentId] as const,
-}
+};
 
-export function projectionHealthQueryOptions(projectId: string, environmentId: string) {
+export function projectionHealthQueryOptions(
+  projectId: string,
+  environmentId: string
+) {
   return queryOptions({
     queryKey: projectionHealthKeys.detail(projectId, environmentId),
     queryFn: async ({ signal }) => {
@@ -29,12 +32,12 @@ export function projectionHealthQueryOptions(projectId: string, environmentId: s
         path: { environmentId, projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     // The same bounded interval billing health uses. An operator watching a
     // projection backlog should not have to reload to find out whether it is
     // draining.
     refetchInterval: 30_000,
-  })
+  });
 }

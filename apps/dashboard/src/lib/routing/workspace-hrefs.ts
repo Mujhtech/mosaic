@@ -8,9 +8,9 @@
  */
 
 export interface WorkspaceScope {
-  environmentId?: string
-  organizationId?: string
-  projectId?: string
+  environmentId?: string;
+  organizationId?: string;
+  projectId?: string;
 }
 
 /**
@@ -18,59 +18,70 @@ export interface WorkspaceScope {
  * returned untouched so a recovery link can never be rewritten into an
  * off-origin destination.
  */
-export function appendSearch(href: string, values: Record<string, string | undefined>) {
-  if (!href.startsWith("/")) return href
-  const url = new URL(href, "https://mosaic.local")
-  for (const [key, value] of Object.entries(values)) {
-    if (value) url.searchParams.set(key, value)
+export function appendSearch(
+  href: string,
+  values: Record<string, string | undefined>
+) {
+  if (!href.startsWith("/")) {
+    return href;
   }
-  return `${url.pathname}${url.search}${url.hash}`
+  const url = new URL(href, "https://mosaic.local");
+  for (const [key, value] of Object.entries(values)) {
+    if (value) {
+      url.searchParams.set(key, value);
+    }
+  }
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 function projectBase(scope: WorkspaceScope) {
-  if (!scope.organizationId || !scope.projectId) return undefined
-  return `/orgs/${encodeURIComponent(scope.organizationId)}/projects/${encodeURIComponent(scope.projectId)}`
+  if (!(scope.organizationId && scope.projectId)) {
+    return;
+  }
+  return `/orgs/${encodeURIComponent(scope.organizationId)}/projects/${encodeURIComponent(scope.projectId)}`;
 }
 
 function monetizationBase(scope: WorkspaceScope) {
-  const base = projectBase(scope)
-  if (!base || !scope.environmentId) return undefined
-  return `${base}/monetization/${encodeURIComponent(scope.environmentId)}`
+  const base = projectBase(scope);
+  if (!(base && scope.environmentId)) {
+    return;
+  }
+  return `${base}/monetization/${encodeURIComponent(scope.environmentId)}`;
 }
 
 export function placementsHref(scope: WorkspaceScope) {
-  const base = monetizationBase(scope)
-  return base ? `${base}/placements` : undefined
+  const base = monetizationBase(scope);
+  return base ? `${base}/placements` : undefined;
 }
 
 export function assetsHref(scope: WorkspaceScope) {
-  const base = monetizationBase(scope)
-  return base ? `${base}/assets` : undefined
+  const base = monetizationBase(scope);
+  return base ? `${base}/assets` : undefined;
 }
 
 export function paywallsHref(scope: WorkspaceScope) {
-  const base = monetizationBase(scope)
-  return base ? `${base}/paywalls` : undefined
+  const base = monetizationBase(scope);
+  return base ? `${base}/paywalls` : undefined;
 }
 
 export function catalogProductsHref(scope: WorkspaceScope) {
-  const base = projectBase(scope)
-  return base ? `${base}/catalog/products` : undefined
+  const base = projectBase(scope);
+  return base ? `${base}/catalog/products` : undefined;
 }
 
 export function catalogProductHref(scope: WorkspaceScope, productId: string) {
-  const base = catalogProductsHref(scope)
-  return base ? `${base}/${encodeURIComponent(productId)}` : undefined
+  const base = catalogProductsHref(scope);
+  return base ? `${base}/${encodeURIComponent(productId)}` : undefined;
 }
 
 export function providersHref(scope: WorkspaceScope) {
-  const base = projectBase(scope)
-  return base ? `${base}/catalog/providers` : undefined
+  const base = projectBase(scope);
+  return base ? `${base}/catalog/providers` : undefined;
 }
 
 export function environmentSettingsHref(scope: WorkspaceScope) {
-  const base = projectBase(scope)
-  return base ? `${base}/settings/environments` : undefined
+  const base = projectBase(scope);
+  return base ? `${base}/settings/environments` : undefined;
 }
 
 /**
@@ -82,39 +93,44 @@ export function environmentSettingsHref(scope: WorkspaceScope) {
  * exactly as Monetization and Analytics do.
  */
 function billingEnvironmentBase(scope: WorkspaceScope) {
-  const base = projectBase(scope)
-  if (!base || !scope.environmentId) return undefined
-  return `${base}/billing/${encodeURIComponent(scope.environmentId)}`
+  const base = projectBase(scope);
+  if (!(base && scope.environmentId)) {
+    return;
+  }
+  return `${base}/billing/${encodeURIComponent(scope.environmentId)}`;
 }
 
 export function storeConnectionsHref(scope: WorkspaceScope) {
-  const base = projectBase(scope)
-  return base ? `${base}/billing/connections` : undefined
+  const base = projectBase(scope);
+  return base ? `${base}/billing/connections` : undefined;
 }
 
-export function storeConnectionHref(scope: WorkspaceScope, credentialId: string) {
-  const base = storeConnectionsHref(scope)
-  return base ? `${base}/${encodeURIComponent(credentialId)}` : undefined
+export function storeConnectionHref(
+  scope: WorkspaceScope,
+  credentialId: string
+) {
+  const base = storeConnectionsHref(scope);
+  return base ? `${base}/${encodeURIComponent(credentialId)}` : undefined;
 }
 
 export function billingTransactionsHref(scope: WorkspaceScope) {
-  const base = billingEnvironmentBase(scope)
-  return base ? `${base}/transactions` : undefined
+  const base = billingEnvironmentBase(scope);
+  return base ? `${base}/transactions` : undefined;
 }
 
 export function billingQuarantineHref(scope: WorkspaceScope) {
-  const base = billingEnvironmentBase(scope)
-  return base ? `${base}/quarantine` : undefined
+  const base = billingEnvironmentBase(scope);
+  return base ? `${base}/quarantine` : undefined;
 }
 
 export function billingReconciliationHref(scope: WorkspaceScope) {
-  const base = billingEnvironmentBase(scope)
-  return base ? `${base}/reconciliation` : undefined
+  const base = billingEnvironmentBase(scope);
+  return base ? `${base}/reconciliation` : undefined;
 }
 
 export function billingHealthHref(scope: WorkspaceScope) {
-  const base = billingEnvironmentBase(scope)
-  return base ? `${base}/health` : undefined
+  const base = billingEnvironmentBase(scope);
+  return base ? `${base}/health` : undefined;
 }
 
 /**
@@ -127,23 +143,28 @@ export function billingHealthHref(scope: WorkspaceScope) {
  * the two are not confused.
  */
 export function billingCustomersHref(scope: WorkspaceScope) {
-  const base = billingEnvironmentBase(scope)
-  return base ? `${base}/customers` : undefined
+  const base = billingEnvironmentBase(scope);
+  return base ? `${base}/customers` : undefined;
 }
 
 export function billingCustomerHref(scope: WorkspaceScope, customerId: string) {
-  const base = billingCustomersHref(scope)
-  return base ? `${base}/${encodeURIComponent(customerId)}` : undefined
+  const base = billingCustomersHref(scope);
+  return base ? `${base}/${encodeURIComponent(customerId)}` : undefined;
 }
 
-export function billingSubscriptionHref(scope: WorkspaceScope, instanceId: string) {
-  const base = billingEnvironmentBase(scope)
-  return base ? `${base}/subscriptions/${encodeURIComponent(instanceId)}` : undefined
+export function billingSubscriptionHref(
+  scope: WorkspaceScope,
+  instanceId: string
+) {
+  const base = billingEnvironmentBase(scope);
+  return base
+    ? `${base}/subscriptions/${encodeURIComponent(instanceId)}`
+    : undefined;
 }
 
 export function billingRestoresHref(scope: WorkspaceScope) {
-  const base = billingEnvironmentBase(scope)
-  return base ? `${base}/restores` : undefined
+  const base = billingEnvironmentBase(scope);
+  return base ? `${base}/restores` : undefined;
 }
 
 /**
@@ -152,13 +173,16 @@ export function billingRestoresHref(scope: WorkspaceScope) {
  * The page itself says so rather than pretending to be filtered.
  */
 export function billingIdentityConflictsHref(scope: WorkspaceScope) {
-  const base = billingEnvironmentBase(scope)
-  return base ? `${base}/identity-conflicts` : undefined
+  const base = billingEnvironmentBase(scope);
+  return base ? `${base}/identity-conflicts` : undefined;
 }
 
-export function billingIdentityConflictHref(scope: WorkspaceScope, conflictId: string) {
-  const base = billingIdentityConflictsHref(scope)
-  return base ? `${base}/${encodeURIComponent(conflictId)}` : undefined
+export function billingIdentityConflictHref(
+  scope: WorkspaceScope,
+  conflictId: string
+) {
+  const base = billingIdentityConflictsHref(scope);
+  return base ? `${base}/${encodeURIComponent(conflictId)}` : undefined;
 }
 
 /**
@@ -168,8 +192,8 @@ export function billingIdentityConflictHref(scope: WorkspaceScope, conflictId: s
  * is green.
  */
 export function billingProjectionHealthHref(scope: WorkspaceScope) {
-  const base = billingEnvironmentBase(scope)
-  return base ? `${base}/projection-health` : undefined
+  const base = billingEnvironmentBase(scope);
+  return base ? `${base}/projection-health` : undefined;
 }
 
 /**
@@ -178,11 +202,13 @@ export function billingProjectionHealthHref(scope: WorkspaceScope) {
  */
 export function grantVersionsHref(
   scope: WorkspaceScope,
-  filters: { entitlementId?: string; productId?: string } = {},
+  filters: { entitlementId?: string; productId?: string } = {}
 ) {
-  const base = projectBase(scope)
-  if (!base) return undefined
-  return appendSearch(`${base}/catalog/grant-versions`, filters)
+  const base = projectBase(scope);
+  if (!base) {
+    return;
+  }
+  return appendSearch(`${base}/catalog/grant-versions`, filters);
 }
 
 /**
@@ -194,15 +220,23 @@ export function grantVersionsHref(
  * path shape rather than hard-coded by whichever page happens to render it.
  */
 export function describeReturnDestination(href: string | undefined) {
-  if (!href) return undefined
+  if (!href) {
+    return;
+  }
   if (href.includes("/billing/") && href.includes("/quarantine/")) {
-    return "Return to the quarantine record"
+    return "Return to the quarantine record";
   }
   if (href.includes("/billing/") && href.includes("/projection-health")) {
-    return "Return to projection health"
+    return "Return to projection health";
   }
-  if (href.includes("/billing/")) return "Return to Mosaic Billing"
-  if (href.includes("/catalog/grant-versions")) return "Return to grant versions"
-  if (href.includes("/studio/")) return "Return to Publish review"
-  return "Return to where you started"
+  if (href.includes("/billing/")) {
+    return "Return to Mosaic Billing";
+  }
+  if (href.includes("/catalog/grant-versions")) {
+    return "Return to grant versions";
+  }
+  if (href.includes("/studio/")) {
+    return "Return to Publish review";
+  }
+  return "Return to where you started";
 }

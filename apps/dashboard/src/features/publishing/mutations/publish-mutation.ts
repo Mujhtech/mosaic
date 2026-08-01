@@ -1,20 +1,19 @@
-import { mutationOptions, type QueryClient } from "@tanstack/react-query"
-
-import { releaseKeys } from "@/features/releases/queries/release-queries"
-import { paywallKeys } from "@/features/paywalls/queries/paywall-queries"
-import type { HostedPublishingAdapter } from "@/features/publishing/api/hosted-publishing-adapter"
+import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import { paywallKeys } from "@/features/paywalls/queries/paywall-queries";
+import type { HostedPublishingAdapter } from "@/features/publishing/api/hosted-publishing-adapter";
+import { releaseKeys } from "@/features/releases/queries/release-queries";
 
 export function publishDraftMutationOptions(
   input: {
-    acknowledgeMockProducts: boolean
-    draftId: string
-    environmentId: string
-    expectedRevision: number
-    paywallId: string
-    projectId: string
+    acknowledgeMockProducts: boolean;
+    draftId: string;
+    environmentId: string;
+    expectedRevision: number;
+    paywallId: string;
+    projectId: string;
   },
   adapter: HostedPublishingAdapter,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
     mutationFn: () => adapter.publishDraft(input),
@@ -33,7 +32,7 @@ export function publishDraftMutationOptions(
             projectId: input.projectId,
           }),
         }),
-      ])
+      ]);
     },
-  })
+  });
 }

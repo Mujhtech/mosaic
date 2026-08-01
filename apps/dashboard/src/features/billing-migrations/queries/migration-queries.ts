@@ -1,5 +1,8 @@
-import { queryOptions } from "@tanstack/react-query"
-
+import { queryOptions } from "@tanstack/react-query";
+import {
+  migrationRunPollingInterval,
+  normalizeMigrationProgramDetail,
+} from "@/features/billing-migrations/types/migration-operations";
 import {
   getBillingMigrationImportBatch,
   getBillingMigrationProgram,
@@ -14,9 +17,9 @@ import {
   listBillingMigrationCredentialRemovals,
   listBillingMigrationDivergences,
   listBillingMigrationImportBatches,
-  listBillingMigrationMappingSets,
   listBillingMigrationLegalHoldProposals,
   listBillingMigrationLegalHolds,
+  listBillingMigrationMappingSets,
   listBillingMigrationPrograms,
   listBillingMigrationProposals,
   listBillingMigrationRepairExecutions,
@@ -25,16 +28,13 @@ import {
   listBillingMigrationSourceManifests,
   listBillingMigrationStabilizationObservations,
   listBillingMigrationWebhookRedeliveries,
-} from "@/generated/api"
-import {
-  migrationRunPollingInterval,
-  normalizeMigrationProgramDetail,
-} from "@/features/billing-migrations/types/migration-operations"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 export const migrationKeys = {
   project: (projectId: string) => ["billing-migrations", projectId] as const,
-  programs: (projectId: string) => ["billing-migrations", projectId, "programs"] as const,
+  programs: (projectId: string) =>
+    ["billing-migrations", projectId, "programs"] as const,
   program: (projectId: string, programId: string) =>
     ["billing-migrations", projectId, "program", programId] as const,
   manifests: (projectId: string, programId: string) =>
@@ -48,14 +48,23 @@ export const migrationKeys = {
   run: (projectId: string, programId: string, runJobId: string) =>
     ["billing-migrations", projectId, programId, "run", runJobId] as const,
   divergences: (projectId: string, programId: string, classification: string) =>
-    ["billing-migrations", projectId, programId, "divergences", classification] as const,
+    [
+      "billing-migrations",
+      projectId,
+      programId,
+      "divergences",
+      classification,
+    ] as const,
   readiness: (projectId: string, programId: string) =>
     ["billing-migrations", projectId, programId, "readiness"] as const,
   lifecycle: (projectId: string, programId: string) =>
     ["billing-migrations", projectId, programId, "lifecycle"] as const,
-}
+};
 
-export function migrationLifecycleQueryOptions(projectId: string, programId: string) {
+export function migrationLifecycleQueryOptions(
+  projectId: string,
+  programId: string
+) {
   return queryOptions({
     queryKey: migrationKeys.lifecycle(projectId, programId),
     queryFn: async ({ signal }) => {
@@ -64,7 +73,7 @@ export function migrationLifecycleQueryOptions(projectId: string, programId: str
         path: { programId, projectId },
         signal,
         throwOnError: true,
-      } as const
+      } as const;
       const [
         proposals,
         approvals,
@@ -97,7 +106,7 @@ export function migrationLifecycleQueryOptions(projectId: string, programId: str
         listBillingMigrationStabilizationObservations(withSignal),
         listBillingMigrationRollbackReadinessAssessments(withSignal),
         inspectBillingMigrationCompletion(withSignal).catch(() => undefined),
-      ])
+      ]);
       return {
         approvals: approvals.data.data.items,
         cases: cases.data.data.items,
@@ -114,9 +123,9 @@ export function migrationLifecycleQueryOptions(projectId: string, programId: str
         reports: reports.data.data.items,
         rollbackAssessments: rollbackAssessments.data.data.items,
         webhookRedeliveries: redeliveries.data.data.items,
-      }
+      };
     },
-  })
+  });
 }
 
 export function migrationProgramsQueryOptions(projectId: string) {
@@ -129,13 +138,18 @@ export function migrationProgramsQueryOptions(projectId: string) {
         query: { limit: 100 },
         signal,
         throwOnError: true,
-      })
-      return result.data.data.items.map((record) => normalizeMigrationProgramDetail(record.payload))
+      });
+      return result.data.data.items.map((record) =>
+        normalizeMigrationProgramDetail(record.payload)
+      );
     },
-  })
+  });
 }
 
-export function migrationProgramQueryOptions(projectId: string, programId: string) {
+export function migrationProgramQueryOptions(
+  projectId: string,
+  programId: string
+) {
   return queryOptions({
     queryKey: migrationKeys.program(projectId, programId),
     queryFn: async ({ signal }) => {
@@ -144,13 +158,16 @@ export function migrationProgramQueryOptions(projectId: string, programId: strin
         path: { programId, projectId },
         signal,
         throwOnError: true,
-      })
-      return normalizeMigrationProgramDetail(result.data.data.payload)
+      });
+      return normalizeMigrationProgramDetail(result.data.data.payload);
     },
-  })
+  });
 }
 
-export function migrationManifestsQueryOptions(projectId: string, programId: string) {
+export function migrationManifestsQueryOptions(
+  projectId: string,
+  programId: string
+) {
   return queryOptions({
     queryKey: migrationKeys.manifests(projectId, programId),
     queryFn: async ({ signal }) => {
@@ -160,13 +177,16 @@ export function migrationManifestsQueryOptions(projectId: string, programId: str
         query: { limit: 100 },
         signal,
         throwOnError: true,
-      })
-      return result.data.data.items.map((record) => record.payload)
+      });
+      return result.data.data.items.map((record) => record.payload);
     },
-  })
+  });
 }
 
-export function migrationMappingsQueryOptions(projectId: string, programId: string) {
+export function migrationMappingsQueryOptions(
+  projectId: string,
+  programId: string
+) {
   return queryOptions({
     queryKey: migrationKeys.mappings(projectId, programId),
     queryFn: async ({ signal }) => {
@@ -176,13 +196,16 @@ export function migrationMappingsQueryOptions(projectId: string, programId: stri
         query: { limit: 100 },
         signal,
         throwOnError: true,
-      })
-      return result.data.data.items.map((record) => record.payload)
+      });
+      return result.data.data.items.map((record) => record.payload);
     },
-  })
+  });
 }
 
-export function migrationBatchesQueryOptions(projectId: string, programId: string) {
+export function migrationBatchesQueryOptions(
+  projectId: string,
+  programId: string
+) {
   return queryOptions({
     queryKey: migrationKeys.batches(projectId, programId),
     queryFn: async ({ signal }) => {
@@ -192,13 +215,17 @@ export function migrationBatchesQueryOptions(projectId: string, programId: strin
         query: { limit: 100 },
         signal,
         throwOnError: true,
-      })
-      return result.data.data.items.map((record) => record.payload)
+      });
+      return result.data.data.items.map((record) => record.payload);
     },
-  })
+  });
 }
 
-export function migrationBatchQueryOptions(projectId: string, programId: string, batchId: string) {
+export function migrationBatchQueryOptions(
+  projectId: string,
+  programId: string,
+  batchId: string
+) {
   return queryOptions({
     enabled: batchId.length > 0,
     queryKey: migrationKeys.batch(projectId, programId, batchId),
@@ -208,13 +235,17 @@ export function migrationBatchQueryOptions(projectId: string, programId: string,
         path: { batchId, programId, projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data.payload
+      });
+      return result.data.data.payload;
     },
-  })
+  });
 }
 
-export function migrationRunQueryOptions(projectId: string, programId: string, runJobId: string) {
+export function migrationRunQueryOptions(
+  projectId: string,
+  programId: string,
+  runJobId: string
+) {
   return queryOptions({
     enabled: runJobId.length > 0,
     queryKey: migrationKeys.run(projectId, programId, runJobId),
@@ -224,20 +255,23 @@ export function migrationRunQueryOptions(projectId: string, programId: string, r
         path: { programId, projectId, runJobId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     // A Stage 2B job may remain pending until a later worker stage is present.
     // Poll for at most two minutes, and always stop immediately on terminal state.
     refetchInterval: (query) =>
-      migrationRunPollingInterval(query.state.data, query.state.dataUpdateCount),
-  })
+      migrationRunPollingInterval(
+        query.state.data,
+        query.state.dataUpdateCount
+      ),
+  });
 }
 
 export function migrationDivergencesQueryOptions(
   projectId: string,
   programId: string,
-  classification = "all",
+  classification = "all"
 ) {
   return queryOptions({
     queryKey: migrationKeys.divergences(projectId, programId, classification),
@@ -248,16 +282,19 @@ export function migrationDivergencesQueryOptions(
         query: { limit: 100 },
         signal,
         throwOnError: true,
-      })
-      const items = result.data.data.items.map((record) => record.payload)
+      });
+      const items = result.data.data.items.map((record) => record.payload);
       return classification === "all"
         ? items
-        : items.filter((item) => item.classification === classification)
+        : items.filter((item) => item.classification === classification);
     },
-  })
+  });
 }
 
-export function migrationReadinessQueryOptions(projectId: string, programId: string) {
+export function migrationReadinessQueryOptions(
+  projectId: string,
+  programId: string
+) {
   return queryOptions({
     queryKey: migrationKeys.readiness(projectId, programId),
     queryFn: async ({ signal }) => {
@@ -266,10 +303,11 @@ export function migrationReadinessQueryOptions(projectId: string, programId: str
         path: { programId, projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data.payload
+      });
+      return result.data.data.payload;
     },
     retry: (count, error) =>
-      !(error instanceof Error && "status" in error && error.status === 404) && count < 2,
-  })
+      !(error instanceof Error && "status" in error && error.status === 404) &&
+      count < 2,
+  });
 }

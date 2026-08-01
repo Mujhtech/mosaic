@@ -1,8 +1,13 @@
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
 /**
  * Mosaic wires the description and error text to the field control from the
@@ -17,29 +22,38 @@ describe("Field accessibility association", () => {
       <Field>
         <FieldLabel htmlFor="api-key-name">Key name</FieldLabel>
         <Input id="api-key-name" />
-        <FieldDescription>Shown to your team in the API key list.</FieldDescription>
+        <FieldDescription>
+          Shown to your team in the API key list.
+        </FieldDescription>
         <FieldError errors={[]} />
-      </Field>,
-    )
+      </Field>
+    );
 
-    const input = screen.getByLabelText("Key name")
-    const description = screen.getByText("Shown to your team in the API key list.")
+    const input = screen.getByLabelText("Key name");
+    const description = screen.getByText(
+      "Shown to your team in the API key list."
+    );
 
-    expect(description.id).not.toBe("")
-    expect(input.getAttribute("aria-describedby")).toBe(description.id)
+    expect(description.id).not.toBe("");
+    expect(input.getAttribute("aria-describedby")).toBe(description.id);
 
     rerender(
       <Field>
         <FieldLabel htmlFor="api-key-name">Key name</FieldLabel>
         <Input id="api-key-name" />
-        <FieldDescription>Shown to your team in the API key list.</FieldDescription>
+        <FieldDescription>
+          Shown to your team in the API key list.
+        </FieldDescription>
         <FieldError errors={[{ message: "A key name is required." }]} />
-      </Field>,
-    )
+      </Field>
+    );
 
-    const error = screen.getByRole("alert")
-    expect(error.id).not.toBe("")
-    expect(input.getAttribute("aria-describedby")?.split(" ")).toEqual([description.id, error.id])
+    const error = screen.getByRole("alert");
+    expect(error.id).not.toBe("");
+    expect(input.getAttribute("aria-describedby")?.split(" ")).toEqual([
+      description.id,
+      error.id,
+    ]);
 
     // Once the error clears, its identifier must not linger as a dangling
     // reference to a removed element.
@@ -47,13 +61,15 @@ describe("Field accessibility association", () => {
       <Field>
         <FieldLabel htmlFor="api-key-name">Key name</FieldLabel>
         <Input id="api-key-name" />
-        <FieldDescription>Shown to your team in the API key list.</FieldDescription>
+        <FieldDescription>
+          Shown to your team in the API key list.
+        </FieldDescription>
         <FieldError errors={[]} />
-      </Field>,
-    )
+      </Field>
+    );
 
-    expect(input.getAttribute("aria-describedby")).toBe(description.id)
-  })
+    expect(input.getAttribute("aria-describedby")).toBe(description.id);
+  });
 
   it("keeps a hand-written aria-describedby written by a feature form", () => {
     render(
@@ -62,13 +78,13 @@ describe("Field accessibility association", () => {
         <Input aria-describedby="credential-note" id="credential" />
         <FieldDescription>Encrypted by the API.</FieldDescription>
         <p id="credential-note">Never returned once saved.</p>
-      </Field>,
-    )
+      </Field>
+    );
 
-    const input = screen.getByLabelText("Secret")
-    const described = input.getAttribute("aria-describedby")?.split(" ") ?? []
+    const input = screen.getByLabelText("Secret");
+    const described = input.getAttribute("aria-describedby")?.split(" ") ?? [];
 
-    expect(described).toContain("credential-note")
-    expect(described).toContain(screen.getByText("Encrypted by the API.").id)
-  })
-})
+    expect(described).toContain("credential-note");
+    expect(described).toContain(screen.getByText("Encrypted by the API.").id);
+  });
+});

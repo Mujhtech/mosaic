@@ -1,72 +1,87 @@
-import { ArchiveIcon } from "@phosphor-icons/react/dist/ssr/Archive"
-import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise"
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link } from "@tanstack/react-router"
-import { useState } from "react"
+import { ArchiveIcon } from "@phosphor-icons/react/dist/ssr/Archive";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { useCallback, useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { buttonVariants } from "@/components/ui/button-variants"
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { ProductReadinessPanel } from "@/features/catalog/components/product-readiness-panel"
-import { ProductPlatformCoverage } from "@/features/catalog/components/product-platform-coverage"
-import { ProviderMappingsPanel } from "@/features/catalog/components/provider-mappings-panel"
-import { NativeProviderMappingSheet } from "@/features/catalog/components/native-provider-mapping-sheet"
+} from "@/components/ui/select";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { NativeProviderMappingSheet } from "@/features/catalog/components/native-provider-mapping-sheet";
+import { ProductPlatformCoverage } from "@/features/catalog/components/product-platform-coverage";
+import { ProductReadinessPanel } from "@/features/catalog/components/product-readiness-panel";
+import { ProviderMappingsPanel } from "@/features/catalog/components/provider-mappings-panel";
 import {
   archiveProviderMappingMutationOptions,
   createProviderMappingDraftMutationOptions,
   productLifecycleMutationOptions,
   replaceProviderMappingMutationOptions,
   setProductReplacementMutationOptions,
-} from "@/features/catalog/mutations/catalog-mutations"
+} from "@/features/catalog/mutations/catalog-mutations";
 import {
   productEntitlementsQueryOptions,
   productQueryOptions,
   productReadinessQueryOptions,
-  providerMappingMetadataQueryOptions,
-  providerMappingObservationsQueryOptions,
-  providerMappingUsageQueryOptions,
   productsQueryOptions,
   productUsageQueryOptions,
+  providerMappingMetadataQueryOptions,
+  providerMappingObservationsQueryOptions,
   providerMappingsQueryOptions,
-} from "@/features/catalog/queries/catalog-query"
-import {
-  canConfirmProductArchive,
-  countProductUsage,
-  replacementCandidates,
-} from "@/features/catalog/types/product-lifecycle"
+  providerMappingUsageQueryOptions,
+} from "@/features/catalog/queries/catalog-query";
 import {
   productReadinessView,
   providerMappingView,
   readinessStateLabel,
-} from "@/features/catalog/types/connected-product-view"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { detectNestedScopeMismatch } from "@/features/orgs/types/nested-scope"
-import { providerConnectionsQueryOptions } from "@/features/provider-connections/queries/provider-connection-queries"
+} from "@/features/catalog/types/connected-product-view";
+import {
+  canConfirmProductArchive,
+  countProductUsage,
+  replacementCandidates,
+} from "@/features/catalog/types/product-lifecycle";
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { detectNestedScopeMismatch } from "@/features/orgs/types/nested-scope";
 import {
   applicationsQueryOptions,
   projectQueryOptions,
-} from "@/features/projects/queries/projects-query"
-import { useOrganizationAccess } from "@/hooks/use-organization-access"
-import { describeReturnDestination, grantVersionsHref } from "@/lib/routing/workspace-hrefs"
+} from "@/features/projects/queries/projects-query";
+import { providerConnectionsQueryOptions } from "@/features/provider-connections/queries/provider-connection-queries";
+import { useOrganizationAccess } from "@/hooks/use-organization-access";
+import {
+  describeReturnDestination,
+  grantVersionsHref,
+} from "@/lib/routing/workspace-hrefs";
+import { workspaceScopeParams } from "@/lib/routing/workspace-params";
 
 interface ProductDetailPageProps {
-  onReadinessScopeChange: (scope: { applicationId?: string; environmentId?: string }) => void
-  organizationId: string
-  productId: string
-  projectId: string
-  readinessApplicationId?: string
-  readinessEnvironmentId?: string
-  returnTo?: string
+  onReadinessScopeChange: (scope: {
+    applicationId?: string;
+    environmentId?: string;
+  }) => void;
+  organizationId: string;
+  productId: string;
+  projectId: string;
+  readinessApplicationId?: string;
+  readinessEnvironmentId?: string;
+  returnTo?: string;
 }
 
 export function ProductDetailPage({
@@ -78,82 +93,118 @@ export function ProductDetailPage({
   readinessEnvironmentId,
   returnTo,
 }: ProductDetailPageProps) {
-  const queryClient = useQueryClient()
-  const access = useOrganizationAccess(organizationId)
-  const [showLifecycle, setShowLifecycle] = useState(false)
-  const [selectedReplacementId, setSelectedReplacementId] = useState<string | null>(null)
-  const project = useQuery(projectQueryOptions(projectId))
-  const product = useQuery(productQueryOptions(productId))
+  const handleClick = useCallback(() => {
+    setSelectedReplacementId(null);
+    setShowLifecycle(true);
+  }, []);
+  const queryClient = useQueryClient();
+  const access = useOrganizationAccess(organizationId);
+  const [showLifecycle, setShowLifecycle] = useState(false);
+  const [selectedReplacementId, setSelectedReplacementId] = useState<
+    string | null
+  >(null);
+  const project = useQuery(projectQueryOptions(projectId));
+  const product = useQuery(productQueryOptions(productId));
   const scopeMismatch = detectNestedScopeMismatch({
     expectedOrganizationId: organizationId,
     expectedProjectId: projectId,
     expectedResourceId: productId,
     project: project.data,
     resource: product.data,
-  })
-  const scopeReady = project.isSuccess && product.isSuccess && scopeMismatch === null
-  const usage = useQuery({ ...productUsageQueryOptions(productId), enabled: scopeReady })
-  const mappings = useQuery({ ...providerMappingsQueryOptions(productId), enabled: scopeReady })
+  });
+  const scopeReady =
+    project.isSuccess && product.isSuccess && scopeMismatch === null;
+  const usage = useQuery({
+    ...productUsageQueryOptions(productId),
+    enabled: scopeReady,
+  });
+  const mappings = useQuery({
+    ...providerMappingsQueryOptions(productId),
+    enabled: scopeReady,
+  });
   const metadataQueries = useQueries({
     queries: (mappings.data?.items ?? []).map((mapping) => ({
       ...providerMappingMetadataQueryOptions(mapping.id),
-      enabled: scopeReady && Boolean(mapping.currentSnapshotId) && mapping.status !== "archived",
+      enabled:
+        scopeReady &&
+        Boolean(mapping.currentSnapshotId) &&
+        mapping.status !== "archived",
     })),
-  })
+  });
   const observationQueries = useQueries({
     queries: (mappings.data?.items ?? []).map((mapping) => ({
       ...providerMappingObservationsQueryOptions(mapping.id),
       enabled:
-        scopeReady && (mapping.provider === "app_store" || mapping.provider === "google_play"),
+        scopeReady &&
+        (mapping.provider === "app_store" ||
+          mapping.provider === "google_play"),
     })),
-  })
-  const grants = useQuery({ ...productEntitlementsQueryOptions(productId), enabled: scopeReady })
-  const replacements = useQuery({ ...productsQueryOptions(projectId), enabled: scopeReady })
-  const applications = useQuery({ ...applicationsQueryOptions(projectId), enabled: scopeReady })
-  const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
+  });
+  const grants = useQuery({
+    ...productEntitlementsQueryOptions(productId),
+    enabled: scopeReady,
+  });
+  const replacements = useQuery({
+    ...productsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
+  const applications = useQuery({
+    ...applicationsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
+  const environments = useQuery({
+    ...environmentsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
   const connections = useQuery({
     ...providerConnectionsQueryOptions(projectId),
     enabled: scopeReady,
-  })
+  });
   const selectedReadinessApplication = applications.data?.items.find(
-    (application) => application.id === readinessApplicationId,
-  )
+    (application) => application.id === readinessApplicationId
+  );
   const selectedReadinessEnvironment = environments.data?.items.find(
-    (environment) => environment.id === readinessEnvironmentId,
-  )
+    (environment) => environment.id === readinessEnvironmentId
+  );
   const hasExplicitReadinessScope = Boolean(
-    selectedReadinessApplication && selectedReadinessEnvironment,
-  )
+    selectedReadinessApplication && selectedReadinessEnvironment
+  );
   const readiness = useQuery({
     ...productReadinessQueryOptions(
       productId,
       readinessEnvironmentId ?? "unselected",
-      readinessApplicationId ?? "unselected",
+      readinessApplicationId ?? "unselected"
     ),
     enabled: scopeReady && hasExplicitReadinessScope,
-  })
+  });
   const coverageReadinessQueries = useQueries({
     queries: (applications.data?.items ?? []).map((application) => ({
       ...productReadinessQueryOptions(
         productId,
         readinessEnvironmentId ?? "unselected",
-        application.id,
+        application.id
       ),
       enabled: scopeReady && Boolean(selectedReadinessEnvironment),
     })),
-  })
-  const archive = useMutation(productLifecycleMutationOptions(queryClient, "archive"))
-  const restore = useMutation(productLifecycleMutationOptions(queryClient, "restore"))
-  const setReplacement = useMutation(setProductReplacementMutationOptions(productId, queryClient))
+  });
+  const archive = useMutation(
+    productLifecycleMutationOptions(queryClient, "archive")
+  );
+  const restore = useMutation(
+    productLifecycleMutationOptions(queryClient, "restore")
+  );
+  const setReplacement = useMutation(
+    setProductReplacementMutationOptions(productId, queryClient)
+  );
   const archiveMapping = useMutation(
-    archiveProviderMappingMutationOptions(productId, projectId, queryClient),
-  )
+    archiveProviderMappingMutationOptions(productId, projectId, queryClient)
+  );
   const createMapping = useMutation(
-    createProviderMappingDraftMutationOptions(productId, projectId, queryClient),
-  )
+    createProviderMappingDraftMutationOptions(productId, projectId, queryClient)
+  );
   const replaceMapping = useMutation(
-    replaceProviderMappingMutationOptions(productId, projectId, queryClient),
-  )
+    replaceProviderMappingMutationOptions(productId, projectId, queryClient)
+  );
   const error =
     project.error ??
     product.error ??
@@ -163,7 +214,7 @@ export function ProductDetailPage({
     applications.error ??
     environments.error ??
     connections.error ??
-    access.error
+    access.error;
   const state = resolveHostedQueryState({
     emptyDescription: "Return to Products and choose an existing Product.",
     emptyTitle: "Product unavailable",
@@ -182,57 +233,67 @@ export function ProductDetailPage({
           connections.isPending)),
     loadingDescription: "Loading Product identity, readiness, and usage.",
     onRetry: () => {
-      void project.refetch()
-      void product.refetch()
-      void usage.refetch()
-      if (hasExplicitReadinessScope) void readiness.refetch()
-      void mappings.refetch()
-      void applications.refetch()
-      void environments.refetch()
-      void connections.refetch()
+      project.refetch();
+      product.refetch();
+      usage.refetch();
+      if (hasExplicitReadinessScope) {
+        readiness.refetch();
+      }
+      mappings.refetch();
+      applications.refetch();
+      environments.refetch();
+      connections.refetch();
     },
     permissionAction: (
       <Link
         className={buttonVariants({ variant: "outline" })}
-        params={(prev) => prev}
+        params={(prev) => ({
+          ...prev,
+          ...workspaceScopeParams(prev),
+        })}
         to="/orgs/$organizationId/projects/$projectId/env/$environmentKey"
       >
         Return to Project
       </Link>
     ),
-    permissionDescription: "Project membership is required to inspect Product usage.",
+    permissionDescription:
+      "Project membership is required to inspect Product usage.",
     scope: { organizationId, projectId },
-  })
-  const usageCount = countProductUsage(usage.data)
-  const isArchived = product.data?.status === "archived"
+  });
+  const usageCount = countProductUsage(usage.data);
+  const isArchived = product.data?.status === "archived";
   const replacementOptions = replacementCandidates(
     replacements.data?.items ?? [],
     productId,
-    product.data?.type,
-  )
+    product.data?.type
+  );
   const replacementSelectOptions = replacementOptions.map((item) => ({
     label: item.internalName,
     value: item.id,
-  }))
+  }));
   const readinessEnvironmentOptions = [
     { label: "Select Environment", value: "" },
     ...(environments.data?.items ?? []).map((environment) => ({
       label: `${environment.name} · ${environment.mode}`,
       value: environment.id,
     })),
-  ]
+  ];
   const readinessApplicationOptions = [
     { label: "Select Application", value: "" },
     ...(applications.data?.items ?? []).map((application) => ({
       label: `${application.name} · ${application.platform.toUpperCase()}`,
       value: application.id,
     })),
-  ]
-  const effectiveReplacementId = selectedReplacementId ?? product.data?.replacementProductId
+  ];
+  const effectiveReplacementId =
+    selectedReplacementId ?? product.data?.replacementProductId;
   const replacementNeedsSave = Boolean(
-    selectedReplacementId && selectedReplacementId !== product.data?.replacementProductId,
-  )
-  const connectedReadiness = readiness.data ? productReadinessView(readiness.data) : null
+    selectedReplacementId &&
+      selectedReplacementId !== product.data?.replacementProductId
+  );
+  const connectedReadiness = readiness.data
+    ? productReadinessView(readiness.data)
+    : null;
   const mappingViews =
     mappings.data?.items.map((mapping, index) =>
       providerMappingView(
@@ -241,41 +302,53 @@ export function ProductDetailPage({
         environments.data?.items ?? [],
         connections.data?.items ?? [],
         metadataQueries[index]?.data,
-        observationQueries[index]?.data,
-      ),
-    ) ?? []
+        observationQueries[index]?.data
+      )
+    ) ?? [];
   const coverageRows =
     applications.data?.items.map((application, index) => {
-      const applicationReadiness = coverageReadinessQueries[index]?.data
+      const applicationReadiness = coverageReadinessQueries[index]?.data;
       return {
         application,
         readiness: applicationReadiness,
         mapping: applicationReadiness?.mappingId
-          ? mappings.data?.items.find((mapping) => mapping.id === applicationReadiness.mappingId)
+          ? mappings.data?.items.find(
+              (mapping) => mapping.id === applicationReadiness.mappingId
+            )
           : undefined,
-      }
-    }) ?? []
-  const manageProvidersHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
+      };
+    }) ?? [];
+  const manageProvidersHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`;
 
-  async function confirmArchive() {
+  const confirmArchive = useCallback(async () => {
     try {
       if (replacementNeedsSave && selectedReplacementId) {
         await setReplacement.mutateAsync({
           previousReplacementProductId: product.data?.replacementProductId,
           replacementProductId: selectedReplacementId,
-        })
+        });
       }
-      await archive.mutateAsync(productId)
-      setSelectedReplacementId(null)
-      setShowLifecycle(false)
+      await archive.mutateAsync(productId);
+      setSelectedReplacementId(null);
+      setShowLifecycle(false);
     } catch {
       // TanStack Mutation exposes the actionable API error in the workflow below.
     }
-  }
+  }, [
+    archive,
+    product,
+    productId,
+    replacementNeedsSave,
+    selectedReplacementId,
+    setReplacement,
+  ]);
 
+  const handleClick2 = useCallback(() => {
+    confirmArchive();
+  }, [confirmArchive]);
   function cancelArchiveReview() {
-    setSelectedReplacementId(null)
-    setShowLifecycle(false)
+    setSelectedReplacementId(null);
+    setShowLifecycle(false);
   }
 
   if (scopeMismatch) {
@@ -290,36 +363,50 @@ export function ProductDetailPage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
   return (
     <WorkspacePage
-      description={product.data?.description ?? "Stable provider-neutral Product identity."}
+      description={
+        product.data?.description ?? "Stable provider-neutral Product identity."
+      }
       eyebrow="Catalog · Product"
       title={product.data?.internalName ?? "Product"}
     >
       <HostedResourceBoundary state={state}>
         {returnTo ? (
-          <a className="text-primary inline-flex text-sm font-semibold" href={returnTo}>
+          <a
+            className="inline-flex font-semibold text-primary text-sm"
+            href={returnTo}
+          >
             {describeReturnDestination(returnTo)}
           </a>
         ) : null}
         <div className="grid gap-4 md:grid-cols-3">
-          <Metric label="Status" value={product.data?.status.replaceAll("_", " ") ?? "—"} />
+          <Metric
+            label="Status"
+            value={product.data?.status.replaceAll("_", " ") ?? "—"}
+          />
           <Metric
             label="Metadata"
-            value={product.data?.metadataSource === "provider" ? "Provider-owned" : "Mock metadata"}
+            value={
+              product.data?.metadataSource === "provider"
+                ? "Provider-owned"
+                : "Mock metadata"
+            }
           />
           <Metric
             label="Readiness"
-            value={
-              readiness.data
-                ? readinessStateLabel(readiness.data.state)
-                : hasExplicitReadinessScope
-                  ? "Checking…"
-                  : "Select scope"
-            }
+            value={(() => {
+              if (readiness.data) {
+                return readinessStateLabel(readiness.data.state);
+              }
+              if (hasExplicitReadinessScope) {
+                return "Checking…";
+              }
+              return "Select scope";
+            })()}
           />
         </div>
 
@@ -328,15 +415,25 @@ export function ProductDetailPage({
           title="Mosaic-owned Product"
         >
           <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Internal name" value={product.data?.internalName ?? "—"} />
+            <Metric
+              label="Internal name"
+              value={product.data?.internalName ?? "—"}
+            />
             <Metric label="Product key" value={product.data?.key ?? "—"} />
-            <Metric label="Type" value={product.data?.type.replaceAll("_", " ") ?? "—"} />
-            <Metric label="Entitlement grants" value={`${grants.data?.items.length ?? 0}`} />
+            <Metric
+              label="Type"
+              value={product.data?.type.replaceAll("_", " ") ?? "—"}
+            />
+            <Metric
+              label="Entitlement grants"
+              value={`${grants.data?.items.length ?? 0}`}
+            />
           </dl>
-          <p className="text-muted-foreground mt-4 text-sm">
-            {product.data?.description || "No internal description."} Provider display names,
-            localized prices, periods, offers, and availability are synchronized read-only evidence
-            below and never overwrite this identity.
+          <p className="mt-4 text-muted-foreground text-sm">
+            {product.data?.description || "No internal description."} Provider
+            display names, localized prices, periods, offers, and availability
+            are synchronized read-only evidence below and never overwrite this
+            identity.
           </p>
         </WorkflowPanel>
 
@@ -345,7 +442,7 @@ export function ProductDetailPage({
           title="Readiness scope"
         >
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="text-sm font-medium">
+            <div className="font-medium text-sm">
               <label htmlFor="readiness-environment">Environment</label>
               <Select
                 items={readinessEnvironmentOptions}
@@ -369,7 +466,7 @@ export function ProductDetailPage({
                 </SelectContent>
               </Select>
             </div>
-            <div className="text-sm font-medium">
+            <div className="font-medium text-sm">
               <label htmlFor="readiness-application">Application</label>
               <Select
                 items={readinessApplicationOptions}
@@ -394,11 +491,12 @@ export function ProductDetailPage({
               </Select>
             </div>
           </div>
-          {!hasExplicitReadinessScope ? (
-            <p className="text-muted-foreground mt-3 text-xs">
-              Readiness is not requested until both scope values are explicitly selected.
+          {hasExplicitReadinessScope ? null : (
+            <p className="mt-3 text-muted-foreground text-xs">
+              Readiness is not requested until both scope values are explicitly
+              selected.
             </p>
-          ) : null}
+          )}
         </WorkflowPanel>
 
         <ProductPlatformCoverage
@@ -430,7 +528,10 @@ export function ProductDetailPage({
           title="Used in"
         >
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <UsageList items={usage.data?.plans.map((item) => item.name) ?? []} label="Plans" />
+            <UsageList
+              items={usage.data?.plans.map((item) => item.name) ?? []}
+              label="Plans"
+            />
             <UsageList
               items={usage.data?.entitlements.map((item) => item.name) ?? []}
               label="Access"
@@ -438,7 +539,8 @@ export function ProductDetailPage({
             <UsageList
               items={
                 usage.data?.providerMappings.map(
-                  (item) => `${item.provider}: ${item.providerProductIdentifier}`,
+                  (item) =>
+                    `${item.provider}: ${item.providerProductIdentifier}`
                 ) ?? []
               }
               label="Provider placeholders"
@@ -469,16 +571,16 @@ export function ProductDetailPage({
               >
                 <span>
                   {entitlement.name}{" "}
-                  <span className="text-muted-foreground font-mono text-xs">
+                  <span className="font-mono text-muted-foreground text-xs">
                     · {entitlement.key}
                   </span>
                 </span>
                 <a
-                  className="text-primary text-xs font-semibold"
+                  className="font-semibold text-primary text-xs"
                   href={
                     grantVersionsHref(
                       { organizationId, projectId },
-                      { entitlementId: entitlement.id, productId },
+                      { entitlementId: entitlement.id, productId }
                     ) ?? "#"
                   }
                 >
@@ -487,22 +589,28 @@ export function ProductDetailPage({
               </li>
             ))}
           </ul>
-          <p className="text-muted-foreground mb-3 text-sm leading-6">
-            Changing what a Product grants publishes a new immutable grant version rather than
-            editing this list. The projection engine selects a version by each purchase&rsquo;s own
-            effective time, so a change made here would otherwise rewrite what someone was entitled
-            to at an instant that has already passed.
+          <p className="mb-3 text-muted-foreground text-sm leading-6">
+            Changing what a Product grants publishes a new immutable grant
+            version rather than editing this list. The projection engine selects
+            a version by each purchase&rsquo;s own effective time, so a change
+            made here would otherwise rewrite what someone was entitled to at an
+            instant that has already passed.
           </p>
           {access.canManage ? (
             <a
               className={buttonVariants({ variant: "outline" })}
-              href={grantVersionsHref({ organizationId, projectId }, { productId }) ?? "#"}
+              href={
+                grantVersionsHref(
+                  { organizationId, projectId },
+                  { productId }
+                ) ?? "#"
+              }
             >
               Open grant versions
             </a>
           ) : (
             <a
-              className="text-primary text-sm font-semibold"
+              className="font-semibold text-primary text-sm"
               href={`/orgs/${encodeURIComponent(organizationId)}/members`}
             >
               Ask an Owner or Admin to change Access grants
@@ -512,21 +620,25 @@ export function ProductDetailPage({
 
         <ProviderMappingsPanel
           canManage={access.canManage}
-          error={archiveMapping.error ?? replaceMapping.error ?? createMapping.error}
-          isPending={
-            archiveMapping.isPending || replaceMapping.isPending || createMapping.isPending
+          error={
+            archiveMapping.error ?? replaceMapping.error ?? createMapping.error
           }
+          isPending={
+            archiveMapping.isPending ||
+            replaceMapping.isPending ||
+            createMapping.isPending
+          }
+          manageProvidersHref={manageProvidersHref}
+          mappings={mappingViews}
+          membersHref={`/orgs/${encodeURIComponent(organizationId)}/members`}
+          onArchive={async (mappingId) => {
+            await archiveMapping.mutateAsync(mappingId);
+          }}
           onLoadUsage={(mappingId) =>
             queryClient.fetchQuery(providerMappingUsageQueryOptions(mappingId))
           }
-          manageProvidersHref={manageProvidersHref}
-          membersHref={`/orgs/${encodeURIComponent(organizationId)}/members`}
-          mappings={mappingViews}
-          onArchive={async (mappingId) => {
-            await archiveMapping.mutateAsync(mappingId)
-          }}
           onReplace={async (mappingId, body) => {
-            await replaceMapping.mutateAsync({ body, mappingId })
+            await replaceMapping.mutateAsync({ body, mappingId });
           }}
           productType={product.data?.type}
         />
@@ -535,7 +647,8 @@ export function ProductDetailPage({
         product.data &&
         selectedReadinessApplication &&
         selectedReadinessEnvironment &&
-        (readiness.data?.provider === "app_store" || readiness.data?.provider === "google_play") ? (
+        (readiness.data?.provider === "app_store" ||
+          readiness.data?.provider === "google_play") ? (
           <WorkflowPanel
             description="The form is fixed to the selected Mosaic Product, Environment, Application, and platform."
             title="Add native store mapping"
@@ -552,8 +665,10 @@ export function ProductDetailPage({
                   ...(input.googleBasePlanId
                     ? { providerBasePlanIdentifier: input.googleBasePlanId }
                     : {}),
-                  ...(input.googleOfferId ? { providerOfferIdentifier: input.googleOfferId } : {}),
-                })
+                  ...(input.googleOfferId
+                    ? { providerOfferIdentifier: input.googleOfferId }
+                    : {}),
+                });
               }}
               product={product.data}
               provider={readiness.data.provider}
@@ -565,43 +680,54 @@ export function ProductDetailPage({
           description="Archive removes this Product from future selection without deleting history. Restore preserves the same ID."
           title="Lifecycle"
         >
-          {!access.canManage ? (
-            <a
-              className="text-primary text-sm font-semibold"
-              href={`/orgs/${encodeURIComponent(organizationId)}/members`}
-            >
-              Ask an Owner or Admin to change Product lifecycle
-            </a>
-          ) : isArchived ? (
-            <Button onClick={() => restore.mutate(productId)} variant="outline">
-              <ArrowCounterClockwiseIcon aria-hidden size={16} />
-              Restore Product
-            </Button>
-          ) : (
-            <Button
-              onClick={() => {
-                setSelectedReplacementId(null)
-                setShowLifecycle(true)
-              }}
-              variant="outline"
-            >
-              <ArchiveIcon aria-hidden size={16} />
-              Review archive
-            </Button>
-          )}
+          {(() => {
+            if (access.canManage) {
+              return (() => {
+                if (isArchived) {
+                  return (
+                    <Button
+                      onClick={() => restore.mutate(productId)}
+                      variant="outline"
+                    >
+                      <ArrowCounterClockwiseIcon aria-hidden size={16} />
+                      Restore Product
+                    </Button>
+                  );
+                }
+                return (
+                  <Button onClick={handleClick} variant="outline">
+                    <ArchiveIcon aria-hidden size={16} />
+                    Review archive
+                  </Button>
+                );
+              })();
+            }
+            return (
+              <a
+                className="font-semibold text-primary text-sm"
+                href={`/orgs/${encodeURIComponent(organizationId)}/members`}
+              >
+                Ask an Owner or Admin to change Product lifecycle
+              </a>
+            );
+          })()}
           {showLifecycle && !isArchived ? (
-            <div className="border-border bg-muted/35 mt-4 rounded border p-4">
-              <p className="text-sm font-semibold">
+            <div className="mt-4 rounded border border-border bg-muted/35 p-4">
+              <p className="font-semibold text-sm">
                 {usageCount > 0
                   ? `This Product has ${usageCount} usage reference(s). Choose a replacement before archiving.`
                   : "This Product has no known usage and can be archived safely."}
               </p>
               {usageCount > 0 ? (
-                <div className="mt-3 flex max-w-md flex-col gap-2 text-sm font-medium">
-                  <label htmlFor="replacement-product">Replacement Product</label>
+                <div className="mt-3 flex max-w-md flex-col gap-2 font-medium text-sm">
+                  <label htmlFor="replacement-product">
+                    Replacement Product
+                  </label>
                   <Select
                     items={replacementSelectOptions}
-                    onValueChange={(value) => setSelectedReplacementId(value || null)}
+                    onValueChange={(value) =>
+                      setSelectedReplacementId(value || null)
+                    }
                     value={effectiveReplacementId ?? ""}
                   >
                     <SelectTrigger id="replacement-product">
@@ -618,16 +744,21 @@ export function ProductDetailPage({
                 </div>
               ) : null}
               {usageCount > 0 && product.data?.replacementProductId ? (
-                <p className="text-muted-foreground mt-2 text-sm">
-                  An existing replacement is already recorded. Choose another only if it should be
-                  changed before archive.
+                <p className="mt-2 text-muted-foreground text-sm">
+                  An existing replacement is already recorded. Choose another
+                  only if it should be changed before archive.
                 </p>
               ) : null}
-              {usageCount > 0 && replacementOptions.length === 0 && !effectiveReplacementId ? (
+              {usageCount > 0 &&
+              replacementOptions.length === 0 &&
+              !effectiveReplacementId ? (
                 <div className="mt-4">
                   <Link
                     className={buttonVariants({ variant: "outline" })}
-                    params={(prev) => prev}
+                    params={(prev) => ({
+                      ...prev,
+                      ...workspaceScopeParams(prev),
+                    })}
                     to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products"
                   >
                     Create Replacement Product
@@ -639,17 +770,25 @@ export function ProductDetailPage({
                   disabled={
                     archive.isPending ||
                     setReplacement.isPending ||
-                    !canConfirmProductArchive(usageCount, Boolean(effectiveReplacementId))
+                    !canConfirmProductArchive(
+                      usageCount,
+                      Boolean(effectiveReplacementId)
+                    )
                   }
-                  onClick={() => void confirmArchive()}
+                  onClick={handleClick2}
                 >
-                  {setReplacement.isPending
-                    ? "Saving replacement…"
-                    : archive.isPending
-                      ? "Archiving…"
-                      : replacementNeedsSave
-                        ? "Save replacement and archive"
-                        : "Archive Product"}
+                  {(() => {
+                    if (setReplacement.isPending) {
+                      return "Saving replacement…";
+                    }
+                    if (archive.isPending) {
+                      return "Archiving…";
+                    }
+                    if (replacementNeedsSave) {
+                      return "Save replacement and archive";
+                    }
+                    return "Archive Product";
+                  })()}
                 </Button>
                 <Button
                   disabled={archive.isPending || setReplacement.isPending}
@@ -661,33 +800,38 @@ export function ProductDetailPage({
               </div>
             </div>
           ) : null}
-          <p className="text-muted-foreground mt-4 text-sm">
-            Destructive deletion is unavailable once referenced. Archive, replacement, and restore
-            are the recovery paths.
+          <p className="mt-4 text-muted-foreground text-sm">
+            Destructive deletion is unavailable once referenced. Archive,
+            replacement, and restore are the recovery paths.
           </p>
           {archive.error || restore.error || setReplacement.error ? (
-            <p className="text-destructive mt-3 text-sm" role="alert">
-              {(archive.error ?? restore.error ?? setReplacement.error)?.message}
+            <p className="mt-3 text-destructive text-sm" role="alert">
+              {
+                (archive.error ?? restore.error ?? setReplacement.error)
+                  ?.message
+              }
             </p>
           ) : null}
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded border p-4">
-      <p className="text-muted-foreground text-xs font-medium uppercase">{label}</p>
-      <p className="mt-2 text-sm font-semibold capitalize">{value}</p>
+      <p className="font-medium text-muted-foreground text-xs uppercase">
+        {label}
+      </p>
+      <p className="mt-2 font-semibold text-sm capitalize">{value}</p>
     </div>
-  )
+  );
 }
 function UsageList({ items, label }: { items: string[]; label: string }) {
   return (
     <section aria-label={label}>
-      <p className="text-xs font-semibold tracking-wide uppercase">{label}</p>
+      <p className="font-semibold text-xs uppercase tracking-wide">{label}</p>
       {items.length ? (
         <ul className="mt-2 space-y-1">
           {items.map((item) => (
@@ -697,8 +841,8 @@ function UsageList({ items, label }: { items: string[]; label: string }) {
           ))}
         </ul>
       ) : (
-        <p className="text-muted-foreground mt-2 text-sm">None</p>
+        <p className="mt-2 text-muted-foreground text-sm">None</p>
       )}
     </section>
-  )
+  );
 }

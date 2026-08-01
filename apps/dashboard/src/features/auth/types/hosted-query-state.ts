@@ -1,21 +1,21 @@
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
 
-import type { HostedResourceState } from "@/features/auth/components/hosted-resource-boundary"
-import { ApiError, describeApiError } from "@/lib/api/errors"
-import type { WorkspaceScope } from "@/lib/routing/workspace-hrefs"
+import type { HostedResourceState } from "@/features/auth/components/hosted-resource-boundary";
+import { ApiError, describeApiError } from "@/lib/api/errors";
+import type { WorkspaceScope } from "@/lib/routing/workspace-hrefs";
 
 interface HostedQueryStateBaseOptions {
-  error: unknown
-  isPending: boolean
-  loadingDescription: string
-  onRetry?: () => void
-  permissionAction?: ReactNode
-  permissionDescription: string
+  error: unknown;
+  isPending: boolean;
+  loadingDescription: string;
+  onRetry?: () => void;
+  permissionAction?: ReactNode;
+  permissionDescription: string;
   /**
    * Identifiers a coded error's recovery link needs. Omitting it keeps the
    * specific explanation and drops only the link.
    */
-  scope?: WorkspaceScope
+  scope?: WorkspaceScope;
 }
 
 /**
@@ -24,13 +24,24 @@ interface HostedQueryStateBaseOptions {
  * inside its own body, must not be forced to pass placeholder strings.
  */
 type HostedQueryEmptyOptions =
-  | { emptyAction?: ReactNode; emptyDescription: string; emptyTitle: string; isEmpty: boolean }
-  | { emptyAction?: never; emptyDescription?: never; emptyTitle?: never; isEmpty: false }
+  | {
+      emptyAction?: ReactNode;
+      emptyDescription: string;
+      emptyTitle: string;
+      isEmpty: boolean;
+    }
+  | {
+      emptyAction?: never;
+      emptyDescription?: never;
+      emptyTitle?: never;
+      isEmpty: false;
+    };
 
-type ResolveHostedQueryStateOptions = HostedQueryStateBaseOptions & HostedQueryEmptyOptions
+type ResolveHostedQueryStateOptions = HostedQueryStateBaseOptions &
+  HostedQueryEmptyOptions;
 
 export function resolveHostedQueryState(
-  options: ResolveHostedQueryStateOptions,
+  options: ResolveHostedQueryStateOptions
 ): HostedResourceState {
   const {
     error,
@@ -41,30 +52,30 @@ export function resolveHostedQueryState(
     permissionAction,
     permissionDescription,
     scope,
-  } = options
+  } = options;
 
   if (isPending) {
-    return { description: loadingDescription, kind: "loading" }
+    return { description: loadingDescription, kind: "loading" };
   }
 
   if (error instanceof ApiError && error.status === 401) {
-    return { kind: "decision_required" }
+    return { kind: "decision_required" };
   }
 
   if (error instanceof ApiError && error.status === 403) {
     return {
-      ...(permissionAction !== undefined ? { action: permissionAction } : {}),
+      ...(permissionAction === undefined ? {} : { action: permissionAction }),
       description: permissionDescription,
       kind: "permission",
-    }
+    };
   }
 
   if (error) {
-    const described = describeApiError(error, scope)
+    const described = describeApiError(error, scope);
     const specifics = {
       ...(described.details ? { details: described.details } : {}),
       ...(described.recovery ? { recovery: described.recovery } : {}),
-    }
+    };
 
     // A transport failure (offline, DNS, CORS, API down) is operationally
     // different from a server-reported error: Mosaic stays usable locally and
@@ -76,7 +87,7 @@ export function resolveHostedQueryState(
         onRetry,
         requestId: described.correlationId,
         ...specifics,
-      }
+      };
     }
 
     return {
@@ -85,7 +96,7 @@ export function resolveHostedQueryState(
       onRetry,
       requestId: described.correlationId,
       ...specifics,
-    }
+    };
   }
 
   if (isEmpty) {
@@ -94,8 +105,8 @@ export function resolveHostedQueryState(
       description: options.emptyDescription,
       kind: "empty",
       title: options.emptyTitle,
-    }
+    };
   }
 
-  return { kind: "ready" }
+  return { kind: "ready" };
 }

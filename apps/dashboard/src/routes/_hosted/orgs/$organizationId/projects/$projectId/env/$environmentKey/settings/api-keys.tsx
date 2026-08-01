@@ -1,31 +1,32 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router";
 
-import { RoutePendingState } from "@/components/feedback/route-feedback"
+import { RoutePendingState } from "@/components/feedback/route-feedback";
 
-import { ApiKeysPage } from "@/features/api-keys/components/api-keys-page"
-import { routeHead } from "@/lib/routing/route-head"
+import { ApiKeysPage } from "@/features/api-keys/components/api-keys-page";
+import { routeHead } from "@/lib/routing/route-head";
 
 interface ApiKeysSearch {
-  environmentId?: string
+  environmentId?: string;
 }
 
 export const Route = createFileRoute(
-  "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys",
+  "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys"
 )({
   component: ProjectApiKeysRoute,
   head: () => routeHead({ title: "API keys" }),
   pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): ApiKeysSearch => ({
     environmentId:
-      typeof search.environmentId === "string" && search.environmentId.length > 0
+      typeof search.environmentId === "string" &&
+      search.environmentId.length > 0
         ? search.environmentId
         : undefined,
   }),
-})
+});
 
 function ProjectApiKeysRoute() {
-  const { organizationId, projectId } = Route.useParams()
-  const { environmentId } = Route.useSearch()
+  const { organizationId, projectId } = Route.useParams();
+  const { environmentId } = Route.useSearch();
 
   return (
     <ApiKeysPage
@@ -33,5 +34,5 @@ function ProjectApiKeysRoute() {
       organizationId={organizationId}
       projectId={projectId}
     />
-  )
+  );
 }

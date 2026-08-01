@@ -274,9 +274,8 @@ npm run preview:relay # start only the loopback preview relay
 npm run generate:api  # regenerate the REST client from docs/backend/openapi.yaml
 npm run build         # create the production client and server bundles
 npm run start         # serve the production build
-npm run format        # format local files
-npm run format:check  # verify formatting
-npm run lint          # run ESLint
+npm run lint          # lint and check formatting with Ultracite (Biome)
+npm run lint:fix      # apply Ultracite formatting and safe lint fixes
 npm run typecheck     # run TypeScript without emitting files
 npm run test          # run Vitest and relay integration tests once
 npm run test:relay    # run relay protocol/routing integration tests

@@ -1,7 +1,7 @@
-import type { ErrorComponentProps } from "@tanstack/react-router"
+import type { ErrorComponentProps } from "@tanstack/react-router";
 
-import { RouteErrorState } from "@/components/feedback/route-feedback"
-import { RootDocument } from "@/components/layout/root-document"
+import { RouteErrorState } from "@/components/feedback/route-feedback";
+import { RootDocument } from "@/components/layout/root-document";
 
 export function RootErrorComponent(props: ErrorComponentProps) {
   return (
@@ -10,5 +10,5 @@ export function RootErrorComponent(props: ErrorComponentProps) {
         <RouteErrorState {...props} />
       </main>
     </RootDocument>
-  )
+  );
 }

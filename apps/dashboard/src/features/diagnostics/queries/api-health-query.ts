@@ -1,11 +1,11 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
-import { getHealth } from "@/generated/api/sdk.gen"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { getHealth } from "@/generated/api/sdk.gen";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 export const diagnosticsKeys = {
   apiHealth: ["diagnostics", "api-health"] as const,
-}
+};
 
 /**
  * The liveness payload reports the serving artifact's identity alongside its
@@ -15,14 +15,14 @@ export const diagnosticsKeys = {
  * rather than breaking the probe.
  */
 export interface ApiLiveness {
-  built?: string
-  commit?: string
-  status: string
-  version?: string
+  built?: string;
+  commit?: string;
+  status: string;
+  version?: string;
 }
 
 function optionalText(value: unknown) {
-  return typeof value === "string" && value.trim() !== "" ? value : undefined
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
 }
 
 /**
@@ -39,16 +39,16 @@ export function apiHealthQueryOptions() {
         client: generatedDashboardClient,
         signal,
         throwOnError: true,
-      })
-      const payload: Record<string, unknown> = result.data.data
+      });
+      const payload: Record<string, unknown> = result.data.data;
       return {
         built: optionalText(payload.built),
         commit: optionalText(payload.commit),
         status: result.data.data.status,
         version: optionalText(payload.version),
-      }
+      };
     },
     retry: false,
     staleTime: 0,
-  })
+  });
 }

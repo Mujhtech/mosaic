@@ -1,69 +1,74 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest";
 
 import {
   isEnvironmentSurface,
   isProjectWideSurface,
   readWorkspaceScope,
-} from "@/features/orgs/types/workspace-navigation"
+} from "@/features/orgs/types/workspace-navigation";
 
 describe("hosted workspace route scope", () => {
   it("derives organization and project identity from the URL without a client store", () => {
-    const productRoute = "/orgs/org_one/projects/project_one/catalog/products/product_one"
+    const productRoute =
+      "/orgs/org_one/projects/project_one/catalog/products/product_one";
 
     expect(readWorkspaceScope(productRoute)).toEqual({
-      environmentId: undefined,
+      environmentSegment: undefined,
       organizationId: "org_one",
       projectId: "project_one",
-    })
-    expect(isProjectWideSurface(productRoute)).toBe(true)
-    expect(isEnvironmentSurface(productRoute)).toBe(false)
-  })
+    });
+    expect(isProjectWideSurface(productRoute)).toBe(true);
+    expect(isEnvironmentSurface(productRoute)).toBe(false);
+  });
 
   it("does not treat creation sentinels as selected scope", () => {
     expect(readWorkspaceScope("/orgs/new")).toEqual({
-      environmentId: undefined,
+      environmentSegment: undefined,
       organizationId: undefined,
       projectId: undefined,
-    })
+    });
     expect(
-      isEnvironmentSurface("/orgs/org_one/projects/project_one/settings/api-keys"),
-    ).toBe(true)
-  })
+      isEnvironmentSurface(
+        "/orgs/org_one/projects/project_one/env/prod/settings/api-keys"
+      )
+    ).toBe(true);
+  });
 
   it("keeps monetization Environment identity URL-owned", () => {
-    const route = "/orgs/org_one/projects/project_one/monetization/env_staging/paywalls"
+    const route =
+      "/orgs/org_one/projects/project_one/env/staging/monetization/paywalls";
 
     expect(readWorkspaceScope(route)).toEqual({
-      environmentId: "env_staging",
+      environmentSegment: "staging",
       organizationId: "org_one",
       projectId: "project_one",
-    })
-    expect(isEnvironmentSurface(route)).toBe(true)
-    expect(isProjectWideSurface(route)).toBe(false)
-  })
+    });
+    expect(isEnvironmentSurface(route)).toBe(true);
+    expect(isProjectWideSurface(route)).toBe(false);
+  });
 
   it("keeps Analytics Environment identity URL-owned", () => {
-    const route = "/orgs/org_one/projects/project_one/analytics/env_production/paywalls"
+    const route =
+      "/orgs/org_one/projects/project_one/env/prod/analytics/funnel";
 
     expect(readWorkspaceScope(route)).toEqual({
-      environmentId: "env_production",
+      environmentSegment: "prod",
       organizationId: "org_one",
       projectId: "project_one",
-    })
-    expect(isEnvironmentSurface(route)).toBe(true)
-    expect(isProjectWideSurface(route)).toBe(false)
-  })
+    });
+    expect(isEnvironmentSurface(route)).toBe(true);
+    expect(isProjectWideSurface(route)).toBe(false);
+  });
 
   it("keeps Billing Environment identity URL-owned", () => {
     const route =
-      "/orgs/org_one/projects/project_one/billing/env_production/projection-health"
+      "/orgs/org_one/projects/project_one/env/prod/billing/projection-health";
 
     expect(readWorkspaceScope(route)).toEqual({
-      environmentId: "env_production",
+      environmentSegment: "prod",
       organizationId: "org_one",
       projectId: "project_one",
-    })
-    expect(isEnvironmentSurface(route)).toBe(true)
-    expect(isProjectWideSurface(route)).toBe(false)
-  })
-})
+    });
+    expect(isEnvironmentSurface(route)).toBe(true);
+    expect(isProjectWideSurface(route)).toBe(false);
+  });
+});

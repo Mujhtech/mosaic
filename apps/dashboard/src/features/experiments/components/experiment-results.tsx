@@ -1,28 +1,35 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query";
+import { ErrorState } from "@/components/feedback/error-state";
+import { LoadingState } from "@/components/feedback/loading-state";
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page";
+import { useExperimentAdapter } from "../api/use-experiment-adapter";
+import { experimentResultsQueryOptions } from "../queries/experiment-queries";
+import {
+  describeMetricEventFilter,
+  type ExperimentScope,
+} from "../types/experiment";
+import { ExperimentIssueCard } from "./experiment-status";
 
-import { LoadingState } from "@/components/feedback/loading-state"
-import { ErrorState } from "@/components/feedback/error-state"
-import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { useExperimentAdapter } from "../api/use-experiment-adapter"
-import { experimentResultsQueryOptions } from "../queries/experiment-queries"
-import { describeMetricEventFilter, type ExperimentScope } from "../types/experiment"
-import { ExperimentIssueCard } from "./experiment-status"
+const MATURITY_ISSUE = /sample|fresh|matur|srm|ratio/i;
 
 function percent(value: number) {
-  return new Intl.NumberFormat(undefined, { style: "percent", maximumFractionDigits: 2 }).format(
-    value,
-  )
+  return new Intl.NumberFormat(undefined, {
+    style: "percent",
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 export function ExperimentResultsPanel({
   experimentId,
   scope,
 }: {
-  experimentId: string
-  scope: ExperimentScope
+  experimentId: string;
+  scope: ExperimentScope;
 }) {
-  const adapter = useExperimentAdapter()
-  const query = useQuery(experimentResultsQueryOptions(scope, experimentId, adapter))
+  const adapter = useExperimentAdapter();
+  const query = useQuery(
+    experimentResultsQueryOptions(scope, experimentId, adapter)
+  );
 
   if (query.isPending) {
     return (
@@ -30,47 +37,65 @@ export function ExperimentResultsPanel({
         description="Loading unique-unit results and uncertainty."
         title="Loading results"
       />
-    )
+    );
   }
   if (query.error) {
-    return <ErrorState description={query.error.message} onRetry={() => void query.refetch()} />
+    return (
+      <ErrorState
+        description={query.error.message}
+        onRetry={() => {
+          query.refetch();
+        }}
+      />
+    );
   }
-  const results = query.data
+  const results = query.data;
   const doNotInterpret =
     results.interim ||
     !results.attributionWindowMature ||
     results.freshnessMinutes === undefined ||
     results.srm.status !== "ok" ||
     results.issues.some((issue) =>
-      /sample|fresh|matur|srm|ratio/i.test(`${issue.code} ${issue.title} ${issue.message}`),
-    )
+      MATURITY_ISSUE.test(`${issue.code} ${issue.title} ${issue.message}`)
+    );
   return (
     <div className="grid gap-5">
       {doNotInterpret ? (
-        <div className="rounded border border-amber-600/35 bg-amber-500/5 p-4" role="alert">
-          <p className="text-sm font-semibold">Do not interpret yet</p>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Results are descriptive while sample ratio, sample size, freshness, or the attribution
-            window is unresolved. Investigate the warnings and wait for mature, fresh aggregates
-            before making a decision.
+        <div
+          className="rounded border border-amber-600/35 bg-amber-500/5 p-4"
+          role="alert"
+        >
+          <p className="font-semibold text-sm">Do not interpret yet</p>
+          <p className="mt-1 text-muted-foreground text-sm">
+            Results are descriptive while sample ratio, sample size, freshness,
+            or the attribution window is unresolved. Investigate the warnings
+            and wait for mature, fresh aggregates before making a decision.
           </p>
         </div>
       ) : null}
-      <div className="border-border bg-muted/20 rounded border p-4" role="status">
-        <p className="text-sm font-semibold">
-          {results.interim ? "Interim descriptive results" : "Final descriptive results"}
+      <div
+        className="rounded border border-border bg-muted/20 p-4"
+        role="status"
+      >
+        <p className="font-semibold text-sm">
+          {results.interim
+            ? "Interim descriptive results"
+            : "Final descriptive results"}
         </p>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {results.primaryMetricName}. No automatic winner is selected. Freshness:{" "}
+        <p className="mt-1 text-muted-foreground text-sm">
+          {results.primaryMetricName}. No automatic winner is selected.
+          Freshness:{" "}
           {results.freshnessMinutes === undefined
             ? "unavailable"
             : `${results.freshnessMinutes} minutes ago`}
           .
         </p>
-        <p className="text-muted-foreground mt-1 text-xs">
-          Authority: {results.primaryMetricAuthority.replace("_", " ")} · Assignment unit: unique
-          assignment key · Filter: {describeMetricEventFilter(results.primaryMetricEventFilter)} ·
-          Trusted source: {results.primaryMetricAvailability.replaceAll("_", " ")}.
+        <p className="mt-1 text-muted-foreground text-xs">
+          Authority: {results.primaryMetricAuthority.replace("_", " ")} ·
+          Assignment unit: unique assignment key · Filter:{" "}
+          {describeMetricEventFilter(results.primaryMetricEventFilter)} ·
+          Trusted source:{" "}
+          {results.primaryMetricAvailability.replaceAll("_", " ")}.
         </p>
       </div>
       {results.issues.length ? (
@@ -81,14 +106,15 @@ export function ExperimentResultsPanel({
         </section>
       ) : null}
       <WorkflowPanel
-        title="Conversion and uncertainty"
         description="First qualifying exposure and at most one conversion per assignment unit. Intervals are 95% Wilson estimates."
+        title="Conversion and uncertainty"
       >
         <div className="overflow-x-auto">
           <table className="w-full min-w-160 text-left text-sm">
             <caption className="sr-only">
-              Conversion and uncertainty by Variant, with allocation, unique exposures, conversions,
-              observed estimate, and the 95% Wilson interval.
+              Conversion and uncertainty by Variant, with allocation, unique
+              exposures, conversions, observed estimate, and the 95% Wilson
+              interval.
             </caption>
             <thead>
               <tr className="border-b">
@@ -127,11 +153,18 @@ export function ExperimentResultsPanel({
                       ({variant.allocationBasisPoints} bp)
                     </span>
                   </td>
-                  <td className="px-4 py-3 tabular-nums">{variant.uniqueExposures}</td>
-                  <td className="px-4 py-3 tabular-nums">{variant.conversions}</td>
-                  <td className="px-4 py-3 tabular-nums">{percent(variant.estimate)}</td>
+                  <td className="px-4 py-3 tabular-nums">
+                    {variant.uniqueExposures}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums">
+                    {variant.conversions}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums">
+                    {percent(variant.estimate)}
+                  </td>
                   <td className="py-3 pl-4 tabular-nums">
-                    {percent(variant.interval.low)}–{percent(variant.interval.high)}
+                    {percent(variant.interval.low)}–
+                    {percent(variant.interval.high)}
                   </td>
                 </tr>
               ))}
@@ -140,29 +173,33 @@ export function ExperimentResultsPanel({
         </div>
       </WorkflowPanel>
       <WorkflowPanel
-        title="Descriptive lift"
         description="Absolute lift uses a 95% Newcombe interval. Relative lift is descriptive and omitted when Control is zero."
+        title="Descriptive lift"
       >
         {results.treatments.length ? (
           <ul className="grid gap-3">
             {results.treatments.map((lift) => {
               const variant = results.variants.find(
-                (candidate) => candidate.variantId === lift.variantId,
-              )
+                (candidate) => candidate.variantId === lift.variantId
+              );
               return (
                 <li className="rounded border p-3 text-sm" key={lift.variantId}>
                   <strong>{variant?.name ?? "Treatment"}</strong>
                   <span className="ml-3">
-                    Absolute {percent(lift.absoluteLift)} ({percent(lift.interval.low)}–
-                    {percent(lift.interval.high)})
+                    Absolute {percent(lift.absoluteLift)} (
+                    {percent(lift.interval.low)}–{percent(lift.interval.high)})
                   </span>
                   {lift.relativeLift === undefined ? (
-                    <span className="text-muted-foreground ml-3">Relative lift unavailable</span>
+                    <span className="ml-3 text-muted-foreground">
+                      Relative lift unavailable
+                    </span>
                   ) : (
-                    <span className="ml-3">Relative {percent(lift.relativeLift)}</span>
+                    <span className="ml-3">
+                      Relative {percent(lift.relativeLift)}
+                    </span>
                   )}
                 </li>
-              )
+              );
             })}
           </ul>
         ) : (
@@ -172,11 +209,13 @@ export function ExperimentResultsPanel({
         )}
       </WorkflowPanel>
       <WorkflowPanel
-        title="Sample-ratio diagnostic"
         description="Pearson chi-square compares first qualifying unique exposures with immutable expected allocation. It never stops the Experiment automatically."
+        title="Sample-ratio diagnostic"
       >
         <div className="flex flex-wrap gap-3 text-sm">
-          <strong className="capitalize">{results.srm.status.replaceAll("_", " ")}</strong>
+          <strong className="capitalize">
+            {results.srm.status.replaceAll("_", " ")}
+          </strong>
           <span>Severity: {results.srm.severity}</span>
           <span>χ² {results.srm.statistic.toFixed(3)}</span>
           <span>df {results.srm.degreesOfFreedom}</span>
@@ -185,7 +224,8 @@ export function ExperimentResultsPanel({
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-120 text-left text-sm">
             <caption className="sr-only">
-              Sample ratio mismatch cells: observed versus expected assignment counts per Variant.
+              Sample ratio mismatch cells: observed versus expected assignment
+              counts per Variant.
             </caption>
             <thead>
               <tr className="border-b">
@@ -207,13 +247,17 @@ export function ExperimentResultsPanel({
               {results.srm.cells.map((cell) => (
                 <tr className="border-b last:border-0" key={cell.variantId}>
                   <th className="py-3 pr-4 font-medium" scope="row">
-                    {results.variants.find((variant) => variant.variantId === cell.variantId)
-                      ?.name ?? cell.variantId}
+                    {results.variants.find(
+                      (variant) => variant.variantId === cell.variantId
+                    )?.name ?? cell.variantId}
                   </th>
                   <td className="px-4 py-3 tabular-nums">{cell.observed}</td>
-                  <td className="px-4 py-3 tabular-nums">{cell.expected.toFixed(1)}</td>
+                  <td className="px-4 py-3 tabular-nums">
+                    {cell.expected.toFixed(1)}
+                  </td>
                   <td className="py-3 pl-4 tabular-nums">
-                    {percent(cell.observedShare)} / {percent(cell.expectedShare)}
+                    {percent(cell.observedShare)} /{" "}
+                    {percent(cell.expectedShare)}
                   </td>
                 </tr>
               ))}
@@ -221,7 +265,7 @@ export function ExperimentResultsPanel({
           </table>
         </div>
         {results.srm.exclusions.length ? (
-          <p className="text-muted-foreground mt-3 text-xs">
+          <p className="mt-3 text-muted-foreground text-xs">
             Excluded: {results.srm.exclusions.join(", ")}.
           </p>
         ) : null}
@@ -233,14 +277,22 @@ export function ExperimentResultsPanel({
               <li className="rounded border p-3" key={guardrail.name}>
                 <div className="flex items-center justify-between gap-3">
                   <strong className="text-sm">{guardrail.name}</strong>
-                  <span className="text-xs font-semibold uppercase">{guardrail.severity}</span>
+                  <span className="font-semibold text-xs uppercase">
+                    {guardrail.severity}
+                  </span>
                 </div>
-                <p className="text-muted-foreground mt-1 text-sm">{guardrail.summary}</p>
+                <p className="mt-1 text-muted-foreground text-sm">
+                  {guardrail.summary}
+                </p>
                 {guardrail.estimate === undefined ? null : (
-                  <p className="mt-1 text-xs">Observed estimate: {percent(guardrail.estimate)}</p>
+                  <p className="mt-1 text-xs">
+                    Observed estimate: {percent(guardrail.estimate)}
+                  </p>
                 )}
                 {guardrail.code ? (
-                  <p className="text-muted-foreground mt-1 font-mono text-xs">{guardrail.code}</p>
+                  <p className="mt-1 font-mono text-muted-foreground text-xs">
+                    {guardrail.code}
+                  </p>
                 ) : null}
                 {guardrail.investigation ? (
                   <p className="mt-2 text-xs">
@@ -260,10 +312,14 @@ export function ExperimentResultsPanel({
           <dl className="grid gap-3 text-sm">
             <div>
               <dt className="text-muted-foreground">Fallback exposures</dt>
-              <dd className="font-semibold tabular-nums">{results.fallbackExposures}</dd>
+              <dd className="font-semibold tabular-nums">
+                {results.fallbackExposures}
+              </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Attribution and late-event window</dt>
+              <dt className="text-muted-foreground">
+                Attribution and late-event window
+              </dt>
               <dd className="font-semibold">
                 {results.attributionWindowMature ? "Mature" : "Still maturing"}
               </dd>
@@ -279,5 +335,5 @@ export function ExperimentResultsPanel({
         </WorkflowPanel>
       </div>
     </div>
-  )
+  );
 }

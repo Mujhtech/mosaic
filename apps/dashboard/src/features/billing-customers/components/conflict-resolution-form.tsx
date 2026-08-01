@@ -1,25 +1,25 @@
-import { useState } from "react"
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { StatusPill } from "@/features/billing-ledger/components/billing-chrome"
+import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
+  type ConflictAction,
   conflictActionConsequence,
   conflictActionLabel,
   conflictActions,
   evaluateResolutionGate,
   expectedAssignee,
-  type ConflictAction,
-} from "@/features/billing-customers/types/conflict-resolution"
-import type { ResolveIdentityConflictRequest } from "@/generated/api"
+} from "@/features/billing-customers/types/conflict-resolution";
+import { StatusPill } from "@/features/billing-ledger/components/billing-chrome";
+import type { ResolveIdentityConflictRequest } from "@/generated/api";
 
 interface ConflictResolutionFormProps {
-  canManage: boolean
-  firstCustomerId: string | undefined
-  membersHref: string
-  onResolve: (request: ResolveIdentityConflictRequest) => Promise<void>
-  secondCustomerId: string | undefined
+  canManage: boolean;
+  firstCustomerId: string | undefined;
+  membersHref: string;
+  onResolve: (request: ResolveIdentityConflictRequest) => Promise<void>;
+  secondCustomerId: string | undefined;
 }
 
 /**
@@ -42,11 +42,11 @@ export function ConflictResolutionForm({
   onResolve,
   secondCustomerId,
 }: ConflictResolutionFormProps) {
-  const [action, setAction] = useState<ConflictAction | undefined>(undefined)
-  const [reason, setReason] = useState("")
-  const [acknowledged, setAcknowledged] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [action, setAction] = useState<ConflictAction | undefined>(undefined);
+  const [reason, setReason] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const gate = evaluateResolutionGate({
     acknowledged,
@@ -56,36 +56,50 @@ export function ConflictResolutionForm({
     isSubmitting: submitting,
     reason,
     secondCustomerId,
-  })
+  });
 
   if (!canManage) {
     return (
       <div className="rounded border p-4">
         <p className="text-sm leading-6">
-          Resolving an identity conflict requires organization owner or admin permission.
+          Resolving an identity conflict requires organization owner or admin
+          permission.
         </p>
-        <a className="text-primary mt-2 inline-flex text-sm font-semibold" href={membersHref}>
+        <a
+          className="mt-2 inline-flex font-semibold text-primary text-sm"
+          href={membersHref}
+        >
           Ask an Owner or Admin to resolve this conflict
         </a>
       </div>
-    )
+    );
   }
 
   async function submit() {
-    if (!action) return
-    setSubmitting(true)
-    setError(null)
+    if (!action) {
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
     try {
-      const assignee = expectedAssignee({ action, firstCustomerId, secondCustomerId })
+      const assignee = expectedAssignee({
+        action,
+        firstCustomerId,
+        secondCustomerId,
+      });
       await onResolve({
         action,
         reason: reason.trim(),
         ...(assignee ? { assignedBillingCustomerId: assignee } : {}),
-      })
+      });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Mosaic could not record this resolution.")
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Mosaic could not record this resolution."
+      );
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
   }
 
@@ -93,12 +107,14 @@ export function ConflictResolutionForm({
     <form
       className="space-y-5"
       onSubmit={(event) => {
-        event.preventDefault()
-        void submit()
+        event.preventDefault();
+        submit();
       }}
     >
       <fieldset className="space-y-3">
-        <legend className="text-sm font-semibold">1. Choose how this resolves</legend>
+        <legend className="font-semibold text-sm">
+          1. Choose how this resolves
+        </legend>
         {conflictActions.map((candidate) => (
           <label className="flex items-start gap-2 text-sm" key={candidate}>
             <input
@@ -106,10 +122,10 @@ export function ConflictResolutionForm({
               className="mt-1"
               name="conflict-action"
               onChange={() => {
-                setAction(candidate)
+                setAction(candidate);
                 // Changing the choice withdraws the acknowledgement: it was
                 // given for a different consequence than the one now selected.
-                setAcknowledged(false)
+                setAcknowledged(false);
               }}
               type="radio"
               value={candidate}
@@ -121,15 +137,17 @@ export function ConflictResolutionForm({
 
       {action ? (
         <div className="rounded border border-amber-500/40 bg-amber-500/10 p-4">
-          <p className="text-sm font-semibold">2. What this does</p>
-          <p className="mt-2 text-sm leading-6">{conflictActionConsequence(action)}</p>
+          <p className="font-semibold text-sm">2. What this does</p>
+          <p className="mt-2 text-sm leading-6">
+            {conflictActionConsequence(action)}
+          </p>
           {expectedAssignee({ action, firstCustomerId, secondCustomerId }) ? (
-            <p className="text-muted-foreground mt-2 font-mono text-xs break-all">
+            <p className="mt-2 break-all font-mono text-muted-foreground text-xs">
               The disputed purchase will be assigned to{" "}
               {expectedAssignee({ action, firstCustomerId, secondCustomerId })}.
             </p>
           ) : (
-            <p className="text-muted-foreground mt-2 text-xs leading-5">
+            <p className="mt-2 text-muted-foreground text-xs leading-5">
               The disputed purchase will be assigned to neither customer.
             </p>
           )}
@@ -137,19 +155,21 @@ export function ConflictResolutionForm({
       ) : null}
 
       <Field>
-        <FieldLabel htmlFor="conflict-reason">3. Reason for this resolution</FieldLabel>
+        <FieldLabel htmlFor="conflict-reason">
+          3. Reason for this resolution
+        </FieldLabel>
         <Input
           disabled={!action}
           id="conflict-reason"
           onChange={(event) => {
-            const value = event.currentTarget.value
-            setReason(value)
+            const { value } = event.currentTarget;
+            setReason(value);
           }}
           value={reason}
         />
         <FieldDescription>
-          Required. Recorded on the conflict and on the audit event, and read by whoever
-          investigates this later.
+          Required. Recorded on the conflict and on the audit event, and read by
+          whoever investigates this later.
         </FieldDescription>
       </Field>
 
@@ -162,8 +182,8 @@ export function ConflictResolutionForm({
           type="checkbox"
         />
         <span>
-          4. I have read what happens to both customers and accept that this moves purchases between
-          them.
+          4. I have read what happens to both customers and accept that this
+          moves purchases between them.
         </span>
       </label>
 
@@ -178,11 +198,13 @@ export function ConflictResolutionForm({
           {submitting ? "Recording…" : "Record this resolution"}
         </Button>
         {gate.explanation ? (
-          <p className="text-muted-foreground text-xs leading-5">{gate.explanation}</p>
+          <p className="text-muted-foreground text-xs leading-5">
+            {gate.explanation}
+          </p>
         ) : (
           <StatusPill label="Ready to record" tone="attention" />
         )}
       </div>
     </form>
-  )
+  );
 }

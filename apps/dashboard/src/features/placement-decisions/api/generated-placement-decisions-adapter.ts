@@ -1,11 +1,21 @@
 import type {
-  MosaicPlacementDecisionV1,
-  MosaicPlacementDecisionV1ConditionNode,
-  MosaicPlacementDecisionV1Outcome,
-  MosaicPlacementDecisionV1RuleSet,
-} from "../../../../../../protocol/browser/generated/contract-types.js"
-
-import type { Client } from "@/generated/api/client"
+  DecisionScope,
+  PlacementDecisionsAdapter,
+} from "@/features/placement-decisions/api/placement-decisions-adapter";
+import type {
+  AttributeDefinition,
+  ConditionNode,
+  DecisionOutcome,
+  DecisionTraceStep,
+  DecisionValidation,
+  PlacementDecisionDetail,
+  PlacementRuleSetDraft,
+  QaOverride,
+  SimulationInput,
+  SimulationResult,
+} from "@/features/placement-decisions/types/placement-decision";
+import { toContractRuleSet } from "@/features/placement-decisions/types/placement-decision-document";
+import type { Client } from "@/generated/api/client";
 import {
   archivePlacementAttribute,
   archivePlacementRuleSet,
@@ -30,36 +40,27 @@ import {
   updatePlacement,
   updatePlacementRuleSetDraft,
   validatePlacementRuleSet,
-} from "@/generated/api/sdk.gen"
+} from "@/generated/api/sdk.gen";
 import type {
+  QaOverride as GeneratedQaOverride,
   PlacementAttribute,
   PlacementOutcome,
   PlacementRuleSetDraftResource,
   PlacementSimulationResult,
   PlacementValidation,
-  QaOverride as GeneratedQaOverride,
-} from "@/generated/api/types.gen"
+} from "@/generated/api/types.gen";
+import { ApiError } from "@/lib/api/errors";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 import type {
-  DecisionScope,
-  PlacementDecisionsAdapter,
-} from "@/features/placement-decisions/api/placement-decisions-adapter"
-import type {
-  AttributeDefinition,
-  ConditionNode,
-  DecisionOutcome,
-  DecisionTraceStep,
-  DecisionValidation,
-  PlacementDecisionDetail,
-  PlacementRuleSetDraft,
-  QaOverride,
-  SimulationInput,
-  SimulationResult,
-} from "@/features/placement-decisions/types/placement-decision"
-import { toContractRuleSet } from "@/features/placement-decisions/types/placement-decision-document"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
-import { ApiError } from "@/lib/api/errors"
+  MosaicPlacementDecisionV1,
+  MosaicPlacementDecisionV1ConditionNode,
+  MosaicPlacementDecisionV1Outcome,
+  MosaicPlacementDecisionV1RuleSet,
+} from "../../../../../../protocol/browser/generated/contract-types.js";
 
-function outcome(value: MosaicPlacementDecisionV1Outcome | PlacementOutcome): DecisionOutcome {
+function outcome(
+  value: MosaicPlacementDecisionV1Outcome | PlacementOutcome
+): DecisionOutcome {
   switch (value.type) {
     case "paywall":
       return {
@@ -68,11 +69,14 @@ function outcome(value: MosaicPlacementDecisionV1Outcome | PlacementOutcome): De
         ...(value.unavailableFallbackKey
           ? { unavailableFallbackKey: value.unavailableFallbackKey }
           : {}),
-      }
+      };
     case "fallback":
-      return { fallbackKey: "key" in value ? (value.key ?? "") : "", type: "fallback" }
+      return {
+        fallbackKey: "key" in value ? (value.key ?? "") : "",
+        type: "fallback",
+      };
     case "no_paywall":
-      return { type: "no_paywall" }
+      return { type: "no_paywall" };
     case "unavailable":
       return {
         reason: (value.reason ?? "no_safe_decision") as Extract<
@@ -80,18 +84,26 @@ function outcome(value: MosaicPlacementDecisionV1Outcome | PlacementOutcome): De
           { type: "unavailable" }
         >["reason"],
         type: "unavailable",
-      }
+      };
+    default: {
+      const unhandled: never = value;
+      throw new Error(`Unhandled value.type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
 function sourceReference(source: Record<string, unknown>) {
   for (const key of ["key", "productId", "capability"] as const) {
-    if (typeof source[key] === "string") return source[key]
+    if (typeof source[key] === "string") {
+      return source[key];
+    }
   }
-  return undefined
 }
 
-function condition(node: MosaicPlacementDecisionV1ConditionNode, path: string): ConditionNode {
+function condition(
+  node: MosaicPlacementDecisionV1ConditionNode,
+  path: string
+): ConditionNode {
   if (node.type === "condition") {
     return {
       id: path,
@@ -100,20 +112,22 @@ function condition(node: MosaicPlacementDecisionV1ConditionNode, path: string): 
       referenceKey: sourceReference(node.source),
       source: node.source.kind,
       value: node.operand?.value,
-    }
+    };
   }
   if (node.type === "not") {
     return {
       children: [condition(node.child, `${path}.child`)],
       id: path,
       kind: "not",
-    }
+    };
   }
   return {
-    children: node.children.map((child, index) => condition(child, `${path}.children.${index}`)),
+    children: node.children.map((child, index) =>
+      condition(child, `${path}.children.${index}`)
+    ),
     id: path,
     kind: node.type,
-  }
+  };
 }
 
 function validation(value: PlacementValidation): DecisionValidation {
@@ -122,24 +136,27 @@ function validation(value: PlacementValidation): DecisionValidation {
     issues: value.issues.map((issue) => ({
       code: issue.code,
       conditionId: issue.conditionPath,
-      message:
-        issue.code === "duplicate_leaf_condition"
-          ? "This condition duplicates another condition in the same Rule."
-          : issue.code === "rule_shadowed_by_earlier_equivalent"
-            ? "An earlier enabled Rule has the same conditions and will always win first."
-            : issue.recoveryAction.replaceAll("_", " "),
+      message: (() => {
+        if (issue.code === "duplicate_leaf_condition") {
+          return "This condition duplicates another condition in the same Rule.";
+        }
+        if (issue.code === "rule_shadowed_by_earlier_equivalent") {
+          return "An earlier enabled Rule has the same conditions and will always win first.";
+        }
+        return issue.recoveryAction.replaceAll("_", " ");
+      })(),
       recoveryLabel: "Resolve",
       resourceId: issue.resourceId,
       resourceType: issue.resourceType,
       ruleId: issue.ruleId,
       severity: issue.severity,
     })),
-  }
+  };
 }
 
 function draft(resource: PlacementRuleSetDraftResource): PlacementRuleSetDraft {
-  const document = resource.document as unknown as MosaicPlacementDecisionV1
-  const ruleSet = document.ruleSet
+  const document = resource.document as unknown as MosaicPlacementDecisionV1;
+  const { ruleSet } = document;
   return {
     assignmentPolicy: ruleSet.assignmentPolicy,
     defaultOutcome: outcome(ruleSet.defaultOutcome),
@@ -162,18 +179,23 @@ function draft(resource: PlacementRuleSetDraftResource): PlacementRuleSetDraft {
       outcome: outcome(rule.outcome),
       priority: rule.priority,
       ...(rule.rollout
-        ? { rollout: { thresholdBasisPoints: rule.rollout.thresholdBasisPoints } }
+        ? {
+            rollout: {
+              thresholdBasisPoints: rule.rollout.thresholdBasisPoints,
+            },
+          }
         : {}),
     })),
     ruleSetId: resource.ruleSet.id,
     updatedAt: resource.draft.updatedAt,
     validation: validation(resource.validation),
-  }
+  };
 }
 
 function attribute(value: PlacementAttribute): AttributeDefinition {
   return {
-    allowedOperators: value.allowedOperators as AttributeDefinition["allowedOperators"],
+    allowedOperators:
+      value.allowedOperators as AttributeDefinition["allowedOperators"],
     description: value.description || undefined,
     id: value.id,
     key: value.key,
@@ -182,7 +204,7 @@ function attribute(value: PlacementAttribute): AttributeDefinition {
     status: value.status,
     type: value.type,
     usageCount: 0,
-  }
+  };
 }
 
 function qaOverride(value: GeneratedQaOverride): QaOverride {
@@ -197,54 +219,94 @@ function qaOverride(value: GeneratedQaOverride): QaOverride {
     outcome: outcome(value.outcome),
     placementId: value.placementId,
     status: value.status,
-  }
+  };
 }
 
-function trace(result: PlacementSimulationResult): readonly DecisionTraceStep[] {
+function trace(
+  result: PlacementSimulationResult
+): readonly DecisionTraceStep[] {
   return result.trace.map((raw, index) => {
-    const resultValue = raw.result
-    const kind = typeof raw.kind === "string" ? raw.kind : "decision"
+    const resultValue = raw.result;
+    const kind = typeof raw.kind === "string" ? raw.kind : "decision";
     return {
-      conditionId: typeof raw.conditionPath === "string" ? raw.conditionPath : undefined,
+      conditionId:
+        typeof raw.conditionPath === "string" ? raw.conditionPath : undefined,
       detail:
         raw.redacted === true
           ? "Sensitive value redacted"
-          : [raw.operator, raw.outcomeType, raw.reasonCode].filter(Boolean).join(" · ") || kind,
+          : [raw.operator, raw.outcomeType, raw.reasonCode]
+              .filter(Boolean)
+              .join(" · ") || kind,
       id: `trace-${index}`,
       label: kind.replaceAll("_", " "),
-      result:
-        resultValue === "true" || resultValue === "false" || resultValue === "unknown"
-          ? resultValue
-          : kind === "final"
-            ? "selected"
-            : "skipped",
+      result: (() => {
+        if (
+          resultValue === "true" ||
+          resultValue === "false" ||
+          resultValue === "unknown"
+        ) {
+          return resultValue;
+        }
+        if (kind === "final") {
+          return "selected";
+        }
+        return "skipped";
+      })(),
       ruleId: typeof raw.ruleId === "string" ? raw.ruleId : undefined,
       sensitive: raw.redacted === true,
-      source:
-        typeof raw.inputSource === "string"
-          ? raw.inputSource
-          : typeof raw.source === "string"
-            ? raw.source
-            : undefined,
-    }
-  })
+      source: (() => {
+        if (typeof raw.inputSource === "string") {
+          return raw.inputSource;
+        }
+        if (typeof raw.source === "string") {
+          return raw.source;
+        }
+      })(),
+    };
+  });
 }
 
 function inputValue(value: unknown, source: string, sensitive = false) {
-  return { sensitive, source, valid: value !== undefined && value !== null, value }
+  return {
+    sensitive,
+    source,
+    valid: value !== undefined && value !== null,
+    value,
+  };
 }
 
-async function ruleSetDocument(client: Client, scope: DecisionScope, value: PlacementRuleSetDraft) {
-  const [attributesResult, environmentsResult, placementsResult] = await Promise.all([
-    listPlacementAttributes({ client, path: { projectId: scope.projectId }, throwOnError: true }),
-    listEnvironments({ client, path: { projectId: scope.projectId }, throwOnError: true }),
-    listPlacements({ client, path: { projectId: scope.projectId }, throwOnError: true }),
-  ])
+async function ruleSetDocument(
+  client: Client,
+  scope: DecisionScope,
+  value: PlacementRuleSetDraft
+) {
+  const [attributesResult, environmentsResult, placementsResult] =
+    await Promise.all([
+      listPlacementAttributes({
+        client,
+        path: { projectId: scope.projectId },
+        throwOnError: true,
+      }),
+      listEnvironments({
+        client,
+        path: { projectId: scope.projectId },
+        throwOnError: true,
+      }),
+      listPlacements({
+        client,
+        path: { projectId: scope.projectId },
+        throwOnError: true,
+      }),
+    ]);
   const environment = environmentsResult.data.data.items.find(
-    (item) => item.id === scope.environmentId,
-  )
-  const placement = placementsResult.data.data.items.find((item) => item.id === scope.placementId)
-  if (!environment || !placement) throw new Error("The Placement or Environment is unavailable.")
+    (item) => item.id === scope.environmentId
+  );
+  const placement = placementsResult.data.data.items.find(
+    (item) => item.id === scope.placementId
+  );
+  if (!(environment && placement)) {
+    throw new Error("The Placement or Environment is unavailable.");
+  }
   return {
     placementDecisionVersion: "1" as const,
     ruleSet: toContractRuleSet(value, {
@@ -253,37 +315,65 @@ async function ruleSetDocument(client: Client, scope: DecisionScope, value: Plac
       placementKey: placement.key,
       projectId: scope.projectId,
     }),
-  }
+  };
 }
 
 async function initialDocument(client: Client, scope: DecisionScope) {
-  const [attributesResult, environmentsResult, placementsResult] = await Promise.all([
-    listPlacementAttributes({ client, path: { projectId: scope.projectId }, throwOnError: true }),
-    listEnvironments({ client, path: { projectId: scope.projectId }, throwOnError: true }),
-    listPlacements({ client, path: { projectId: scope.projectId }, throwOnError: true }),
-  ])
+  const [attributesResult, environmentsResult, placementsResult] =
+    await Promise.all([
+      listPlacementAttributes({
+        client,
+        path: { projectId: scope.projectId },
+        throwOnError: true,
+      }),
+      listEnvironments({
+        client,
+        path: { projectId: scope.projectId },
+        throwOnError: true,
+      }),
+      listPlacements({
+        client,
+        path: { projectId: scope.projectId },
+        throwOnError: true,
+      }),
+    ]);
   const environment = environmentsResult.data.data.items.find(
-    (item) => item.id === scope.environmentId,
-  )
-  const placement = placementsResult.data.data.items.find((item) => item.id === scope.placementId)
-  if (!environment || !placement) throw new Error("The Placement or Environment is unavailable.")
+    (item) => item.id === scope.environmentId
+  );
+  const placement = placementsResult.data.data.items.find(
+    (item) => item.id === scope.placementId
+  );
+  if (!(environment && placement)) {
+    throw new Error("The Placement or Environment is unavailable.");
+  }
   let defaultOutcome: MosaicPlacementDecisionV1Outcome = {
     reason: "no_safe_decision",
     type: "unavailable",
-  }
+  };
   try {
-    const binding = await getPlacementBinding({ client, path: scope, throwOnError: true })
+    const binding = await getPlacementBinding({
+      client,
+      path: scope,
+      throwOnError: true,
+    });
     const versions = await listPaywallVersions({
       client,
-      path: { paywallId: binding.data.data.paywallId, projectId: scope.projectId },
+      path: {
+        paywallId: binding.data.data.paywallId,
+        projectId: scope.projectId,
+      },
       throwOnError: true,
-    })
-    const latest = versions.data.data.items
+    });
+    const [latest] = versions.data.data.items
       .filter((version) => version.environmentId === scope.environmentId)
-      .sort((left, right) => right.versionNumber - left.versionNumber)[0]
-    if (latest) defaultOutcome = { paywallVersionId: latest.id, type: "paywall" }
+      .sort((left, right) => right.versionNumber - left.versionNumber);
+    if (latest) {
+      defaultOutcome = { paywallVersionId: latest.id, type: "paywall" };
+    }
   } catch (error) {
-    if (!(error instanceof ApiError) || error.status !== 404) throw error
+    if (!(error instanceof ApiError) || error.status !== 404) {
+      throw error;
+    }
   }
   const ruleSet: MosaicPlacementDecisionV1RuleSet = {
     assignmentPolicy: "installation",
@@ -309,12 +399,12 @@ async function initialDocument(client: Client, scope: DecisionScope) {
     qaOverrides: [],
     rules: [],
     version: 1,
-  }
-  return { placementDecisionVersion: "1" as const, ruleSet }
+  };
+  return { placementDecisionVersion: "1" as const, ruleSet };
 }
 
 export function createGeneratedPlacementDecisionsAdapter(
-  client: Client = generatedDashboardClient,
+  client: Client = generatedDashboardClient
 ): PlacementDecisionsAdapter {
   return {
     status: "available",
@@ -323,17 +413,21 @@ export function createGeneratedPlacementDecisionsAdapter(
         client,
         path: { attributeId, projectId },
         throwOnError: true,
-      })
+      });
     },
     async archivePlacement(scope) {
-      await archivePlacementWithUsageCheck({ client, path: scope, throwOnError: true })
+      await archivePlacementWithUsageCheck({
+        client,
+        path: scope,
+        throwOnError: true,
+      });
     },
     async archiveRuleSet(scope, ruleSetId) {
       await archivePlacementRuleSet({
         client,
         path: { ...scope, ruleSetId },
         throwOnError: true,
-      })
+      });
     },
     async createAlias(scope, key) {
       const result = await createPlacementAlias({
@@ -341,8 +435,8 @@ export function createGeneratedPlacementDecisionsAdapter(
         client,
         path: scope,
         throwOnError: true,
-      })
-      return { key: result.data.data.key, status: result.data.data.status }
+      });
+      return { key: result.data.data.key, status: result.data.data.status };
     },
     async createAttribute(projectId, value) {
       const result = await createPlacementAttribute({
@@ -350,8 +444,8 @@ export function createGeneratedPlacementDecisionsAdapter(
         client,
         path: { projectId },
         throwOnError: true,
-      })
-      return attribute(result.data.data)
+      });
+      return attribute(result.data.data);
     },
     async createOverride(scope, value) {
       const result = await createPlacementQaOverride({
@@ -364,27 +458,42 @@ export function createGeneratedPlacementDecisionsAdapter(
         client,
         path: scope,
         throwOnError: true,
-      })
-      return { ...qaOverride(result.data.data.override), token: result.data.data.token }
+      });
+      return {
+        ...qaOverride(result.data.data.override),
+        token: result.data.data.token,
+      };
     },
     async getPlacementDecision(scope): Promise<PlacementDecisionDetail> {
       const [aliasesResult, usageResult, placementsResult] = await Promise.all([
         listPlacementAliases({ client, path: scope, throwOnError: true }),
         getPlacementUsage({ client, path: scope, throwOnError: true }),
-        listPlacements({ client, path: { projectId: scope.projectId }, throwOnError: true }),
-      ])
+        listPlacements({
+          client,
+          path: { projectId: scope.projectId },
+          throwOnError: true,
+        }),
+      ]);
       const placement = placementsResult.data.data.items.find(
-        (item) => item.id === scope.placementId,
-      )
-      if (!placement) throw new Error("Placement not found.")
-      let resource: PlacementRuleSetDraftResource
+        (item) => item.id === scope.placementId
+      );
+      if (!placement) {
+        throw new Error("Placement not found.");
+      }
+      let resource: PlacementRuleSetDraftResource;
       try {
-        const result = await getPlacementDecision({ client, path: scope, throwOnError: true })
-        resource = result.data.data
+        const result = await getPlacementDecision({
+          client,
+          path: scope,
+          throwOnError: true,
+        });
+        resource = result.data.data;
       } catch (error) {
-        if (!(error instanceof ApiError) || error.status !== 404) throw error
-        const document = await initialDocument(client, scope)
-        const now = new Date().toISOString()
+        if (!(error instanceof ApiError) || error.status !== 404) {
+          throw error;
+        }
+        const document = await initialDocument(client, scope);
+        const now = new Date().toISOString();
         resource = {
           document,
           draft: {
@@ -411,7 +520,7 @@ export function createGeneratedPlacementDecisionsAdapter(
             updatedAt: now,
           },
           validation: { issues: [], valid: true },
-        }
+        };
       }
       const published =
         resource.ruleSet.id === "pending-rule-set"
@@ -423,9 +532,9 @@ export function createGeneratedPlacementDecisionsAdapter(
             }).then(
               (result) =>
                 [...result.data.data.items].sort(
-                  (left, right) => right.versionNumber - left.versionNumber,
-                )[0],
-            )
+                  (left, right) => right.versionNumber - left.versionNumber
+                )[0]
+            );
       return {
         aliases: aliasesResult.data.data.items.map((item) => ({
           key: item.key,
@@ -446,19 +555,23 @@ export function createGeneratedPlacementDecisionsAdapter(
           : undefined,
         status: placement.status,
         usage: usageResult.data.data,
-      }
+      };
     },
     async listAttributes(projectId) {
       const result = await listPlacementAttributes({
         client,
         path: { projectId },
         throwOnError: true,
-      })
-      return result.data.data.items.map(attribute)
+      });
+      return result.data.data.items.map(attribute);
     },
     async listOverrides(scope) {
-      const result = await listPlacementQaOverrides({ client, path: scope, throwOnError: true })
-      return result.data.data.items.map(qaOverride)
+      const result = await listPlacementQaOverrides({
+        client,
+        path: scope,
+        throwOnError: true,
+      });
+      return result.data.data.items.map(qaOverride);
     },
     async publishRuleSet(scope, value) {
       const result = await publishPlacementRuleSet({
@@ -466,22 +579,22 @@ export function createGeneratedPlacementDecisionsAdapter(
         client,
         path: { ...scope, ruleSetId: value.ruleSetId },
         throwOnError: true,
-      })
+      });
       return {
         id: result.data.data.id,
         publishedAt: result.data.data.publishedAt,
         version: result.data.data.versionNumber,
-      }
+      };
     },
     async revokeOverride(scope, overrideId) {
       await revokePlacementQaOverride({
         client,
         path: { ...scope, overrideId },
         throwOnError: true,
-      })
+      });
     },
     async saveDraft(scope, value) {
-      const document = await ruleSetDocument(client, scope, value.draft)
+      const document = await ruleSetDocument(client, scope, value.draft);
       if (value.draft.ruleSetId === "pending-rule-set") {
         const created = await createPlacementRuleSet({
           body: { document },
@@ -489,8 +602,8 @@ export function createGeneratedPlacementDecisionsAdapter(
           headers: { "Idempotency-Key": value.idempotencyKey },
           path: scope,
           throwOnError: true,
-        })
-        return draft(created.data.data)
+        });
+        return draft(created.data.data);
       }
       const result = await updatePlacementRuleSetDraft({
         body: { document },
@@ -501,33 +614,49 @@ export function createGeneratedPlacementDecisionsAdapter(
         },
         path: { ...scope, ruleSetId: value.draft.ruleSetId },
         throwOnError: true,
-      })
-      return draft(result.data.data)
+      });
+      return draft(result.data.data);
     },
     async simulate(scope, value) {
-      const detail = await getPlacementDecision({ client, path: scope, throwOnError: true })
+      const detail = await getPlacementDecision({
+        client,
+        path: scope,
+        throwOnError: true,
+      });
       const result = await simulatePlacementDecision({
         body: simulationRequest(value),
         client,
         path: { ...scope, ruleSetId: detail.data.data.ruleSet.id },
         throwOnError: true,
-      })
-      return simulationResult(result.data.data)
+      });
+      return simulationResult(result.data.data);
     },
     async updatePlacement(scope, value) {
-      const result = await updatePlacement({ body: value, client, path: scope, throwOnError: true })
-      return { description: result.data.data.description, name: result.data.data.name }
+      const result = await updatePlacement({
+        body: value,
+        client,
+        path: scope,
+        throwOnError: true,
+      });
+      return {
+        description: result.data.data.description,
+        name: result.data.data.name,
+      };
     },
     async validateDraft(scope) {
-      const detail = await getPlacementDecision({ client, path: scope, throwOnError: true })
+      const detail = await getPlacementDecision({
+        client,
+        path: scope,
+        throwOnError: true,
+      });
       const result = await validatePlacementRuleSet({
         client,
         path: { ...scope, ruleSetId: detail.data.data.ruleSet.id },
         throwOnError: true,
-      })
-      return validation(result.data.data)
+      });
+      return validation(result.data.data);
     },
-  }
+  };
 }
 
 function toGeneratedOutcome(value: DecisionOutcome): PlacementOutcome {
@@ -537,13 +666,17 @@ function toGeneratedOutcome(value: DecisionOutcome): PlacementOutcome {
         paywallVersionId: value.paywallVersionId,
         type: "paywall",
         unavailableFallbackKey: value.unavailableFallbackKey,
-      }
+      };
     case "fallback":
-      return { key: value.fallbackKey, type: "fallback" }
+      return { key: value.fallbackKey, type: "fallback" };
     case "no_paywall":
-      return { type: "no_paywall" }
+      return { type: "no_paywall" };
     case "unavailable":
-      return { reason: value.reason, type: "unavailable" }
+      return { reason: value.reason, type: "unavailable" };
+    default: {
+      const unhandled: never = value;
+      throw new Error(`Unhandled value.type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
@@ -554,14 +687,14 @@ function simulationRequest(value: SimulationInput) {
       Object.entries(value.attributes).map(([key, item]) => [
         key,
         inputValue(item, "host_application"),
-      ]),
+      ])
     ),
     country: value.country,
     entitlements: Object.fromEntries(
       Object.entries(value.entitlementStates).map(([key, item]) => [
         key,
         inputValue(item, "provider"),
-      ]),
+      ])
     ),
     installationId: value.installationId,
     locale: value.locale,
@@ -572,30 +705,35 @@ function simulationRequest(value: SimulationInput) {
       Object.entries(value.productAvailability).map(([key, item]) => [
         key,
         inputValue(item, "provider"),
-      ]),
+      ])
     ),
     productReadiness: Object.fromEntries(
       Object.entries(value.productReadiness).map(([key, item]) => [
         key,
         inputValue(item, "configuration"),
-      ]),
+      ])
     ),
     providerCapabilities: Object.fromEntries(
-      value.providerCapabilities.map((key) => [key, inputValue(true, "provider")]),
+      value.providerCapabilities.map((key) => [
+        key,
+        inputValue(true, "provider"),
+      ])
     ),
     userId: value.userId,
-  }
+  };
 }
 
 function simulationResult(value: PlacementSimulationResult): SimulationResult {
   return {
-    assignmentKeyType: value.assignmentKeyType as SimulationResult["assignmentKeyType"],
+    assignmentKeyType:
+      value.assignmentKeyType as SimulationResult["assignmentKeyType"],
     fallbackPath: value.fallbackPath,
     finalOutcome: outcome(value.finalOutcome),
     rolloutBucket: value.rolloutBucket,
     trace: trace(value),
     winningRuleId: value.winningRuleId,
-  }
+  };
 }
 
-export const generatedPlacementDecisionsAdapter = createGeneratedPlacementDecisionsAdapter()
+export const generatedPlacementDecisionsAdapter =
+  createGeneratedPlacementDecisionsAdapter();

@@ -1,32 +1,32 @@
-import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle"
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 
-import { Field, FieldLabel } from "@/components/ui/field"
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import type {
   DecisionOutcome,
   NamedFallback,
-} from "@/features/placement-decisions/types/placement-decision"
-import type { HostedPaywallListItem } from "@/features/publishing/api/hosted-publishing-adapter"
+} from "@/features/placement-decisions/types/placement-decision";
+import type { HostedPaywallListItem } from "@/features/publishing/api/hosted-publishing-adapter";
 
 const OUTCOME_TYPE_OPTIONS = [
   { label: "Show Paywall", value: "paywall" },
   { label: "Show no Paywall", value: "no_paywall" },
   { label: "Use named fallback", value: "fallback" },
   { label: "Return unavailable", value: "unavailable" },
-]
+];
 
 const UNAVAILABLE_REASON_OPTIONS = [
   { label: "No safe decision", value: "no_safe_decision" },
   { label: "Configuration incompatible", value: "configuration_incompatible" },
   { label: "Content unavailable", value: "content_unavailable" },
   { label: "Commerce unavailable", value: "commerce_unavailable" },
-]
+];
 
 export function OutcomeEditor({
   fallbacks,
@@ -36,23 +36,26 @@ export function OutcomeEditor({
   paywalls,
   value,
 }: {
-  fallbacks: readonly NamedFallback[]
-  id: string
-  label?: string
-  onChange: (value: DecisionOutcome) => void
-  paywalls: readonly HostedPaywallListItem[]
-  value: DecisionOutcome
+  fallbacks: readonly NamedFallback[];
+  id: string;
+  label?: string;
+  onChange: (value: DecisionOutcome) => void;
+  paywalls: readonly HostedPaywallListItem[];
+  value: DecisionOutcome;
 }) {
   const paywallOptions = [
     { label: "Select a Paywall", value: "" },
     ...paywalls
       .filter((paywall) => paywall.status === "active")
       .map((paywall) => ({ label: paywall.name, value: paywall.id })),
-  ]
+  ];
   const fallbackOptions = [
     { label: "Select a named fallback", value: "" },
-    ...fallbacks.map((fallback) => ({ label: fallback.key, value: fallback.key })),
-  ]
+    ...fallbacks.map((fallback) => ({
+      label: fallback.key,
+      value: fallback.key,
+    })),
+  ];
 
   return (
     <div className="space-y-3">
@@ -61,11 +64,19 @@ export function OutcomeEditor({
         <Select
           items={OUTCOME_TYPE_OPTIONS}
           onValueChange={(selectedValue) => {
-            const type = selectedValue as DecisionOutcome["type"]
-            if (type === "paywall") onChange({ type, paywallVersionId: paywalls[0]?.id ?? "" })
-            if (type === "no_paywall") onChange({ type })
-            if (type === "fallback") onChange({ type, fallbackKey: fallbacks[0]?.key ?? "" })
-            if (type === "unavailable") onChange({ type, reason: "no_safe_decision" })
+            const type = selectedValue as DecisionOutcome["type"];
+            if (type === "paywall") {
+              onChange({ type, paywallVersionId: paywalls[0]?.id ?? "" });
+            }
+            if (type === "no_paywall") {
+              onChange({ type });
+            }
+            if (type === "fallback") {
+              onChange({ type, fallbackKey: fallbacks[0]?.key ?? "" });
+            }
+            if (type === "unavailable") {
+              onChange({ type, reason: "no_safe_decision" });
+            }
           }}
           value={value.type}
         >
@@ -104,7 +115,8 @@ export function OutcomeEditor({
             </SelectContent>
           </Select>
           <p className="text-muted-foreground text-xs">
-            Publication pins the current immutable published version and checks Product readiness.
+            Publication pins the current immutable published version and checks
+            Product readiness.
           </p>
         </Field>
       ) : null}
@@ -135,12 +147,16 @@ export function OutcomeEditor({
 
       {value.type === "no_paywall" ? (
         <p
-          className="border-primary/30 bg-primary/5 flex items-start gap-2 rounded border p-3 text-sm"
+          className="flex items-start gap-2 rounded border border-primary/30 bg-primary/5 p-3 text-sm"
           role="status"
         >
-          <CheckCircleIcon aria-hidden className="text-primary mt-0.5 shrink-0" weight="fill" />
-          This is an intentional successful decision. Mosaic will not present a Paywall or enter a
-          fallback.
+          <CheckCircleIcon
+            aria-hidden
+            className="mt-0.5 shrink-0 text-primary"
+            weight="fill"
+          />
+          This is an intentional successful decision. Mosaic will not present a
+          Paywall or enter a fallback.
         </p>
       ) : null}
 
@@ -174,5 +190,5 @@ export function OutcomeEditor({
         </Field>
       ) : null}
     </div>
-  )
+  );
 }

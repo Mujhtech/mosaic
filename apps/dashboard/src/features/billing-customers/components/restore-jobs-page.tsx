@@ -1,21 +1,11 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query";
 
-import { EmptyState } from "@/components/feedback/empty-state"
-import { buttonVariants } from "@/components/ui/button-variants"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import {
-  DefinitionRow,
-  LedgerPaging,
-  StatusPill,
-} from "@/features/billing-ledger/components/billing-chrome"
-import {
-  BILLING_OPTIONAL_NOTE,
-  runStatusLabel,
-} from "@/features/billing-ledger/types/billing-vocabulary"
-import { billingHealthQueryOptions } from "@/features/billing-operations/queries/billing-health-queries"
-import { restoreJobsQueryOptions } from "@/features/billing-customers/queries/restore-queries"
-import { formatEntitlementInstant } from "@/features/billing-customers/types/entitlement-vocabulary"
+import { EmptyState } from "@/components/feedback/empty-state";
+import { buttonVariants } from "@/components/ui/button-variants";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { restoreJobsQueryOptions } from "@/features/billing-customers/queries/restore-queries";
+import { formatEntitlementInstant } from "@/features/billing-customers/types/entitlement-vocabulary";
 import {
   describeSnapshotMovement,
   providerOutcomeLabel,
@@ -24,19 +14,35 @@ import {
   restoreOutcomeExplanation,
   restoreOutcomeLabel,
   restoreOutcomeTone,
-} from "@/features/billing-customers/types/restore-vocabulary"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { WorkflowPanel, WorkspacePage } from "@/features/orgs/components/workspace-page"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
-import { billingCustomerHref, storeConnectionsHref } from "@/lib/routing/workspace-hrefs"
-import type { BillingRestoreJob } from "@/generated/api"
+} from "@/features/billing-customers/types/restore-vocabulary";
+import {
+  DefinitionRow,
+  LedgerPaging,
+  StatusPill,
+} from "@/features/billing-ledger/components/billing-chrome";
+import {
+  BILLING_OPTIONAL_NOTE,
+  runStatusLabel,
+} from "@/features/billing-ledger/types/billing-vocabulary";
+import { billingHealthQueryOptions } from "@/features/billing-operations/queries/billing-health-queries";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import type { BillingRestoreJob } from "@/generated/api";
+import {
+  billingCustomerHref,
+  storeConnectionsHref,
+} from "@/lib/routing/workspace-hrefs";
 
 interface RestoreJobsPageProps {
-  cursor?: string
-  environmentId: string
-  onCursorChange: (cursor: string | undefined) => void
-  organizationId: string
-  projectId: string
+  cursor?: string;
+  environmentId: string;
+  onCursorChange: (cursor: string | undefined) => void;
+  organizationId: string;
+  projectId: string;
 }
 
 /**
@@ -59,32 +65,37 @@ export function RestoreJobsPage({
   organizationId,
   projectId,
 }: RestoreJobsPageProps) {
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
   const health = useQuery({
     ...billingHealthQueryOptions(projectId, environmentId),
     enabled: scopeReady,
-  })
+  });
   const restores = useQuery({
-    ...restoreJobsQueryOptions(projectId, environmentId, { ...(cursor ? { cursor } : {}) }),
+    ...restoreJobsQueryOptions(projectId, environmentId, {
+      ...(cursor ? { cursor } : {}),
+    }),
     enabled: scopeReady,
-  })
+  });
 
-  const billingEnabled = health.data?.billingEnabled !== false
-  const items = restores.data?.items ?? []
+  const billingEnabled = health.data?.billingEnabled !== false;
+  const items = restores.data?.items ?? [];
 
-  const error = project.error ?? restores.error
+  const error = project.error ?? restores.error;
   const state = resolveHostedQueryState({
     error,
     isEmpty: false,
     isPending: project.isPending || (scopeReady && restores.isPending),
     loadingDescription: "Loading restore jobs for this Mosaic Environment.",
     onRetry: () => {
-      void restores.refetch()
+      restores.refetch();
     },
     permissionDescription:
       "Organization owner or admin permission is required to read restore jobs.",
     scope: { environmentId, organizationId, projectId },
-  })
+  });
 
   if (scopeMismatch) {
     return (
@@ -98,10 +109,10 @@ export function RestoreJobsPage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
-  const scope = { environmentId, organizationId, projectId }
+  const scope = { environmentId, organizationId, projectId };
 
   return (
     <WorkspacePage
@@ -109,7 +120,9 @@ export function RestoreJobsPage({
       eyebrow="Mosaic Billing · Restores"
       title="Restores"
     >
-      <p className="text-muted-foreground text-xs leading-5">{RESTORE_READ_ONLY_NOTE}</p>
+      <p className="text-muted-foreground text-xs leading-5">
+        {RESTORE_READ_ONLY_NOTE}
+      </p>
 
       <WorkflowPanel
         description="Almost every confusing restore is a case where one of these succeeded and the next had not finished yet."
@@ -118,76 +131,96 @@ export function RestoreJobsPage({
         <ol className="space-y-3">
           {RESTORE_LAYERS.map((layer) => (
             <li className="rounded border p-4" key={layer.title}>
-              <p className="text-sm font-semibold">{layer.title}</p>
-              <p className="text-muted-foreground mt-1 text-sm leading-6">{layer.body}</p>
+              <p className="font-semibold text-sm">{layer.title}</p>
+              <p className="mt-1 text-muted-foreground text-sm leading-6">
+                {layer.body}
+              </p>
             </li>
           ))}
         </ol>
       </WorkflowPanel>
 
       <HostedResourceBoundary state={state}>
-        {!billingEnabled ? (
-          <EmptyState
-            action={
-              <a className={buttonVariants()} href={storeConnectionsHref(scope) ?? "#"}>
-                Set up Mosaic Billing
-              </a>
-            }
-            description={`Mosaic Billing is turned off for this Project, so restore submissions are rejected and none is recorded. ${BILLING_OPTIONAL_NOTE}`}
-            title="Mosaic Billing is not enabled for this Project"
-          />
-        ) : items.length === 0 ? (
-          <>
+        {(() => {
+          if (billingEnabled) {
+            return (() => {
+              if (items.length === 0) {
+                return (
+                  <>
+                    <EmptyState
+                      description="No SDK has reported a restore in this Mosaic Environment. Restores appear here once an app calls the restore API on a device."
+                      title="No restores recorded yet"
+                    />
+                    <LedgerPaging
+                      cursor={cursor}
+                      endLabel="End of the restore list."
+                      nextCursor={restores.data?.nextCursor}
+                      onCursorChange={onCursorChange}
+                    />
+                  </>
+                );
+              }
+              return (
+                <WorkflowPanel
+                  title={`${items.length} restore(s) on this page`}
+                >
+                  <ul className="space-y-3">
+                    {items.map((job) => (
+                      <RestoreRow
+                        customerHref={
+                          job.billingCustomerId
+                            ? (billingCustomerHref(
+                                scope,
+                                job.billingCustomerId
+                              ) ?? "#")
+                            : undefined
+                        }
+                        job={job}
+                        key={job.restoreId}
+                      />
+                    ))}
+                  </ul>
+                  <LedgerPaging
+                    cursor={cursor}
+                    endLabel="End of the restore list."
+                    nextCursor={restores.data?.nextCursor}
+                    onCursorChange={onCursorChange}
+                  />
+                </WorkflowPanel>
+              );
+            })();
+          }
+          return (
             <EmptyState
-              description="No SDK has reported a restore in this Mosaic Environment. Restores appear here once an app calls the restore API on a device."
-              title="No restores recorded yet"
+              action={
+                <a
+                  className={buttonVariants()}
+                  href={storeConnectionsHref(scope) ?? "#"}
+                >
+                  Set up Mosaic Billing
+                </a>
+              }
+              description={`Mosaic Billing is turned off for this Project, so restore submissions are rejected and none is recorded. ${BILLING_OPTIONAL_NOTE}`}
+              title="Mosaic Billing is not enabled for this Project"
             />
-            <LedgerPaging
-              cursor={cursor}
-              endLabel="End of the restore list."
-              nextCursor={restores.data?.nextCursor}
-              onCursorChange={onCursorChange}
-            />
-          </>
-        ) : (
-          <WorkflowPanel title={`${items.length} restore(s) on this page`}>
-            <ul className="space-y-3">
-              {items.map((job) => (
-                <RestoreRow
-                  customerHref={
-                    job.billingCustomerId
-                      ? (billingCustomerHref(scope, job.billingCustomerId) ?? "#")
-                      : undefined
-                  }
-                  job={job}
-                  key={job.restoreId}
-                />
-              ))}
-            </ul>
-            <LedgerPaging
-              cursor={cursor}
-              endLabel="End of the restore list."
-              nextCursor={restores.data?.nextCursor}
-              onCursorChange={onCursorChange}
-            />
-          </WorkflowPanel>
-        )}
+          );
+        })()}
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }
 
 function RestoreRow({
   customerHref,
   job,
 }: {
-  customerHref: string | undefined
-  job: BillingRestoreJob
+  customerHref: string | undefined;
+  job: BillingRestoreJob;
 }) {
   return (
     <li className="rounded border p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-mono text-xs break-all">{job.restoreId}</span>
+        <span className="break-all font-mono text-xs">{job.restoreId}</span>
         <div className="flex flex-wrap items-center gap-2">
           {/* Two axes, never merged. The store's own result and Mosaic's are
               different questions, and a native restore that "succeeded" says
@@ -204,8 +237,10 @@ function RestoreRow({
         </div>
       </div>
 
-      <p className="mt-2 text-sm leading-6">{restoreOutcomeExplanation(job.outcome)}</p>
-      <p className="text-muted-foreground mt-1 text-sm leading-6">
+      <p className="mt-2 text-sm leading-6">
+        {restoreOutcomeExplanation(job.outcome)}
+      </p>
+      <p className="mt-1 text-muted-foreground text-sm leading-6">
         {describeSnapshotMovement(job)}
       </p>
 
@@ -214,7 +249,7 @@ function RestoreRow({
           label="Billing Customer"
           value={
             customerHref ? (
-              <a className="text-primary font-mono" href={customerHref}>
+              <a className="font-mono text-primary" href={customerHref}>
                 {job.billingCustomerId}
               </a>
             ) : (
@@ -234,9 +269,15 @@ function RestoreRow({
           label="Attempts"
           value={`${job.attemptCount ?? 0} of ${job.maxAttempts ?? "—"}`}
         />
-        <DefinitionRow label="Requested" value={formatEntitlementInstant(job.requestedAt)} />
-        <DefinitionRow label="Completed" value={formatEntitlementInstant(job.completedAt)} />
+        <DefinitionRow
+          label="Requested"
+          value={formatEntitlementInstant(job.requestedAt)}
+        />
+        <DefinitionRow
+          label="Completed"
+          value={formatEntitlementInstant(job.completedAt)}
+        />
       </dl>
     </li>
-  )
+  );
 }

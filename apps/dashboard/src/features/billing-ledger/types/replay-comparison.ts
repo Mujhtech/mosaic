@@ -1,10 +1,10 @@
-import type { TransactionFact, ValidationAttempt } from "@/generated/api"
 import {
   formatBillingTimestamp,
   resolutionStateLabel,
   storeEnvironmentLabel,
   validationOutcomeLabel,
-} from "@/features/billing-ledger/types/billing-vocabulary"
+} from "@/features/billing-ledger/types/billing-vocabulary";
+import type { TransactionFact, ValidationAttempt } from "@/generated/api";
 
 /**
  * Replay comparison.
@@ -17,27 +17,29 @@ import {
  */
 
 export interface ReplayComparisonRow {
-  changed: boolean
-  earlier: string
-  label: string
-  latest: string
+  changed: boolean;
+  earlier: string;
+  label: string;
+  latest: string;
 }
 
 export type ReplayConflictKind =
-  "outcome_changed" | "resolved_product_changed" | "store_environment_changed"
+  | "outcome_changed"
+  | "resolved_product_changed"
+  | "store_environment_changed";
 
 export interface ReplayComparison {
+  conflicts: readonly ReplayConflictKind[];
   /** Both attempts are always present in the result. */
-  earlierAttemptNumber?: number
-  conflicts: readonly ReplayConflictKind[]
-  hasConflict: boolean
-  latestAttemptNumber?: number
-  rows: readonly ReplayComparisonRow[]
+  earlierAttemptNumber?: number;
+  hasConflict: boolean;
+  latestAttemptNumber?: number;
+  rows: readonly ReplayComparisonRow[];
 }
 
 export interface ReplayComparisonInput {
-  attempt: ValidationAttempt
-  fact?: TransactionFact
+  attempt: ValidationAttempt;
+  fact?: TransactionFact;
 }
 
 const CONFLICT_EXPLANATIONS: Record<ReplayConflictKind, string> = {
@@ -47,10 +49,10 @@ const CONFLICT_EXPLANATIONS: Record<ReplayConflictKind, string> = {
     "The same transaction now resolves to a different Mosaic Product. Review the Product mapping history before relying on either resolution.",
   store_environment_changed:
     "The Store Environment differs between attempts. Sandbox and production facts must never be treated as one series.",
-}
+};
 
 export function describeReplayConflict(kind: ReplayConflictKind) {
-  return CONFLICT_EXPLANATIONS[kind]
+  return CONFLICT_EXPLANATIONS[kind];
 }
 
 /**
@@ -60,121 +62,136 @@ export function describeReplayConflict(kind: ReplayConflictKind) {
  */
 export function orderReplayAttempts(
   a: ReplayComparisonInput,
-  b: ReplayComparisonInput,
+  b: ReplayComparisonInput
 ): [ReplayComparisonInput, ReplayComparisonInput] {
-  const left = a.attempt.attemptNumber
-  const right = b.attempt.attemptNumber
+  const left = a.attempt.attemptNumber;
+  const right = b.attempt.attemptNumber;
   if (typeof left === "number" && typeof right === "number" && left !== right) {
-    return left < right ? [a, b] : [b, a]
+    return left < right ? [a, b] : [b, a];
   }
-  const leftStarted = Date.parse(a.attempt.startedAt ?? "")
-  const rightStarted = Date.parse(b.attempt.startedAt ?? "")
-  if (!Number.isNaN(leftStarted) && !Number.isNaN(rightStarted) && leftStarted !== rightStarted) {
-    return leftStarted < rightStarted ? [a, b] : [b, a]
+  const leftStarted = Date.parse(a.attempt.startedAt ?? "");
+  const rightStarted = Date.parse(b.attempt.startedAt ?? "");
+  if (
+    !(Number.isNaN(leftStarted) || Number.isNaN(rightStarted)) &&
+    leftStarted !== rightStarted
+  ) {
+    return leftStarted < rightStarted ? [a, b] : [b, a];
   }
-  return [a, b]
+  return [a, b];
 }
 
-function row(label: string, earlier: string, latest: string): ReplayComparisonRow {
-  return { changed: earlier !== latest, earlier, label, latest }
+function row(
+  label: string,
+  earlier: string,
+  latest: string
+): ReplayComparisonRow {
+  return { changed: earlier !== latest, earlier, label, latest };
 }
 
-const UNSET = "—"
+const UNSET = "—";
 
 function text(value: string | number | undefined) {
-  return value === undefined || value === "" ? UNSET : String(value)
+  return value === undefined || value === "" ? UNSET : String(value);
 }
 
 export function compareReplayAttempts(
   first: ReplayComparisonInput,
-  second: ReplayComparisonInput,
+  second: ReplayComparisonInput
 ): ReplayComparison {
-  const [earlier, latest] = orderReplayAttempts(first, second)
+  const [earlier, latest] = orderReplayAttempts(first, second);
 
   const rows: ReplayComparisonRow[] = [
-    row("Attempt", text(earlier.attempt.attemptNumber), text(latest.attempt.attemptNumber)),
+    row(
+      "Attempt",
+      text(earlier.attempt.attemptNumber),
+      text(latest.attempt.attemptNumber)
+    ),
     row(
       "Outcome",
       validationOutcomeLabel(earlier.attempt.outcome),
-      validationOutcomeLabel(latest.attempt.outcome),
+      validationOutcomeLabel(latest.attempt.outcome)
     ),
     row(
       "Store Environment",
       storeEnvironmentLabel(earlier.attempt.storeEnvironment),
-      storeEnvironmentLabel(latest.attempt.storeEnvironment),
+      storeEnvironmentLabel(latest.attempt.storeEnvironment)
     ),
     row(
       "Diagnostic code",
       text(earlier.attempt.diagnosticCode),
-      text(latest.attempt.diagnosticCode),
+      text(latest.attempt.diagnosticCode)
     ),
-    row("Store code", text(earlier.attempt.providerCode), text(latest.attempt.providerCode)),
+    row(
+      "Store code",
+      text(earlier.attempt.providerCode),
+      text(latest.attempt.providerCode)
+    ),
     row(
       "Store HTTP status",
       text(earlier.attempt.providerHttpStatus),
-      text(latest.attempt.providerHttpStatus),
+      text(latest.attempt.providerHttpStatus)
     ),
     row(
       "Validator version",
       text(earlier.attempt.validatorVersion),
-      text(latest.attempt.validatorVersion),
+      text(latest.attempt.validatorVersion)
     ),
     row(
       "Completed at",
       formatBillingTimestamp(earlier.attempt.completedAt),
-      formatBillingTimestamp(latest.attempt.completedAt),
+      formatBillingTimestamp(latest.attempt.completedAt)
     ),
     row(
       "Resolved Mosaic Product",
       text(earlier.fact?.mosaicProductId),
-      text(latest.fact?.mosaicProductId),
+      text(latest.fact?.mosaicProductId)
     ),
     row(
       "Resolution",
       earlier.fact ? resolutionStateLabel(earlier.fact.resolutionState) : UNSET,
-      latest.fact ? resolutionStateLabel(latest.fact.resolutionState) : UNSET,
+      latest.fact ? resolutionStateLabel(latest.fact.resolutionState) : UNSET
     ),
     row(
       "Mapping version",
       text(earlier.fact?.resolvedMappingVersion),
-      text(latest.fact?.resolvedMappingVersion),
+      text(latest.fact?.resolvedMappingVersion)
     ),
-  ]
+  ];
 
-  const conflicts: ReplayConflictKind[] = []
+  const conflicts: ReplayConflictKind[] = [];
   if (
     earlier.attempt.outcome !== undefined &&
     latest.attempt.outcome !== undefined &&
     earlier.attempt.outcome !== latest.attempt.outcome
   ) {
-    conflicts.push("outcome_changed")
+    conflicts.push("outcome_changed");
   }
   if (
     earlier.fact?.mosaicProductId !== undefined &&
     latest.fact?.mosaicProductId !== undefined &&
     earlier.fact.mosaicProductId !== latest.fact.mosaicProductId
   ) {
-    conflicts.push("resolved_product_changed")
+    conflicts.push("resolved_product_changed");
   }
   if (
     earlier.attempt.storeEnvironment !== undefined &&
     latest.attempt.storeEnvironment !== undefined &&
     earlier.attempt.storeEnvironment !== latest.attempt.storeEnvironment
   ) {
-    conflicts.push("store_environment_changed")
+    conflicts.push("store_environment_changed");
   }
 
   return {
     conflicts,
-    ...(earlier.attempt.attemptNumber !== undefined
-      ? { earlierAttemptNumber: earlier.attempt.attemptNumber }
-      : {}),
+    ...(earlier.attempt.attemptNumber === undefined
+      ? {}
+      : { earlierAttemptNumber: earlier.attempt.attemptNumber }),
     hasConflict: conflicts.length > 0,
-    ...(latest.attempt.attemptNumber !== undefined
-      ? { latestAttemptNumber: latest.attempt.attemptNumber }
-      : {}),
+    ...(latest.attempt.attemptNumber === undefined
+      ? {}
+      : { latestAttemptNumber: latest.attempt.attemptNumber }),
     rows,
-  }
+  };
 }
 
 /**
@@ -184,16 +201,22 @@ export function compareReplayAttempts(
  */
 export function selectComparableAttempts(
   attempts: readonly ValidationAttempt[],
-  factsByAttemptId: ReadonlyMap<string, TransactionFact> = new Map(),
+  factsByAttemptId: ReadonlyMap<string, TransactionFact> = new Map()
 ): [ReplayComparisonInput, ReplayComparisonInput] | undefined {
-  if (attempts.length < 2) return undefined
-  const ordered = [...attempts].sort((a, b) => (a.attemptNumber ?? 0) - (b.attemptNumber ?? 0))
-  const latest = ordered[ordered.length - 1]
-  const earlier = ordered[ordered.length - 2]
-  if (!latest || !earlier) return undefined
-  const withFact = (attempt: ValidationAttempt): ReplayComparisonInput => {
-    const fact = attempt.id ? factsByAttemptId.get(attempt.id) : undefined
-    return fact ? { attempt, fact } : { attempt }
+  if (attempts.length < 2) {
+    return;
   }
-  return [withFact(earlier), withFact(latest)]
+  const ordered = [...attempts].sort(
+    (a, b) => (a.attemptNumber ?? 0) - (b.attemptNumber ?? 0)
+  );
+  const latest = ordered.at(-1);
+  const earlier = ordered.at(-2);
+  if (!(latest && earlier)) {
+    return;
+  }
+  const withFact = (attempt: ValidationAttempt): ReplayComparisonInput => {
+    const fact = attempt.id ? factsByAttemptId.get(attempt.id) : undefined;
+    return fact ? { attempt, fact } : { attempt };
+  };
+  return [withFact(earlier), withFact(latest)];
 }

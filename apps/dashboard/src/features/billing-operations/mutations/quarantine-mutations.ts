@@ -1,9 +1,11 @@
-import { mutationOptions, type QueryClient } from "@tanstack/react-query"
-
-import { closeQuarantineRecordSuperseded, retryQuarantinedInput } from "@/generated/api"
-import { transactionKeys } from "@/features/billing-ledger/queries/transaction-queries"
-import { quarantineKeys } from "@/features/billing-operations/queries/quarantine-queries"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import { transactionKeys } from "@/features/billing-ledger/queries/transaction-queries";
+import { quarantineKeys } from "@/features/billing-operations/queries/quarantine-queries";
+import {
+  closeQuarantineRecordSuperseded,
+  retryQuarantinedInput,
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 /**
  * The two audited quarantine operations, and only those two.
@@ -18,20 +20,26 @@ async function invalidateQuarantine(
   queryClient: QueryClient,
   projectId: string,
   environmentId: string,
-  recordId: string,
+  recordId: string
 ) {
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: quarantineKeys.scope(projectId) }),
-    queryClient.invalidateQueries({ queryKey: quarantineKeys.detail(projectId, recordId) }),
-    queryClient.invalidateQueries({ queryKey: transactionKeys.scope(projectId, environmentId) }),
-  ])
+    queryClient.invalidateQueries({
+      queryKey: quarantineKeys.scope(projectId),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: quarantineKeys.detail(projectId, recordId),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: transactionKeys.scope(projectId, environmentId),
+    }),
+  ]);
 }
 
 export function retryQuarantinedInputMutationOptions(
   projectId: string,
   environmentId: string,
   recordId: string,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
     mutationFn: async () => {
@@ -39,29 +47,35 @@ export function retryQuarantinedInputMutationOptions(
         client: generatedDashboardClient,
         path: { projectId, recordId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-    onSettled: async () => invalidateQuarantine(queryClient, projectId, environmentId, recordId),
-  })
+    onSettled: async () =>
+      invalidateQuarantine(queryClient, projectId, environmentId, recordId),
+  });
 }
 
 export function closeQuarantineSupersededMutationOptions(
   projectId: string,
   environmentId: string,
   recordId: string,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
-    mutationFn: async ({ supersededByRecordId }: { supersededByRecordId: string }) => {
+    mutationFn: async ({
+      supersededByRecordId,
+    }: {
+      supersededByRecordId: string;
+    }) => {
       const result = await closeQuarantineRecordSuperseded({
         body: { supersededByRecordId },
         client: generatedDashboardClient,
         path: { projectId, recordId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-    onSettled: async () => invalidateQuarantine(queryClient, projectId, environmentId, recordId),
-  })
+    onSettled: async () =>
+      invalidateQuarantine(queryClient, projectId, environmentId, recordId),
+  });
 }

@@ -2,7 +2,7 @@
 // `env`, carrying a readable alias rather than an id.
 //
 //   /orgs/O/projects/P/env/prod/billing/quarantine/rec_01
-const ENVIRONMENT_SEGMENT = "env"
+const ENVIRONMENT_SEGMENT = "env";
 
 /**
  * Rewrites the Environment alias in place, so switching keeps the operator on the
@@ -16,15 +16,19 @@ const ENVIRONMENT_SEGMENT = "env"
 export function switchEnvironmentPath(
   pathname: string,
   currentAlias: string,
-  nextAlias: string,
+  nextAlias: string
 ): string | null {
-  if (currentAlias === "" || nextAlias === "") return null
+  if (currentAlias === "" || nextAlias === "") {
+    return null;
+  }
 
-  const segments = pathname.split("/")
-  const index = segments.indexOf(ENVIRONMENT_SEGMENT)
-  if (index === -1 || segments[index + 1] !== currentAlias) return null
+  const segments = pathname.split("/");
+  const index = segments.indexOf(ENVIRONMENT_SEGMENT);
+  if (index === -1 || segments[index + 1] !== currentAlias) {
+    return null;
+  }
 
-  const rewritten = [...segments]
-  rewritten[index + 1] = nextAlias
-  return rewritten.join("/")
+  const rewritten = [...segments];
+  rewritten[index + 1] = nextAlias;
+  return rewritten.join("/");
 }

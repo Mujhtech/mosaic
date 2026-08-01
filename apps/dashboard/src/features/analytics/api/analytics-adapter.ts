@@ -10,49 +10,68 @@ import type {
   IdentityRequest,
   IssueRow,
   PaywallComparisonRow,
-} from "../types/analytics"
+} from "../types/analytics";
 
 export interface AnalyticsAdapter {
-  getOverview(
+  confirmDeletion: (
+    scope: AnalyticsScope,
+    request: IdentityRequest,
+    requestDigest: string
+  ) => Promise<AsyncJob>;
+  createEventExport: (
+    scope: AnalyticsScope,
+    filters: AnalyticsFilters
+  ) => Promise<AsyncJob>;
+  createIdentityExport: (
+    scope: AnalyticsScope,
+    request: IdentityRequest
+  ) => Promise<AsyncJob>;
+  downloadJob: (scope: AnalyticsScope, jobId: string) => Promise<Blob>;
+  getBreakdowns: (
     scope: AnalyticsScope,
     filters: AnalyticsFilters,
-    signal?: AbortSignal,
-  ): Promise<AnalyticsOverview>
-  getBreakdowns(
+    signal?: AbortSignal
+  ) => Promise<AnalyticsBreakdown[]>;
+  getCollectionSettings: (
     scope: AnalyticsScope,
-    filters: AnalyticsFilters,
-    signal?: AbortSignal,
-  ): Promise<AnalyticsBreakdown[]>
-  getFunnel(
+    signal?: AbortSignal
+  ) => Promise<CollectionSettings>;
+  getFunnel: (
     scope: AnalyticsScope,
     funnel: "placements" | "paywalls" | "products" | "purchases",
     filters: AnalyticsFilters,
-    signal?: AbortSignal,
-  ): Promise<FunnelReport>
-  getPaywallComparison(
+    signal?: AbortSignal
+  ) => Promise<FunnelReport>;
+  getIssues: (
     scope: AnalyticsScope,
     filters: AnalyticsFilters,
-    signal?: AbortSignal,
-  ): Promise<PaywallComparisonRow[]>
-  getIssues(
+    signal?: AbortSignal
+  ) => Promise<IssueRow[]>;
+  getJob: (
+    scope: AnalyticsScope,
+    jobId: string,
+    signal?: AbortSignal
+  ) => Promise<AsyncJob>;
+  getOverview: (
     scope: AnalyticsScope,
     filters: AnalyticsFilters,
-    signal?: AbortSignal,
-  ): Promise<IssueRow[]>
-  getCollectionSettings(scope: AnalyticsScope, signal?: AbortSignal): Promise<CollectionSettings>
-  updateCollectionSettings(
+    signal?: AbortSignal
+  ) => Promise<AnalyticsOverview>;
+  getPaywallComparison: (
     scope: AnalyticsScope,
-    settings: Pick<CollectionSettings, "enabled" | "rawRetentionDays">,
-  ): Promise<CollectionSettings>
-  createEventExport(scope: AnalyticsScope, filters: AnalyticsFilters): Promise<AsyncJob>
-  getJob(scope: AnalyticsScope, jobId: string, signal?: AbortSignal): Promise<AsyncJob>
-  previewIdentity(scope: AnalyticsScope, request: IdentityRequest): Promise<IdentityPreview>
-  createIdentityExport(scope: AnalyticsScope, request: IdentityRequest): Promise<AsyncJob>
-  previewDeletion(scope: AnalyticsScope, request: IdentityRequest): Promise<IdentityPreview>
-  confirmDeletion(
+    filters: AnalyticsFilters,
+    signal?: AbortSignal
+  ) => Promise<PaywallComparisonRow[]>;
+  previewDeletion: (
     scope: AnalyticsScope,
-    request: IdentityRequest,
-    requestDigest: string,
-  ): Promise<AsyncJob>
-  downloadJob(scope: AnalyticsScope, jobId: string): Promise<Blob>
+    request: IdentityRequest
+  ) => Promise<IdentityPreview>;
+  previewIdentity: (
+    scope: AnalyticsScope,
+    request: IdentityRequest
+  ) => Promise<IdentityPreview>;
+  updateCollectionSettings: (
+    scope: AnalyticsScope,
+    settings: Pick<CollectionSettings, "enabled" | "rawRetentionDays">
+  ) => Promise<CollectionSettings>;
 }

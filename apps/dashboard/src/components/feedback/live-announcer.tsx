@@ -10,8 +10,8 @@ export function LiveAnnouncer({
   assertive = false,
   message,
 }: {
-  assertive?: boolean
-  message?: string
+  assertive?: boolean;
+  message?: string;
 }) {
   return (
     <div
@@ -23,5 +23,5 @@ export function LiveAnnouncer({
     >
       {message ?? ""}
     </div>
-  )
+  );
 }

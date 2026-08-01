@@ -1,39 +1,62 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
-import { useLayoutEffect } from "react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-
-import { EditorShell } from "@/features/paywall-editor/components/editor-shell"
-import { PaywallEditorProviders } from "@/features/paywall-editor/components/paywall-editor-workspace"
-import { DEFAULT_MOCK_PRODUCTS } from "@/features/paywall-editor/constants/editor-constants"
-import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { useLayoutEffect } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EditorShell } from "@/features/paywall-editor/components/editor-shell";
+import { PaywallEditorProviders } from "@/features/paywall-editor/components/paywall-editor-workspace";
+import { DEFAULT_MOCK_PRODUCTS } from "@/features/paywall-editor/constants/editor-constants";
+import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import {
   useEditorActions,
   useEditorStore,
-} from "@/features/paywall-editor/stores/editor-store-context"
-import { cloneValue } from "@/features/paywall-editor/utils/clone"
-import { findNode } from "@/features/paywall-editor/utils/document-tree"
+} from "@/features/paywall-editor/stores/editor-store-context";
+import { cloneValue } from "@/features/paywall-editor/utils/clone";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 
 class ResizeObserverStub {
-  disconnect() {}
-  observe() {}
-  unobserve() {}
+  disconnect() {
+    /* stub for a browser API jsdom does not implement */
+  }
+  observe() {
+    /* stub for a browser API jsdom does not implement */
+  }
+  unobserve() {
+    /* stub for a browser API jsdom does not implement */
+  }
 }
 
 function InvalidEditorHarness() {
-  const { document } = useEditorStore()
-  const editor = useEditorActions()
+  const { document } = useEditorStore();
+  const editor = useEditorActions();
 
   useLayoutEffect(() => {
-    if (document) return
-    const invalid = cloneValue(EDITOR_TEMPLATES[0]!.document)
-    const headline = findNode(invalid, "headline")
-    if (headline?.type !== "text") throw new Error("Expected headline")
-    headline.value.default = ""
-    invalid.localization.locales.en!.strings[headline.value.localizationKey] = ""
-    editor.loadTemplate(invalid)
-  }, [document, editor])
+    if (document) {
+      return;
+    }
+    const invalid = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
+    const headline = findNode(invalid, "headline");
+    if (headline?.type !== "text") {
+      throw new Error("Expected headline");
+    }
+    headline.value.default = "";
+    required(
+      invalid.localization.locales.en,
+      "invalid.localization.locales.en"
+    ).strings[headline.value.localizationKey] = "";
+    editor.loadTemplate(invalid);
+  }, [document, editor]);
 
-  if (!document) return null
+  if (!document) {
+    return null;
+  }
   return (
     <EditorShell
       importError={null}
@@ -43,38 +66,46 @@ function InvalidEditorHarness() {
       onProductsChange={vi.fn()}
       onPurchaseStateChange={vi.fn()}
     />
-  )
+  );
 }
 
 describe("EditorShell validation navigation", () => {
-  const originalWidth = window.innerWidth
+  const originalWidth = window.innerWidth;
 
   beforeEach(() => {
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: 900 })
-    window.dispatchEvent(new Event("resize"))
-    vi.stubGlobal("ResizeObserver", ResizeObserverStub)
-    vi.stubGlobal("WebSocket", undefined)
-  })
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 900,
+    });
+    window.dispatchEvent(new Event("resize"));
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    vi.stubGlobal("WebSocket", undefined);
+  });
 
   afterEach(() => {
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth })
-    window.dispatchEvent(new Event("resize"))
-    vi.unstubAllGlobals()
-  })
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: originalWidth,
+    });
+    window.dispatchEvent(new Event("resize"));
+    vi.unstubAllGlobals();
+  });
 
   it("uses export failure to open compact Properties and focus the exact invalid field", async () => {
     render(
       <PaywallEditorProviders>
         <InvalidEditorHarness />
-      </PaywallEditorProviders>,
-    )
+      </PaywallEditorProviders>
+    );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Export" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Export" }));
 
-    const sheet = await screen.findByRole("dialog", { name: "Properties" })
-    const field = within(sheet).getByRole("textbox", { name: "Text" })
-    await waitFor(() => expect(field).toHaveFocus())
-    expect(field).toHaveAttribute("aria-invalid", "true")
-    expect(within(sheet).getByRole("alert")).toHaveTextContent("Visible text cannot be empty.")
-  })
-})
+    const sheet = await screen.findByRole("dialog", { name: "Properties" });
+    const field = within(sheet).getByRole("textbox", { name: "Text" });
+    await waitFor(() => expect(field).toHaveFocus());
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(within(sheet).getByRole("alert")).toHaveTextContent(
+      "Visible text cannot be empty."
+    );
+  });
+});

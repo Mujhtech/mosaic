@@ -1,21 +1,33 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query";
 
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
 
 interface EnvironmentsPageProps {
-  organizationId: string
-  projectId: string
+  organizationId: string;
+  projectId: string;
 }
 
-export function EnvironmentsPage({ organizationId, projectId }: EnvironmentsPageProps) {
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
-  const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
-  const items = environments.data?.items ?? []
+export function EnvironmentsPage({
+  organizationId,
+  projectId,
+}: EnvironmentsPageProps) {
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
+  const environments = useQuery({
+    ...environmentsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
+  const items = environments.data?.items ?? [];
   const state = resolveHostedQueryState({
     emptyDescription:
       "Every project must retain Development, Staging, and Production. Retry loading this project.",
@@ -24,9 +36,12 @@ export function EnvironmentsPage({ organizationId, projectId }: EnvironmentsPage
     isEmpty: scopeReady && environments.isSuccess && items.length === 0,
     isPending: project.isPending || (scopeReady && environments.isPending),
     loadingDescription: "Loading isolated project environments.",
-    onRetry: () => void environments.refetch(),
-    permissionDescription: "Project membership is required to view environment metadata.",
-  })
+    onRetry: () => {
+      environments.refetch();
+    },
+    permissionDescription:
+      "Project membership is required to view environment metadata.",
+  });
 
   if (scopeMismatch) {
     return (
@@ -40,7 +55,7 @@ export function EnvironmentsPage({ organizationId, projectId }: EnvironmentsPage
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
   return (
@@ -57,8 +72,10 @@ export function EnvironmentsPage({ organizationId, projectId }: EnvironmentsPage
             {items.map((environment) => (
               <li className="rounded border p-4" key={environment.id}>
                 <p className="font-semibold">{environment.name}</p>
-                <p className="text-muted-foreground mt-1 font-mono text-xs">{environment.key}</p>
-                <p className="text-muted-foreground mt-2 text-xs capitalize">
+                <p className="mt-1 font-mono text-muted-foreground text-xs">
+                  {environment.key}
+                </p>
+                <p className="mt-2 text-muted-foreground text-xs capitalize">
                   Mosaic mode · {environment.mode}
                 </p>
               </li>
@@ -67,5 +84,5 @@ export function EnvironmentsPage({ organizationId, projectId }: EnvironmentsPage
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }

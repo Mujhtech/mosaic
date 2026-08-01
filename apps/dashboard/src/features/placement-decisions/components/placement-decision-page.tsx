@@ -1,29 +1,28 @@
-import { ArchiveIcon } from "@phosphor-icons/react/dist/ssr/Archive"
-import { FloppyDiskIcon } from "@phosphor-icons/react/dist/ssr/FloppyDisk"
-import { Link } from "@tanstack/react-router"
-import { useForm } from "@tanstack/react-form"
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useRef, useState } from "react"
-
-import { EmptyState } from "@/components/feedback/empty-state"
-import { ErrorState } from "@/components/feedback/error-state"
+import { ArchiveIcon } from "@phosphor-icons/react/dist/ssr/Archive";
+import { FloppyDiskIcon } from "@phosphor-icons/react/dist/ssr/FloppyDisk";
+import { useForm } from "@tanstack/react-form";
 import {
-  ApiErrorDetails,
-  ApiErrorRecoveryAction,
-  RequestIdCopy,
-} from "@/features/auth/components/hosted-resource-boundary"
-import { describeApiError } from "@/lib/api/errors"
-import { LoadingState } from "@/components/feedback/loading-state"
-import { Button } from "@/components/ui/button"
-import { Field, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { useCallback, useRef, useState } from "react";
+
+import { EmptyState } from "@/components/feedback/empty-state";
+import { ErrorState } from "@/components/feedback/error-state";
+import { LoadingState } from "@/components/feedback/loading-state";
+import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -31,45 +30,55 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet"
-import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { usePlacementDecisionsAdapter } from "@/features/placement-decisions/api/use-placement-decisions-adapter"
-import { AttributeDefinitions } from "@/features/placement-decisions/components/attribute-definitions"
-import { DecisionSimulator } from "@/features/placement-decisions/components/decision-simulator"
-import { OutcomeEditor } from "@/features/placement-decisions/components/outcome-editor"
-import { QaOverrides } from "@/features/placement-decisions/components/qa-overrides"
-import { RuleBuilder } from "@/features/placement-decisions/components/rule-builder"
-import { openPlacementRule } from "@/features/placement-decisions/components/rule-navigation"
+} from "@/components/ui/sheet";
+import {
+  ApiErrorDetails,
+  ApiErrorRecoveryAction,
+  RequestIdCopy,
+} from "@/features/auth/components/hosted-resource-boundary";
+import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace";
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import { paywallsQueryOptions } from "@/features/paywalls/queries/paywall-queries";
+import { usePlacementDecisionsAdapter } from "@/features/placement-decisions/api/use-placement-decisions-adapter";
+import { AttributeDefinitions } from "@/features/placement-decisions/components/attribute-definitions";
+import { DecisionSimulator } from "@/features/placement-decisions/components/decision-simulator";
+import { OutcomeEditor } from "@/features/placement-decisions/components/outcome-editor";
+import { QaOverrides } from "@/features/placement-decisions/components/qa-overrides";
+import { RuleBuilder } from "@/features/placement-decisions/components/rule-builder";
+import { openPlacementRule } from "@/features/placement-decisions/components/rule-navigation";
 import {
   saveRuleSetMutationOptions,
   validateRuleSetMutationOptions,
-} from "@/features/placement-decisions/mutations/placement-decision-mutations"
+} from "@/features/placement-decisions/mutations/placement-decision-mutations";
 import {
   attributeDefinitionsQueryOptions,
   placementDecisionKeys,
   placementDecisionQueryOptions,
-} from "@/features/placement-decisions/queries/placement-decision-queries"
+} from "@/features/placement-decisions/queries/placement-decision-queries";
 import type {
-  AttributeDefinition,
   AssignmentPolicy,
+  AttributeDefinition,
   DecisionOutcome,
   NamedFallback,
   PlacementDecisionDetail,
   PlacementRule,
   PlacementRuleSetDraft,
-} from "@/features/placement-decisions/types/placement-decision"
-import { paywallsQueryOptions } from "@/features/paywalls/queries/paywall-queries"
-import type { HostedPaywallListItem } from "@/features/publishing/api/hosted-publishing-adapter"
-import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter"
+} from "@/features/placement-decisions/types/placement-decision";
+import type { HostedPaywallListItem } from "@/features/publishing/api/hosted-publishing-adapter";
+import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter";
+import { describeApiError } from "@/lib/api/errors";
+import { workspaceScopeParams } from "@/lib/routing/workspace-params";
 
-type DetailTab = "overview" | "rules" | "simulator" | "overrides"
+type DetailTab = "overview" | "rules" | "simulator" | "overrides";
 
 const ASSIGNMENT_POLICY_OPTIONS = [
   { label: "Installation (default)", value: "installation" },
   { label: "Identified user", value: "identified_user" },
-  { label: "Identified user, otherwise installation", value: "identified_user_or_installation" },
-]
+  {
+    label: "Identified user, otherwise installation",
+    value: "identified_user_or_installation",
+  },
+];
 
 export function PlacementDecisionPage({
   environmentId,
@@ -77,16 +86,16 @@ export function PlacementDecisionPage({
   placementId,
   projectId,
 }: {
-  environmentId: string
-  organizationId: string
-  placementId: string
-  projectId: string
+  environmentId: string;
+  organizationId: string;
+  placementId: string;
+  projectId: string;
 }) {
-  const adapter = usePlacementDecisionsAdapter()
-  const publishingAdapter = useHostedPublishingAdapter()
-  const scope = { environmentId, placementId, projectId }
-  const detail = useQuery(placementDecisionQueryOptions(scope, adapter))
-  const paywalls = useQuery(paywallsQueryOptions(projectId, publishingAdapter))
+  const adapter = usePlacementDecisionsAdapter();
+  const publishingAdapter = useHostedPublishingAdapter();
+  const scope = { environmentId, placementId, projectId };
+  const detail = useQuery(placementDecisionQueryOptions(scope, adapter));
+  const paywalls = useQuery(paywallsQueryOptions(projectId, publishingAdapter));
   const paywallVersions = useQuery(
     queryOptions({
       enabled: paywalls.isSuccess,
@@ -98,17 +107,18 @@ export function PlacementDecisionPage({
         paywalls.data,
       ],
       queryFn: async () => {
-        const active = paywalls.data?.filter((paywall) => paywall.status === "active") ?? []
+        const active =
+          paywalls.data?.filter((paywall) => paywall.status === "active") ?? [];
         const versions = await Promise.all(
           active.map(async (paywall) => {
             const published = await publishingAdapter.listPublishedVersions({
               environmentId,
               paywallId: paywall.id,
               projectId,
-            })
-            const latest = [...published].sort(
-              (left, right) => right.versionNumber - left.versionNumber,
-            )[0]
+            });
+            const [latest] = [...published].sort(
+              (left, right) => right.versionNumber - left.versionNumber
+            );
             return latest
               ? {
                   id: latest.id,
@@ -117,16 +127,20 @@ export function PlacementDecisionPage({
                   status: "active" as const,
                   updatedAt: latest.createdAt,
                 }
-              : null
-          }),
-        )
-        return versions.filter((version) => version !== null)
+              : null;
+          })
+        );
+        return versions.filter((version) => version !== null);
       },
-    }),
-  )
-  const attributes = useQuery(attributeDefinitionsQueryOptions(projectId, adapter))
-  const environments = useQuery(environmentsQueryOptions(projectId))
-  const environment = environments.data?.items.find((item) => item.id === environmentId)
+    })
+  );
+  const attributes = useQuery(
+    attributeDefinitionsQueryOptions(projectId, adapter)
+  );
+  const environments = useQuery(environmentsQueryOptions(projectId));
+  const environment = environments.data?.items.find(
+    (item) => item.id === environmentId
+  );
 
   return (
     <MonetizationWorkspace
@@ -139,26 +153,44 @@ export function PlacementDecisionPage({
     >
       {/* Loading and error are mutually exclusive: a failed reference query
           previously left the spinner mounted next to the error. */}
-      {detail.error || paywalls.error || paywallVersions.error || attributes.error ? (
-        <ErrorState
-          description={
-            describeApiError(
-              detail.error ?? paywalls.error ?? paywallVersions.error ?? attributes.error,
-            ).description
-          }
-          onRetry={() => {
-            void detail.refetch()
-            void paywalls.refetch()
-            void paywallVersions.refetch()
-            void attributes.refetch()
-          }}
-        />
-      ) : detail.isPending ||
-        paywalls.isPending ||
-        paywallVersions.isPending ||
-        attributes.isPending ? (
-        <LoadingState description="Loading the Placement decision settings and their references." />
-      ) : null}
+      {(() => {
+        if (
+          detail.error ||
+          paywalls.error ||
+          paywallVersions.error ||
+          attributes.error
+        ) {
+          return (
+            <ErrorState
+              description={
+                describeApiError(
+                  detail.error ??
+                    paywalls.error ??
+                    paywallVersions.error ??
+                    attributes.error
+                ).description
+              }
+              onRetry={() => {
+                detail.refetch();
+                paywalls.refetch();
+                paywallVersions.refetch();
+                attributes.refetch();
+              }}
+            />
+          );
+        }
+        if (
+          detail.isPending ||
+          paywalls.isPending ||
+          paywallVersions.isPending ||
+          attributes.isPending
+        ) {
+          return (
+            <LoadingState description="Loading the Placement decision settings and their references." />
+          );
+        }
+        return null;
+      })()}
       {detail.data && paywallVersions.data && attributes.data ? (
         <DecisionWorkspace
           adapter={adapter}
@@ -171,7 +203,7 @@ export function PlacementDecisionPage({
         />
       ) : null}
     </MonetizationWorkspace>
-  )
+  );
 }
 
 function DecisionWorkspace({
@@ -183,69 +215,99 @@ function DecisionWorkspace({
   paywalls,
   scope,
 }: {
-  adapter: ReturnType<typeof usePlacementDecisionsAdapter>
-  attributes: readonly AttributeDefinition[]
-  detail: PlacementDecisionDetail
-  environmentKind: "development" | "staging" | "production"
-  organizationId: string
-  paywalls: readonly HostedPaywallListItem[]
-  scope: { environmentId: string; placementId: string; projectId: string }
+  adapter: ReturnType<typeof usePlacementDecisionsAdapter>;
+  attributes: readonly AttributeDefinition[];
+  detail: PlacementDecisionDetail;
+  environmentKind: "development" | "staging" | "production";
+  organizationId: string;
+  paywalls: readonly HostedPaywallListItem[];
+  scope: { environmentId: string; placementId: string; projectId: string };
 }) {
-  const [tab, setTab] = useState<DetailTab>("overview")
-  const [confirmingRuleSetArchive, setConfirmingRuleSetArchive] = useState(false)
-  const queryClient = useQueryClient()
-  const save = useMutation(saveRuleSetMutationOptions(scope, adapter, queryClient))
-  const validation = useMutation(validateRuleSetMutationOptions(scope, adapter))
+  const handleClick2 = useCallback(() => setConfirmingRuleSetArchive(true), []);
+  const [tab, setTab] = useState<DetailTab>("overview");
+  const [confirmingRuleSetArchive, setConfirmingRuleSetArchive] =
+    useState(false);
+  const queryClient = useQueryClient();
+  const save = useMutation(
+    saveRuleSetMutationOptions(scope, adapter, queryClient)
+  );
+  const validation = useMutation(
+    validateRuleSetMutationOptions(scope, adapter)
+  );
   const placementUpdate = useMutation({
     mutationFn: (input: { description?: string; name: string }) =>
       adapter.updatePlacement(scope, input),
     onSuccess: (updated) =>
       queryClient.setQueryData<PlacementDecisionDetail>(
         placementDecisionKeys.detail(scope, adapter),
-        (current) => (current ? { ...current, ...updated } : current),
+        (current) => (current ? { ...current, ...updated } : current)
       ),
-  })
+  });
   const alias = useMutation({
     mutationFn: (key: string) => adapter.createAlias(scope, key),
     onSuccess: (created) =>
       queryClient.setQueryData<PlacementDecisionDetail>(
         placementDecisionKeys.detail(scope, adapter),
-        (current) => (current ? { ...current, aliases: [...current.aliases, created] } : current),
+        (current) =>
+          current
+            ? { ...current, aliases: [...current.aliases, created] }
+            : current
       ),
-  })
+  });
   const archive = useMutation({
     mutationFn: () => adapter.archivePlacement(scope),
     onSuccess: () =>
       queryClient.setQueryData<PlacementDecisionDetail>(
         placementDecisionKeys.detail(scope, adapter),
-        (current) => (current ? { ...current, status: "archived" } : current),
+        (current) => (current ? { ...current, status: "archived" } : current)
       ),
-  })
+  });
+  const handleClick = useCallback(() => archive.mutate(), [archive]);
   const archiveRuleSet = useMutation({
     mutationFn: () => adapter.archiveRuleSet(scope, detail.draft.ruleSetId),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: placementDecisionKeys.detail(scope, adapter),
       }),
-  })
+  });
   // Archiving a Placement or its rule set previously rendered the raw server
   // message. Mosaic-owned copy plus the correlation ID is the documented
   // support path, and a coded refusal here can name the page that resolves it.
-  const archiveError = archiveRuleSet.error ?? archive.error
+  const handleConfirm = useCallback(() => {
+    archiveRuleSet.mutate(undefined, {
+      onSuccess: () => setConfirmingRuleSetArchive(false),
+    });
+  }, [archiveRuleSet]);
+  const archiveError = archiveRuleSet.error ?? archive.error;
   const archiveFailure = archiveError
     ? describeApiError(archiveError, {
         environmentId: scope.environmentId,
         organizationId,
         projectId: scope.projectId,
       })
-    : null
+    : null;
   const form = useForm({
     defaultValues: detail.draft,
     onSubmit: async ({ value }) => {
-      const saved = await save.mutateAsync(value)
-      form.reset(saved)
+      const saved = await save.mutateAsync(value);
+      form.reset(saved);
     },
-  })
+  });
+  // TanStack Form's instance type is deep enough that naming it in a dependency
+  // array trips TS2589, so the callbacks read it through a ref instead. The
+  // instance is stable across renders, so the behaviour is unchanged.
+  const formRef = useRef(form);
+  formRef.current = form;
+  const handleClick7 = useCallback(() => {
+    formRef.current.handleSubmit();
+  }, []);
+  const handleClick5 = useCallback(
+    () => validation.mutate(formRef.current.state.values.revision),
+    [validation]
+  );
+  const handleClick4 = useCallback(() => {
+    formRef.current.handleSubmit();
+  }, []);
   const publish = useMutation({
     mutationFn: () =>
       adapter.publishRuleSet(scope, {
@@ -253,43 +315,68 @@ function DecisionWorkspace({
         ruleSetId: form.state.values.ruleSetId,
       }),
     onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: placementDecisionKeys.detail(scope, adapter) }),
-  })
-  const issues = validation.data?.issues ?? detail.draft.validation?.issues ?? []
+      queryClient.invalidateQueries({
+        queryKey: placementDecisionKeys.detail(scope, adapter),
+      }),
+  });
+  const handleClick6 = useCallback(() => publish.mutate(), [publish]);
+  const issues =
+    validation.data?.issues ?? detail.draft.validation?.issues ?? [];
   const updateRules = (next: readonly PlacementRule[]) =>
     (
       form as unknown as {
-        setFieldValue(name: "rules", value: readonly PlacementRule[]): void
+        setFieldValue: (name: "rules", value: readonly PlacementRule[]) => void;
       }
-    ).setFieldValue("rules", next)
-  const updateFallbacks = (next: readonly NamedFallback[]) =>
-    (
-      form as unknown as {
-        setFieldValue(name: "fallbacks", value: readonly NamedFallback[]): void
-      }
-    ).setFieldValue("fallbacks", next)
+    ).setFieldValue("rules", next);
+  const updateFallbacks = useCallback(
+    (next: readonly NamedFallback[]) =>
+      (
+        formRef.current as unknown as {
+          setFieldValue: (
+            name: "fallbacks",
+            value: readonly NamedFallback[]
+          ) => void;
+        }
+      ).setFieldValue("fallbacks", next),
+    []
+  );
+  const handleClick3 = useCallback(() => {
+    const { fallbacks } = formRef.current.state.values;
+    updateFallbacks([
+      ...fallbacks,
+      {
+        key: `fallback_${fallbacks.length + 1}`,
+        outcome: { type: "no_paywall" },
+      },
+    ]);
+  }, [updateFallbacks]);
   const updateDefaultOutcome = (next: DecisionOutcome) =>
     (
       form as unknown as {
-        setFieldValue(name: "defaultOutcome", value: DecisionOutcome): void
+        setFieldValue: (name: "defaultOutcome", value: DecisionOutcome) => void;
       }
-    ).setFieldValue("defaultOutcome", next)
+    ).setFieldValue("defaultOutcome", next);
   const updateAssignmentPolicy = (next: AssignmentPolicy) =>
     (
       form as unknown as {
-        setFieldValue(name: "assignmentPolicy", value: AssignmentPolicy): void
+        setFieldValue: (
+          name: "assignmentPolicy",
+          value: AssignmentPolicy
+        ) => void;
       }
-    ).setFieldValue("assignmentPolicy", next)
-  const openRule = (ruleId: string) => openPlacementRule(ruleId, () => setTab("rules"))
+    ).setFieldValue("assignmentPolicy", next);
+  const openRule = (ruleId: string) =>
+    openPlacementRule(ruleId, () => setTab("rules"));
 
   return (
     <div className="space-y-5">
-      <div className="border-border rounded border p-4">
+      <div className="rounded border border-border p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="font-mono text-sm">{detail.key}</p>
-            <p className="text-muted-foreground mt-1 text-xs">
-              Stable Placement key · {detail.status} · saved revision {detail.draft.revision}
+            <p className="mt-1 text-muted-foreground text-xs">
+              Stable Placement key · {detail.status} · saved revision{" "}
+              {detail.draft.revision}
               {detail.publishedVersion
                 ? ` · published v${detail.publishedVersion.version}`
                 : " · not published"}
@@ -297,54 +384,67 @@ function DecisionWorkspace({
           </div>
           <Button
             disabled={
-              archive.isPending || detail.status === "archived" || detail.usage.ruleSetCount > 0
+              archive.isPending ||
+              detail.status === "archived" ||
+              detail.usage.ruleSetCount > 0
             }
-            onClick={() => archive.mutate()}
+            onClick={handleClick}
             size="sm"
             type="button"
             variant="outline"
           >
             <ArchiveIcon aria-hidden />
-            {detail.status === "archived" ? "Placement archived" : "Archive Placement"}
+            {detail.status === "archived"
+              ? "Placement archived"
+              : "Archive Placement"}
           </Button>
         </div>
-        {detail.status === "archived" ? (
-          <p className="text-muted-foreground mt-3 text-sm" role="status">
-            This Placement is archived and cannot receive decision changes.
-          </p>
-        ) : detail.usage.ruleSetCount > 0 ? (
-          <div className="border-border bg-muted/30 mt-3 flex flex-wrap items-center justify-between gap-3 rounded border p-3">
-            <div>
-              <p className="text-sm font-medium">Archive the active decision settings first</p>
-              <p className="text-muted-foreground mt-1 text-xs">
-                This preserves published version history and removes the active decision settings so
-                the Placement can then be archived. Archiving decision settings cannot be undone;
-                rebuilding them means recreating every rule by hand.
+        {(() => {
+          if (detail.status === "archived") {
+            return (
+              <p className="mt-3 text-muted-foreground text-sm" role="status">
+                This Placement is archived and cannot receive decision changes.
               </p>
-            </div>
-            <Button
-              disabled={archiveRuleSet.isPending}
-              onClick={() => setConfirmingRuleSetArchive(true)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <ArchiveIcon aria-hidden />
-              {archiveRuleSet.isPending ? "Archiving decision settings…" : "Archive settings"}
-            </Button>
-            <ArchiveRuleSetConfirmation
-              onConfirm={() => {
-                archiveRuleSet.mutate(undefined, {
-                  onSuccess: () => setConfirmingRuleSetArchive(false),
-                })
-              }}
-              onOpenChange={setConfirmingRuleSetArchive}
-              open={confirmingRuleSetArchive}
-              pending={archiveRuleSet.isPending}
-              placementKey={detail.key}
-            />
-          </div>
-        ) : null}
+            );
+          }
+          if (detail.usage.ruleSetCount > 0) {
+            return (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded border border-border bg-muted/30 p-3">
+                <div>
+                  <p className="font-medium text-sm">
+                    Archive the active decision settings first
+                  </p>
+                  <p className="mt-1 text-muted-foreground text-xs">
+                    This preserves published version history and removes the
+                    active decision settings so the Placement can then be
+                    archived. Archiving decision settings cannot be undone;
+                    rebuilding them means recreating every rule by hand.
+                  </p>
+                </div>
+                <Button
+                  disabled={archiveRuleSet.isPending}
+                  onClick={handleClick2}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <ArchiveIcon aria-hidden />
+                  {archiveRuleSet.isPending
+                    ? "Archiving decision settings…"
+                    : "Archive settings"}
+                </Button>
+                <ArchiveRuleSetConfirmation
+                  onConfirm={handleConfirm}
+                  onOpenChange={setConfirmingRuleSetArchive}
+                  open={confirmingRuleSetArchive}
+                  pending={archiveRuleSet.isPending}
+                  placementKey={detail.key}
+                />
+              </div>
+            );
+          }
+          return null;
+        })()}
         {archiveFailure ? (
           <div className="mt-3 space-y-2">
             <p className="text-destructive text-sm" role="alert">
@@ -362,25 +462,31 @@ function DecisionWorkspace({
       </div>
 
       <div
-        className="border-border flex flex-wrap gap-1 rounded border p-1"
-        role="tablist"
         aria-label="Placement decision"
+        className="flex flex-wrap gap-1 rounded border border-border p-1"
+        role="tablist"
       >
-        {(["overview", "rules", "simulator", "overrides"] as const).map((item) => (
-          <Button
-            aria-selected={tab === item}
-            key={item}
-            onClick={() => setTab(item)}
-            role="tab"
-            size="sm"
-            type="button"
-            variant={tab === item ? "secondary" : "ghost"}
-          >
-            {item === "overrides"
-              ? "Test Overrides"
-              : { overview: "Overview", rules: "Rules", simulator: "Simulator" }[item]}
-          </Button>
-        ))}
+        {(["overview", "rules", "simulator", "overrides"] as const).map(
+          (item) => (
+            <Button
+              aria-selected={tab === item}
+              key={item}
+              onClick={() => setTab(item)}
+              role="tab"
+              size="sm"
+              type="button"
+              variant={tab === item ? "secondary" : "ghost"}
+            >
+              {item === "overrides"
+                ? "Test Overrides"
+                : {
+                    overview: "Overview",
+                    rules: "Rules",
+                    simulator: "Simulator",
+                  }[item]}
+            </Button>
+          )
+        )}
       </div>
 
       {tab === "overview" ? (
@@ -389,34 +495,47 @@ function DecisionWorkspace({
             aria-labelledby="placement-overview-heading"
             className="grid gap-5 xl:grid-cols-2"
           >
-            <div className="border-border rounded border p-4">
+            <div className="rounded border border-border p-4">
               <h2 className="font-semibold" id="placement-overview-heading">
                 Placement details
               </h2>
               <form
                 className="mt-4 space-y-3"
                 onSubmit={(event) => {
-                  event.preventDefault()
-                  const data = new FormData(event.currentTarget)
+                  event.preventDefault();
+                  const data = new FormData(event.currentTarget);
                   placementUpdate.mutate({
-                    description: String(data.get("description") ?? "") || undefined,
+                    description:
+                      String(data.get("description") ?? "") || undefined,
                     name: String(data.get("name") ?? ""),
-                  })
+                  });
                 }}
               >
                 <Field>
-                  <FieldLabel htmlFor="placement-detail-name">Internal name</FieldLabel>
-                  <Input defaultValue={detail.name} id="placement-detail-name" name="name" />
+                  <FieldLabel htmlFor="placement-detail-name">
+                    Internal name
+                  </FieldLabel>
+                  <Input
+                    defaultValue={detail.name}
+                    id="placement-detail-name"
+                    name="name"
+                  />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="placement-detail-description">Description</FieldLabel>
+                  <FieldLabel htmlFor="placement-detail-description">
+                    Description
+                  </FieldLabel>
                   <Input
                     defaultValue={detail.description}
                     id="placement-detail-description"
                     name="description"
                   />
                 </Field>
-                <Button disabled={placementUpdate.isPending} size="sm" type="submit">
+                <Button
+                  disabled={placementUpdate.isPending}
+                  size="sm"
+                  type="submit"
+                >
                   Save details
                 </Button>
                 {placementUpdate.error ? (
@@ -434,12 +553,12 @@ function DecisionWorkspace({
               })}
             >
               {({ assignmentPolicy, defaultOutcome, fallbacks }) => (
-                <div className="border-border space-y-4 rounded border p-4">
+                <div className="space-y-4 rounded border border-border p-4">
                   <div>
                     <h2 className="font-semibold">Default decision</h2>
-                    <p className="text-muted-foreground mt-1 text-sm">
-                      Used when no Rule wins. Existing simple bindings compile here as a default
-                      Paywall.
+                    <p className="mt-1 text-muted-foreground text-sm">
+                      Used when no Rule wins. Existing simple bindings compile
+                      here as a default Paywall.
                     </p>
                   </div>
                   <OutcomeEditor
@@ -451,11 +570,15 @@ function DecisionWorkspace({
                     value={defaultOutcome}
                   />
                   <Field>
-                    <FieldLabel htmlFor="assignment-policy">Rollout assignment identity</FieldLabel>
+                    <FieldLabel htmlFor="assignment-policy">
+                      Rollout assignment identity
+                    </FieldLabel>
                     <Select
                       items={ASSIGNMENT_POLICY_OPTIONS}
                       onValueChange={(value) =>
-                        updateAssignmentPolicy(value as PlacementRuleSetDraft["assignmentPolicy"])
+                        updateAssignmentPolicy(
+                          value as PlacementRuleSetDraft["assignmentPolicy"]
+                        )
                       }
                       value={assignmentPolicy}
                     >
@@ -471,8 +594,9 @@ function DecisionWorkspace({
                       </SelectContent>
                     </Select>
                     <p className="text-muted-foreground text-xs">
-                      Identification can change rollout only when a user-based policy is selected.
-                      Assignment values are never shown in traces.
+                      Identification can change rollout only when a user-based
+                      policy is selected. Assignment values are never shown in
+                      traces.
                     </p>
                   </Field>
                 </div>
@@ -480,25 +604,23 @@ function DecisionWorkspace({
             </form.Subscribe>
           </section>
 
-          <section aria-labelledby="fallbacks-heading" className="border-border rounded border p-4">
+          <section
+            aria-labelledby="fallbacks-heading"
+            className="rounded border border-border p-4"
+          >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="font-semibold" id="fallbacks-heading">
                   Named fallbacks
                 </h2>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  Explicit recovery paths for incompatible content, missing Product mappings,
-                  unavailable providers, and unknown Access state.
+                <p className="mt-1 text-muted-foreground text-sm">
+                  Explicit recovery paths for incompatible content, missing
+                  Product mappings, unavailable providers, and unknown Access
+                  state.
                 </p>
               </div>
               <Button
-                onClick={() => {
-                  const fallbacks = form.state.values.fallbacks
-                  updateFallbacks([
-                    ...fallbacks,
-                    { key: `fallback_${fallbacks.length + 1}`, outcome: { type: "no_paywall" } },
-                  ])
-                }}
+                onClick={handleClick3}
                 size="sm"
                 type="button"
                 variant="outline"
@@ -527,8 +649,8 @@ function DecisionWorkspace({
 
           <AliasAndUsage
             detail={detail}
-            onCreateAlias={(key) => alias.mutate(key)}
             error={alias.error?.message}
+            onCreateAlias={(key) => alias.mutate(key)}
           />
           <AttributeDefinitions adapter={adapter} projectId={scope.projectId} />
         </div>
@@ -536,7 +658,10 @@ function DecisionWorkspace({
 
       {tab === "rules" ? (
         <form.Subscribe
-          selector={(state) => ({ fallbacks: state.values.fallbacks, rules: state.values.rules })}
+          selector={(state) => ({
+            fallbacks: state.values.fallbacks,
+            rules: state.values.rules,
+          })}
         >
           {({ fallbacks, rules }) => (
             <RuleBuilder
@@ -559,13 +684,17 @@ function DecisionWorkspace({
         />
       ) : null}
       {tab === "overrides" ? (
-        <QaOverrides adapter={adapter} environmentKind={environmentKind} scope={scope} />
+        <QaOverrides
+          adapter={adapter}
+          environmentKind={environmentKind}
+          scope={scope}
+        />
       ) : null}
 
       {tab === "overview" || tab === "rules" ? (
         <section
           aria-labelledby="decision-actions-heading"
-          className="border-border bg-background sticky bottom-3 z-10 rounded border p-4 shadow-lg"
+          className="sticky bottom-3 z-10 rounded border border-border bg-background p-4 shadow-lg"
         >
           <h2 className="sr-only" id="decision-actions-heading">
             Draft actions
@@ -573,7 +702,7 @@ function DecisionWorkspace({
           <div className="flex flex-wrap items-center gap-2">
             <Button
               disabled={save.isPending}
-              onClick={() => void form.handleSubmit()}
+              onClick={handleClick4}
               type="button"
             >
               <FloppyDiskIcon aria-hidden />
@@ -581,43 +710,50 @@ function DecisionWorkspace({
             </Button>
             <Button
               disabled={validation.isPending || form.state.isDirty}
-              onClick={() => validation.mutate(form.state.values.revision)}
+              onClick={handleClick5}
               type="button"
               variant="outline"
             >
               {validation.isPending ? "Validating…" : "Validate for release"}
             </Button>
             <Button
-              disabled={form.state.isDirty || publish.isPending || !validation.data?.valid}
-              onClick={() => publish.mutate()}
+              disabled={
+                form.state.isDirty ||
+                publish.isPending ||
+                !validation.data?.valid
+              }
+              onClick={handleClick6}
               type="button"
               variant="outline"
             >
               {publish.isPending ? "Publishing…" : "Publish decision rules"}
             </Button>
             <Link
-              className="text-primary ms-auto text-sm font-medium"
-              params={(prev) => prev}
+              className="ms-auto font-medium text-primary text-sm"
+              params={(prev) => ({
+                ...prev,
+                ...workspaceScopeParams(prev),
+              })}
               to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases"
             >
               Review release history
             </Link>
           </div>
           {form.state.isDirty ? (
-            <p className="text-muted-foreground mt-2 text-xs" role="status">
-              Save changes before validation. Unsaved work remains in this form if the server
-              reports a revision conflict.
+            <p className="mt-2 text-muted-foreground text-xs" role="status">
+              Save changes before validation. Unsaved work remains in this form
+              if the server reports a revision conflict.
             </p>
           ) : null}
           {save.error ? (
             <div
-              className="border-destructive/25 bg-destructive/5 mt-3 rounded border p-3"
+              className="mt-3 rounded border border-destructive/25 bg-destructive/5 p-3"
               role="alert"
             >
               <p className="text-destructive text-sm">{save.error.message}</p>
               <div className="mt-2 flex gap-2">
                 <Button
-                  onClick={() => void form.handleSubmit()}
+                  onClick={handleClick7}
                   size="sm"
                   type="button"
                   variant="outline"
@@ -626,7 +762,7 @@ function DecisionWorkspace({
                 </Button>
                 <Button
                   onClick={() =>
-                    void queryClient.invalidateQueries({
+                    queryClient.invalidateQueries({
                       queryKey: placementDecisionKeys.detail(scope, adapter),
                     })
                   }
@@ -640,28 +776,28 @@ function DecisionWorkspace({
             </div>
           ) : null}
           {publish.data ? (
-            <p className="text-primary mt-2 text-sm" role="status">
-              Decision version {publish.data.version} is immutable and ready for the next
-              Configuration Release.
+            <p className="mt-2 text-primary text-sm" role="status">
+              Decision version {publish.data.version} is immutable and ready for
+              the next Configuration Release.
             </p>
           ) : null}
           {publish.error ? (
-            <p className="text-destructive mt-2 text-sm" role="alert">
-              {publish.error.message} Validate again, resolve the linked blocker, or reload the
-              latest saved revision.
+            <p className="mt-2 text-destructive text-sm" role="alert">
+              {publish.error.message} Validate again, resolve the linked
+              blocker, or reload the latest saved revision.
             </p>
           ) : null}
           {validation.data ? (
             <ValidationSummary
               issues={validation.data.issues}
-              valid={validation.data.valid}
               onOpenRule={openRule}
+              valid={validation.data.valid}
             />
           ) : null}
         </section>
       ) : null}
     </div>
-  )
+  );
 }
 
 function FallbackList({
@@ -669,26 +805,31 @@ function FallbackList({
   onChange,
   paywalls,
 }: {
-  fallbacks: readonly NamedFallback[]
-  onChange: (fallbacks: readonly NamedFallback[]) => void
-  paywalls: Parameters<typeof OutcomeEditor>[0]["paywalls"]
+  fallbacks: readonly NamedFallback[];
+  onChange: (fallbacks: readonly NamedFallback[]) => void;
+  paywalls: Parameters<typeof OutcomeEditor>[0]["paywalls"];
 }) {
   return (
     <ul className="mt-4 space-y-3">
       {fallbacks.map((fallback, index) => (
         <li
           className="grid gap-3 rounded border p-3 lg:grid-cols-[14rem_1fr_auto]"
+          // biome-ignore lint/suspicious/noArrayIndexKey: the fallback key is the field being edited, so keying on it would remount the row and drop focus on every keystroke; every input in the row is controlled, so a reused row still renders the right values
           key={`${fallback.key}:${index}`}
         >
           <Field>
-            <FieldLabel htmlFor={`fallback-${index}-key`}>Fallback key</FieldLabel>
+            <FieldLabel htmlFor={`fallback-${index}-key`}>
+              Fallback key
+            </FieldLabel>
             <Input
               id={`fallback-${index}-key`}
               onChange={(event) =>
                 onChange(
                   fallbacks.map((item, itemIndex) =>
-                    itemIndex === index ? { ...item, key: event.currentTarget.value } : item,
-                  ),
+                    itemIndex === index
+                      ? { ...item, key: event.currentTarget.value }
+                      : item
+                  )
                 )
               }
               value={fallback.key}
@@ -700,8 +841,8 @@ function FallbackList({
             onChange={(outcome) =>
               onChange(
                 fallbacks.map((item, itemIndex) =>
-                  itemIndex === index ? { ...item, outcome } : item,
-                ),
+                  itemIndex === index ? { ...item, outcome } : item
+                )
               )
             }
             paywalls={paywalls}
@@ -709,7 +850,9 @@ function FallbackList({
           />
           <Button
             aria-label={`Remove fallback ${fallback.key}`}
-            onClick={() => onChange(fallbacks.filter((_, itemIndex) => itemIndex !== index))}
+            onClick={() =>
+              onChange(fallbacks.filter((_, itemIndex) => itemIndex !== index))
+            }
             size="sm"
             type="button"
             variant="ghost"
@@ -719,7 +862,7 @@ function FallbackList({
         </li>
       ))}
     </ul>
-  )
+  );
 }
 
 function AliasAndUsage({
@@ -727,26 +870,33 @@ function AliasAndUsage({
   error,
   onCreateAlias,
 }: {
-  detail: PlacementDecisionDetail
-  error?: string
-  onCreateAlias: (key: string) => void
+  detail: PlacementDecisionDetail;
+  error?: string;
+  onCreateAlias: (key: string) => void;
 }) {
   return (
-    <section aria-labelledby="alias-heading" className="grid gap-5 xl:grid-cols-2">
-      <div className="border-border rounded border p-4">
+    <section
+      aria-labelledby="alias-heading"
+      className="grid gap-5 xl:grid-cols-2"
+    >
+      <div className="rounded border border-border p-4">
         <h2 className="font-semibold" id="alias-heading">
           Key aliases
         </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Keys are never edited in place. Add an old key as an alias to keep installed application
-          calls working.
+        <p className="mt-1 text-muted-foreground text-sm">
+          Keys are never edited in place. Add an old key as an alias to keep
+          installed application calls working.
         </p>
         <form
           className="mt-3 flex gap-2"
           onSubmit={(event) => {
-            event.preventDefault()
-            const input = event.currentTarget.elements.namedItem("alias") as HTMLInputElement
-            if (input.value.trim()) onCreateAlias(input.value.trim())
+            event.preventDefault();
+            const input = event.currentTarget.elements.namedItem(
+              "alias"
+            ) as HTMLInputElement;
+            if (input.value.trim()) {
+              onCreateAlias(input.value.trim());
+            }
           }}
         >
           <Input
@@ -760,7 +910,7 @@ function AliasAndUsage({
           </Button>
         </form>
         {error ? (
-          <p className="text-destructive mt-2 text-sm" role="alert">
+          <p className="mt-2 text-destructive text-sm" role="alert">
             {error}
           </p>
         ) : null}
@@ -772,7 +922,7 @@ function AliasAndUsage({
           ))}
         </ul>
       </div>
-      <div className="border-border rounded border p-4">
+      <div className="rounded border border-border p-4">
         <h2 className="font-semibold">Usage</h2>
         <dl className="mt-3 grid grid-cols-[1fr_auto] gap-2 text-sm">
           <dt>Decision configurations</dt>
@@ -784,7 +934,7 @@ function AliasAndUsage({
         </dl>
       </div>
     </section>
-  )
+  );
 }
 
 export function ValidationSummary({
@@ -793,42 +943,52 @@ export function ValidationSummary({
   valid,
 }: {
   issues: readonly {
-    code: string
-    message: string
-    severity: "error" | "warning"
-    ruleId?: string
-    recoveryHref?: string
-    recoveryLabel?: string
-  }[]
-  onOpenRule: (ruleId: string) => void
-  valid: boolean
+    code: string;
+    message: string;
+    severity: "error" | "warning";
+    ruleId?: string;
+    recoveryHref?: string;
+    recoveryLabel?: string;
+  }[];
+  onOpenRule: (ruleId: string) => void;
+  valid: boolean;
 }) {
-  const errorCount = issues.filter((issue) => issue.severity === "error").length
-  const warningCount = issues.length - errorCount
+  const errorCount = issues.filter(
+    (issue) => issue.severity === "error"
+  ).length;
+  const warningCount = issues.length - errorCount;
   return (
     <div
-      className={
-        errorCount > 0 || !valid
-          ? "border-destructive/25 bg-destructive/5 mt-3 rounded border p-3"
-          : warningCount > 0
-            ? "mt-3 rounded border border-amber-500/35 bg-amber-500/10 p-3"
-            : "border-primary/25 bg-primary/5 mt-3 rounded border p-3"
-      }
+      className={(() => {
+        if (errorCount > 0 || !valid) {
+          return "mt-3 rounded border border-destructive/25 bg-destructive/5 p-3";
+        }
+        if (warningCount > 0) {
+          return "mt-3 rounded border border-amber-500/35 bg-amber-500/10 p-3";
+        }
+        return "mt-3 rounded border border-primary/25 bg-primary/5 p-3";
+      })()}
       role={errorCount > 0 || !valid ? "alert" : "status"}
     >
       <p className="font-semibold">
-        {errorCount > 0 || !valid
-          ? "Publishing is blocked."
-          : warningCount > 0
-            ? `Ready to publish with ${warningCount} ${warningCount === 1 ? "warning" : "warnings"}.`
-            : "Decision rules are ready for the next Configuration Release."}
+        {(() => {
+          if (errorCount > 0 || !valid) {
+            return "Publishing is blocked.";
+          }
+          if (warningCount > 0) {
+            return `Ready to publish with ${warningCount} ${warningCount === 1 ? "warning" : "warnings"}.`;
+          }
+          return "Decision rules are ready for the next Configuration Release.";
+        })()}
       </p>
       {issues.length > 0 ? (
         <ul className="mt-2 space-y-2 text-sm">
           {issues.map((issue) => (
             <li
               className={
-                issue.severity === "warning" ? "text-amber-800 dark:text-amber-200" : undefined
+                issue.severity === "warning"
+                  ? "text-amber-800 dark:text-amber-200"
+                  : undefined
               }
               key={`${issue.code}:${issue.message}`}
             >
@@ -836,27 +996,39 @@ export function ValidationSummary({
                 {issue.severity === "warning" ? "Warning: " : "Error: "}
               </span>
               <span>{issue.message}</span>
-              {issue.ruleId ? (
-                <Button
-                  className="ms-2"
-                  onClick={() => onOpenRule(issue.ruleId!)}
-                  size="sm"
-                  type="button"
-                  variant="link"
-                >
-                  Open Rule
-                </Button>
-              ) : issue.recoveryHref ? (
-                <a className="text-primary ms-2 font-medium" href={issue.recoveryHref}>
-                  {issue.recoveryLabel ?? "Resolve"}
-                </a>
-              ) : null}
+              {(() => {
+                const issueRuleId = issue.ruleId;
+                if (issueRuleId) {
+                  return (
+                    <Button
+                      className="ms-2"
+                      onClick={() => onOpenRule(issueRuleId)}
+                      size="sm"
+                      type="button"
+                      variant="link"
+                    >
+                      Open Rule
+                    </Button>
+                  );
+                }
+                if (issue.recoveryHref) {
+                  return (
+                    <a
+                      className="ms-2 font-medium text-primary"
+                      href={issue.recoveryHref}
+                    >
+                      {issue.recoveryLabel ?? "Resolve"}
+                    </a>
+                  );
+                }
+                return null;
+              })()}
             </li>
           ))}
         </ul>
       ) : null}
     </div>
-  )
+  );
 }
 
 /**
@@ -872,13 +1044,13 @@ function ArchiveRuleSetConfirmation({
   pending,
   placementKey,
 }: {
-  onConfirm: () => void
-  onOpenChange: (open: boolean) => void
-  open: boolean
-  pending: boolean
-  placementKey: string
+  onConfirm: () => void;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  pending: boolean;
+  placementKey: string;
 }) {
-  const cancelRef = useRef<HTMLButtonElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
   return (
     <Sheet onOpenChange={onOpenChange} open={open}>
@@ -889,9 +1061,11 @@ function ArchiveRuleSetConfirmation({
         </SheetHeader>
         <div className="p-5">
           <p className="text-muted-foreground text-sm leading-6">
-            Published versions of this Placement stay in history and keep serving. The active rules,
-            outcomes, and fallbacks are removed permanently: restoring them means recreating every
-            rule by hand. Archive the settings only when you intend to archive the Placement itself.
+            Published versions of this Placement stay in history and keep
+            serving. The active rules, outcomes, and fallbacks are removed
+            permanently: restoring them means recreating every rule by hand.
+            Archive the settings only when you intend to archive the Placement
+            itself.
           </p>
         </div>
         <SheetFooter className="flex-row flex-wrap gap-2 border-t p-5">
@@ -902,7 +1076,9 @@ function ArchiveRuleSetConfirmation({
             type="button"
             variant="destructive"
           >
-            {pending ? "Archiving decision settings…" : "Archive decision settings"}
+            {pending
+              ? "Archiving decision settings…"
+              : "Archive decision settings"}
           </Button>
           <Button
             disabled={pending}
@@ -917,5 +1093,5 @@ function ArchiveRuleSetConfirmation({
         </SheetFooter>
       </SheetContent>
     </Sheet>
-  )
+  );
 }

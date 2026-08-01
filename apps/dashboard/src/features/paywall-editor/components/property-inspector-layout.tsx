@@ -1,60 +1,62 @@
-import type { ReactNode } from "react"
-
-import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
-import type { AxisSizing, ProtocolNode, Visibility } from "@/features/paywall-editor/types/editor"
-import {
-  flattenDocument,
-  resolveLocalizedText,
-} from "@/features/paywall-editor/utils/document-tree"
-import { sizingMode } from "@/features/paywall-editor/utils/protocol-styles"
-import { fillAxisIsBounded } from "@/features/paywall-editor/utils/sizing"
-import type { MosaicPaywallV02Typography } from "@/lib/mosaic-protocol"
-
-import { updateAppearance } from "@/features/paywall-editor/components/property-inspector-background"
-import {
-  AppearanceValue,
-  Field,
-  InspectorSection,
-  TwoColumn,
-  TypographyValue,
-  ZERO_INSETS,
-  useInspectorContext,
-} from "@/features/paywall-editor/components/property-inspector-core"
-import {
-  CheckboxField,
-  ColorField,
-  EdgeInsetsFields,
-  NumberField,
-  SelectField,
-} from "@/features/paywall-editor/components/property-inspector-fields"
+import type { ReactNode } from "react";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
+import { updateAppearance } from "@/features/paywall-editor/components/property-inspector-background";
+import {
+  type AppearanceValue,
+  Field,
+  InspectorSection,
+  TwoColumn,
+  type TypographyValue,
+  useInspectorContext,
+  ZERO_INSETS,
+} from "@/features/paywall-editor/components/property-inspector-core";
+import {
+  CheckboxField,
+  ColorField,
+  EdgeInsetsFields,
+  NumberField,
+  SelectField,
+} from "@/features/paywall-editor/components/property-inspector-fields";
+import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
+import type {
+  AxisSizing,
+  ProtocolNode,
+  Visibility,
+} from "@/features/paywall-editor/types/editor";
+import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
+import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { sizingMode } from "@/features/paywall-editor/utils/protocol-styles";
+import { fillAxisIsBounded } from "@/features/paywall-editor/utils/sizing";
+import type { MosaicPaywallV02Typography } from "@/lib/mosaic-protocol";
 
 const AXIS_MODE_OPTIONS = [
   { label: "Fit", value: "fit" },
   { label: "Fill", value: "fill" },
   { label: "Fixed", value: "fixed" },
-]
+];
 
 export function AppearanceSection({
   children,
   container = false,
   node,
 }: {
-  children?: ReactNode
-  container?: boolean
-  node: ProtocolNode
+  children?: ReactNode;
+  container?: boolean;
+  node: ProtocolNode;
 }) {
-  const editor = useEditorActions()
-  const appearance = ("appearance" in node ? node.appearance : undefined) ?? {}
+  const editor = useEditorActions();
+  const appearance = ("appearance" in node ? node.appearance : undefined) ?? {};
 
   function update(updater: (value: AppearanceValue) => AppearanceValue) {
-    editor.updateComponent(node.id, (current) => updateAppearance(current, updater))
+    editor.updateComponent(node.id, (current) =>
+      updateAppearance(current, updater)
+    );
   }
 
   return (
@@ -67,7 +69,10 @@ export function AppearanceSection({
           max={4096}
           min={0}
           onChange={(cornerRadius) =>
-            update((currentAppearance) => ({ ...currentAppearance, cornerRadius }))
+            update((currentAppearance) => ({
+              ...currentAppearance,
+              cornerRadius,
+            }))
           }
           unit="lu"
           value={appearance.cornerRadius ?? 0}
@@ -78,7 +83,10 @@ export function AppearanceSection({
           max={100}
           min={0}
           onChange={(opacity) =>
-            update((currentAppearance) => ({ ...currentAppearance, opacity: opacity / 100 }))
+            update((currentAppearance) => ({
+              ...currentAppearance,
+              opacity: opacity / 100,
+            }))
           }
           step={5}
           unit="%"
@@ -89,24 +97,31 @@ export function AppearanceSection({
         <CheckboxField
           address="appearance.clipContent"
           checked={
-            "clipContent" in appearance && typeof appearance.clipContent === "boolean"
+            "clipContent" in appearance &&
+            typeof appearance.clipContent === "boolean"
               ? appearance.clipContent
               : false
           }
           label="Clip content"
           onChange={(clipContent) =>
-            update((currentAppearance) => ({ ...currentAppearance, clipContent }))
+            update((currentAppearance) => ({
+              ...currentAppearance,
+              clipContent,
+            }))
           }
         />
       ) : null}
     </InspectorSection>
-  )
+  );
 }
 
 export function AppearancePaddingFields({ node }: { node: ProtocolNode }) {
-  const editor = useEditorActions()
-  const appearance = ("appearance" in node ? node.appearance : undefined) ?? {}
-  const padding = "padding" in appearance && appearance.padding ? appearance.padding : ZERO_INSETS
+  const editor = useEditorActions();
+  const appearance = ("appearance" in node ? node.appearance : undefined) ?? {};
+  const padding =
+    "padding" in appearance && appearance.padding
+      ? appearance.padding
+      : ZERO_INSETS;
 
   return (
     <Field address="appearance.padding" group label="Inner padding">
@@ -118,14 +133,14 @@ export function AppearancePaddingFields({ node }: { node: ProtocolNode }) {
               updateAppearance(current, (currentAppearance) => ({
                 ...currentAppearance,
                 padding: nextPadding,
-              })),
+              }))
             )
           }
           value={padding}
         />
       )}
     </Field>
-  )
+  );
 }
 
 export function SpacingSection({
@@ -133,9 +148,9 @@ export function SpacingSection({
   children,
   node,
 }: {
-  box?: boolean
-  children?: ReactNode
-  node: ProtocolNode
+  box?: boolean;
+  children?: ReactNode;
+  node: ProtocolNode;
 }) {
   return (
     <InspectorSection title="Spacing">
@@ -143,7 +158,7 @@ export function SpacingSection({
       {box ? <AppearancePaddingFields node={node} /> : null}
       <OuterInsetsFields node={node} />
     </InspectorSection>
-  )
+  );
 }
 
 export function SizingLayoutSection({ node }: { node: ProtocolNode }) {
@@ -151,13 +166,13 @@ export function SizingLayoutSection({ node }: { node: ProtocolNode }) {
     <InspectorSection defaultOpen title="Layout">
       <SizingFields node={node} />
     </InspectorSection>
-  )
+  );
 }
 
 export function SwitchAppearanceFields({
   node,
 }: {
-  node: Extract<ProtocolNode, { type: "switch" }>
+  node: Extract<ProtocolNode, { type: "switch" }>;
 }) {
   return (
     <>
@@ -186,29 +201,35 @@ export function SwitchAppearanceFields({
         value={node.thumbColor}
       />
     </>
-  )
+  );
 }
 
 export function SizingFields({ node }: { node: ProtocolNode }) {
-  const { document } = useInspectorContext()
-  const editor = useEditorActions()
-  const sizing = "sizing" in node ? node.sizing : undefined
-  const width: AxisSizing = sizing?.width ?? "fit"
-  const height: AxisSizing = sizing?.height ?? "fit"
-  const widthFillBounded = fillAxisIsBounded(document, node, "width")
-  const heightFillBounded = fillAxisIsBounded(document, node, "height")
+  const { document } = useInspectorContext();
+  const editor = useEditorActions();
+  const sizing = "sizing" in node ? node.sizing : undefined;
+  const width: AxisSizing = sizing?.width ?? "fit";
+  const height: AxisSizing = sizing?.height ?? "fit";
+  const widthFillBounded = fillAxisIsBounded(document, node, "width");
+  const heightFillBounded = fillAxisIsBounded(document, node, "height");
 
   function updateSizing(nextSizing: Record<string, unknown>) {
-    editor.updateComponent(node.id, (current) => {
-      return {
-        ...current,
-        sizing: {
-          width: ("sizing" in current ? current.sizing?.width : undefined) ?? "fit",
-          height: ("sizing" in current ? current.sizing?.height : undefined) ?? "fit",
-          ...nextSizing,
-        },
-      } as ProtocolNode
-    })
+    editor.updateComponent(
+      node.id,
+      (current) =>
+        ({
+          ...current,
+          sizing: {
+            width:
+              ("sizing" in current ? current.sizing?.width : undefined) ??
+              "fit",
+            height:
+              ("sizing" in current ? current.sizing?.height : undefined) ??
+              "fit",
+            ...nextSizing,
+          },
+        }) as ProtocolNode
+    );
   }
 
   return (
@@ -221,7 +242,9 @@ export function SizingFields({ node }: { node: ProtocolNode }) {
               width: mode === "fixed" ? { mode: "fixed", value: 320 } : mode,
             })
           }
-          onValueChange={(value) => updateSizing({ width: { mode: "fixed", value } })}
+          onValueChange={(value) =>
+            updateSizing({ width: { mode: "fixed", value } })
+          }
           value={width}
         />
         <SizingAxisField
@@ -231,22 +254,24 @@ export function SizingFields({ node }: { node: ProtocolNode }) {
               height: mode === "fixed" ? { mode: "fixed", value: 240 } : mode,
             })
           }
-          onValueChange={(value) => updateSizing({ height: { mode: "fixed", value } })}
+          onValueChange={(value) =>
+            updateSizing({ height: { mode: "fixed", value } })
+          }
           value={height}
         />
       </TwoColumn>
       {sizingMode(width) === "fill" && !widthFillBounded ? (
-        <p className="text-muted-foreground text-[11px] leading-4">
+        <p className="text-[11px] text-muted-foreground leading-4">
           Width Fill is unbounded here, so previews recover to Fit.
         </p>
       ) : null}
       {sizingMode(height) === "fill" && !heightFillBounded ? (
-        <p className="text-muted-foreground text-[11px] leading-4">
+        <p className="text-[11px] text-muted-foreground leading-4">
           Height Fill is unbounded here, so previews recover to Fit.
         </p>
       ) : null}
     </div>
-  )
+  );
 }
 
 export function SizingAxisField({
@@ -255,21 +280,24 @@ export function SizingAxisField({
   onValueChange,
   value,
 }: {
-  axis: "height" | "width"
-  onModeChange: (mode: "fill" | "fit" | "fixed") => void
-  onValueChange: (value: number) => void
-  value: AxisSizing
+  axis: "height" | "width";
+  onModeChange: (mode: "fill" | "fit" | "fixed") => void;
+  onValueChange: (value: number) => void;
+  value: AxisSizing;
 }) {
-  const { disabled } = useInspectorContext()
-  const mode = sizingMode(value)
-  const axisLabel = axis === "width" ? "Width" : "Height"
-  const prefix = axis === "width" ? "W" : "H"
+  const { disabled } = useInspectorContext();
+  const mode = sizingMode(value);
+  const axisLabel = axis === "width" ? "Width" : "Height";
+  const prefix = axis === "width" ? "W" : "H";
 
   return (
     <Field address={`sizing.${axis}`} hideLabel label={axisLabel}>
       {(fieldProps) => (
-        <div className="border-input bg-background focus-within:border-ring focus-within:ring-ring/30 flex h-9 min-w-0 items-center overflow-hidden rounded border focus-within:ring-2">
-          <span className="text-muted-foreground ps-2 text-xs font-medium" aria-hidden>
+        <div className="flex h-9 min-w-0 items-center overflow-hidden rounded border border-input bg-background focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30">
+          <span
+            aria-hidden
+            className="ps-2 font-medium text-muted-foreground text-xs"
+          >
             {prefix}
           </span>
           {typeof value === "object" ? (
@@ -281,23 +309,29 @@ export function SizingAxisField({
               max={4096}
               min={0.01}
               onChange={(event) => {
-                const next = event.target.valueAsNumber
-                if (Number.isFinite(next) && next > 0 && next <= 4096) onValueChange(next)
+                const next = event.target.valueAsNumber;
+                if (Number.isFinite(next) && next > 0 && next <= 4096) {
+                  onValueChange(next);
+                }
               }}
               step={1}
               type="number"
               value={value.value}
             />
           ) : (
-            <span className="min-w-0 flex-1 px-2 text-sm capitalize">{mode}</span>
+            <span className="min-w-0 flex-1 px-2 text-sm capitalize">
+              {mode}
+            </span>
           )}
           <span
-            className="border-input relative h-full w-8 shrink-0 border-s"
+            className="relative h-full w-8 shrink-0 border-input border-s"
             title={`${axisLabel} behaviour`}
           >
             <Select
               items={AXIS_MODE_OPTIONS}
-              onValueChange={(next) => onModeChange(next as "fill" | "fit" | "fixed")}
+              onValueChange={(next) =>
+                onModeChange(next as "fill" | "fit" | "fixed")
+              }
               value={mode}
             >
               <SelectTrigger
@@ -323,11 +357,11 @@ export function SizingAxisField({
         </div>
       )}
     </Field>
-  )
+  );
 }
 
 export function OuterInsetsFields({ node }: { node: ProtocolNode }) {
-  const editor = useEditorActions()
+  const editor = useEditorActions();
   return (
     <Field address="outerInsets" group label="Outer spacing">
       {() => (
@@ -336,14 +370,17 @@ export function OuterInsetsFields({ node }: { node: ProtocolNode }) {
           onChange={(outerInsets) =>
             editor.updateComponent(
               node.id,
-              (current) => ({ ...current, outerInsets }) as ProtocolNode,
+              (current) => ({ ...current, outerInsets }) as ProtocolNode
             )
           }
-          value={("outerInsets" in node ? node.outerInsets : undefined) ?? ZERO_INSETS}
+          value={
+            ("outerInsets" in node ? node.outerInsets : undefined) ??
+            ZERO_INSETS
+          }
         />
       )}
     </Field>
-  )
+  );
 }
 
 export function TypographyFields({
@@ -352,16 +389,16 @@ export function TypographyFields({
   supportsMaxLines = false,
   typography,
 }: {
-  node: ProtocolNode
-  onChange: (node: ProtocolNode, typography: TypographyValue) => ProtocolNode
-  supportsMaxLines?: boolean
-  typography: TypographyValue
+  node: ProtocolNode;
+  onChange: (node: ProtocolNode, typography: TypographyValue) => ProtocolNode;
+  supportsMaxLines?: boolean;
+  typography: TypographyValue;
 }) {
-  const editor = useEditorActions()
-  const extended = typography as MosaicPaywallV02Typography
+  const editor = useEditorActions();
+  const extended = typography as MosaicPaywallV02Typography;
 
   function update(next: TypographyValue) {
-    editor.updateComponent(node.id, (current) => onChange(current, next))
+    editor.updateComponent(node.id, (current) => onChange(current, next));
   }
 
   return (
@@ -370,20 +407,26 @@ export function TypographyFields({
         <SelectField
           address="typography.style"
           label="Text style"
-          onChange={(style) => update({ ...typography, style } as TypographyValue)}
+          onChange={(style) =>
+            update({ ...typography, style } as TypographyValue)
+          }
           value={typography.style}
         >
-          {["display", "title", "heading", "body", "label", "caption"].map((style) => (
-            <SelectItem key={style} value={style}>
-              {style[0]?.toUpperCase()}
-              {style.slice(1)}
-            </SelectItem>
-          ))}
+          {["display", "title", "heading", "body", "label", "caption"].map(
+            (style) => (
+              <SelectItem key={style} value={style}>
+                {style[0]?.toUpperCase()}
+                {style.slice(1)}
+              </SelectItem>
+            )
+          )}
         </SelectField>
         <SelectField
           address="typography.weight"
           label="Weight"
-          onChange={(weight) => update({ ...typography, weight } as TypographyValue)}
+          onChange={(weight) =>
+            update({ ...typography, weight } as TypographyValue)
+          }
           value={typography.weight}
         >
           {["regular", "medium", "semibold", "bold"].map((weight) => (
@@ -409,7 +452,9 @@ export function TypographyFields({
           label="Line height"
           max={3}
           min={0.8}
-          onChange={(lineHeightMultiplier) => update({ ...typography, lineHeightMultiplier })}
+          onChange={(lineHeightMultiplier) =>
+            update({ ...typography, lineHeightMultiplier })
+          }
           step={0.05}
           unit="×"
           value={typography.lineHeightMultiplier}
@@ -419,13 +464,17 @@ export function TypographyFields({
         <ColorField
           address="typography.color"
           label="Colour"
-          onUpdate={(current, color) => onChange(current, { ...typography, color })}
+          onUpdate={(current, color) =>
+            onChange(current, { ...typography, color })
+          }
           value={typography.color}
         />
         <SelectField
           address="typography.alignment"
           label="Alignment"
-          onChange={(alignment) => update({ ...typography, alignment } as TypographyValue)}
+          onChange={(alignment) =>
+            update({ ...typography, alignment } as TypographyValue)
+          }
           value={typography.alignment}
         >
           <SelectItem value="start">Start</SelectItem>
@@ -441,16 +490,16 @@ export function TypographyFields({
             label="Limit lines"
             onChange={(enabled) => {
               if (enabled) {
-                update({ ...extended, maxLines: 2, overflow: "ellipsis" })
-                return
+                update({ ...extended, maxLines: 2, overflow: "ellipsis" });
+                return;
               }
-              const next = { ...extended }
-              delete next.maxLines
-              delete next.overflow
-              update(next)
+              const next = { ...extended };
+              delete next.maxLines;
+              delete next.overflow;
+              update(next);
             }}
           />
-          {extended.maxLines !== undefined ? (
+          {extended.maxLines === undefined ? null : (
             <TwoColumn>
               <NumberField
                 address="typography.maxLines"
@@ -465,7 +514,10 @@ export function TypographyFields({
                 address="typography.overflow"
                 label="Overflow"
                 onChange={(overflow) =>
-                  update({ ...extended, overflow } as MosaicPaywallV02Typography)
+                  update({
+                    ...extended,
+                    overflow,
+                  } as MosaicPaywallV02Typography)
                 }
                 value={extended.overflow ?? "ellipsis"}
               >
@@ -473,11 +525,11 @@ export function TypographyFields({
                 <SelectItem value="clip">Clip</SelectItem>
               </SelectField>
             </TwoColumn>
-          ) : null}
+          )}
         </>
       ) : null}
     </>
-  )
+  );
 }
 
 export function TypographySection({
@@ -486,10 +538,10 @@ export function TypographySection({
   supportsMaxLines = false,
   typography,
 }: {
-  node: ProtocolNode
-  onChange: (node: ProtocolNode, typography: TypographyValue) => ProtocolNode
-  supportsMaxLines?: boolean
-  typography: TypographyValue
+  node: ProtocolNode;
+  onChange: (node: ProtocolNode, typography: TypographyValue) => ProtocolNode;
+  supportsMaxLines?: boolean;
+  typography: TypographyValue;
 }) {
   return (
     <InspectorSection title="Typography">
@@ -500,21 +552,21 @@ export function TypographySection({
         typography={typography}
       />
     </InspectorSection>
-  )
+  );
 }
 
 export function VisibilitySection({ node }: { node: ProtocolNode }) {
-  const { document } = useInspectorContext()
-  const editor = useEditorActions()
+  const { document } = useInspectorContext();
+  const editor = useEditorActions();
   const switches = flattenDocument(document)
     .map((entry) => entry.node)
     .filter(
       (candidate): candidate is Extract<ProtocolNode, { type: "switch" }> =>
-        candidate.type === "switch",
-    )
+        candidate.type === "switch"
+    );
   const visibility = ("visibility" in node ? node.visibility : undefined) ?? {
     mode: "always" as const,
-  }
+  };
 
   function update(nextVisibility: Visibility) {
     editor.updateComponent(
@@ -523,8 +575,8 @@ export function VisibilitySection({ node }: { node: ProtocolNode }) {
         ({
           ...current,
           visibility: nextVisibility,
-        }) as ProtocolNode,
-    )
+        }) as ProtocolNode
+    );
   }
 
   return (
@@ -534,11 +586,11 @@ export function VisibilitySection({ node }: { node: ProtocolNode }) {
         label="Visibility"
         onChange={(mode) => {
           if (mode === "hidden") {
-            update({ mode: "hidden" })
+            update({ mode: "hidden" });
           } else if (mode === "switch" && switches[0]) {
-            update({ mode: "switch", switchId: switches[0].id, equals: true })
+            update({ mode: "switch", switchId: switches[0].id, equals: true });
           } else {
-            update({ mode: "always" })
+            update({ mode: "always" });
           }
         }}
         value={visibility.mode}
@@ -562,7 +614,7 @@ export function VisibilitySection({ node }: { node: ProtocolNode }) {
                 {resolveLocalizedText(
                   document,
                   candidate.label,
-                  document.localization.defaultLocale,
+                  document.localization.defaultLocale
                 )}
               </SelectItem>
             ))}
@@ -576,5 +628,5 @@ export function VisibilitySection({ node }: { node: ProtocolNode }) {
         </>
       ) : null}
     </InspectorSection>
-  )
+  );
 }

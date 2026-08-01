@@ -1,39 +1,45 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import {
-  DefinitionRow,
-  EnvironmentBadges,
-  StatusPill,
-} from "@/features/billing-ledger/components/billing-chrome"
-import { providerLabel } from "@/features/billing-ledger/types/billing-vocabulary"
-import { ConflictResolutionForm } from "@/features/billing-customers/components/conflict-resolution-form"
-import { resolveIdentityConflictMutationOptions } from "@/features/billing-customers/mutations/conflict-mutations"
-import { identityConflictQueryOptions } from "@/features/billing-customers/queries/conflict-queries"
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { ConflictResolutionForm } from "@/features/billing-customers/components/conflict-resolution-form";
+import { resolveIdentityConflictMutationOptions } from "@/features/billing-customers/mutations/conflict-mutations";
+import { identityConflictQueryOptions } from "@/features/billing-customers/queries/conflict-queries";
 import {
   CONFLICT_FREEZE_NOTE,
   conflictActionLabel,
   conflictDiagnosticExplanation,
-} from "@/features/billing-customers/types/conflict-resolution"
+} from "@/features/billing-customers/types/conflict-resolution";
 import {
   aliasTypeLabel,
   formatEntitlementInstant,
   lineageDiagnosticLabel,
   PROJECTION_FROZEN_NOTE,
-} from "@/features/billing-customers/types/entitlement-vocabulary"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { WorkflowPanel, WorkspacePage } from "@/features/orgs/components/workspace-page"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
-import { useOrganizationAccess } from "@/hooks/use-organization-access"
-import { billingCustomerHref, billingIdentityConflictsHref } from "@/lib/routing/workspace-hrefs"
+} from "@/features/billing-customers/types/entitlement-vocabulary";
+import {
+  DefinitionRow,
+  EnvironmentBadges,
+  StatusPill,
+} from "@/features/billing-ledger/components/billing-chrome";
+import { providerLabel } from "@/features/billing-ledger/types/billing-vocabulary";
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import { useOrganizationAccess } from "@/hooks/use-organization-access";
+import {
+  billingCustomerHref,
+  billingIdentityConflictsHref,
+} from "@/lib/routing/workspace-hrefs";
 
 interface IdentityConflictDetailPageProps {
-  conflictId: string
-  environmentId: string
-  organizationId: string
-  projectId: string
+  conflictId: string;
+  environmentId: string;
+  organizationId: string;
+  projectId: string;
 }
 
 /**
@@ -50,39 +56,46 @@ export function IdentityConflictDetailPage({
   organizationId,
   projectId,
 }: IdentityConflictDetailPageProps) {
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
-  const access = useOrganizationAccess(organizationId)
-  const queryClient = useQueryClient()
-  const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
+  const access = useOrganizationAccess(organizationId);
+  const queryClient = useQueryClient();
+  const environments = useQuery({
+    ...environmentsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
   const detail = useQuery({
     ...identityConflictQueryOptions(projectId, conflictId),
     enabled: scopeReady,
-  })
+  });
   const resolve = useMutation(
-    resolveIdentityConflictMutationOptions(projectId, conflictId, queryClient),
-  )
+    resolveIdentityConflictMutationOptions(projectId, conflictId, queryClient)
+  );
 
-  const conflict = detail.data?.conflict
-  const lineage = detail.data?.lineage
+  const conflict = detail.data?.conflict;
+  const lineage = detail.data?.lineage;
   const environmentName =
-    environments.data?.items.find((item) => item.id === (lineage?.environmentId ?? environmentId))
-      ?.name ??
+    environments.data?.items.find(
+      (item) => item.id === (lineage?.environmentId ?? environmentId)
+    )?.name ??
     lineage?.environmentId ??
-    environmentId
+    environmentId;
 
-  const error = project.error ?? detail.error
+  const error = project.error ?? detail.error;
   const state = resolveHostedQueryState({
     error,
     isEmpty: false,
     isPending: project.isPending || (scopeReady && detail.isPending),
     loadingDescription: "Loading this identity conflict.",
     onRetry: () => {
-      void detail.refetch()
+      detail.refetch();
     },
     permissionDescription:
       "Organization owner or admin permission is required to read an identity conflict.",
     scope: { environmentId, organizationId, projectId },
-  })
+  });
 
   if (scopeMismatch) {
     return (
@@ -96,11 +109,11 @@ export function IdentityConflictDetailPage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
-  const scope = { environmentId, organizationId, projectId }
-  const isOpen = conflict?.status === "open"
+  const scope = { environmentId, organizationId, projectId };
+  const isOpen = conflict?.status === "open";
 
   return (
     <WorkspacePage
@@ -109,7 +122,7 @@ export function IdentityConflictDetailPage({
       title={conflictId}
     >
       <a
-        className="text-primary text-sm font-semibold"
+        className="font-semibold text-primary text-sm"
         href={billingIdentityConflictsHref(scope) ?? "#"}
       >
         Back to identity conflicts
@@ -123,7 +136,11 @@ export function IdentityConflictDetailPage({
               tone={isOpen ? "attention" : "neutral"}
             />
             <StatusPill
-              label={conflict?.scope === "alias" ? "Alias-scoped" : "Purchase Lineage-scoped"}
+              label={
+                conflict?.scope === "alias"
+                  ? "Alias-scoped"
+                  : "Purchase Lineage-scoped"
+              }
               tone="neutral"
             />
           </div>
@@ -132,7 +149,10 @@ export function IdentityConflictDetailPage({
             {conflictDiagnosticExplanation(conflict?.diagnosticCode)}
           </p>
           <dl className="mt-3">
-            <DefinitionRow label="Opened" value={formatEntitlementInstant(conflict?.openedAt)} />
+            <DefinitionRow
+              label="Opened"
+              value={formatEntitlementInstant(conflict?.openedAt)}
+            />
             {conflict?.resolvedAt ? (
               <>
                 <DefinitionRow
@@ -143,7 +163,10 @@ export function IdentityConflictDetailPage({
                   label="Resolution"
                   value={conflictActionLabel(conflict.resolutionAction)}
                 />
-                <DefinitionRow label="Reason" value={conflict.resolutionReason ?? "—"} />
+                <DefinitionRow
+                  label="Reason"
+                  value={conflict.resolutionReason ?? "—"}
+                />
               </>
             ) : null}
             {/* The disputed alias *type* is reported. Its digest is not rendered
@@ -165,13 +188,19 @@ export function IdentityConflictDetailPage({
             <CandidateCard
               caption="Held the association before this evidence arrived."
               customerId={conflict?.firstCustomerId}
-              href={billingCustomerHref(scope, conflict?.firstCustomerId ?? "") ?? "#"}
+              href={
+                billingCustomerHref(scope, conflict?.firstCustomerId ?? "") ??
+                "#"
+              }
               title="Incumbent"
             />
             <CandidateCard
               caption="Proposed by the new evidence."
               customerId={conflict?.secondCustomerId}
-              href={billingCustomerHref(scope, conflict?.secondCustomerId ?? "") ?? "#"}
+              href={
+                billingCustomerHref(scope, conflict?.secondCustomerId ?? "") ??
+                "#"
+              }
               title="Challenger"
             />
           </div>
@@ -185,9 +214,14 @@ export function IdentityConflictDetailPage({
             <dl>
               <DefinitionRow
                 label="Purchase Lineage"
-                value={<span className="font-mono">{lineage.purchaseLineageId}</span>}
+                value={
+                  <span className="font-mono">{lineage.purchaseLineageId}</span>
+                }
               />
-              <DefinitionRow label="Store" value={providerLabel(lineage.provider)} />
+              <DefinitionRow
+                label="Store"
+                value={providerLabel(lineage.provider)}
+              />
               <DefinitionRow label="Type" value={lineage.lineageType ?? "—"} />
               <DefinitionRow
                 label="Diagnostic"
@@ -201,7 +235,7 @@ export function IdentityConflictDetailPage({
               />
             </div>
             {lineage.projectionFrozen ? (
-              <p className="text-muted-foreground mt-3 text-xs leading-5">
+              <p className="mt-3 text-muted-foreground text-xs leading-5">
                 {PROJECTION_FROZEN_NOTE}
               </p>
             ) : null}
@@ -218,7 +252,7 @@ export function IdentityConflictDetailPage({
               firstCustomerId={conflict?.firstCustomerId}
               membersHref={`/orgs/${encodeURIComponent(organizationId)}/members`}
               onResolve={async (request) => {
-                await resolve.mutateAsync(request)
+                await resolve.mutateAsync(request);
               }}
               secondCustomerId={conflict?.secondCustomerId}
             />
@@ -226,16 +260,17 @@ export function IdentityConflictDetailPage({
         ) : (
           <WorkflowPanel title="Already resolved">
             <p className="text-sm leading-6">
-              This conflict was resolved as &ldquo;{conflictActionLabel(conflict?.resolutionAction)}
-              &rdquo;. Both customers were unfrozen and reprojected. A resolution is recorded, not
-              reversed: if it was wrong, the correction is a new association, not an edit to this
-              record.
+              This conflict was resolved as &ldquo;
+              {conflictActionLabel(conflict?.resolutionAction)}
+              &rdquo;. Both customers were unfrozen and reprojected. A
+              resolution is recorded, not reversed: if it was wrong, the
+              correction is a new association, not an edit to this record.
             </p>
           </WorkflowPanel>
         )}
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }
 
 function CandidateCard({
@@ -244,22 +279,25 @@ function CandidateCard({
   href,
   title,
 }: {
-  caption: string
-  customerId: string | undefined
-  href: string
-  title: string
+  caption: string;
+  customerId: string | undefined;
+  href: string;
+  title: string;
 }) {
   return (
     <div className="rounded border p-4">
-      <p className="text-sm font-semibold">{title}</p>
-      <p className="text-muted-foreground mt-1 text-xs leading-5">{caption}</p>
+      <p className="font-semibold text-sm">{title}</p>
+      <p className="mt-1 text-muted-foreground text-xs leading-5">{caption}</p>
       {customerId ? (
-        <a className="text-primary mt-2 inline-flex font-mono text-xs break-all" href={href}>
+        <a
+          className="mt-2 inline-flex break-all font-mono text-primary text-xs"
+          href={href}
+        >
           {customerId}
         </a>
       ) : (
-        <p className="text-muted-foreground mt-2 text-xs">Not recorded.</p>
+        <p className="mt-2 text-muted-foreground text-xs">Not recorded.</p>
       )}
     </div>
-  )
+  );
 }

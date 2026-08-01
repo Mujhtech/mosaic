@@ -1,6 +1,6 @@
-import type { QueryClient } from "@tanstack/react-query"
+import type { QueryClient } from "@tanstack/react-query";
 
-import type { StoreServerCredentialWithEndpoint } from "@/generated/api"
+import type { StoreServerCredentialWithEndpoint } from "@/generated/api";
 
 /**
  * Creating or rotating an Apple Store Server Credential returns the complete
@@ -13,22 +13,29 @@ import type { StoreServerCredentialWithEndpoint } from "@/generated/api"
  * scrubbed from the cache, mirroring the API-key handling.
  */
 
-export type StoreCredentialEndpointOperation = "create" | "rotate"
+export type StoreCredentialEndpointOperation = "create" | "rotate";
 
 export function storeCredentialEndpointMutationKey(
   projectId: string,
-  operation: StoreCredentialEndpointOperation,
+  operation: StoreCredentialEndpointOperation
 ) {
-  return ["store-connections", projectId, "one-time-endpoint", operation] as const
+  return [
+    "store-connections",
+    projectId,
+    "one-time-endpoint",
+    operation,
+  ] as const;
 }
 
-export function clearStoreCredentialSecretMutationCache(queryClient: QueryClient) {
-  const mutationCache = queryClient.getMutationCache()
+export function clearStoreCredentialSecretMutationCache(
+  queryClient: QueryClient
+) {
+  const mutationCache = queryClient.getMutationCache();
 
   for (const mutation of mutationCache.getAll()) {
-    const key = mutation.options.mutationKey
+    const key = mutation.options.mutationKey;
     if (key?.[0] === "store-connections" && key[2] === "one-time-endpoint") {
-      mutationCache.remove(mutation)
+      mutationCache.remove(mutation);
     }
   }
 }
@@ -37,9 +44,9 @@ export function transferStoreCredentialEndpoint(
   queryClient: QueryClient,
   result: StoreServerCredentialWithEndpoint,
   reveal: (result: StoreServerCredentialWithEndpoint) => void,
-  resetObservers: () => void,
+  resetObservers: () => void
 ) {
-  reveal(result)
-  resetObservers()
-  clearStoreCredentialSecretMutationCache(queryClient)
+  reveal(result);
+  resetObservers();
+  clearStoreCredentialSecretMutationCache(queryClient);
 }

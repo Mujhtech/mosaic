@@ -1,15 +1,15 @@
-import * as React from "react"
+import { useQuery } from "@tanstack/react-query";
 
-import { useNavigate } from "@tanstack/react-router"
-import { useQuery } from "@tanstack/react-query"
+import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo } from "react";
 
-import { RoutePendingState } from "@/components/feedback/route-feedback"
-import { WorkspaceHome } from "@/features/orgs/components/workspace-home"
+import { RoutePendingState } from "@/components/feedback/route-feedback";
+import { WorkspaceHome } from "@/features/orgs/components/workspace-home";
+import { workspaceBootstrapQueryOptions } from "@/features/orgs/queries/workspace-bootstrap-query";
 import {
   resolveWorkspaceEntry,
   workspaceEntryNavigation,
-} from "@/features/orgs/types/workspace-entry"
-import { workspaceBootstrapQueryOptions } from "@/features/orgs/queries/workspace-bootstrap-query"
+} from "@/features/orgs/types/workspace-entry";
 
 /**
  * Entry resolves here rather than in the route's beforeLoad. The session lives in
@@ -20,26 +20,30 @@ import { workspaceBootstrapQueryOptions } from "@/features/orgs/queries/workspac
  * hydration, so this holds for both a typed URL and an in-app navigation.
  */
 export function WorkspaceEntryRedirect() {
-  const navigate = useNavigate()
-  const bootstrap = useQuery(workspaceBootstrapQueryOptions())
+  const navigate = useNavigate();
+  const bootstrap = useQuery(workspaceBootstrapQueryOptions());
 
   // Memoised on the cached snapshot: resolveWorkspaceEntry returns a fresh
   // object each call, which would re-arm the effect on every render.
-  const target = React.useMemo(
+  const target = useMemo(
     () => (bootstrap.data ? resolveWorkspaceEntry(bootstrap.data) : undefined),
-    [bootstrap.data],
-  )
+    [bootstrap.data]
+  );
 
-  React.useEffect(() => {
-    if (!target) return
+  useEffect(() => {
+    if (!target) {
+      return;
+    }
     // Replaced, not pushed: Back must leave the workspace rather than land on
     // this route again and bounce forward.
-    void navigate({ ...workspaceEntryNavigation(target), replace: true })
-  }, [navigate, target])
+    navigate({ ...workspaceEntryNavigation(target), replace: true });
+  }, [navigate, target]);
 
   // A failed bootstrap must not strand the operator on a blank redirect. The
   // Organization list reports the outage and offers a retry.
-  if (bootstrap.isError) return <WorkspaceHome />
+  if (bootstrap.isError) {
+    return <WorkspaceHome />;
+  }
 
-  return <RoutePendingState />
+  return <RoutePendingState />;
 }
