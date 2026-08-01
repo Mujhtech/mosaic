@@ -80,15 +80,12 @@ export function useEditorKeyboardShortcuts(
   );
 
   useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (isEditableTarget(event.target)) {
-        chordRef.current = null;
-        return;
-      }
-
-      const modifier = event.metaKey || event.ctrlKey;
-      const key = event.key.toLowerCase();
-
+    /** The `g` chord: a pending prefix, then the tool it opens. */
+    function handleChord(
+      event: KeyboardEvent,
+      key: string,
+      modifier: boolean
+    ): boolean {
       if (chordRef.current === "g") {
         chordRef.current = null;
         if (chordTimeoutRef.current !== null) {
@@ -100,9 +97,8 @@ export function useEditorKeyboardShortcuts(
           invokeHandler("onOpenTool", tool);
           event.preventDefault();
         }
-        return;
+        return true;
       }
-
       if (key === "g" && !modifier && !event.altKey && !event.shiftKey) {
         chordRef.current = "g";
         if (chordTimeoutRef.current !== null) {
@@ -113,16 +109,32 @@ export function useEditorKeyboardShortcuts(
           chordTimeoutRef.current = null;
         }, CHORD_TIMEOUT_MS);
         event.preventDefault();
-        return;
+        return true;
       }
+      return false;
+    }
 
+    /** Command palette. */
+    function handleCommandShortcut(
+      event: KeyboardEvent,
+      key: string,
+      modifier: boolean
+    ): boolean {
       if (modifier && event.shiftKey && key === "k") {
         invokeHandler("onOpenCommandPalette");
         event.preventDefault();
-        return;
+        return true;
       }
+      return false;
+    }
 
-      const snapshot = editor.getSnapshot();
+    /** Undo and redo. */
+    function handleHistoryShortcut(
+      event: KeyboardEvent,
+      key: string,
+      modifier: boolean,
+      snapshot: ReturnType<typeof editor.getSnapshot>
+    ): boolean {
       if (modifier && key === "z") {
         if (event.shiftKey && snapshot.redoStack.length > 0) {
           editor.redo();
@@ -130,34 +142,51 @@ export function useEditorKeyboardShortcuts(
           editor.undo();
         }
         event.preventDefault();
-        return;
+        return true;
       }
       if (modifier && key === "y" && snapshot.redoStack.length > 0) {
         editor.redo();
         event.preventDefault();
-        return;
+        return true;
       }
+      return false;
+    }
+
+    /** Duplicate, delete and reorder the selection. */
+    function handleComponentShortcut(
+      event: KeyboardEvent,
+      key: string,
+      modifier: boolean
+    ): boolean {
       if (event.altKey && event.shiftKey && key === "d") {
         editor.duplicateSelectedComponent();
         event.preventDefault();
-        return;
+        return true;
       }
       if ((event.key === "Backspace" || event.key === "Delete") && !modifier) {
         editor.removeSelectedComponent();
         event.preventDefault();
-        return;
+        return true;
       }
       if (modifier && event.key === "ArrowUp") {
         editor.moveSelectedComponent(-1);
         event.preventDefault();
-        return;
+        return true;
       }
       if (modifier && event.key === "ArrowDown") {
         editor.moveSelectedComponent(1);
         event.preventDefault();
-        return;
+        return true;
       }
+      return false;
+    }
 
+    /** Arrow-key movement across the tree. */
+    function handleArrowNavigation(
+      event: KeyboardEvent,
+      key: string,
+      modifier: boolean
+    ): boolean {
       if (!(modifier || event.altKey || event.shiftKey) && event.key === "[") {
         invokeHandler("onTogglePanel", "left");
         event.preventDefault();
@@ -186,6 +215,25 @@ export function useEditorKeyboardShortcuts(
       } else if (!(modifier || event.altKey) && event.shiftKey && key === "a") {
         invokeHandler("onToggleAppearance");
         event.preventDefault();
+      }
+      return false;
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (isEditableTarget(event.target)) {
+        chordRef.current = null;
+        return;
+      }
+      const modifier = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      const snapshot = editor.getSnapshot();
+      if (
+        handleChord(event, key, modifier) ||
+        handleCommandShortcut(event, key, modifier) ||
+        handleHistoryShortcut(event, key, modifier, snapshot) ||
+        handleComponentShortcut(event, key, modifier) ||
+        handleArrowNavigation(event, key, modifier)
+      ) {
       }
     }
 
