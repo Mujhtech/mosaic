@@ -360,11 +360,150 @@ export function createPreviewRelay({
     }
 
     socket.on("message", (data, isBinary) => {
+      /** Frame-level checks every message has to pass. */
+      const rejectInvalidFrame = (message, meta) => {
+        if (!validatePreviewMessage(message).ok) {
+          socket.close(1008, "Invalid preview message");
+          return true;
+        }
+        if (message.previewProtocolVersion !== meta.protocolVersion) {
+          socket.close(
+            1008,
+            "Message version does not match the negotiated subprotocol"
+          );
+          return true;
+        }
+        if (meta.sessionId && meta.sessionId !== message.sessionId) {
+          socket.close(1008, "Session cannot change");
+          return true;
+        }
+        return false;
+      };
+
+      /** What a studio-role socket is allowed to send. */
+      const rejectStudioFrame = (message, meta) => {
+        if (meta.role === "studio") {
+          if (!STUDIO_MESSAGE_TYPES.has(message.type)) {
+            socket.close(1008, "Message direction is not allowed for Studio");
+            return true;
+          }
+        } else if (meta.phase === "awaitingConnected") {
+          if (message.type !== "previewClientConnected") {
+            socket.close(
+              1008,
+              "The first client message must identify the preview client"
+            );
+            return true;
+          }
+        } else if (meta.phase === "awaitingCapability") {
+          if (message.type !== "capabilityReport") {
+            socket.close(
+              1008,
+              "The capability report must follow client identity"
+            );
+            return true;
+          }
+        } else if (
+          meta.phase !== "ready" ||
+          !CLIENT_MESSAGE_TYPES.has(message.type)
+        ) {
+          socket.close(
+            1008,
+            "Message direction is not allowed for a preview client"
+          );
+          return true;
+        }
+        if (
+          meta.role === "client" &&
+          meta.phase === "ready" &&
+          cachedClients.get(message.sessionId)?.get(meta.clientId)?.socket !==
+            socket
+        ) {
+          socket.close(
+            1008,
+            "This preview client connection has been replaced"
+          );
+          return true;
+        }
+        return false;
+      };
+
+      /** The connect frame carries the renderer's identity and capabilities. */
+      const handleClientConnected = (message, meta) => {
+        if (message.type === "previewClientConnected") {
+          meta.clientId = message.payload.client.clientId;
+          meta.phase = "awaitingCapability";
+          meta.disconnected = false;
+          meta.connected = message;
+          const cache = sessionCache(message.sessionId);
+          if (!cache.has(meta.clientId)) {
+            cache.set(meta.clientId, {
+              connected: message,
+              capability: null,
+              socket,
+            });
+          }
+        } else if (message.type === "capabilityReport") {
+          if (message.payload.clientId !== meta.clientId) {
+            socket.close(
+              1008,
+              "Capability identity does not match the connected client"
+            );
+            return true;
+          }
+          meta.phase = "ready";
+          meta.capabilityReport = message.payload;
+          const cache = sessionCache(message.sessionId);
+          const previousSocket = cache.get(meta.clientId)?.socket;
+          cache.set(meta.clientId, {
+            connected: meta.connected,
+            capability: message,
+            socket,
+          });
+          if (previousSocket && previousSocket !== socket) {
+            queueMicrotask(() =>
+              previousSocket.close(1000, "Replaced by reconnect")
+            );
+          }
+        } else if (message.type === "previewClientDisconnected") {
+          if (message.payload.clientId !== meta.clientId) {
+            socket.close(
+              1008,
+              "Disconnect identity does not match the connected client"
+            );
+            return true;
+          }
+          if (
+            sessionCache(message.sessionId).get(meta.clientId)?.socket !==
+            socket
+          ) {
+            meta.disconnected = true;
+            meta.phase = "disconnected";
+            queueMicrotask(() =>
+              socket.close(1000, "Preview client connection replaced")
+            );
+            return true;
+          }
+          meta.disconnected = true;
+          meta.phase = "disconnected";
+          sessionCache(message.sessionId).delete(meta.clientId);
+        } else if (
+          meta.role === "client" &&
+          message.payload.clientId !== meta.clientId
+        ) {
+          socket.close(
+            1008,
+            "Message identity does not match the connected client"
+          );
+          return true;
+        }
+        return false;
+      };
+
       if (isBinary) {
         socket.close(1003, "JSON text messages only");
         return;
       }
-
       let message;
       try {
         message = JSON.parse(data.toString());
@@ -372,134 +511,16 @@ export function createPreviewRelay({
         socket.close(1007, "Invalid JSON");
         return;
       }
-      if (!validatePreviewMessage(message).ok) {
-        socket.close(1008, "Invalid preview message");
+      if (rejectInvalidFrame(message, meta)) {
         return;
       }
-      if (message.previewProtocolVersion !== meta.protocolVersion) {
-        socket.close(
-          1008,
-          "Message version does not match the negotiated subprotocol"
-        );
+      if (rejectStudioFrame(message, meta)) {
         return;
       }
-
-      if (meta.sessionId && meta.sessionId !== message.sessionId) {
-        socket.close(1008, "Session cannot change");
-        return;
-      }
-
-      if (meta.role === "studio") {
-        if (!STUDIO_MESSAGE_TYPES.has(message.type)) {
-          socket.close(1008, "Message direction is not allowed for Studio");
-          return;
-        }
-      } else if (meta.phase === "awaitingConnected") {
-        if (message.type !== "previewClientConnected") {
-          socket.close(
-            1008,
-            "The first client message must identify the preview client"
-          );
-          return;
-        }
-      } else if (meta.phase === "awaitingCapability") {
-        if (message.type !== "capabilityReport") {
-          socket.close(
-            1008,
-            "The capability report must follow client identity"
-          );
-          return;
-        }
-      } else if (
-        meta.phase !== "ready" ||
-        !CLIENT_MESSAGE_TYPES.has(message.type)
-      ) {
-        socket.close(
-          1008,
-          "Message direction is not allowed for a preview client"
-        );
-        return;
-      }
-
-      if (
-        meta.role === "client" &&
-        meta.phase === "ready" &&
-        cachedClients.get(message.sessionId)?.get(meta.clientId)?.socket !==
-          socket
-      ) {
-        socket.close(1008, "This preview client connection has been replaced");
-        return;
-      }
-
       meta.sessionId = message.sessionId;
-
-      if (message.type === "previewClientConnected") {
-        meta.clientId = message.payload.client.clientId;
-        meta.phase = "awaitingCapability";
-        meta.disconnected = false;
-        meta.connected = message;
-        const cache = sessionCache(message.sessionId);
-        if (!cache.has(meta.clientId)) {
-          cache.set(meta.clientId, {
-            connected: message,
-            capability: null,
-            socket,
-          });
-        }
-      } else if (message.type === "capabilityReport") {
-        if (message.payload.clientId !== meta.clientId) {
-          socket.close(
-            1008,
-            "Capability identity does not match the connected client"
-          );
-          return;
-        }
-        meta.phase = "ready";
-        meta.capabilityReport = message.payload;
-        const cache = sessionCache(message.sessionId);
-        const previousSocket = cache.get(meta.clientId)?.socket;
-        cache.set(meta.clientId, {
-          connected: meta.connected,
-          capability: message,
-          socket,
-        });
-        if (previousSocket && previousSocket !== socket) {
-          queueMicrotask(() =>
-            previousSocket.close(1000, "Replaced by reconnect")
-          );
-        }
-      } else if (message.type === "previewClientDisconnected") {
-        if (message.payload.clientId !== meta.clientId) {
-          socket.close(
-            1008,
-            "Disconnect identity does not match the connected client"
-          );
-          return;
-        }
-        if (
-          sessionCache(message.sessionId).get(meta.clientId)?.socket !== socket
-        ) {
-          meta.disconnected = true;
-          meta.phase = "disconnected";
-          queueMicrotask(() =>
-            socket.close(1000, "Preview client connection replaced")
-          );
-          return;
-        }
-        meta.disconnected = true;
-        meta.phase = "disconnected";
-        sessionCache(message.sessionId).delete(meta.clientId);
-      } else if (
-        meta.role === "client" &&
-        message.payload.clientId !== meta.clientId
-      ) {
-        socket.close(
-          1008,
-          "Message identity does not match the connected client"
-        );
+      if (handleClientConnected(message, meta)) {
         return;
       }
-
       meta.lastActivityAt = Date.now();
       relayMessage(
         server,
