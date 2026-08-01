@@ -142,13 +142,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          # Pinned, because `dart format --set-exit-if-changed` is only
-          # meaningful against a fixed formatter. On `channel: stable` the
-          # action takes whatever the newest release is, and a formatter change
-          # rewrote 86 of 90 files with nothing in the repository having moved.
-          # Every other toolchain here is pinned; this one was the exception.
-          flutter-version: 3.38.5
           channel: stable
+      # `dart format` picks its style from the package's language version, which
+      # it reads from .dart_tool/package_config.json. On a fresh checkout that
+      # file does not exist yet, so it falls back to the newest language version
+      # and applies the tall style introduced in Dart 3.7 — rewriting 86 of 90
+      # files against a package that declares `sdk: ">=3.4.0"`. Resolving first
+      # pins the language version to 3.4 and the formatter to the style the
+      # sources are actually written in. One `pub get` here also resolves the
+      # example package, which the format step covers.
+      - name: Resolve packages
+        working-directory: sdk/flutter
+        run: flutter pub get
       - name: Format
         working-directory: sdk/flutter
         run: dart format --output=none --set-exit-if-changed lib test example/lib
