@@ -177,6 +177,48 @@ func TestSourcePullLeaseAndFrozenApplicationBinding(t *testing.T) {
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM billing_migration_capability_assessments WHERE program_id='program_source'`).Scan(&capabilityCount); err != nil || capabilityCount != 2 {
 		t.Fatalf("capability replay count=%d err=%v", capabilityCount, err)
 	}
+}
+
+func TestSourcePullRollbackGuardRetainsDurableEvidence(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_TEST_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
+	}
+	configuration, err := pgx.ParseConfig(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := stdlib.OpenDB(*configuration)
+	t.Cleanup(func() { _ = db.Close() })
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	t.Cleanup(cancel)
+	if _, err = db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public`); err != nil {
+		t.Fatal(err)
+	}
+	goose.SetBaseFS(migrations.Files)
+	if err = goose.SetDialect("postgres"); err != nil {
+		t.Fatal(err)
+	}
+	if err = goose.UpContext(ctx, db, "."); err != nil {
+		t.Fatal(err)
+	}
+	seedMigrationTenant(t, ctx, db)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	for _, statement := range []string{
+		`INSERT INTO billing_migration_credentials(id,project_id,provider,external_project_id,status,envelope_version,algorithm,key_id,nonce,ciphertext,fingerprint,created_by_actor_id,created_at) VALUES('credential_source','project_one','revenuecat','rc_project','active',1,'AES-256-GCM','credential_key',decode(repeat('01',12),'hex'),decode(repeat('02',32),'hex'),decode(repeat('03',32),'hex'),'owner_one',$1)`,
+		`INSERT INTO billing_migration_programs(id,project_id,environment_id,source_adapter,source_adapter_version,credential_id,state,state_version,authority_epoch_before,stabilization_days,rollback_window_days,scope_digest,policy_digest,idempotency_key,request_digest,created_by_actor_id,created_at,updated_at) VALUES('program_source','project_one','environment_one','revenuecat','` + billingmigration.AdapterVersion + `','credential_source','mapping',1,0,7,7,decode(repeat('11',32),'hex'),decode(repeat('12',32),'hex'),'program-source',decode(repeat('13',32),'hex'),'owner_one',$1,$1)`,
+		`INSERT INTO billing_migration_mapping_sets(id,program_id,project_id,version,status,mapping_digest,expected_program_state_version,created_by_actor_id,created_at,frozen_at) VALUES('mapping_pull','program_source','project_one',1,'frozen',decode(repeat('51',32),'hex'),1,'owner_one',$1,$1)`,
+	} {
+		if _, err = db.ExecContext(ctx, statement, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A completed checkpoint is 00058 evidence and nothing later: it writes a
+	// source-pull job but no import batch *record*. That distinction is what
+	// makes 58 reachable at all — 00059 guards the record table too, so a
+	// fixture that imports records can never roll back far enough to observe
+	// 00058's own guard.
+	seedCompletedSourcePullCheckpoint(t, ctx, db, "guard", "cursor", "watermark", bytesOf(0x53), now)
 	if err = goose.DownToContext(ctx, db, ".", 58); err != nil {
 		t.Fatalf("down to 58: %v", err)
 	}
