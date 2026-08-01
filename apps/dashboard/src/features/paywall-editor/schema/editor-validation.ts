@@ -535,6 +535,345 @@ function localizedEntries(
   }
 }
 
+/** What the per-node checks read, and the accumulators they carry across nodes. */
+interface NodeValidationContext {
+  readonly assetIds: ReadonlySet<string>;
+  readonly document: MosaicDocument;
+  readonly productIds: ReadonlySet<string>;
+  readonly selectorIds: ReadonlySet<string>;
+  readonly state: {
+    emittedCannotVerifyContrast: boolean;
+    readonly seenIds: Set<string>;
+  };
+}
+
+/** Duplicate and malformed component identifiers. */
+function validateNodeIdentity(
+  node: ProtocolNode,
+  path: string,
+  context: NodeValidationContext
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const { state } = context;
+  if (state.seenIds.has(node.id)) {
+    issues.push(
+      issue(
+        "component.duplicateId",
+        `Component ID ${node.id} is used more than once.`,
+        `${path}/id`,
+        "Remove the duplicate component and insert it again to assign a unique ID.",
+        node.id,
+        "id"
+      )
+    );
+  }
+  state.seenIds.add(node.id);
+  if (!IDENTIFIER.test(node.id)) {
+    issues.push(
+      issue(
+        "component.invalidId",
+        `Component ID ${node.id} is not a valid Protocol 0.2 identifier.`,
+        `${path}/id`,
+        "Use a lowercase identifier containing letters, numbers, dashes, or underscores.",
+        node.id,
+        "id"
+      )
+    );
+  }
+  return issues;
+}
+
+/** Localized text: empty values and product tokens. */
+function validateNodeLocalization(
+  node: ProtocolNode,
+  path: string,
+  context: NodeValidationContext
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const { document } = context;
+  for (const localized of localizedEntries(node)) {
+    if (!localized.value.default.trim()) {
+      issues.push(
+        issue(
+          "localization.emptyValue",
+          "Visible text cannot be empty.",
+          `${path}/${localized.property}`,
+          "Enter text in the property inspector.",
+          node.id,
+          localized.property
+        )
+      );
+    }
+    for (const [locale, catalog] of Object.entries(
+      document.localization.locales
+    )) {
+      if (!catalog.strings[localized.value.localizationKey]?.trim()) {
+        issues.push(
+          issue(
+            "localization.missingKey",
+            `${locale} is missing ${localized.value.localizationKey}.`,
+            `/localization/locales/${locale}/strings/${localized.value.localizationKey.replaceAll("~", "~0").replaceAll("/", "~1")}`,
+            `Add a ${locale} value in Localization controls.`,
+            node.id,
+            localized.property
+          )
+        );
+      }
+    }
+  }
+  if (
+    node.type === "productCard" &&
+    JSON.stringify(resolveProductCardStyle(node, false)) ===
+      JSON.stringify(resolveProductCardStyle(node, true))
+  ) {
+    issues.push(
+      warning(
+        "appearance.indistinguishableProductStates",
+        "Default and Selected Product Card appearance are visually identical.",
+        `${path}/styles/selected`,
+        "Change at least one Selected fill, stroke, radius, padding, or opacity value.",
+        node.id,
+        "styles.selected"
+      )
+    );
+  }
+  return issues;
+}
+
+/** Foreground and boundary colours, including contrast. */
+function validateNodeColour(
+  node: ProtocolNode,
+  path: string,
+  context: NodeValidationContext
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const { document, state } = context;
+  for (const field of foregroundFields(node)) {
+    const contrast = evaluateContrast(
+      document,
+      field,
+      backgroundSamples(document, node)
+    );
+    if (contrast === "low") {
+      issues.push(
+        warning(
+          "appearance.lowContrast",
+          `Text or icon contrast is below ${field.threshold}:1 after literal colour alpha and composed opacity.`,
+          `${path}/${field.property.replaceAll(".", "/")}`,
+          "Choose literal foreground and background colours with sufficient contrast in every authored state.",
+          node.id,
+          field.property
+        )
+      );
+    } else if (
+      contrast === "cannotVerify" &&
+      !state.emittedCannotVerifyContrast
+    ) {
+      state.emittedCannotVerifyContrast = true;
+      issues.push(
+        warning(
+          "appearance.contrastCannotVerify",
+          "Contrast cannot be verified because semantic colours are mapped by the host app theme.",
+          `${path}/${field.property.replaceAll(".", "/")}`,
+          "Verify this semantic colour pair in every host theme, or use literal colours for a Studio contrast result.",
+          node.id,
+          field.property
+        )
+      );
+    }
+  }
+  for (const field of boundaryFields(node)) {
+    const contrast = evaluateContrast(
+      document,
+      field,
+      backgroundSamples(document, node, false)
+    );
+    if (contrast === "low") {
+      issues.push(
+        warning(
+          "appearance.lowBoundaryContrast",
+          "Control-boundary contrast is below 3:1 after literal colour alpha and composed opacity.",
+          `${path}/${field.property.replaceAll(".", "/")}`,
+          "Choose a border or track colour that contrasts with the adjacent background.",
+          node.id,
+          field.property
+        )
+      );
+    } else if (
+      contrast === "cannotVerify" &&
+      !state.emittedCannotVerifyContrast
+    ) {
+      state.emittedCannotVerifyContrast = true;
+      issues.push(
+        warning(
+          "appearance.contrastCannotVerify",
+          "Control-boundary contrast cannot be verified because semantic colours are mapped by the host app theme.",
+          `${path}/${field.property.replaceAll(".", "/")}`,
+          "Verify this semantic colour pair in every host theme, or use literal colours for a Studio contrast result.",
+          node.id,
+          field.property
+        )
+      );
+    }
+  }
+  return issues;
+}
+
+/** Fixed widths, horizontal children and sizing. */
+function validateNodeLayout(
+  node: ProtocolNode,
+  path: string,
+  context: NodeValidationContext
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const { document } = context;
+  const textWidth = node.type === "text" ? fixedWidth(node) : null;
+  if (
+    node.type === "text" &&
+    node.typography.maxLines &&
+    (localizedValues(document, node.value).some((value) =>
+      PRODUCT_TOKEN.test(value)
+    ) ||
+      (textWidth !== null &&
+        estimatedTextWidthAtScale(document, node, 2) >
+          textWidth * node.typography.maxLines))
+  ) {
+    issues.push(
+      warning(
+        "typography.truncationRisk",
+        "This text may truncate with long localization, live product data, or 200% text scaling.",
+        `${path}/typography/maxLines`,
+        "Preview long locales and product values, then increase Maximum lines or remove the limit.",
+        node.id,
+        "typography.maxLines"
+      )
+    );
+  }
+  const children = horizontalChildren(node);
+  const width = fixedWidth(node);
+  if (
+    children &&
+    width !== null &&
+    horizontalMinimumWidth(document, node, children, 2) > width
+  ) {
+    issues.push(
+      warning(
+        "layout.horizontalOverflow",
+        "Child content, spacing, and padding overflow this horizontal container at 200% text scaling.",
+        `${path}/sizing/width`,
+        "Increase the container width, reduce fixed child widths or spacing, or use vertical flow.",
+        node.id,
+        "sizing.width"
+      )
+    );
+  }
+  if ("sizing" in node && node.sizing) {
+    for (const axis of ["width", "height"] as const) {
+      if (
+        node.sizing[axis] !== "fill" ||
+        fillAxisIsBounded(document, node, axis)
+      ) {
+        continue;
+      }
+      const dimension = axis === "width" ? "Width" : "Height";
+      const parentDirection = axis === "width" ? "vertically" : "horizontally";
+      issues.push(
+        warning(
+          "layout.unboundedFill",
+          `${dimension} Fill has no bounded ${axis === "width" ? "horizontal" : "vertical"} parent here, so preview and native renderers recover to Fit.`,
+          `${path}/sizing/${axis}`,
+          `Choose Fit or Fixed ${axis}, or move this layer into a ${parentDirection} flowing bounded container.`,
+          node.id,
+          `sizing.${axis}`
+        )
+      );
+    }
+  }
+  return issues;
+}
+
+/** Product, selector and asset references. */
+function validateNodeReferences(
+  node: ProtocolNode,
+  path: string,
+  context: NodeValidationContext
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const { assetIds, productIds, selectorIds } = context;
+  if (node.type === "productSelector") {
+    const cardIds = new Set(node.cards.map((card) => card.id));
+    const productBindings = new Set<string>();
+    for (const card of node.cards) {
+      if (!productIds.has(card.productReferenceId)) {
+        issues.push(
+          issue(
+            "product.missingReference",
+            `Product reference ${card.productReferenceId} is not defined.`,
+            `${path}/cards/${node.cards.indexOf(card)}/productReferenceId`,
+            "Bind the product card to a configured product.",
+            card.id,
+            "productReferenceId"
+          )
+        );
+      }
+      if (productBindings.has(card.productReferenceId)) {
+        issues.push(
+          issue(
+            "product.duplicateBinding",
+            `Product ${card.productReferenceId} is already bound in this selector.`,
+            `${path}/cards/${node.cards.indexOf(card)}/productReferenceId`,
+            "Choose a different product for this card.",
+            card.id,
+            "productReferenceId"
+          )
+        );
+      }
+      productBindings.add(card.productReferenceId);
+    }
+    if (!cardIds.has(node.initialProductCardId)) {
+      issues.push(
+        issue(
+          "product.invalidInitialSelection",
+          "The default Product Card is not inside this selector.",
+          `${path}/initialProductCardId`,
+          "Choose one of this selector's Product Cards as the default.",
+          node.id,
+          "initialProductCardId"
+        )
+      );
+    }
+  }
+  if (
+    node.type === "button" &&
+    node.action.type === "purchase" &&
+    !selectorIds.has(node.action.productSelectorId)
+  ) {
+    issues.push(
+      issue(
+        "purchase.missingSelector",
+        `Purchase button references missing selector ${node.action.productSelectorId}.`,
+        `${path}/action/productSelectorId`,
+        "Insert a product selector or bind this button to an existing selector.",
+        node.id,
+        "productSelectorId"
+      )
+    );
+  }
+  if (node.type === "image" && !assetIds.has(node.assetId)) {
+    issues.push(
+      issue(
+        "asset.missingReference",
+        `Image references missing asset ${node.assetId}.`,
+        `${path}/assetId`,
+        "Choose a bundled asset that exists in this document.",
+        node.id,
+        "assetId"
+      )
+    );
+  }
+  return issues;
+}
+
 export function validateEditorDocument(
   document: MosaicDocument
 ): ValidationIssue[] {
@@ -597,7 +936,7 @@ export function validateEditorDocument(
     )
   );
   const assetIds = new Set(document.assets.map((asset) => asset.id));
-  let emittedCannotVerifyContrast = false;
+  const emittedCannotVerifyContrast = false;
 
   document.screens.forEach((screen, index) => {
     if (screen.layout.content.children.length === 0) {
@@ -614,282 +953,19 @@ export function validateEditorDocument(
     }
   });
 
+  const context: NodeValidationContext = {
+    assetIds,
+    document,
+    productIds,
+    selectorIds,
+    state: { emittedCannotVerifyContrast, seenIds },
+  };
   for (const { node, documentPath: path } of entries) {
-    if (seenIds.has(node.id)) {
-      issues.push(
-        issue(
-          "component.duplicateId",
-          `Component ID ${node.id} is used more than once.`,
-          `${path}/id`,
-          "Remove the duplicate component and insert it again to assign a unique ID.",
-          node.id,
-          "id"
-        )
-      );
-    }
-    seenIds.add(node.id);
-    if (!IDENTIFIER.test(node.id)) {
-      issues.push(
-        issue(
-          "component.invalidId",
-          `Component ID ${node.id} is not a valid Protocol 0.2 identifier.`,
-          `${path}/id`,
-          "Use a lowercase identifier containing letters, numbers, dashes, or underscores.",
-          node.id,
-          "id"
-        )
-      );
-    }
-
-    for (const localized of localizedEntries(node)) {
-      if (!localized.value.default.trim()) {
-        issues.push(
-          issue(
-            "localization.emptyValue",
-            "Visible text cannot be empty.",
-            `${path}/${localized.property}`,
-            "Enter text in the property inspector.",
-            node.id,
-            localized.property
-          )
-        );
-      }
-      for (const [locale, catalog] of Object.entries(
-        document.localization.locales
-      )) {
-        if (!catalog.strings[localized.value.localizationKey]?.trim()) {
-          issues.push(
-            issue(
-              "localization.missingKey",
-              `${locale} is missing ${localized.value.localizationKey}.`,
-              `/localization/locales/${locale}/strings/${localized.value.localizationKey.replaceAll("~", "~0").replaceAll("/", "~1")}`,
-              `Add a ${locale} value in Localization controls.`,
-              node.id,
-              localized.property
-            )
-          );
-        }
-      }
-    }
-
-    if (
-      node.type === "productCard" &&
-      JSON.stringify(resolveProductCardStyle(node, false)) ===
-        JSON.stringify(resolveProductCardStyle(node, true))
-    ) {
-      issues.push(
-        warning(
-          "appearance.indistinguishableProductStates",
-          "Default and Selected Product Card appearance are visually identical.",
-          `${path}/styles/selected`,
-          "Change at least one Selected fill, stroke, radius, padding, or opacity value.",
-          node.id,
-          "styles.selected"
-        )
-      );
-    }
-
-    for (const field of foregroundFields(node)) {
-      const contrast = evaluateContrast(
-        document,
-        field,
-        backgroundSamples(document, node)
-      );
-      if (contrast === "low") {
-        issues.push(
-          warning(
-            "appearance.lowContrast",
-            `Text or icon contrast is below ${field.threshold}:1 after literal colour alpha and composed opacity.`,
-            `${path}/${field.property.replaceAll(".", "/")}`,
-            "Choose literal foreground and background colours with sufficient contrast in every authored state.",
-            node.id,
-            field.property
-          )
-        );
-      } else if (contrast === "cannotVerify" && !emittedCannotVerifyContrast) {
-        emittedCannotVerifyContrast = true;
-        issues.push(
-          warning(
-            "appearance.contrastCannotVerify",
-            "Contrast cannot be verified because semantic colours are mapped by the host app theme.",
-            `${path}/${field.property.replaceAll(".", "/")}`,
-            "Verify this semantic colour pair in every host theme, or use literal colours for a Studio contrast result.",
-            node.id,
-            field.property
-          )
-        );
-      }
-    }
-
-    for (const field of boundaryFields(node)) {
-      const contrast = evaluateContrast(
-        document,
-        field,
-        backgroundSamples(document, node, false)
-      );
-      if (contrast === "low") {
-        issues.push(
-          warning(
-            "appearance.lowBoundaryContrast",
-            "Control-boundary contrast is below 3:1 after literal colour alpha and composed opacity.",
-            `${path}/${field.property.replaceAll(".", "/")}`,
-            "Choose a border or track colour that contrasts with the adjacent background.",
-            node.id,
-            field.property
-          )
-        );
-      } else if (contrast === "cannotVerify" && !emittedCannotVerifyContrast) {
-        emittedCannotVerifyContrast = true;
-        issues.push(
-          warning(
-            "appearance.contrastCannotVerify",
-            "Control-boundary contrast cannot be verified because semantic colours are mapped by the host app theme.",
-            `${path}/${field.property.replaceAll(".", "/")}`,
-            "Verify this semantic colour pair in every host theme, or use literal colours for a Studio contrast result.",
-            node.id,
-            field.property
-          )
-        );
-      }
-    }
-
-    const textWidth = node.type === "text" ? fixedWidth(node) : null;
-    if (
-      node.type === "text" &&
-      node.typography.maxLines &&
-      (localizedValues(document, node.value).some((value) =>
-        PRODUCT_TOKEN.test(value)
-      ) ||
-        (textWidth !== null &&
-          estimatedTextWidthAtScale(document, node, 2) >
-            textWidth * node.typography.maxLines))
-    ) {
-      issues.push(
-        warning(
-          "typography.truncationRisk",
-          "This text may truncate with long localization, live product data, or 200% text scaling.",
-          `${path}/typography/maxLines`,
-          "Preview long locales and product values, then increase Maximum lines or remove the limit.",
-          node.id,
-          "typography.maxLines"
-        )
-      );
-    }
-
-    const children = horizontalChildren(node);
-    const width = fixedWidth(node);
-    if (
-      children &&
-      width !== null &&
-      horizontalMinimumWidth(document, node, children, 2) > width
-    ) {
-      issues.push(
-        warning(
-          "layout.horizontalOverflow",
-          "Child content, spacing, and padding overflow this horizontal container at 200% text scaling.",
-          `${path}/sizing/width`,
-          "Increase the container width, reduce fixed child widths or spacing, or use vertical flow.",
-          node.id,
-          "sizing.width"
-        )
-      );
-    }
-
-    if ("sizing" in node && node.sizing) {
-      for (const axis of ["width", "height"] as const) {
-        if (
-          node.sizing[axis] !== "fill" ||
-          fillAxisIsBounded(document, node, axis)
-        ) {
-          continue;
-        }
-        const dimension = axis === "width" ? "Width" : "Height";
-        const parentDirection =
-          axis === "width" ? "vertically" : "horizontally";
-        issues.push(
-          warning(
-            "layout.unboundedFill",
-            `${dimension} Fill has no bounded ${axis === "width" ? "horizontal" : "vertical"} parent here, so preview and native renderers recover to Fit.`,
-            `${path}/sizing/${axis}`,
-            `Choose Fit or Fixed ${axis}, or move this layer into a ${parentDirection} flowing bounded container.`,
-            node.id,
-            `sizing.${axis}`
-          )
-        );
-      }
-    }
-
-    if (node.type === "productSelector") {
-      const cardIds = new Set(node.cards.map((card) => card.id));
-      const productBindings = new Set<string>();
-      for (const card of node.cards) {
-        if (!productIds.has(card.productReferenceId)) {
-          issues.push(
-            issue(
-              "product.missingReference",
-              `Product reference ${card.productReferenceId} is not defined.`,
-              `${path}/cards/${node.cards.indexOf(card)}/productReferenceId`,
-              "Bind the product card to a configured product.",
-              card.id,
-              "productReferenceId"
-            )
-          );
-        }
-        if (productBindings.has(card.productReferenceId)) {
-          issues.push(
-            issue(
-              "product.duplicateBinding",
-              `Product ${card.productReferenceId} is already bound in this selector.`,
-              `${path}/cards/${node.cards.indexOf(card)}/productReferenceId`,
-              "Choose a different product for this card.",
-              card.id,
-              "productReferenceId"
-            )
-          );
-        }
-        productBindings.add(card.productReferenceId);
-      }
-      if (!cardIds.has(node.initialProductCardId)) {
-        issues.push(
-          issue(
-            "product.invalidInitialSelection",
-            "The default Product Card is not inside this selector.",
-            `${path}/initialProductCardId`,
-            "Choose one of this selector's Product Cards as the default.",
-            node.id,
-            "initialProductCardId"
-          )
-        );
-      }
-    }
-    if (
-      node.type === "button" &&
-      node.action.type === "purchase" &&
-      !selectorIds.has(node.action.productSelectorId)
-    ) {
-      issues.push(
-        issue(
-          "purchase.missingSelector",
-          `Purchase button references missing selector ${node.action.productSelectorId}.`,
-          `${path}/action/productSelectorId`,
-          "Insert a product selector or bind this button to an existing selector.",
-          node.id,
-          "productSelectorId"
-        )
-      );
-    }
-    if (node.type === "image" && !assetIds.has(node.assetId)) {
-      issues.push(
-        issue(
-          "asset.missingReference",
-          `Image references missing asset ${node.assetId}.`,
-          `${path}/assetId`,
-          "Choose a bundled asset that exists in this document.",
-          node.id,
-          "assetId"
-        )
-      );
-    }
+    issues.push(...validateNodeIdentity(node, path, context));
+    issues.push(...validateNodeLocalization(node, path, context));
+    issues.push(...validateNodeColour(node, path, context));
+    issues.push(...validateNodeLayout(node, path, context));
+    issues.push(...validateNodeReferences(node, path, context));
   }
 
   return issues;
