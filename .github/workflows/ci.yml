@@ -122,6 +122,15 @@ jobs:
       - name: Install
         working-directory: apps/dashboard
         run: npm ci
+      # apps/dashboard/scripts/*.mjs reach protocol/browser/index.js by relative
+      # path rather than as a declared dependency, so its runtime deps resolve
+      # from protocol/node_modules — which installing the dashboard alone never
+      # creates. The relay test is the step that notices, and only in a clean
+      # checkout: any working copy that has built the protocol package has the
+      # directory already and passes.
+      - name: Install protocol runtime dependencies
+        working-directory: protocol
+        run: npm ci --omit=dev
       - name: Check (format, lint, typecheck, tests, relay, build)
         working-directory: apps/dashboard
         run: npm run check
