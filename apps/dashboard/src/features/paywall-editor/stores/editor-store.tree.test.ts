@@ -417,9 +417,12 @@ describe("editor store tree commands", () => {
     siblingStore.selectComponent("close");
     expectOneCommit(siblingStore, () => siblingStore.moveSelectedComponent(1));
     expect(
-      siblingStore
-        .getSnapshot()
-        .document!.screens[0]!.layout.content.children.slice(0, 2)
+      required(
+        required(siblingStore.getSnapshot().document, "sibling document")
+          .screens[0],
+        "sibling first screen"
+      )
+        .layout.content.children.slice(0, 2)
         .map((node) => node.id)
     ).toEqual(["headline", "close"]);
 
@@ -447,9 +450,10 @@ describe("editor store tree commands", () => {
       ).filter((entry) => entry.node.id === "plans")
     ).toHaveLength(1);
     expect(
-      store
-        .getSnapshot()
-        .document!.screens[0]!.layout.content.children.map((node) => node.id)
+      required(
+        required(store.getSnapshot().document, "store document").screens[0],
+        "first screen"
+      ).layout.content.children.map((node) => node.id)
     ).toEqual(["close", "stack-a", "plans", "purchase", "legal"]);
   });
 

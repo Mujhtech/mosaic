@@ -474,13 +474,17 @@ export function createGeneratedExperimentAdapter(
         path: scope,
         throwOnError: true,
       });
-      return result.data.data.items
-        .filter((group) => group.status === "active" && group.activeVersionId)
-        .map((group) => ({
-          id: group.id,
-          name: group.name,
-          versionId: group.activeVersionId!,
-        }));
+      return result.data.data.items.flatMap((group) =>
+        group.status === "active" && group.activeVersionId
+          ? [
+              {
+                id: group.id,
+                name: group.name,
+                versionId: group.activeVersionId,
+              },
+            ]
+          : []
+      );
     },
     async listMutualExclusionGroupVersions(scope, groupId) {
       const result = await listExperimentMutualExclusionGroupVersions({

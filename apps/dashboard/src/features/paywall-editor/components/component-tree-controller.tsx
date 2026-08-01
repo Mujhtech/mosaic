@@ -800,11 +800,13 @@ export function useComponentTreeModel({
           focusRow(rows[0].id);
         }
         break;
-      case "End":
-        if (rows.at(-1)) {
-          focusRow(rows.at(-1)!.id);
+      case "End": {
+        const lastRow = rows.at(-1);
+        if (lastRow) {
+          focusRow(lastRow.id);
         }
         break;
+      }
       case "ArrowRight":
         if (expandable && !expanded) {
           if (row.kind === "scroll") {

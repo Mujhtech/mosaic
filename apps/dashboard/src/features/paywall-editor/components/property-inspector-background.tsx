@@ -77,20 +77,14 @@ export function defaultBackground(
           { position: 1, color: "surface.default" },
         ],
       };
-    case "image":
-      return document.assets.find((asset) => asset.type === "image")?.id
-        ? defaultMediaBackground(
-            type,
-            document.assets.find((asset) => asset.type === "image")!.id
-          )
-        : undefined;
-    case "video":
-      return document.assets.find((asset) => asset.type === "video")?.id
-        ? defaultMediaBackground(
-            type,
-            document.assets.find((asset) => asset.type === "video")!.id
-          )
-        : undefined;
+    case "image": {
+      const asset = document.assets.find((item) => item.type === "image");
+      return asset ? defaultMediaBackground(type, asset.id) : undefined;
+    }
+    case "video": {
+      const asset = document.assets.find((item) => item.type === "video");
+      return asset ? defaultMediaBackground(type, asset.id) : undefined;
+    }
     case "backgroundToken":
       return document.designSystem.backgrounds[0]
         ? { type, id: document.designSystem.backgrounds[0].id }

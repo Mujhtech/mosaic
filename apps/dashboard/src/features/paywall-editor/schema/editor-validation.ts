@@ -753,15 +753,16 @@ export function validateEditorDocument(
       }
     }
 
+    const textWidth = node.type === "text" ? fixedWidth(node) : null;
     if (
       node.type === "text" &&
       node.typography.maxLines &&
       (localizedValues(document, node.value).some((value) =>
         PRODUCT_TOKEN.test(value)
       ) ||
-        (fixedWidth(node) !== null &&
+        (textWidth !== null &&
           estimatedTextWidthAtScale(document, node, 2) >
-            fixedWidth(node)! * node.typography.maxLines))
+            textWidth * node.typography.maxLines))
     ) {
       issues.push(
         warning(

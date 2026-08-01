@@ -246,9 +246,9 @@ export function canSelectMetric(metric: MetricDefinitionOption) {
 }
 
 export function describeMetricEventFilter(
-  filter: MetricDefinitionOption["eventFilter"]
+  filter: MetricDefinitionOption["eventFilter"] | undefined
 ) {
-  return filter["payload.reason"]
+  return filter?.["payload.reason"]
     ? `payload.reason = ${filter["payload.reason"]}`
     : "All qualifying events";
 }

@@ -738,7 +738,7 @@ export function ExperimentBuilder({
                       {describeMetricEventFilter(
                         resources.data.metrics.find(
                           (metric) => metric.versionId === field.state.value
-                        )!.eventFilter
+                        )?.eventFilter
                       )}
                     </p>
                   ) : (

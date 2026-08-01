@@ -54,7 +54,7 @@ export function CreateDraftAction({
   );
 
   const handleClick = useCallback(() => {
-    create(EDITOR_TEMPLATES[0]!.document);
+    create(EDITOR_TEMPLATES[0].document);
   }, [create]);
   return (
     <div>

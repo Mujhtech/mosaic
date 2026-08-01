@@ -140,8 +140,8 @@ export function PropertyInspector({
           </span>
         ) : null}
       </div>
-      {selectedTarget && document ? (
-        <InspectorContext.Provider value={inspectorContext!}>
+      {selectedTarget && document && inspectorContext ? (
+        <InspectorContext.Provider value={inspectorContext}>
           {lockedBy ? (
             <div
               className="mt-4 rounded border border-border bg-muted p-3 text-xs"

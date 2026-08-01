@@ -370,8 +370,9 @@ export function findNodeEntry(
   const screenIndex = document.screens.findIndex(
     (screen) => screen.layout.content.id === id
   );
-  if (screenIndex >= 0) {
-    const root = document.screens[screenIndex]!.layout.content;
+  const matchedScreen = document.screens[screenIndex];
+  if (screenIndex >= 0 && matchedScreen) {
+    const root = matchedScreen.layout.content;
     return {
       node: root,
       depth: -1,

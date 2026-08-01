@@ -515,46 +515,47 @@ export interface EditorTemplate {
   name: string;
 }
 
-export const EDITOR_TEMPLATES: readonly EditorTemplate[] = [
-  {
-    id: "focused",
-    name: "Focused offer",
-    description:
-      "A concise subscription choice with a clear value proposition.",
-    document: baseDocument("focused-offer", [
-      CLOSE_BUTTON,
-      text(
-        "headline",
-        "paywall.headline",
-        STRINGS.en["paywall.headline"],
-        "title"
-      ),
-      text("subtitle", "paywall.subtitle", STRINGS.en["paywall.subtitle"]),
-      PRODUCT_SELECTOR,
-      PURCHASE_BUTTON,
-      RESTORE_BUTTON,
-      LEGAL_TEXT,
-    ]),
-  },
-  {
-    id: "benefits",
-    name: "Benefits first",
-    description:
-      "Lead with product benefits before asking someone to choose a plan.",
-    document: baseDocument("benefits-first", [
-      CLOSE_BUTTON,
-      text(
-        "headline",
-        "paywall.headline",
-        STRINGS.en["paywall.headline"],
-        "title"
-      ),
-      text("subtitle", "paywall.subtitle", STRINGS.en["paywall.subtitle"]),
-      FEATURE_LIST,
-      PRODUCT_SELECTOR,
-      PURCHASE_BUTTON,
-      RESTORE_BUTTON,
-      LEGAL_TEXT,
-    ]),
-  },
-];
+export const EDITOR_TEMPLATES: readonly [EditorTemplate, ...EditorTemplate[]] =
+  [
+    {
+      id: "focused",
+      name: "Focused offer",
+      description:
+        "A concise subscription choice with a clear value proposition.",
+      document: baseDocument("focused-offer", [
+        CLOSE_BUTTON,
+        text(
+          "headline",
+          "paywall.headline",
+          STRINGS.en["paywall.headline"],
+          "title"
+        ),
+        text("subtitle", "paywall.subtitle", STRINGS.en["paywall.subtitle"]),
+        PRODUCT_SELECTOR,
+        PURCHASE_BUTTON,
+        RESTORE_BUTTON,
+        LEGAL_TEXT,
+      ]),
+    },
+    {
+      id: "benefits",
+      name: "Benefits first",
+      description:
+        "Lead with product benefits before asking someone to choose a plan.",
+      document: baseDocument("benefits-first", [
+        CLOSE_BUTTON,
+        text(
+          "headline",
+          "paywall.headline",
+          STRINGS.en["paywall.headline"],
+          "title"
+        ),
+        text("subtitle", "paywall.subtitle", STRINGS.en["paywall.subtitle"]),
+        FEATURE_LIST,
+        PRODUCT_SELECTOR,
+        PURCHASE_BUTTON,
+        RESTORE_BUTTON,
+        LEGAL_TEXT,
+      ]),
+    },
+  ];

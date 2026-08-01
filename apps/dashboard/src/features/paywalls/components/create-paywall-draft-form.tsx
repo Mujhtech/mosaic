@@ -27,7 +27,7 @@ import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted
 import { studioScopeParams } from "@/lib/routing/workspace-params";
 
 const KEY_PATTERN = /^[a-z][a-z0-9_-]{1,62}$/;
-const starterDocument = EDITOR_TEMPLATES[0]!.document;
+const starterDocument = EDITOR_TEMPLATES[0].document;
 
 type DraftSource = "file" | "local" | "template";
 

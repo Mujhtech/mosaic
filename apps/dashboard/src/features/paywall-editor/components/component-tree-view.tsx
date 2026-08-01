@@ -530,7 +530,7 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
                   )}
                   <span className="grid size-5 shrink-0 place-items-center text-muted-foreground">
                     <LayerTypeIcon
-                      type={isScroll ? "scrollContainer" : node!.type}
+                      type={node ? node.type : "scrollContainer"}
                     />
                   </span>
                   {renameId === row.id && node ? (

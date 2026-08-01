@@ -997,11 +997,12 @@ export function ValidationSummary({
               </span>
               <span>{issue.message}</span>
               {(() => {
-                if (issue.ruleId) {
+                const issueRuleId = issue.ruleId;
+                if (issueRuleId) {
                   return (
                     <Button
                       className="ms-2"
-                      onClick={() => onOpenRule(issue.ruleId!)}
+                      onClick={() => onOpenRule(issueRuleId)}
                       size="sm"
                       type="button"
                       variant="link"
