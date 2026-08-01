@@ -166,9 +166,13 @@ jobs:
       - name: Analyze
         working-directory: sdk/flutter
         run: flutter analyze
+      # Goldens are rasterised output, so they encode the host's font rendering
+      # and the Flutter version that produced them. The baselines are macOS and
+      # this runner is Linux on a channel that moves, so comparing here fails on
+      # the environment rather than on the renderer. See sdk/flutter/dart_test.yaml.
       - name: Tests
         working-directory: sdk/flutter
-        run: flutter test
+        run: flutter test --exclude-tags golden
 
   android:
     runs-on: ubuntu-latest

@@ -6,7 +6,7 @@ import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 void main() {
   testWidgets('canonical Protocol 0.2 paywall has a native golden baseline',
-      (tester) async {
+      tags: 'golden', (tester) async {
     final root = Directory.current.parent.parent;
     final document = const MosaicProtocolDecoder().decode(
       File('${root.path}/protocol/fixtures/v0.2/complete-paywall.json')
