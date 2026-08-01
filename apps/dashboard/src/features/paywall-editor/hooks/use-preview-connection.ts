@@ -22,6 +22,7 @@ import {
   createHeartbeatPongMessage,
   createMockCommerceStateChangedMessage,
   PREVIEW_WEBSOCKET_SUBPROTOCOLS,
+  type PreviewMessageEnvelope,
   type PreviewProtocolVersion,
   parsePreviewMessage,
   previewProtocolVersionForSubprotocol,
@@ -437,6 +438,232 @@ export function usePreviewConnection(options: {
     };
 
     const onMessage = (event: MessageEvent) => {
+      /** Client presence, capability and heartbeat frames. */
+      const handleLifecycleMessage = (
+        message: PreviewMessageEnvelope,
+        payload: PreviewMessageEnvelope["payload"]
+      ): boolean => {
+        if (message.type === "previewClientConnected") {
+          const identity = recordValue(payload.client);
+          const renderer = recordValue(identity?.renderer);
+          const application = recordValue(identity?.application);
+          const device = recordValue(identity?.device);
+          const rendererId = stringValue(renderer?.id);
+          const clientId = stringValue(identity?.clientId);
+          if (!clientId) {
+            return true;
+          }
+          connectedClientIdsRef.current.add(clientId);
+          setClients((current) => {
+            const client: PreviewClient = {
+              clientId,
+              sessionId: message.sessionId,
+              platform: platformForRenderer(rendererId),
+              displayName: stringValue(identity?.displayName, "Preview client"),
+              renderer: {
+                id: rendererId,
+                version: stringValue(renderer?.version),
+              },
+              application: {
+                id: stringValue(application?.id),
+                displayName: stringValue(
+                  application?.displayName,
+                  "Example app"
+                ),
+                version: stringValue(application?.version),
+              },
+              device: {
+                displayName: stringValue(device?.displayName, "Device"),
+                systemName: stringValue(device?.systemName),
+                systemVersion: stringValue(device?.systemVersion),
+              },
+              supportedSchemaVersions: [],
+              supportedCapabilities: [],
+              previewCapabilities: [],
+              lastSeenAt: message.sentAt,
+            };
+            return [
+              client,
+              ...current.filter((entry) => entry.clientId !== clientId),
+            ];
+          });
+          return true;
+        }
+        if (message.type === "previewClientDisconnected") {
+          const clientId = stringValue(payload.clientId);
+          connectedClientIdsRef.current.delete(clientId);
+          capabilityClientIdsRef.current.delete(clientId);
+          clientDocumentLimitsRef.current.delete(clientId);
+          setClients((current) =>
+            current.filter((entry) => entry.clientId !== clientId)
+          );
+          return true;
+        }
+        if (message.type === "capabilityReport") {
+          const clientId = stringValue(payload.clientId);
+          if (!(clientId && connectedClientIdsRef.current.has(clientId))) {
+            return true;
+          }
+          capabilityClientIdsRef.current.add(clientId);
+          const limits = recordValue(payload.limits);
+          const maxDocumentBytes = numberValue(limits?.maxDocumentBytes);
+          if (maxDocumentBytes > 0) {
+            clientDocumentLimitsRef.current.set(clientId, maxDocumentBytes);
+          }
+          setClients((current) =>
+            current.map((client) =>
+              client.clientId === clientId
+                ? {
+                    ...client,
+                    supportedSchemaVersions: stringList(
+                      payload.supportedSchemaVersions
+                    ),
+                    supportedCapabilities: reportedCapabilities(
+                      payload.supportedCapabilities
+                    ),
+                    previewCapabilities: reportedCapabilities(
+                      payload.previewCapabilities
+                    ),
+                    maxDocumentBytes: maxDocumentBytes || undefined,
+                    lastSeenAt: message.sentAt,
+                  }
+                : client
+            )
+          );
+          queueMicrotask(() => {
+            sendLatestCommerce(true);
+            sendLatestDraft(true);
+          });
+          return true;
+        }
+        if (message.type === "previewHeartbeat") {
+          const clientId = stringValue(payload.clientId);
+          const sequence = numberValue(payload.sequence);
+          if (
+            payload.kind === "ping" &&
+            clientId &&
+            connectedClientIdsRef.current.has(clientId)
+          ) {
+            send(
+              createHeartbeatPongMessage({
+                sessionId: message.sessionId,
+                clientId,
+                sequence,
+                protocolVersion: message.previewProtocolVersion,
+              })
+            );
+          }
+          setClients((current) =>
+            current.map((client) =>
+              client.clientId === clientId
+                ? { ...client, lastSeenAt: message.sentAt }
+                : client
+            )
+          );
+          return true;
+        }
+        return false;
+      };
+
+      /** The frames that report what the renderer did with a draft. */
+      const handleOutcomeMessage = (
+        message: PreviewMessageEnvelope,
+        payload: PreviewMessageEnvelope["payload"],
+        clientId: string
+      ): boolean => {
+        if (message.type === "draftAccepted") {
+          recordAcknowledgement({
+            clientId,
+            editableDocumentId: incomingEditableDocumentId,
+            revisionId: revision.revisionId,
+            revisionSequence: revision.sequence,
+            status: "accepted",
+            message: "Latest changes are visible in this native preview.",
+          });
+          return true;
+        }
+        if (message.type === "draftRejected") {
+          recordAcknowledgement({
+            clientId,
+            editableDocumentId: incomingEditableDocumentId,
+            revisionId: revision.revisionId,
+            revisionSequence: revision.sequence,
+            status: "rejected",
+            message:
+              "This update needs attention. The last working preview remains visible.",
+          });
+          const rawDiagnostics = Array.isArray(payload.diagnostics)
+            ? payload.diagnostics
+            : [];
+          for (const raw of rawDiagnostics) {
+            addDiagnostic(
+              diagnosticFromProtocol({
+                raw,
+                clientId,
+                revisionId: revision.revisionId,
+                revisionSequence: revision.sequence,
+                severity: "error",
+                fallbackCode: "preview.draftRejected",
+                fallbackMessage: "The preview client rejected this revision.",
+              })
+            );
+          }
+          return true;
+        }
+        if (message.type === "validationError") {
+          const errors = Array.isArray(payload.errors) ? payload.errors : [];
+          for (const raw of errors) {
+            addDiagnostic(
+              diagnosticFromProtocol({
+                raw,
+                clientId,
+                revisionId: revision.revisionId,
+                revisionSequence: revision.sequence,
+                severity: "error",
+                fallbackCode: "preview.validationError",
+                fallbackMessage:
+                  "The native preview found an invalid property.",
+              })
+            );
+          }
+          return true;
+        }
+        if (message.type === "renderWarning") {
+          const warnings = Array.isArray(payload.warnings)
+            ? payload.warnings
+            : [];
+          for (const raw of warnings) {
+            addDiagnostic(
+              diagnosticFromProtocol({
+                raw,
+                clientId,
+                revisionId: revision.revisionId,
+                revisionSequence: revision.sequence,
+                severity: "warning",
+                fallbackCode: "preview.renderWarning",
+                fallbackMessage: "The native preview used a defined fallback.",
+              })
+            );
+          }
+          return true;
+        }
+        if (message.type === "renderFailure") {
+          addDiagnostic(
+            diagnosticFromProtocol({
+              raw: payload.failure,
+              clientId,
+              revisionId: revision.revisionId,
+              revisionSequence: revision.sequence,
+              severity: "error",
+              fallbackCode: "preview.renderFailure",
+              fallbackMessage:
+                "The client could not render this revision and kept the last accepted draft.",
+            })
+          );
+        }
+        return false;
+      };
+
       if (disposed || typeof event.data !== "string") {
         return;
       }
@@ -461,127 +688,9 @@ export function usePreviewConnection(options: {
         return;
       }
       const { payload } = message;
-
-      if (message.type === "previewClientConnected") {
-        const identity = recordValue(payload.client);
-        const renderer = recordValue(identity?.renderer);
-        const application = recordValue(identity?.application);
-        const device = recordValue(identity?.device);
-        const rendererId = stringValue(renderer?.id);
-        const clientId = stringValue(identity?.clientId);
-        if (!clientId) {
-          return;
-        }
-        connectedClientIdsRef.current.add(clientId);
-        setClients((current) => {
-          const client: PreviewClient = {
-            clientId,
-            sessionId: message.sessionId,
-            platform: platformForRenderer(rendererId),
-            displayName: stringValue(identity?.displayName, "Preview client"),
-            renderer: {
-              id: rendererId,
-              version: stringValue(renderer?.version),
-            },
-            application: {
-              id: stringValue(application?.id),
-              displayName: stringValue(application?.displayName, "Example app"),
-              version: stringValue(application?.version),
-            },
-            device: {
-              displayName: stringValue(device?.displayName, "Device"),
-              systemName: stringValue(device?.systemName),
-              systemVersion: stringValue(device?.systemVersion),
-            },
-            supportedSchemaVersions: [],
-            supportedCapabilities: [],
-            previewCapabilities: [],
-            lastSeenAt: message.sentAt,
-          };
-          return [
-            client,
-            ...current.filter((entry) => entry.clientId !== clientId),
-          ];
-        });
+      if (handleLifecycleMessage(message, payload)) {
         return;
       }
-
-      if (message.type === "previewClientDisconnected") {
-        const clientId = stringValue(payload.clientId);
-        connectedClientIdsRef.current.delete(clientId);
-        capabilityClientIdsRef.current.delete(clientId);
-        clientDocumentLimitsRef.current.delete(clientId);
-        setClients((current) =>
-          current.filter((entry) => entry.clientId !== clientId)
-        );
-        return;
-      }
-
-      if (message.type === "capabilityReport") {
-        const clientId = stringValue(payload.clientId);
-        if (!(clientId && connectedClientIdsRef.current.has(clientId))) {
-          return;
-        }
-        capabilityClientIdsRef.current.add(clientId);
-        const limits = recordValue(payload.limits);
-        const maxDocumentBytes = numberValue(limits?.maxDocumentBytes);
-        if (maxDocumentBytes > 0) {
-          clientDocumentLimitsRef.current.set(clientId, maxDocumentBytes);
-        }
-        setClients((current) =>
-          current.map((client) =>
-            client.clientId === clientId
-              ? {
-                  ...client,
-                  supportedSchemaVersions: stringList(
-                    payload.supportedSchemaVersions
-                  ),
-                  supportedCapabilities: reportedCapabilities(
-                    payload.supportedCapabilities
-                  ),
-                  previewCapabilities: reportedCapabilities(
-                    payload.previewCapabilities
-                  ),
-                  maxDocumentBytes: maxDocumentBytes || undefined,
-                  lastSeenAt: message.sentAt,
-                }
-              : client
-          )
-        );
-        queueMicrotask(() => {
-          sendLatestCommerce(true);
-          sendLatestDraft(true);
-        });
-        return;
-      }
-
-      if (message.type === "previewHeartbeat") {
-        const clientId = stringValue(payload.clientId);
-        const sequence = numberValue(payload.sequence);
-        if (
-          payload.kind === "ping" &&
-          clientId &&
-          connectedClientIdsRef.current.has(clientId)
-        ) {
-          send(
-            createHeartbeatPongMessage({
-              sessionId: message.sessionId,
-              clientId,
-              sequence,
-              protocolVersion: message.previewProtocolVersion,
-            })
-          );
-        }
-        setClients((current) =>
-          current.map((client) =>
-            client.clientId === clientId
-              ? { ...client, lastSeenAt: message.sentAt }
-              : client
-          )
-        );
-        return;
-      }
-
       const clientId = stringValue(payload.clientId, "client_unknown");
       if (!capabilityClientIdsRef.current.has(clientId)) {
         return;
@@ -605,99 +714,7 @@ export function usePreviewConnection(options: {
       ) {
         return;
       }
-      if (message.type === "draftAccepted") {
-        recordAcknowledgement({
-          clientId,
-          editableDocumentId: incomingEditableDocumentId,
-          revisionId: revision.revisionId,
-          revisionSequence: revision.sequence,
-          status: "accepted",
-          message: "Latest changes are visible in this native preview.",
-        });
-        return;
-      }
-
-      if (message.type === "draftRejected") {
-        recordAcknowledgement({
-          clientId,
-          editableDocumentId: incomingEditableDocumentId,
-          revisionId: revision.revisionId,
-          revisionSequence: revision.sequence,
-          status: "rejected",
-          message:
-            "This update needs attention. The last working preview remains visible.",
-        });
-        const rawDiagnostics = Array.isArray(payload.diagnostics)
-          ? payload.diagnostics
-          : [];
-        for (const raw of rawDiagnostics) {
-          addDiagnostic(
-            diagnosticFromProtocol({
-              raw,
-              clientId,
-              revisionId: revision.revisionId,
-              revisionSequence: revision.sequence,
-              severity: "error",
-              fallbackCode: "preview.draftRejected",
-              fallbackMessage: "The preview client rejected this revision.",
-            })
-          );
-        }
-        return;
-      }
-
-      if (message.type === "validationError") {
-        const errors = Array.isArray(payload.errors) ? payload.errors : [];
-        for (const raw of errors) {
-          addDiagnostic(
-            diagnosticFromProtocol({
-              raw,
-              clientId,
-              revisionId: revision.revisionId,
-              revisionSequence: revision.sequence,
-              severity: "error",
-              fallbackCode: "preview.validationError",
-              fallbackMessage: "The native preview found an invalid property.",
-            })
-          );
-        }
-        return;
-      }
-
-      if (message.type === "renderWarning") {
-        const warnings = Array.isArray(payload.warnings)
-          ? payload.warnings
-          : [];
-        for (const raw of warnings) {
-          addDiagnostic(
-            diagnosticFromProtocol({
-              raw,
-              clientId,
-              revisionId: revision.revisionId,
-              revisionSequence: revision.sequence,
-              severity: "warning",
-              fallbackCode: "preview.renderWarning",
-              fallbackMessage: "The native preview used a defined fallback.",
-            })
-          );
-        }
-        return;
-      }
-
-      if (message.type === "renderFailure") {
-        addDiagnostic(
-          diagnosticFromProtocol({
-            raw: payload.failure,
-            clientId,
-            revisionId: revision.revisionId,
-            revisionSequence: revision.sequence,
-            severity: "error",
-            fallbackCode: "preview.renderFailure",
-            fallbackMessage:
-              "The client could not render this revision and kept the last accepted draft.",
-          })
-        );
-      }
+      handleOutcomeMessage(message, payload, clientId);
     };
 
     const onError = () => {
