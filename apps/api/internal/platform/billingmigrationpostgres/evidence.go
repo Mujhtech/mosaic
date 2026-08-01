@@ -189,8 +189,8 @@ func (r *Repository) CreateImportBatch(ctx context.Context, expectedStateVersion
 	command, err := tx.Exec(ctx, `INSERT INTO billing_migration_import_batches(
 		id,program_id,project_id,manifest_id,mapping_set_id,idempotency_key,request_digest,
 		expected_program_state_version,status,record_count,validated_count,quarantined_count,
-		cursor_before,cursor_after,attempt_count,created_at,updated_at)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9,0,0,$10,'',0,$11,$11)
+		cursor_before,cursor_after,attempt_count,created_at,updated_at,due_at,max_attempts)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9,0,0,$10,'',0,$11,$11,$11,8)
 		ON CONFLICT (program_id,idempotency_key) DO NOTHING`,
 		batch.BatchID, batch.ProgramID, write.ProjectID, write.ManifestID, write.MappingSetID,
 		batch.IdempotencyKey, write.RequestDigest, expectedStateVersion, batch.RecordCount,
@@ -328,8 +328,8 @@ func (r *Repository) QueueRun(ctx context.Context, expectedStateVersion int64, w
 		return false, err
 	}
 	command, err := tx.Exec(ctx, `INSERT INTO billing_migration_run_jobs(id,program_id,project_id,run_kind,idempotency_key,
-		request_digest,expected_program_state_version,manifest_digest,mapping_digest,policy_digest,status,created_at,updated_at)
-		SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$11
+		request_digest,expected_program_state_version,manifest_digest,mapping_digest,policy_digest,status,created_at,updated_at,due_at,max_attempts)
+		SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$11,$11,8
 		WHERE EXISTS(SELECT 1 FROM billing_migration_source_manifests WHERE program_id=$2 AND project_id=$3 AND manifest_digest=$8)
 		AND EXISTS(SELECT 1 FROM billing_migration_mapping_sets WHERE program_id=$2 AND project_id=$3 AND mapping_digest=$9 AND status='frozen')
 		AND EXISTS(SELECT 1 FROM billing_migration_programs WHERE id=$2 AND project_id=$3 AND policy_digest=$10)

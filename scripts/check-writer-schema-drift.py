@@ -126,6 +126,31 @@ def parse_trigger_supplied(sql):
     return supplied
 
 
+def column_is_not_null(sql, table, column):
+    """Whether the schema declares this column NOT NULL, in CREATE or ALTER.
+
+    Dropping a default only makes a column required if it is also NOT NULL;
+    a nullable column with no default simply takes NULL.
+    """
+    create = re.search(
+        r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?" + re.escape(table) + r"\s*\((.*?)\n\);",
+        sql, re.IGNORECASE | re.DOTALL,
+    )
+    if create and re.search(
+        r"\b" + re.escape(column) + r"\b[^,]*NOT\s+NULL", create.group(1), re.IGNORECASE
+    ):
+        return True
+    added = re.search(
+        r"ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?" + re.escape(column) + r"\b([^,;]*)",
+        sql, re.IGNORECASE,
+    )
+    if added and re.search(r"NOT\s+NULL", added.group(1), re.IGNORECASE):
+        return True
+    return bool(re.search(
+        r"ALTER\s+COLUMN\s+" + re.escape(column) + r"\s+SET\s+NOT\s+NULL", sql, re.IGNORECASE
+    ))
+
+
 def parse_schema(sql):
     """Return {table: set(required columns)} after applying CREATE and ALTER."""
     required = {}
@@ -185,6 +210,17 @@ def parse_schema(sql):
             # which is exactly the case being checked, so it is not a rescue for
             # an explicit NULL. Keep it required.
             pass
+        # The backfill shape: add the column NOT NULL with a default so existing
+        # rows are valid, then drop the default so new rows must state a value.
+        # Without this, such a column is recorded as defaulted forever and every
+        # writer that omits it passes — which is how the import batch writers
+        # reached CI missing due_at and max_attempts.
+        for alter in re.finditer(
+            r"ALTER\s+COLUMN\s+([a-z_][a-z0-9_]*)\s+DROP\s+DEFAULT", body, re.IGNORECASE
+        ):
+            name = alter.group(1).lower()
+            if name not in dropped[table] and column_is_not_null(sql, table, name):
+                required[table].add(name)
         for drop in re.finditer(r"DROP\s+COLUMN\s+(?:IF\s+EXISTS\s+)?([a-z_][a-z0-9_]*)", body, re.IGNORECASE):
             name = drop.group(1).lower()
             required[table].discard(name)
