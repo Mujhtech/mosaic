@@ -153,7 +153,13 @@ jobs:
       # example package, which the format step covers.
       - name: Resolve packages
         working-directory: sdk/flutter
-        run: flutter pub get
+        run: |
+          # Every package with a pubspec, not just the root: `flutter pub get`
+          # here resolves the root and the example, but packages/* are separate
+          # and analyze covers them, so unresolved they report as missing URIs.
+          for pubspec in $(find . -name pubspec.yaml -not -path "*/build/*" | sort); do
+            (cd "$(dirname "$pubspec")" && flutter pub get)
+          done
       - name: Format
         working-directory: sdk/flutter
         run: dart format --output=none --set-exit-if-changed lib test example/lib
