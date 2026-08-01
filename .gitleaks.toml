@@ -1,0 +1,28 @@
+# Gitleaks configuration.
+#
+# The default rules are kept in full. This narrows exactly one of them.
+#
+# `generic-api-key` fires on any assignment whose value clears a Shannon
+# entropy of 3.5, which readable Go test fixtures do as soon as they get
+# descriptive: `redelivery-v1-destination` scores 3.65, while its siblings
+# `redelivery-stale-digest` (3.41) and `redelivery-1` (3.02) pass. Renaming is
+# not a fix — a longer, clearer name scores *higher* — so without this the
+# repository would have to name its test fixtures against an entropy budget.
+#
+# Scope is by value, not by path. An earlier attempt allowlisted `_test.go`
+# paths as well, which turned out to widen rather than narrow: allowlist
+# conditions are OR'd, so the path alone exempted the file and real secrets
+# planted in a test went unreported. Matching only the secret, anchored, means
+# a value has to *be* a fixture identifier end to end to be exempt; a random
+# credential in the same file still fails the scan.
+#
+# Verified both directions — see the commit that introduced this file.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Readable fixture identifiers, matched only by the generic entropy rule"
+targetRules = ["generic-api-key"]
+regexes = [
+  '''(?i)^(idempotency|correlation|redelivery|fixture|expected|request)[-_][a-z0-9-]+$''',
+]

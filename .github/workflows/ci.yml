@@ -36,11 +36,21 @@ jobs:
             -e MINIO_ROOT_USER=mosaic_ci -e MINIO_ROOT_PASSWORD=mosaic_ci_secret \
             minio/minio:RELEASE.2025-07-23T15-54-02Z server /data
           for i in $(seq 1 30); do
-            curl -fsS http://localhost:9000/minio/health/live && break; sleep 2
+            curl -fsS http://localhost:9000/minio/health/live && break
+            sleep 2
           done
-          docker run --rm --network host \
+          # The loop above exits on its last iteration whether or not MinIO ever
+          # answered, so failure has to be its own statement: otherwise the
+          # bucket step is the first thing to notice, and it reports a client
+          # error rather than an unreachable server.
+          curl -fsS http://localhost:9000/minio/health/live >/dev/null || {
+            echo "MinIO did not become ready"; docker logs mosaic-ci-minio | tail -50; exit 1;
+          }
+          # `mc` is the image's entrypoint, so an `sh -c` argument is read as an
+          # mc subcommand and fails with "`sh` is not a recognized command".
+          docker run --rm --network host --entrypoint sh \
             minio/mc:RELEASE.2025-07-21T05-28-08Z \
-            sh -c "mc alias set ci http://localhost:9000 mosaic_ci mosaic_ci_secret && mc mb --ignore-existing ci/mosaic-ci-assets"
+            -c "mc alias set ci http://localhost:9000 mosaic_ci mosaic_ci_secret && mc mb --ignore-existing ci/mosaic-ci-assets"
       - uses: actions/setup-go@v5
         with:
           go-version-file: apps/api/go.mod
@@ -132,6 +142,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          # Pinned, because `dart format --set-exit-if-changed` is only
+          # meaningful against a fixed formatter. On `channel: stable` the
+          # action takes whatever the newest release is, and a formatter change
+          # rewrote 86 of 90 files with nothing in the repository having moved.
+          # Every other toolchain here is pinned; this one was the exception.
+          flutter-version: 3.38.5
           channel: stable
       - name: Format
         working-directory: sdk/flutter
