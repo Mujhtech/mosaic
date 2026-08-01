@@ -609,7 +609,7 @@ export function ShadowSection({ node }: { node: ProtocolNode }) {
   const { document } = useInspectorContext();
   const editor = useEditorActions();
   const appearance = ("appearance" in node ? node.appearance : undefined) ?? {};
-  const shadow = appearance.shadow;
+  const { shadow } = appearance;
 
   function update(next: ProtocolShadow | undefined) {
     editor.updateComponent(node.id, (current) =>

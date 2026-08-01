@@ -186,7 +186,7 @@ function conditionalAccessibilityBranchDecision(
 
   const address = issue.property ?? "";
   if (target.type === "text" || target.type === "countdown") {
-    const role = target.accessibility.role;
+    const { role } = target.accessibility;
     if (address === "accessibility.role" && issue.code === "schema.const") {
       return role === "text" || role === "heading";
     }
@@ -212,7 +212,7 @@ function conditionalAccessibilityBranchDecision(
   }
 
   if (target.type === "image" || target.type === "icon") {
-    const hidden = target.accessibility.hidden;
+    const { hidden } = target.accessibility;
     if (address === "accessibility.hidden" && issue.code === "schema.const") {
       return typeof hidden === "boolean";
     }

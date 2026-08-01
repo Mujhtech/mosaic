@@ -167,7 +167,7 @@ describe("editor validation merge", () => {
     if (features?.type !== "featureList" || !features.items[0]) {
       throw new Error("Missing feature list");
     }
-    const item = features.items[0];
+    const [item] = features.items;
     item.text.default = "";
     invalidFeature.localization.locales.en!.strings[item.text.localizationKey] =
       "";

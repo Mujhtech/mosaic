@@ -185,7 +185,7 @@ function HostedManagedAssets({
     if (asset.source.type !== "remote") {
       return "";
     }
-    const url = asset.source.url;
+    const { url } = asset.source;
     return (
       readyManagedAssets.find((candidate) => candidate.url === url)?.id ?? ""
     );

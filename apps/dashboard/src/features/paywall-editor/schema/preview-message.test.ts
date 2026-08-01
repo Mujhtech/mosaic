@@ -39,7 +39,7 @@ describe("preview message adapter", () => {
   });
 
   it("emits exact canonical draft, commerce, and heartbeat envelopes", () => {
-    const document = EDITOR_TEMPLATES[0]!.document;
+    const { document } = EDITOR_TEMPLATES[0]!;
     const editableDocumentId = "document_message_test";
     const revision = { revisionId: "revision_test_12", sequence: 12 };
     const draft = createDraftUpdatedMessage({

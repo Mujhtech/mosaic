@@ -28,7 +28,7 @@ function ShortcutHarness({
     if (document) {
       return;
     }
-    const template = EDITOR_TEMPLATES[0];
+    const [template] = EDITOR_TEMPLATES;
     if (!template) {
       throw new Error("Missing shortcut test template");
     }

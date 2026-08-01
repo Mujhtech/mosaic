@@ -347,7 +347,7 @@ export function MigrationLifecycleOperations({
   queryClient: QueryClient;
 }) {
   const fieldIds = useId();
-  const program = detail.program;
+  const { program } = detail;
   const mutation = useMutation(
     migrationLifecycleMutationOptions(projectId, programId, queryClient)
   );

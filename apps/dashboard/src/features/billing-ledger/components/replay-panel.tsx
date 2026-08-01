@@ -74,7 +74,7 @@ export function ReplayPanel({
 }: ReplayPanelProps) {
   const pair = selectComparableAttempts(attempts, factsByAttemptId);
   const comparison = pair ? compareReplayAttempts(pair[0], pair[1]) : undefined;
-  const latestJob = jobs[0];
+  const [latestJob] = jobs;
   const running =
     latestJob !== undefined && !TERMINAL_STATUSES.includes(latestJob.status);
 

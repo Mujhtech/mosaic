@@ -115,7 +115,7 @@ export function SubscriptionDetailPage({
   }
 
   const scope = { environmentId, organizationId, projectId };
-  const data = subscription.data;
+  const { data } = subscription;
 
   return (
     <WorkspacePage

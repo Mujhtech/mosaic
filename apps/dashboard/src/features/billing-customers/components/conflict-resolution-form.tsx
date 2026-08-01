@@ -162,7 +162,7 @@ export function ConflictResolutionForm({
           disabled={!action}
           id="conflict-reason"
           onChange={(event) => {
-            const value = event.currentTarget.value;
+            const { value } = event.currentTarget;
             setReason(value);
           }}
           value={reason}

@@ -303,7 +303,7 @@ function migrateLegacyCanvasDevice(value: unknown): unknown {
   if (!(isRecord(value) && isRecord(value.canvas))) {
     return value;
   }
-  const device = value.canvas.device;
+  const { device } = value.canvas;
   if (typeof device !== "string") {
     return value;
   }

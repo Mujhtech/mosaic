@@ -183,7 +183,7 @@ export function StudioCommandPalette({
   const listRef = useRef<HTMLDivElement>(null);
 
   const editorSnapshot = editor.getSnapshot();
-  const document = editorSnapshot.document;
+  const { document } = editorSnapshot;
   const selectedNode = document
     ? findNode(document, editorSnapshot.selectedComponentId)
     : null;

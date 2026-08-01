@@ -49,7 +49,7 @@ beforeEach(() => {
 async function runGuard(respond: () => Promise<unknown>, href: string) {
   getSession.mockImplementation(respond);
 
-  const beforeLoad = Route.options.beforeLoad;
+  const { beforeLoad } = Route.options;
   if (!beforeLoad) {
     throw new Error("The hosted layout route has no beforeLoad guard.");
   }

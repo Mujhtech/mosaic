@@ -187,7 +187,7 @@ function previewClient(
   platform: PreviewClient["platform"],
   unsupportedCapability?: string
 ): PreviewClient {
-  const document = EDITOR_TEMPLATES[0]!.document;
+  const { document } = EDITOR_TEMPLATES[0]!;
   return {
     clientId: `client-${platform}`,
     sessionId: "session-local",

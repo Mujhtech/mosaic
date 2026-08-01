@@ -70,7 +70,7 @@ export function ProjectionHealthPage({
   const environmentName =
     environments.data?.items.find((item) => item.id === environmentId)?.name ??
     environmentId;
-  const data = health.data;
+  const { data } = health;
 
   const error = project.error ?? environments.error ?? health.error;
   const state = resolveHostedQueryState({

@@ -106,7 +106,7 @@ function condition(
     };
   }
   if (node.kind === "not") {
-    const child = node.children[0];
+    const [child] = node.children;
     if (!child) {
       throw new Error("Not requires one condition.");
     }

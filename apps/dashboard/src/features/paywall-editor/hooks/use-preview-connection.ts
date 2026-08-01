@@ -460,7 +460,7 @@ export function usePreviewConnection(options: {
       if (message.sessionId !== sessionId) {
         return;
       }
-      const payload = message.payload;
+      const { payload } = message;
 
       if (message.type === "previewClientConnected") {
         const identity = recordValue(payload.client);

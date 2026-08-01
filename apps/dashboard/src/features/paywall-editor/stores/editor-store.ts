@@ -328,7 +328,7 @@ export function createEditorStore(
   }
 
   function moveSelectedComponent(direction: -1 | 1): TreeOperationResult {
-    const document = state.document;
+    const { document } = state;
     const selectedId = state.selectedComponentId;
     if (!document || documentTransaction || !selectedId) {
       return unavailableOperation("move");
@@ -348,7 +348,7 @@ export function createEditorStore(
   }
 
   function indentSelectedComponent(): TreeOperationResult {
-    const document = state.document;
+    const { document } = state;
     const selectedId = state.selectedComponentId;
     if (!document || documentTransaction || !selectedId) {
       return unavailableOperation("move");
@@ -368,7 +368,7 @@ export function createEditorStore(
   }
 
   function outdentSelectedComponent(): TreeOperationResult {
-    const document = state.document;
+    const { document } = state;
     const selectedId = state.selectedComponentId;
     if (!document || documentTransaction || !selectedId) {
       return unavailableOperation("move");
@@ -391,7 +391,7 @@ export function createEditorStore(
   }
 
   function duplicateSelectedComponent(): TreeOperationResult {
-    const document = state.document;
+    const { document } = state;
     const selectedId = state.selectedComponentId;
     if (!document || documentTransaction || !selectedId) {
       return unavailableOperation("duplicate");
@@ -400,7 +400,7 @@ export function createEditorStore(
   }
 
   function deleteSelectedComponent(): TreeOperationResult {
-    const document = state.document;
+    const { document } = state;
     const selectedId = state.selectedComponentId;
     if (!document || documentTransaction || !selectedId) {
       return unavailableOperation("delete");
@@ -708,7 +708,7 @@ export function createEditorStore(
       return true;
     },
     selectComponent: (id) => {
-      const document = state.document;
+      const { document } = state;
       if (!document) {
         emit({ ...state, selectedComponentId: null });
         return;

@@ -30,7 +30,7 @@ export function resolveCanvasDeviceGeometry(
   device: StudioCanvasDevice,
   orientation: StudioCanvasOrientation
 ): CanvasDeviceGeometry {
-  const portrait = getCanvasDevicePreset(device).portrait;
+  const { portrait } = getCanvasDevicePreset(device);
   if (orientation === "portrait") {
     return portrait;
   }

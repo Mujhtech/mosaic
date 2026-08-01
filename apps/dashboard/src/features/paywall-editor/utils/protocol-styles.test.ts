@@ -17,7 +17,7 @@ describe("Protocol 0.2 preview styles", () => {
   });
 
   it("renders physical gradient angles without any locale or RTL mirroring input", () => {
-    const document = EDITOR_TEMPLATES[0]!.document;
+    const { document } = EDITOR_TEMPLATES[0]!;
     const leftToRight = resolvedBackground(document, {
       type: "linearGradient",
       angle: 0,

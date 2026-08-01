@@ -42,7 +42,7 @@ function isLoopbackOrigin(origin) {
     return true;
   }
   try {
-    const hostname = new URL(origin).hostname;
+    const { hostname } = new URL(origin);
     return (
       hostname === "127.0.0.1" ||
       hostname === "localhost" ||
@@ -92,7 +92,7 @@ function sendCanonical(socket, meta, message) {
 }
 
 function incompatibleDraftDecision(message, peerMeta) {
-  const document = message.payload.document;
+  const { document } = message.payload;
   if (document.schemaVersion === "0.2") {
     return decideLocalPreviewDraftDelivery({
       capabilityReport: peerMeta.capabilityReport,
@@ -327,7 +327,7 @@ export function createPreviewRelay({
     const requestedRole = requestUrl.searchParams.get("role");
     const isStudio = requestedRole === "studio";
     const querySession = requestUrl.searchParams.get("sessionId");
-    const protocol = socket.protocol;
+    const { protocol } = socket;
     const protocolVersion = VERSION_BY_SUBPROTOCOL.get(protocol);
     const meta = {
       role: isStudio ? "studio" : "client",

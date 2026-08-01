@@ -360,7 +360,7 @@ describe("preview connection", () => {
     }
 
     render(<Harness />);
-    const firstSocket = FakeWebSocket.instances[0];
+    const [firstSocket] = FakeWebSocket.instances;
     expect(firstSocket).toBeDefined();
     expect(firstSocket?.url).toContain(`sessionId=${SESSION_ID}`);
     expect(firstSocket?.requestedProtocol).toEqual([
@@ -459,7 +459,7 @@ describe("preview connection", () => {
     await act(async () => vi.advanceTimersByTimeAsync(1));
     expect(FakeWebSocket.instances).toHaveLength(2);
 
-    const reconnectedSocket = FakeWebSocket.instances[1];
+    const [, reconnectedSocket] = FakeWebSocket.instances;
     expect(reconnectedSocket?.url).toContain(`sessionId=${SESSION_ID}`);
     await act(async () => reconnectedSocket?.open());
     expect(reconnectedSocket?.sent).toEqual([]);
@@ -493,7 +493,7 @@ describe("preview connection", () => {
     }
 
     render(<Harness />);
-    const socket = FakeWebSocket.instances[0];
+    const [socket] = FakeWebSocket.instances;
     await act(async () => socket?.open());
     await act(async () => {
       socket?.receive(capability(document, "client_flutter", 1));
@@ -521,7 +521,7 @@ describe("preview connection", () => {
     }
 
     render(<Harness />);
-    const socket = FakeWebSocket.instances[0];
+    const [socket] = FakeWebSocket.instances;
     expect(socket?.requestedProtocol).toEqual(["mosaic.local-preview.v0.2"]);
     await act(async () => socket?.open("mosaic.local-preview.v0.1"));
 
@@ -554,7 +554,7 @@ describe("preview connection", () => {
     }
 
     render(<Harness />);
-    const socket = FakeWebSocket.instances[0];
+    const [socket] = FakeWebSocket.instances;
     await act(async () => socket?.open());
     await act(async () => {
       socket?.receive(connected("client_flutter", 1));
@@ -591,7 +591,7 @@ describe("preview connection", () => {
     }
 
     render(<Harness />);
-    const socket = FakeWebSocket.instances[0];
+    const [socket] = FakeWebSocket.instances;
     await act(async () => socket?.open());
     await act(async () => {
       socket?.receive(connected("client_flutter", 1));

@@ -58,7 +58,7 @@ function canCreateProject(entry: BootstrapOrganization) {
 export function resolveWorkspaceEntry(
   bootstrap: WorkspaceBootstrap
 ): WorkspaceEntryTarget {
-  const organizations = bootstrap.organizations;
+  const { organizations } = bootstrap;
   const [first] = organizations;
   if (!first) {
     return { reason: "no-organizations", to: "/orgs/new" };

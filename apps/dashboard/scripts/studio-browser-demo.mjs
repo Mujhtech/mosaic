@@ -150,7 +150,7 @@ const initialScreen = exported.screens.find(
 if (initialScreen?.presentation?.type !== "screen") {
   throw new Error("The browser export does not preserve its initial Screen.");
 }
-const children = initialScreen.layout.content.children;
+const { children } = initialScreen.layout.content;
 const headlineIndex = children.findIndex((node) => node.id === "headline");
 const subtitleIndex = children.findIndex((node) => node.id === "subtitle");
 const headlineNode = children.find((node) => node.id === "headline");

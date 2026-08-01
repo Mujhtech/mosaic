@@ -72,7 +72,7 @@ export function BillingHealthPage({
   const environmentName =
     environments.data?.items.find((item) => item.id === environmentId)?.name ??
     environmentId;
-  const data = health.data;
+  const { data } = health;
   const environmentCredentials = (credentials.data ?? []).filter(
     (credential) => credential.environmentId === environmentId
   );

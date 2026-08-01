@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noMisplacedAssertion: every assertion here sits in a named expect* helper that the tests call; the rule cannot see through the call to the it() that owns it
 /* eslint-disable react-refresh/only-export-components -- test-only harness exports fixtures and render helpers alongside harness components. */
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";

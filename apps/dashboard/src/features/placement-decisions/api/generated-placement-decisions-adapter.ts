@@ -153,7 +153,7 @@ function validation(value: PlacementValidation): DecisionValidation {
 
 function draft(resource: PlacementRuleSetDraftResource): PlacementRuleSetDraft {
   const document = resource.document as unknown as MosaicPlacementDecisionV1;
-  const ruleSet = document.ruleSet;
+  const { ruleSet } = document;
   return {
     assignmentPolicy: ruleSet.assignmentPolicy,
     defaultOutcome: outcome(ruleSet.defaultOutcome),
@@ -354,9 +354,9 @@ async function initialDocument(client: Client, scope: DecisionScope) {
       },
       throwOnError: true,
     });
-    const latest = versions.data.data.items
+    const [latest] = versions.data.data.items
       .filter((version) => version.environmentId === scope.environmentId)
-      .sort((left, right) => right.versionNumber - left.versionNumber)[0];
+      .sort((left, right) => right.versionNumber - left.versionNumber);
     if (latest) {
       defaultOutcome = { paywallVersionId: latest.id, type: "paywall" };
     }

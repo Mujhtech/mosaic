@@ -121,7 +121,7 @@ export function TextAccessibilitySection({
 }) {
   const { disabled } = useInspectorContext();
   const editor = useEditorActions();
-  const label = node.accessibility.label;
+  const { label } = node.accessibility;
 
   return (
     <InspectorSection title="Accessibility">

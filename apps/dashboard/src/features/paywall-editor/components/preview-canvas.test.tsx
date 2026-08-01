@@ -45,8 +45,8 @@ function InitializePreview({ mode }: { mode: MetadataMode }) {
     if (editor.getSnapshot().document) {
       return;
     }
-    const document =
-      EDITOR_TEMPLATES[mode === "semantic-elements" ? 1 : 0]!.document;
+    const { document } =
+      EDITOR_TEMPLATES[mode === "semantic-elements" ? 1 : 0]!;
     editor.loadTemplate(document);
     if (mode === "fixed-product-card") {
       editor.updateComponent("monthly-card", (node) =>

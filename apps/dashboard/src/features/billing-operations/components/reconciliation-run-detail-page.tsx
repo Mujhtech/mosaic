@@ -61,7 +61,7 @@ export function ReconciliationRunDetailPage({
     enabled: scopeReady,
   });
 
-  const data = run.data;
+  const { data } = run;
   const environmentName =
     environments.data?.items.find((item) => item.id === environmentId)?.name ??
     environmentId;

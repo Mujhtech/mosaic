@@ -142,7 +142,7 @@ function parseLiteralColor(value: string): ColorChannels | null {
   if (!match) {
     return null;
   }
-  const rgb = match[1];
+  const [, rgb] = match;
   if (!rgb) {
     return null;
   }

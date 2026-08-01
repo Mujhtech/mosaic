@@ -10,7 +10,7 @@ import { cloneValue } from "@/features/paywall-editor/utils/clone";
 
 describe("workspace preview context precedence", () => {
   it("keeps a valid persisted workspace locale and text scale authoritative", () => {
-    const document = EDITOR_TEMPLATES[0]!.document;
+    const { document } = EDITOR_TEMPLATES[0]!;
     expect(
       resolveRestoredPreviewContext({
         document,
@@ -26,7 +26,7 @@ describe("workspace preview context precedence", () => {
   });
 
   it("uses local-project compatibility preview values only when workspace storage is missing", () => {
-    const document = EDITOR_TEMPLATES[0]!.document;
+    const { document } = EDITOR_TEMPLATES[0]!;
     expect(
       resolveRestoredPreviewContext({
         document,
@@ -38,7 +38,7 @@ describe("workspace preview context precedence", () => {
   });
 
   it("reconciles an unavailable persisted locale without discarding its text scale", () => {
-    const document = EDITOR_TEMPLATES[0]!.document;
+    const { document } = EDITOR_TEMPLATES[0]!;
     expect(
       resolveRestoredPreviewContext({
         document,

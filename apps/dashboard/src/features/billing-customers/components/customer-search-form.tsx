@@ -117,7 +117,7 @@ export function CustomerSearchForm({
             id="customer-identifier-value"
             maxLength={MAX_IDENTIFIER_LENGTH}
             onChange={(event) => {
-              const value = event.currentTarget.value;
+              const { value } = event.currentTarget;
               setIdentifierValue(value);
               setIssue(undefined);
             }}

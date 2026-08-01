@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noMisplacedAssertion: both assertions sit in connect/waitForMessages helpers that the tests call; the rule cannot see through the call to the test() that owns them
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";

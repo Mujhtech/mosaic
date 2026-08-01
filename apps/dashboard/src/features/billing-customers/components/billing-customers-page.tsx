@@ -223,7 +223,7 @@ export function BillingCustomersPage({
                 <input
                   checked={conflictedOnly === true}
                   onChange={(event) => {
-                    const checked = event.currentTarget.checked;
+                    const { checked } = event.currentTarget;
                     onFiltersChange(checked ? { conflictedOnly: true } : {});
                   }}
                   type="checkbox"

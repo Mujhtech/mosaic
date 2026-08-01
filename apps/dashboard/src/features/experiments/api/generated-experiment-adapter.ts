@@ -79,7 +79,7 @@ function mapExperiment(
   experiment: GeneratedExperiment,
   placementNames: ReadonlyMap<string, string> = new Map()
 ): ExperimentDetail {
-  const activeVersion = experiment.activeVersion;
+  const { activeVersion } = experiment;
   const matchingDraft =
     activeVersion &&
     experiment.currentDraft?.revision === activeVersion.sourceRevision
@@ -239,7 +239,7 @@ function mapGuardrailResult(guardrail: unknown): GuardrailResult {
       summary: String(guardrail),
     };
   }
-  const severity = guardrail.severity;
+  const { severity } = guardrail;
   const mappedSeverity: GuardrailResult["severity"] =
     severity === "ok" ||
     severity === "critical" ||
@@ -557,7 +557,7 @@ export function createGeneratedExperimentAdapter(
           throwOnError: true,
         }),
       ]);
-      const data = result.data.data;
+      const { data } = result.data;
       const names = new Map(
         detail.data.data.activeVersion?.variants.map((variant) => [
           variant.id,
@@ -647,7 +647,7 @@ export function createGeneratedExperimentAdapter(
         path: { ...scope, experimentId },
         throwOnError: true,
       });
-      const currentDraft = detail.data.data.currentDraft;
+      const { currentDraft } = detail.data.data;
       if (!currentDraft) {
         throw new Error("This Experiment has no editable Draft.");
       }

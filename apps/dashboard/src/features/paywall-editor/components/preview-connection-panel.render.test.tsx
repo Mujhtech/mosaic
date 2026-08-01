@@ -13,7 +13,7 @@ import type {
 } from "@/features/paywall-editor/types/editor";
 import { requiredPreviewCapabilities } from "@/lib/mosaic-protocol";
 
-const document = EDITOR_TEMPLATES[0]!.document;
+const { document } = EDITOR_TEMPLATES[0]!;
 
 function previewClient(
   platform: PreviewClient["platform"],

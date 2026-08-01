@@ -60,7 +60,7 @@ function experiment(revision: number) {
 }
 
 function draftDocument(): ExperimentDraftDocument {
-  const document = experiment(7).currentDraft.document;
+  const { document } = experiment(7).currentDraft;
   return {
     assignmentKeyPolicy: "identified_user",
     guardrailMetricVersionIds: document.guardrailMetricVersionIds,

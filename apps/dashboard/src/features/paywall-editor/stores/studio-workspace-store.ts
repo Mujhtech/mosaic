@@ -107,7 +107,7 @@ function canvasPreferencesEqual(
 export function createStudioWorkspaceStore(
   options: CreateStudioWorkspaceStoreOptions = {}
 ): StudioWorkspaceStore {
-  const storage = options.storage;
+  const { storage } = options;
   const initial =
     storage === undefined
       ? readStudioWorkspacePreferences()

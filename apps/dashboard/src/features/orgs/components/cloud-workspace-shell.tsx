@@ -39,7 +39,7 @@ export function CloudWorkspaceShell() {
 
   // Administrative surfaces are hidden until membership confirms management
   // rights. The API remains the authority; this only prevents dead-end links.
-  const canManage = access.canManage;
+  const { canManage } = access;
 
   // Mosaic Billing is per-Project opt-in. While it is off, its Environment
   // surfaces have nothing to show, so the group collapses to the one page that

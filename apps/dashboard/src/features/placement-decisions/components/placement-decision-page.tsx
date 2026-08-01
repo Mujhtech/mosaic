@@ -116,9 +116,9 @@ export function PlacementDecisionPage({
               paywallId: paywall.id,
               projectId,
             });
-            const latest = [...published].sort(
+            const [latest] = [...published].sort(
               (left, right) => right.versionNumber - left.versionNumber
-            )[0];
+            );
             return latest
               ? {
                   id: latest.id,
@@ -329,7 +329,7 @@ function DecisionWorkspace({
     []
   );
   const handleClick3 = useCallback(() => {
-    const fallbacks = formRef.current.state.values.fallbacks;
+    const { fallbacks } = formRef.current.state.values;
     updateFallbacks([
       ...fallbacks,
       {

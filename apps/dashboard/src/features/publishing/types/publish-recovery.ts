@@ -44,9 +44,7 @@ export function publishRecoveryHref(
     return appendSearch(issue.recoveryHref, { returnTo: context.returnTo });
   }
   if (issue.recoveryAction) {
-    const destination = providerRecoveryDescriptor(
-      issue.recoveryAction
-    ).destination;
+    const { destination } = providerRecoveryDescriptor(issue.recoveryAction);
     const destinations: Record<ProviderRecoveryDestination, string> = {
       access: `${productHref(context, issue)}#access-grants-title`,
       applications: `/orgs/${encodeURIComponent(context.organizationId)}/projects/${encodeURIComponent(context.projectId)}/apps`,

@@ -95,7 +95,7 @@ export function QuarantineDetailPage({
     )
   );
 
-  const data = record.data;
+  const { data } = record;
   const environmentName =
     environments.data?.items.find((item) => item.id === environmentId)?.name ??
     environmentId;

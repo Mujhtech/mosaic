@@ -38,7 +38,7 @@ describe("privacy REST requests", () => {
       { scope: "application_user", value: identity }
     );
 
-    const call = fetchMock.mock.calls[0];
+    const [call] = fetchMock.mock.calls;
     expect(call).toBeDefined();
     if (!call) {
       throw new Error("Expected one privacy request");
@@ -88,7 +88,7 @@ describe("privacy REST requests", () => {
       "fresh-request-digest"
     );
 
-    const call = fetchMock.mock.calls[0];
+    const [call] = fetchMock.mock.calls;
     if (!call) {
       throw new Error("Expected one deletion request");
     }

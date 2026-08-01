@@ -218,7 +218,7 @@ function importFailure(
     recovery: { message: string };
   }[]
 ) {
-  const first = diagnostics[0];
+  const [first] = diagnostics;
   return first
     ? `${first.message} ${first.recovery.message}`
     : "Import a valid Mosaic Protocol document or local project file.";

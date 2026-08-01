@@ -131,7 +131,7 @@ draft.payload.revision = {
 draft.payload.document.revision = revisionSequence;
 draft.payload.document.localization.locales.en.strings["paywall.headline"] =
   headline;
-const children = draft.payload.document.layout.content.children;
+const { children } = draft.payload.document.layout.content;
 const headlineNode = children.find((node) => node.id === "headline");
 headlineNode.value.default = headline;
 const productSelector = children.find((node) => node.id === "plans");

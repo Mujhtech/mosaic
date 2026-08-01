@@ -6,7 +6,7 @@ import type { PreviewClient } from "@/features/paywall-editor/types/editor";
 import { compatibilityWarnings } from "@/features/paywall-editor/utils/preview-compatibility";
 import { requiredPreviewCapabilities } from "@/lib/mosaic-protocol";
 
-const document = EDITOR_TEMPLATES[0]!.document;
+const { document } = EDITOR_TEMPLATES[0]!;
 
 function compatibleClient(): PreviewClient {
   return {

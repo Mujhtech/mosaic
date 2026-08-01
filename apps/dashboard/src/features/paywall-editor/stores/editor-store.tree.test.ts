@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noMisplacedAssertion: every assertion here sits in a named expect* helper that the tests call; the rule cannot see through the call to the it() that owns it
 import { describe, expect, it } from "vitest";
 
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
@@ -143,7 +144,7 @@ function expectNoCommit(
 
 function expectExpandedIdsValid(store: EditorStore) {
   const snapshot = store.getSnapshot();
-  const document = snapshot.document;
+  const { document } = snapshot;
   if (!document) {
     throw new Error("Missing editor document");
   }

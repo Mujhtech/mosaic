@@ -122,7 +122,7 @@ function DiagnosticCard({
   diagnostic: PreviewDiagnostic;
   onInspect: (componentId: string) => void;
 }) {
-  const componentId = diagnostic.componentId;
+  const { componentId } = diagnostic;
   return (
     <article className="rounded border border-border p-2.5 text-xs">
       <div className="flex items-start justify-between gap-2">
@@ -213,7 +213,7 @@ export function PreviewConnectionPanel({
       setCopied(false);
     }
   }, [configuration]);
-  const latestDiagnostic = diagnostics[0];
+  const [latestDiagnostic] = diagnostics;
 
   return (
     <section

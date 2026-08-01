@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noMisplacedAssertion: every assertion here sits in a named expect* helper that the tests call; the rule cannot see through the call to the it() that owns it
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -617,9 +618,9 @@ describe("Studio workspace preference persistence", () => {
   });
 
   it("rejects an oversized serialized value before parsing", () => {
-    const storage = createMemoryStorage(
+    const { storage } = createMemoryStorage(
       " ".repeat(STUDIO_WORKSPACE_MAX_CHARACTERS + 1)
-    ).storage;
+    );
     expect(readStudioWorkspacePreferences(storage).status).toBe("invalid");
   });
 

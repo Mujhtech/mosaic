@@ -173,7 +173,7 @@ export function MigrationProgramsPage({
           <WorkflowPanel title={`${items.length} Migration Program(s)`}>
             <ul className="divide-y">
               {items.map((detail) => {
-                const program = detail.program;
+                const { program } = detail;
                 return (
                   <li
                     className="flex items-center gap-3 py-4"

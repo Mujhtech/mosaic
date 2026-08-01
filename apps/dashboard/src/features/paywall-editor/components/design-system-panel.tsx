@@ -86,7 +86,7 @@ export function DesignSystemPanel() {
   if (!document) {
     return null;
   }
-  const designSystem = document.designSystem;
+  const { designSystem } = document;
 
   function updateSystem(
     updater: (current: PaywallDesignSystem) => PaywallDesignSystem
