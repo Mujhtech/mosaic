@@ -21,7 +21,23 @@
         // suggested `= undefined` leaves the key in place, which changes
         // Object.keys, `in`, and deep-equality against a fixture. The two are
         // not interchangeable here.
-        "noDelete": "off"
+        "noDelete": "off",
+
+        // Most of what remains is a handler inside a .map that closes over the
+        // row it renders, where useCallback is not available and the fix is a
+        // child component per list. The handlers that could be lifted have
+        // been: see the useCallback pass across the feature components.
+        "noJsxPropsBind": "off"
+      },
+      "suspicious": {
+        // Type-aware, and its inference disagrees with tsc. It reads
+        // `data?.proposals ?? []` as a redundant coalesce where `data` is
+        // `LifecycleData | undefined`; removing it, as the rule asks, spreads
+        // undefined and fails to compile (TS2488). It also resolves
+        // `Exclude<...>` to never, so reachable switch cases read as dead, and
+        // misses a `let` reassigned inside a closure. A rule that is wrong
+        // about types is worse than no rule, because acting on it breaks code.
+        "noUnnecessaryConditions": "off"
       }
     }
   },
