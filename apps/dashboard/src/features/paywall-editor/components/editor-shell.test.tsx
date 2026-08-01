@@ -7,7 +7,6 @@ import {
 } from "@testing-library/react";
 import { useLayoutEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
 import { EditorShell } from "@/features/paywall-editor/components/editor-shell";
 import { PaywallEditorProviders } from "@/features/paywall-editor/components/paywall-editor-workspace";
 import { DEFAULT_MOCK_PRODUCTS } from "@/features/paywall-editor/constants/editor-constants";
@@ -18,6 +17,7 @@ import {
 } from "@/features/paywall-editor/stores/editor-store-context";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 
 class ResizeObserverStub {
   disconnect() {
@@ -39,14 +39,18 @@ function InvalidEditorHarness() {
     if (document) {
       return;
     }
-    const invalid = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const invalid = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     const headline = findNode(invalid, "headline");
     if (headline?.type !== "text") {
       throw new Error("Expected headline");
     }
     headline.value.default = "";
-    invalid.localization.locales.en!.strings[headline.value.localizationKey] =
-      "";
+    required(
+      invalid.localization.locales.en,
+      "invalid.localization.locales.en"
+    ).strings[headline.value.localizationKey] = "";
     editor.loadTemplate(invalid);
   }, [document, editor]);
 

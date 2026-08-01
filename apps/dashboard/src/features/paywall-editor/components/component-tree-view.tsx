@@ -274,9 +274,9 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
               sourceParent?.parent.type === "productBadge");
           const rowCanDelete =
             !(immutable || effectivelyLocked) &&
-            Boolean(sourceParent) &&
+            sourceParent !== undefined &&
             (!sourceRequiresChild ||
-              parentEntryChildren(sourceParent!).length > 1);
+              parentEntryChildren(sourceParent).length > 1);
           const rowCanIndent =
             !(immutable || effectivelyLocked) &&
             rowBoundaries?.canIndentIntoPrevious === true;

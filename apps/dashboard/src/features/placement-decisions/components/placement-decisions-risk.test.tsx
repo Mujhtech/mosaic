@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-
 import type { PlacementDecisionsAdapter } from "@/features/placement-decisions/api/placement-decisions-adapter";
 import { ConditionEditor } from "@/features/placement-decisions/components/condition-editor";
 import { DecisionSimulator } from "@/features/placement-decisions/components/decision-simulator";
@@ -10,6 +9,7 @@ import { ValidationSummary } from "@/features/placement-decisions/components/pla
 import { QaOverrides } from "@/features/placement-decisions/components/qa-overrides";
 import { RuleBuilder } from "@/features/placement-decisions/components/rule-builder";
 import { openPlacementRule } from "@/features/placement-decisions/components/rule-navigation";
+import { required } from "@/test/required";
 import { chooseSelectOption } from "@/test/select";
 
 function adapter(
@@ -107,12 +107,15 @@ describe("Placement decision risk controls", () => {
       />
     );
 
-    const source = screen.getAllByLabelText("Source")[0]!;
+    const source = required(
+      screen.getAllByLabelText("Source")[0],
+      'screen.getAllByLabelText("Source")[0]'
+    );
     const [operator, exactOperator] = screen.getAllByLabelText("Operator");
 
     // The options only exist while the list is open, so each row is inspected
     // in turn rather than by reading a closed control's DOM.
-    fireEvent.click(operator!);
+    fireEvent.click(required(operator, "operator"));
     expect(
       await screen.findByRole("option", { name: "is greater than" })
     ).toBeVisible();
@@ -123,7 +126,7 @@ describe("Placement decision risk controls", () => {
       ).not.toBeInTheDocument()
     );
 
-    fireEvent.click(exactOperator!);
+    fireEvent.click(required(exactOperator, "exactOperator"));
     expect(await screen.findByRole("option", { name: "equals" })).toBeVisible();
     expect(
       screen.queryByRole("option", { name: "is greater than" })

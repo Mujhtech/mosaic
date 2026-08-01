@@ -568,9 +568,10 @@ export function PreviewNode(props: PreviewNodeProps) {
         node.inProgressChildren?.some((child) =>
           subtreeIncludesId(child, selectedComponentId)
         ) ?? false;
-      const children = previewingProgress
-        ? node.inProgressChildren!
-        : node.children;
+      const children =
+        previewingProgress && node.inProgressChildren
+          ? node.inProgressChildren
+          : node.children;
       const editingInside = children.some((child) =>
         subtreeIncludesId(child, editingComponentId)
       );

@@ -18,6 +18,7 @@ import {
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import type { StudioTool } from "@/features/paywall-editor/types/studio-workspace";
 import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 import { chooseSelectOption } from "@/test/select";
 
 function InitializeTool({ tool }: { tool: StudioTool }) {
@@ -26,7 +27,9 @@ function InitializeTool({ tool }: { tool: StudioTool }) {
 
   useLayoutEffect(() => {
     if (!editor.getSnapshot().document) {
-      editor.loadTemplate(EDITOR_TEMPLATES[0]!.document);
+      editor.loadTemplate(
+        required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+      );
     }
     workspace.setSelectedTool(tool);
   }, [editor, tool, workspace]);

@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useLayoutEffect } from "react";
 import { describe, expect, it } from "vitest";
-
 import {
   COMPONENT_LIBRARY_COUNTDOWN_ENDS_AT_DRAG_TYPE,
   COMPONENT_LIBRARY_DRAG_TYPE,
@@ -19,6 +18,7 @@ import {
   useStudioWorkspaceSelector,
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 
 const selectRecentInsertions = (snapshot: StudioWorkspaceSnapshot) =>
   snapshot.preferences.recentInsertions;
@@ -34,7 +34,10 @@ function InitializeDocument({
     if (editor.getSnapshot().document) {
       return;
     }
-    const source = EDITOR_TEMPLATES[0]!.document;
+    const source = required(
+      EDITOR_TEMPLATES[0],
+      "EDITOR_TEMPLATES[0]"
+    ).document;
     editor.loadTemplate(
       withoutSelector
         ? {

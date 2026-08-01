@@ -501,50 +501,53 @@ export function DecisionSimulator({
               </p>
             ) : null}
             <ol className="mt-4 space-y-2">
-              {simulation.data.trace.map((step) => (
-                <li
-                  className="rounded border border-border p-3 text-sm"
-                  key={step.id}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{step.label}</p>
-                      <p className="mt-1 text-muted-foreground">
-                        {step.sensitive
-                          ? "Sensitive value redacted"
-                          : step.detail}
-                      </p>
-                      <p className="mt-1 text-muted-foreground text-xs">
-                        Source: {step.source ?? "decision configuration"}
-                      </p>
+              {simulation.data.trace.map((step) => {
+                const stepRuleId = step.ruleId;
+                return (
+                  <li
+                    className="rounded border border-border p-3 text-sm"
+                    key={step.id}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium">{step.label}</p>
+                        <p className="mt-1 text-muted-foreground">
+                          {step.sensitive
+                            ? "Sensitive value redacted"
+                            : step.detail}
+                        </p>
+                        <p className="mt-1 text-muted-foreground text-xs">
+                          Source: {step.source ?? "decision configuration"}
+                        </p>
+                      </div>
+                      <span
+                        className={
+                          step.result === "unknown"
+                            ? "text-amber-700 dark:text-amber-300"
+                            : "text-muted-foreground"
+                        }
+                      >
+                        {step.result === "unknown" ? (
+                          <WarningCircleIcon aria-label="Unknown" />
+                        ) : (
+                          step.result
+                        )}
+                      </span>
                     </div>
-                    <span
-                      className={
-                        step.result === "unknown"
-                          ? "text-amber-700 dark:text-amber-300"
-                          : "text-muted-foreground"
-                      }
-                    >
-                      {step.result === "unknown" ? (
-                        <WarningCircleIcon aria-label="Unknown" />
-                      ) : (
-                        step.result
-                      )}
-                    </span>
-                  </div>
-                  {step.ruleId ? (
-                    <Button
-                      className="mt-2 h-auto p-0 text-xs"
-                      onClick={() => onOpenRule(step.ruleId!)}
-                      size="sm"
-                      type="button"
-                      variant="link"
-                    >
-                      Open Rule
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
+                    {stepRuleId ? (
+                      <Button
+                        className="mt-2 h-auto p-0 text-xs"
+                        onClick={() => onOpenRule(stepRuleId)}
+                        size="sm"
+                        type="button"
+                        variant="link"
+                      >
+                        Open Rule
+                      </Button>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ol>
           </>
         ) : (

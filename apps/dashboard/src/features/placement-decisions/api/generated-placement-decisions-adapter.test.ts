@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-
 import { createGeneratedPlacementDecisionsAdapter } from "@/features/placement-decisions/api/generated-placement-decisions-adapter";
 import type { PlacementRuleSetDraft } from "@/features/placement-decisions/types/placement-decision";
 import { createGeneratedDashboardClient } from "@/lib/api/generated-dashboard-client";
+import { required } from "@/test/required";
 
 const scope = {
   environmentId: "env-staging",
@@ -37,7 +37,9 @@ describe("generated Placement decisions adapter", () => {
     await adapter.archiveRuleSet(scope, "rule-set");
 
     expect(archiveRequest?.method).toBe("POST");
-    expect(new URL(archiveRequest!.url).pathname).toBe(
+    expect(
+      new URL(required(archiveRequest, "archiveRequest").url).pathname
+    ).toBe(
       "/v1/projects/project/environments/env-staging/placements/placement-export/rule-sets/rule-set/archive"
     );
   });

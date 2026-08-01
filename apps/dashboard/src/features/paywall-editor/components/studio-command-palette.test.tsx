@@ -17,6 +17,7 @@ import {
   useStudioWorkspaceSelector,
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 
 const selectDocument = (state: EditorState) => state.document;
 const selectSelectedTool = (snapshot: StudioWorkspaceSnapshot) =>
@@ -44,7 +45,9 @@ function PaletteHarness({
     if (document) {
       return;
     }
-    editor.loadTemplate(EDITOR_TEMPLATES[0]!.document);
+    editor.loadTemplate(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     editor.selectComponent("headline");
   }, [document, editor]);
 

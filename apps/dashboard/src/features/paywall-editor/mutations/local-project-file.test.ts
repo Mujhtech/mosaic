@@ -22,6 +22,7 @@ import type {
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 import canonicalFixture from "../../../../../../protocol/fixtures/v0.2/complete-paywall.json";
 
 const canonicalDocument = canonicalFixture as MosaicDocument;
@@ -192,22 +193,28 @@ describe("local project import and export", () => {
   it("derives safe unavailable mocks for non-template product identifiers", () => {
     const importedDocument = cloneValue(canonicalDocument);
     importedDocument.products[0] = {
-      ...importedDocument.products[0]!,
+      ...required(importedDocument.products[0], "importedDocument.products[0]"),
       id: "starter-plan",
     };
     importedDocument.products[1] = {
-      ...importedDocument.products[1]!,
+      ...required(importedDocument.products[1], "importedDocument.products[1]"),
       id: "pro-plan",
     };
-    const selector = importedDocument.screens[0]!.layout.content.children.find(
-      (node) => node.type === "productSelector"
-    );
+    const selector = required(
+      importedDocument.screens[0],
+      "importedDocument.screens[0]"
+    ).layout.content.children.find((node) => node.type === "productSelector");
     if (selector?.type !== "productSelector") {
       throw new Error("Canonical fixture is missing its selector");
     }
-    selector.cards[0]!.productReferenceId = "starter-plan";
-    selector.cards[1]!.productReferenceId = "pro-plan";
-    selector.initialProductCardId = selector.cards[1]!.id;
+    required(selector.cards[0], "selector.cards[0]").productReferenceId =
+      "starter-plan";
+    required(selector.cards[1], "selector.cards[1]").productReferenceId =
+      "pro-plan";
+    selector.initialProductCardId = required(
+      selector.cards[1],
+      "selector.cards[1]"
+    ).id;
 
     const imported = parseImportedJson(JSON.stringify(importedDocument));
     expect(unavailableMockProductsForDocument(imported.document)).toEqual([

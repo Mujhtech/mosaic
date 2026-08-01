@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
-
 import type { MosaicDocument } from "@/features/paywall-editor/types/editor";
 import {
   readHostedDraftRecovery,
   serializeHostedRecoveryDocument,
   writeHostedDraftRecovery,
 } from "@/features/paywalls/mutations/hosted-draft-recovery";
+import { required } from "@/test/required";
 
 describe("hosted Draft browser recovery", () => {
   beforeEach(() => window.localStorage.clear());
@@ -37,8 +37,8 @@ describe("hosted Draft browser recovery", () => {
       expectedRevision: 7,
       reason: "conflict",
     });
-    expect(serializeHostedRecoveryDocument(recovered!)).toContain(
-      '"id": "unfinished-paywall"'
-    );
+    expect(
+      serializeHostedRecoveryDocument(required(recovered, "recovered"))
+    ).toContain('"id": "unfinished-paywall"');
   });
 });

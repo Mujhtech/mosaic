@@ -10,6 +10,7 @@ import {
 } from "@/features/paywall-editor/stores/editor-store-context";
 import { StudioWorkspaceStoreProvider } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 import { chooseSelectOption } from "@/test/select";
 
 function Harness() {
@@ -17,7 +18,9 @@ function Harness() {
   const { loadTemplate, undo } = useEditorActions();
   useEffect(() => {
     if (!document) {
-      loadTemplate(EDITOR_TEMPLATES[0]!.document);
+      loadTemplate(
+        required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+      );
     }
   }, [document, loadTemplate]);
   const headline = document ? findNode(document, "headline") : null;

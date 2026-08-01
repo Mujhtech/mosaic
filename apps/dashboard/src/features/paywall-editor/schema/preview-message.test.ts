@@ -13,6 +13,7 @@ import {
   validatePaywallDocument,
   validatePreviewMessage,
 } from "@/lib/mosaic-protocol";
+import { required } from "@/test/required";
 import sessionFlowFixture from "../../../../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json";
 import canonicalDocumentFixture from "../../../../../../protocol/fixtures/v0.2/complete-paywall.json";
 
@@ -39,7 +40,7 @@ describe("preview message adapter", () => {
   });
 
   it("emits exact canonical draft, commerce, and heartbeat envelopes", () => {
-    const { document } = EDITOR_TEMPLATES[0]!;
+    const { document } = required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]");
     const editableDocumentId = "document_message_test";
     const revision = { revisionId: "revision_test_12", sequence: 12 };
     const draft = createDraftUpdatedMessage({

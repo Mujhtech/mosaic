@@ -3,7 +3,6 @@
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { expect } from "vitest";
-
 import { PropertyInspector } from "@/features/paywall-editor/components/property-inspector";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import {
@@ -31,6 +30,7 @@ import {
   focusInspectorValidationIssue,
   getInspectorFieldId,
 } from "@/features/paywall-editor/utils/property-inspector-navigation";
+import { required } from "@/test/required";
 
 export function InspectorHarness({
   initialDocument,
@@ -63,7 +63,11 @@ export function InspectorHarness({
       }
     } else {
       loadTemplate(
-        initialDocument ?? EDITOR_TEMPLATES[templateIndex]!.document
+        initialDocument ??
+          required(
+            EDITOR_TEMPLATES[templateIndex],
+            "EDITOR_TEMPLATES[templateIndex]"
+          ).document
       );
     }
   }, [
@@ -119,7 +123,10 @@ export function SeededLocalizedTextHarness({ mode }: { mode: SeedMode }) {
   useEffect(() => {
     if (!document) {
       editor.loadTemplate(
-        EDITOR_TEMPLATES[mode === "feature" ? 1 : 0]!.document
+        required(
+          EDITOR_TEMPLATES[mode === "feature" ? 1 : 0],
+          'EDITOR_TEMPLATES[mode === "feature" ? 1 : 0]'
+        ).document
       );
       return;
     }
@@ -127,7 +134,8 @@ export function SeededLocalizedTextHarness({ mode }: { mode: SeedMode }) {
       const image = findNode(document, "image-1");
       if (!image) {
         const result = editor.insertComponentAt("image", {
-          parentId: document.screens[0]!.layout.content.id,
+          parentId: required(document.screens[0], "document.screens[0]").layout
+            .content.id,
           index: 0,
         });
         if (result.status === "accepted") {
@@ -203,13 +211,17 @@ export function renderInspector(selection: string, templateIndex = 0) {
 }
 
 export function documentWithBlock(type: InsertableBlockType) {
-  const document = cloneValue(EDITOR_TEMPLATES[0]!.document);
+  const document = cloneValue(
+    required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+  );
   const result = insertBlockAtLocation(
     document,
     type,
     {
-      parentId: document.screens[0]!.layout.content.id,
-      index: document.screens[0]!.layout.content.children.length,
+      parentId: required(document.screens[0], "document.screens[0]").layout
+        .content.id,
+      index: required(document.screens[0], "document.screens[0]").layout.content
+        .children.length,
     },
     type === "countdown"
       ? { countdownEndsAt: "2030-12-31T23:59:59Z" }

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { collectEditorValidation } from "@/features/paywall-editor/hooks/use-editor-validation";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 
 describe("editor validation merge", () => {
   it("keeps one actionable error instead of oneOf branch noise for an empty headline", () => {
@@ -17,8 +17,10 @@ describe("editor validation merge", () => {
       throw new Error("Missing headline");
     }
     headline.value.default = "";
-    document.localization.locales.en!.strings[headline.value.localizationKey] =
-      "";
+    required(
+      document.localization.locales.en,
+      "document.localization.locales.en"
+    ).strings[headline.value.localizationKey] = "";
 
     const result = collectEditorValidation(document);
     expect(result.contractValid).toBe(false);
@@ -69,7 +71,10 @@ describe("editor validation merge", () => {
 
   it("maps canonical nested fields and feature item IDs to stable inspector addresses", () => {
     const invalidPadding = templateDocument("focused");
-    invalidPadding.screens[0]!.layout.content.padding.top = -1;
+    required(
+      invalidPadding.screens[0],
+      "invalidPadding.screens[0]"
+    ).layout.content.padding.top = -1;
     expect(collectEditorValidation(invalidPadding).issues).toContainEqual(
       expect.objectContaining({
         componentId: "paywall-content",
@@ -169,8 +174,10 @@ describe("editor validation merge", () => {
     }
     const [item] = features.items;
     item.text.default = "";
-    invalidFeature.localization.locales.en!.strings[item.text.localizationKey] =
-      "";
+    required(
+      invalidFeature.localization.locales.en,
+      "invalidFeature.localization.locales.en"
+    ).strings[item.text.localizationKey] = "";
 
     expect(collectEditorValidation(invalidFeature).issues).toContainEqual(
       expect.objectContaining({

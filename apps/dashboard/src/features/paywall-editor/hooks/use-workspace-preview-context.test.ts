@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import { DEFAULT_STUDIO_WORKSPACE_PREFERENCES } from "@/features/paywall-editor/constants/studio-workspace";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import {
@@ -7,10 +6,11 @@ import {
   resolveRestoredPreviewContext,
 } from "@/features/paywall-editor/hooks/use-workspace-preview-context";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
+import { required } from "@/test/required";
 
 describe("workspace preview context precedence", () => {
   it("keeps a valid persisted workspace locale and text scale authoritative", () => {
-    const { document } = EDITOR_TEMPLATES[0]!;
+    const { document } = required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]");
     expect(
       resolveRestoredPreviewContext({
         document,
@@ -26,7 +26,7 @@ describe("workspace preview context precedence", () => {
   });
 
   it("uses local-project compatibility preview values only when workspace storage is missing", () => {
-    const { document } = EDITOR_TEMPLATES[0]!;
+    const { document } = required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]");
     expect(
       resolveRestoredPreviewContext({
         document,
@@ -38,7 +38,7 @@ describe("workspace preview context precedence", () => {
   });
 
   it("reconciles an unavailable persisted locale without discarding its text scale", () => {
-    const { document } = EDITOR_TEMPLATES[0]!;
+    const { document } = required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]");
     expect(
       resolveRestoredPreviewContext({
         document,

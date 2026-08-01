@@ -1,12 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { EditorStoreProvider } from "@/features/paywall-editor/stores/editor-store-context";
 import { StudioWorkspaceStoreProvider } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { appendScreen } from "@/features/paywall-editor/utils/document-tree-creation";
 import { getInspectorFieldId } from "@/features/paywall-editor/utils/property-inspector-navigation";
+import { required } from "@/test/required";
 import {
   documentWithBlock,
   expectReadOnlyField,
@@ -563,7 +563,9 @@ describe("property inspector safety", () => {
   });
 
   it("sets an eligible Screen as the start destination", async () => {
-    const appended = appendScreen(cloneValue(EDITOR_TEMPLATES[0]!.document));
+    const appended = appendScreen(
+      cloneValue(required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document)
+    );
     const addedScreen = appended.document.screens.find(
       (candidate) => candidate.id === appended.screenId
     );

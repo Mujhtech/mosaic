@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { required } from "@/test/required";
 
 const listBillingQuarantine = vi.fn();
 const listReconciliationRuns = vi.fn();
@@ -52,7 +53,10 @@ describe("billing list paging", () => {
     const options = quarantineRecordsQueryOptions("proj_1", "env_1", {
       status: "open",
     });
-    const page = await options.queryFn!({
+    const page = await required(
+      options.queryFn,
+      "options.queryFn"
+    )({
       signal: new AbortController().signal,
     } as never);
 
@@ -67,7 +71,10 @@ describe("billing list paging", () => {
       cursor: "cursor_page_2",
       status: "open",
     });
-    await options.queryFn!({ signal: new AbortController().signal } as never);
+    await required(
+      options.queryFn,
+      "options.queryFn"
+    )({ signal: new AbortController().signal } as never);
 
     const [request] = listBillingQuarantine.mock.calls[0] ?? [];
     expect(request.query.cursor).toBe("cursor_page_2");
@@ -85,7 +92,10 @@ describe("billing list paging", () => {
     });
 
     const first = reconciliationRunsQueryOptions("proj_1", "env_1");
-    const firstPage = await first.queryFn!({
+    const firstPage = await required(
+      first.queryFn,
+      "first.queryFn"
+    )({
       signal: new AbortController().signal,
     } as never);
     expect(firstPage.nextCursor).toBe("cursor_older");
@@ -99,7 +109,10 @@ describe("billing list paging", () => {
       "env_1",
       "cursor_older"
     );
-    await second.queryFn!({ signal: new AbortController().signal } as never);
+    await required(
+      second.queryFn,
+      "second.queryFn"
+    )({ signal: new AbortController().signal } as never);
     expect(listReconciliationRuns.mock.calls[1]?.[0].query.cursor).toBe(
       "cursor_older"
     );
@@ -124,7 +137,10 @@ describe("billing list paging", () => {
     });
 
     const first = subscriptionTimelineQueryOptions("proj_1", "env_1", "sub_1");
-    const firstPage = await first.queryFn!({
+    const firstPage = await required(
+      first.queryFn,
+      "first.queryFn"
+    )({
       signal: new AbortController().signal,
     } as never);
     expect(firstPage.items).toHaveLength(1);
@@ -139,7 +155,10 @@ describe("billing list paging", () => {
       "sub_1",
       "cursor_older"
     );
-    await second.queryFn!({ signal: new AbortController().signal } as never);
+    await required(
+      second.queryFn,
+      "second.queryFn"
+    )({ signal: new AbortController().signal } as never);
     expect(
       listBillingSubscriptionTimeline.mock.calls[1]?.[0].query.cursor
     ).toBe("cursor_older");
@@ -162,7 +181,10 @@ describe("billing list paging", () => {
       "cus_1",
       "cursor_older"
     );
-    const page = await options.queryFn!({
+    const page = await required(
+      options.queryFn,
+      "options.queryFn"
+    )({
       signal: new AbortController().signal,
     } as never);
 

@@ -8,7 +8,6 @@ import {
 } from "@testing-library/react";
 import { useCallback, useLayoutEffect } from "react";
 import { describe, expect, it } from "vitest";
-
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   COMPONENT_LIBRARY_COUNTDOWN_ENDS_AT_DRAG_TYPE,
@@ -35,6 +34,7 @@ import {
   findNode,
   flattenDocument,
 } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 
 const selectWorkspaceProbe = (snapshot: StudioWorkspaceSnapshot) => ({
   hiddenIds: snapshot.preferences.layerMetadata.canvasHiddenIds,
@@ -51,7 +51,7 @@ function InitializeTree({ invalidHeadline }: { invalidHeadline: boolean }) {
     if (editor.getSnapshot().document) {
       return;
     }
-    const template = EDITOR_TEMPLATES[0]!;
+    const template = required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]");
     const document = cloneValue(template.document);
     if (invalidHeadline) {
       const headline = findNode(document, "headline");
@@ -59,13 +59,17 @@ function InitializeTree({ invalidHeadline }: { invalidHeadline: boolean }) {
         throw new Error("Missing headline fixture");
       }
       headline.value.default = "";
-      document.localization.locales.en!.strings[
-        headline.value.localizationKey
-      ] = "";
+      required(
+        document.localization.locales.en,
+        "document.localization.locales.en"
+      ).strings[headline.value.localizationKey] = "";
     }
     editor.loadTemplate(document);
     const stack = editor.insertComponentAt("stack", {
-      parentId: template.document.screens[0]!.layout.content.id,
+      parentId: required(
+        template.document.screens[0],
+        "template.document.screens[0]"
+      ).layout.content.id,
       index: 2,
     });
     if (stack.status !== "accepted") {
@@ -76,14 +80,20 @@ function InitializeTree({ invalidHeadline }: { invalidHeadline: boolean }) {
       targetId: stack.nodeId,
       index: 0,
     });
-    const nested = findNode(editor.getSnapshot().document!, stack.nodeId);
+    const nested = findNode(
+      required(editor.getSnapshot().document, "editor.getSnapshot().document"),
+      stack.nodeId
+    );
     if (nested?.type !== "stack") {
       throw new Error("Missing nested Stack fixture");
     }
     workspace.setLayerLabel("headline", "Hero headline");
     workspace.setLayerLabel("legal", "Terms");
     workspace.setLayerLabel(stack.nodeId, "Offer group");
-    workspace.setLayerLabel(nested.children[0]!.id, "Nested copy");
+    workspace.setLayerLabel(
+      required(nested.children[0], "nested.children[0]").id,
+      "Nested copy"
+    );
     editor.selectComponent("headline");
   }, [editor, invalidHeadline, workspace]);
 
@@ -193,7 +203,7 @@ function previewClient(
   platform: PreviewClient["platform"],
   unsupportedCapability?: string
 ): PreviewClient {
-  const { document } = EDITOR_TEMPLATES[0]!;
+  const { document } = required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]");
   return {
     clientId: `client-${platform}`,
     sessionId: "session-local",
@@ -412,7 +422,7 @@ describe("ComponentTree", () => {
       screen.getByRole("button", { name: "Layer shortcuts" })
     ).toHaveAttribute("title", "Layer shortcuts");
 
-    fireEvent.click(items[0]!);
+    fireEvent.click(required(items[0], "items[0]"));
     expect(items[0]).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("selected-id")).toHaveTextContent(
       "paywall-scroll"

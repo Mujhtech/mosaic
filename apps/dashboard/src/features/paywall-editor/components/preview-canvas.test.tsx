@@ -5,7 +5,6 @@ import {
   calculateCanvasScale,
   resolveCanvasDeviceGeometry,
 } from "@/features/paywall-editor/components/canvas-preview-geometry";
-
 import { COMPONENT_LIBRARY_DRAG_TYPE } from "@/features/paywall-editor/components/component-catalog";
 import { ComponentLibrary } from "@/features/paywall-editor/components/component-library";
 import { PreviewCanvas } from "@/features/paywall-editor/components/preview-canvas";
@@ -22,6 +21,7 @@ import {
   useStudioWorkspaceActions,
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 import { chooseSelectOption } from "@/test/select";
 
 type MetadataMode =
@@ -45,8 +45,10 @@ function InitializePreview({ mode }: { mode: MetadataMode }) {
     if (editor.getSnapshot().document) {
       return;
     }
-    const { document } =
-      EDITOR_TEMPLATES[mode === "semantic-elements" ? 1 : 0]!;
+    const { document } = required(
+      EDITOR_TEMPLATES[mode === "semantic-elements" ? 1 : 0],
+      'EDITOR_TEMPLATES[mode === "semantic-elements" ? 1 : 0]'
+    );
     editor.loadTemplate(document);
     if (mode === "fixed-product-card") {
       editor.updateComponent("monthly-card", (node) =>
@@ -87,15 +89,18 @@ function InitializePreview({ mode }: { mode: MetadataMode }) {
       editor.insertComponentAt(
         "countdown",
         {
-          parentId: document.screens[0]!.layout.content.id,
-          index: document.screens[0]!.layout.content.children.length,
+          parentId: required(document.screens[0], "document.screens[0]").layout
+            .content.id,
+          index: required(document.screens[0], "document.screens[0]").layout
+            .content.children.length,
         },
         { countdownEndsAt: "2026-01-02T12:00:00Z" }
       );
     }
     if (mode === "rtl-icon") {
       const inserted = editor.insertComponentAt("icon", {
-        parentId: document.screens[0]!.layout.content.id,
+        parentId: required(document.screens[0], "document.screens[0]").layout
+          .content.id,
         index: 1,
       });
       if (inserted.status === "accepted") {
@@ -106,7 +111,8 @@ function InitializePreview({ mode }: { mode: MetadataMode }) {
     }
     if (mode === "semantic-elements") {
       editor.insertComponentAt("image", {
-        parentId: document.screens[0]!.layout.content.id,
+        parentId: required(document.screens[0], "document.screens[0]").layout
+          .content.id,
         index: 2,
       });
     }
@@ -119,7 +125,7 @@ function InitializePreview({ mode }: { mode: MetadataMode }) {
     }
     if (mode === "hide-root") {
       workspace.setLayerCanvasHidden(
-        document.screens[0]!.layout.content.id,
+        required(document.screens[0], "document.screens[0]").layout.content.id,
         true
       );
     }
@@ -255,9 +261,9 @@ describe("PreviewCanvas layer metadata", () => {
       screen.queryByRole("textbox", { name: "Edit headline inline" })
     ).not.toBeInTheDocument();
 
-    fireEvent.mouseEnter(headline!);
+    fireEvent.mouseEnter(required(headline, "headline"));
     expect(screen.getByTestId("preview-hovered")).toHaveTextContent("headline");
-    fireEvent.mouseLeave(headline!);
+    fireEvent.mouseLeave(required(headline, "headline"));
     expect(screen.getByTestId("preview-hovered")).toHaveTextContent("none");
   });
 
@@ -374,7 +380,7 @@ describe("PreviewCanvas layer metadata", () => {
         '[data-component-id="monthly-card"]'
       );
       expect(element).not.toBeNull();
-      return element!;
+      return required(element, "element");
     });
 
     expect(card).toHaveStyle({

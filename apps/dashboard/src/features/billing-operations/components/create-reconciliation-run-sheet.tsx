@@ -273,8 +273,9 @@ export function CreateReconciliationRunSheet({
                     windowEnd: form.getFieldValue("windowEnd"),
                     windowStart: value,
                   });
-                  return issues.length > 0
-                    ? describeReconciliationRangeIssue(issues[0]!)
+                  const [firstIssue] = issues;
+                  return firstIssue
+                    ? describeReconciliationRangeIssue(firstIssue)
                     : undefined;
                 },
               }}

@@ -11,6 +11,7 @@ import { EditorStoreProvider } from "@/features/paywall-editor/stores/editor-sto
 import { StudioWorkspaceStoreProvider } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 import { chooseSelectOption } from "@/test/select";
 import {
   documentWithBlock,
@@ -182,7 +183,9 @@ describe("property inspector safety", () => {
   });
 
   it("opens Selected card state when validation targets an override", async () => {
-    const invalidDocument = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const invalidDocument = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     const card = findNode(invalidDocument, "monthly-card");
     if (card?.type !== "productCard") {
       throw new Error("Missing Product Card");

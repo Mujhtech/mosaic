@@ -10,6 +10,7 @@ import { PaywallEditorWorkspace } from "@/features/paywall-editor/components/pay
 import { LOCAL_PROJECT_STORAGE_KEY } from "@/features/paywall-editor/constants/editor-constants";
 import { STUDIO_WORKSPACE_STORAGE_KEY } from "@/features/paywall-editor/constants/studio-workspace";
 import type { StudioWorkspacePreferencesV1 } from "@/features/paywall-editor/types/studio-workspace";
+import { required } from "@/test/required";
 import {
   installResizableGeometry,
   PointerEventStub,
@@ -149,8 +150,11 @@ describe("Studio automated workflow", () => {
       .getAllByRole("treeitem")
       .find((row) => row.getAttribute("aria-selected") === "true");
     expect(selectedLayer).toBeDefined();
-    selectedLayer!.focus();
-    fireEvent.keyDown(selectedLayer!, { altKey: true, key: "ArrowDown" });
+    required(selectedLayer, "selectedLayer").focus();
+    fireEvent.keyDown(required(selectedLayer, "selectedLayer"), {
+      altKey: true,
+      key: "ArrowDown",
+    });
     expect(within(layersPanel).getByText("Layer moved down")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Products" }));
@@ -188,7 +192,12 @@ describe("Studio automated workflow", () => {
       'details[data-inspector-section="Actions"]'
     );
     expect(actionSection).not.toBeNull();
-    fireEvent.click(actionSection!.querySelector("summary")!);
+    fireEvent.click(
+      required(
+        required(actionSection, "actionSection").querySelector("summary"),
+        'actionSection!.querySelector("summary")'
+      )
+    );
     expect(
       screen.getByRole("combobox", { name: "Product selector" })
     ).toHaveTextContent("Product Selector");
@@ -275,14 +284,22 @@ describe("Studio automated workflow", () => {
       within(restoredCanvas).getByRole("heading", { level: 1 })
     ).toHaveTextContent("عنوان جاهز للنشر");
     expect(screen.getByTestId("studio-left-panel").offsetWidth).toBeCloseTo(
-      workspaceBeforeReload!.panels.left.size,
+      required(workspaceBeforeReload, "workspaceBeforeReload").panels.left.size,
       0
     );
     expect(
       screen.getByTestId("studio-properties-panel").offsetWidth
-    ).toBeCloseTo(workspaceBeforeReload!.panels.properties.size, 0);
+    ).toBeCloseTo(
+      required(workspaceBeforeReload, "workspaceBeforeReload").panels.properties
+        .size,
+      0
+    );
     expect(
       screen.getByTestId("studio-diagnostics-panel").offsetHeight
-    ).toBeCloseTo(workspaceBeforeReload!.panels.diagnostics.size, 0);
+    ).toBeCloseTo(
+      required(workspaceBeforeReload, "workspaceBeforeReload").panels
+        .diagnostics.size,
+      0
+    );
   }, 15_000);
 });

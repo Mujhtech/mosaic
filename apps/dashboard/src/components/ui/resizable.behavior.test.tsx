@@ -10,6 +10,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { required } from "@/test/required";
 
 class ResizeObserverStub {
   disconnect() {
@@ -90,9 +91,11 @@ function elementWidth(element: HTMLElement) {
     return groupWidth(element);
   }
   if (element.hasAttribute("data-separator")) {
-    return groupOrientation(element.parentElement!) === "horizontal"
+    return groupOrientation(
+      required(element.parentElement, "element.parentElement")
+    ) === "horizontal"
       ? 1
-      : groupWidth(element.parentElement!);
+      : groupWidth(required(element.parentElement, "element.parentElement"));
   }
   if (element.hasAttribute("data-panel")) {
     const group = element.parentElement;
@@ -114,9 +117,11 @@ function elementHeight(element: HTMLElement) {
     return groupHeight(element);
   }
   if (element.hasAttribute("data-separator")) {
-    return groupOrientation(element.parentElement!) === "vertical"
+    return groupOrientation(
+      required(element.parentElement, "element.parentElement")
+    ) === "vertical"
       ? 1
-      : groupHeight(element.parentElement!);
+      : groupHeight(required(element.parentElement, "element.parentElement"));
   }
   if (element.hasAttribute("data-panel")) {
     const group = element.parentElement;

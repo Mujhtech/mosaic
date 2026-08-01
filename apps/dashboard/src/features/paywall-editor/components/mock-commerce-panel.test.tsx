@@ -21,6 +21,7 @@ import { studioApplicationsErrorMessage } from "@/features/paywall-editor/utils/
 import { projectKeys } from "@/features/projects/queries/projects-query";
 import type { ProductList } from "@/generated/api";
 import { ApiError } from "@/lib/api/errors";
+import { required } from "@/test/required";
 import { chooseSelectOption } from "@/test/select";
 
 function Harness() {
@@ -40,10 +41,12 @@ function Harness() {
     if (document) {
       return;
     }
-    const imported = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const imported = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     imported.products = [
       {
-        ...imported.products[0]!,
+        ...required(imported.products[0], "imported.products[0]"),
         id: "starter-plan",
         label: {
           default: "Starter",
@@ -51,14 +54,22 @@ function Harness() {
         },
       },
     ];
-    imported.localization.locales.en!.strings["paywall.products.monthly"] =
-      "Starter";
+    required(
+      imported.localization.locales.en,
+      "imported.localization.locales.en"
+    ).strings["paywall.products.monthly"] = "Starter";
     const selector = findNode(imported, "plans");
     if (selector?.type === "productSelector") {
       selector.cards = [
-        { ...selector.cards[0]!, productReferenceId: "starter-plan" },
+        {
+          ...required(selector.cards[0], "selector.cards[0]"),
+          productReferenceId: "starter-plan",
+        },
       ];
-      selector.initialProductCardId = selector.cards[0]!.id;
+      selector.initialProductCardId = required(
+        selector.cards[0],
+        "selector.cards[0]"
+      ).id;
     }
     replaceDocument(imported);
   }, [document, replaceDocument]);
@@ -98,10 +109,12 @@ function HostedHarness() {
     if (document) {
       return;
     }
-    const imported = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const imported = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     imported.products = [
       {
-        ...imported.products[0]!,
+        ...required(imported.products[0], "imported.products[0]"),
         id: "starter-plan",
         label: {
           default: "Starter",
@@ -110,14 +123,22 @@ function HostedHarness() {
         productId: "legacy-provider-id",
       },
     ];
-    imported.localization.locales.en!.strings["paywall.products.monthly"] =
-      "Starter";
+    required(
+      imported.localization.locales.en,
+      "imported.localization.locales.en"
+    ).strings["paywall.products.monthly"] = "Starter";
     const selector = findNode(imported, "plans");
     if (selector?.type === "productSelector") {
       selector.cards = [
-        { ...selector.cards[0]!, productReferenceId: "starter-plan" },
+        {
+          ...required(selector.cards[0], "selector.cards[0]"),
+          productReferenceId: "starter-plan",
+        },
       ];
-      selector.initialProductCardId = selector.cards[0]!.id;
+      selector.initialProductCardId = required(
+        selector.cards[0],
+        "selector.cards[0]"
+      ).id;
     }
     replaceDocument(imported);
   }, [document, replaceDocument]);

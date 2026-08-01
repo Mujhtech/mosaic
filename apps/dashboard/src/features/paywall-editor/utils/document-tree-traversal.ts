@@ -270,9 +270,13 @@ export function rejectTreeOperation(
 }
 
 export function initialScreen(document: MosaicDocument): Screen {
+  const [first] = document.screens;
+  if (!first) {
+    throw new Error("A Mosaic document must declare at least one screen.");
+  }
   return (
     document.screens.find((screen) => screen.id === document.initialScreenId) ??
-    document.screens[0]!
+    first
   );
 }
 

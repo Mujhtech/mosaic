@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import {
@@ -11,9 +10,12 @@ import {
   HostedDraftOfflineError,
 } from "@/features/publishing/api/hosted-publishing-adapter";
 import { createGeneratedDashboardClient } from "@/lib/api/generated-dashboard-client";
+import { required } from "@/test/required";
 
 const input = {
-  document: cloneValue(EDITOR_TEMPLATES[0]!.document),
+  document: cloneValue(
+    required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+  ),
   draftId: "draft_01",
   expectedRevision: 4,
   paywallId: "paywall_01",
@@ -121,11 +123,13 @@ describe("generated hosted publishing adapter", () => {
     });
 
     expect(requests).toHaveLength(2);
-    expect(requests[0]!.credentials).toBe("include");
-    expect(requests[0]!.headers.get("If-Match")).toBe('"draft-draft_01-r4"');
-    expect(requests[0]!.headers.get("Idempotency-Key")).toBe(
-      requests[1]!.headers.get("Idempotency-Key")
+    expect(required(requests[0], "requests[0]").credentials).toBe("include");
+    expect(required(requests[0], "requests[0]").headers.get("If-Match")).toBe(
+      '"draft-draft_01-r4"'
     );
+    expect(
+      required(requests[0], "requests[0]").headers.get("Idempotency-Key")
+    ).toBe(required(requests[1], "requests[1]").headers.get("Idempotency-Key"));
   });
 
   it("maps safe server conflict details into the editor conflict error", async () => {

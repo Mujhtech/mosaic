@@ -1,7 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { describe, expect, it, vi } from "vitest";
-
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { reconcileMockProductsForDocument } from "@/features/paywall-editor/mutations/local-project-file";
 import { validateEditorDocument } from "@/features/paywall-editor/schema/editor-validation";
@@ -17,6 +16,7 @@ import {
 import type { MosaicDocument } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 
 function template(id: "focused" | "benefits" = "focused") {
   const match = EDITOR_TEMPLATES.find((entry) => entry.id === id);
@@ -32,9 +32,11 @@ describe("editor store", () => {
     const store = createEditorStore();
     store.loadTemplate(document);
 
-    store.selectComponent(document.screens[0]!.layout.id);
+    store.selectComponent(
+      required(document.screens[0], "document.screens[0]").layout.id
+    );
     expect(store.getSnapshot().selectedComponentId).toBe(
-      document.screens[0]!.layout.id
+      required(document.screens[0], "document.screens[0]").layout.id
     );
 
     const beforeStructuralAttempts = store.getSnapshot().document;
@@ -45,7 +47,8 @@ describe("editor store", () => {
     expect(store.deleteSelectedComponent().status).toBe("rejected");
     expect(
       store.insertComponentAt("text", {
-        parentId: document.screens[0]!.layout.id,
+        parentId: required(document.screens[0], "document.screens[0]").layout
+          .id,
         index: 0,
       }).status
     ).toBe("rejected");
@@ -54,12 +57,13 @@ describe("editor store", () => {
     store.updateDocument((current) => ({
       ...current,
       layout: {
-        ...current.screens[0]!.layout,
-        showsIndicators: !current.screens[0]!.layout.showsIndicators,
+        ...required(current.screens[0], "current.screens[0]").layout,
+        showsIndicators: !required(current.screens[0], "current.screens[0]")
+          .layout.showsIndicators,
       },
     }));
     expect(store.getSnapshot().selectedComponentId).toBe(
-      document.screens[0]!.layout.id
+      required(document.screens[0], "document.screens[0]").layout.id
     );
   });
 
@@ -433,8 +437,10 @@ describe("editor store", () => {
     expect(store.getSnapshot().document?.products).toEqual([]);
     const current = store.getSnapshot().document as MosaicDocument;
     const replacement = store.insertComponentAt("productSelector", {
-      parentId: current.screens[0]!.layout.content.id,
-      index: current.screens[0]!.layout.content.children.length,
+      parentId: required(current.screens[0], "current.screens[0]").layout
+        .content.id,
+      index: required(current.screens[0], "current.screens[0]").layout.content
+        .children.length,
     });
     if (replacement.status === "rejected") {
       throw new Error(replacement.message);
@@ -473,9 +479,14 @@ describe("editor store", () => {
     if (selector?.type !== "productSelector") {
       throw new Error("Missing selector");
     }
-    selector.cards[0]!.productReferenceId = "starter-plan";
-    selector.cards[1]!.productReferenceId = "pro-plan";
-    selector.initialProductCardId = selector.cards[0]!.id;
+    required(selector.cards[0], "selector.cards[0]").productReferenceId =
+      "starter-plan";
+    required(selector.cards[1], "selector.cards[1]").productReferenceId =
+      "pro-plan";
+    selector.initialProductCardId = required(
+      selector.cards[0],
+      "selector.cards[0]"
+    ).id;
 
     store.importDocument(imported);
     store.undo();
@@ -507,7 +518,12 @@ describe("editor store", () => {
     imported.localization.fallbackLocale = "fr";
     imported.localization.locales = {
       fr: {
-        ...cloneValue(imported.localization.locales.en!),
+        ...cloneValue(
+          required(
+            imported.localization.locales.en,
+            "imported.localization.locales.en"
+          )
+        ),
         direction: "ltr",
       },
     };
@@ -522,17 +538,24 @@ describe("editor store", () => {
 
   it("allows removing the only child of a nested stack", () => {
     const document = template();
-    const headline = document.screens[0]!.layout.content.children.find(
-      (node) => node.id === "headline"
-    );
+    const headline = required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children.find((node) => node.id === "headline");
     if (!headline) {
       throw new Error("Missing headline test node");
     }
-    document.screens[0]!.layout.content.children =
-      document.screens[0]!.layout.content.children.filter(
-        (node) => node.id !== "headline"
-      );
-    document.screens[0]!.layout.content.children.unshift({
+    required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children = required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children.filter((node) => node.id !== "headline");
+    required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children.unshift({
       type: "stack",
       id: "nested-stack",
       direction: "vertical",

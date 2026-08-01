@@ -23,6 +23,7 @@ import {
   type AppendScreenOptions,
   type AppendScreenResult,
   findNode,
+  initialScreen,
   updateNode,
   ZERO_INSETS,
 } from "./document-tree-traversal";
@@ -332,6 +333,11 @@ export function createBlock(
       const cards = productReferenceIds.map((referenceId) =>
         createProductCard(identifiers, keys, id, referenceId)
       );
+      const [firstCard] = cards;
+      if (!firstCard) {
+        throw new Error("A product selector needs at least one product card.");
+      }
+      const firstCardId = firstCard.id;
       return {
         type,
         id,
@@ -340,7 +346,7 @@ export function createBlock(
         crossAxisAlignment: "stretch",
         initialProductCardId:
           cards.find((card) => card.productReferenceId === firstProduct)?.id ??
-          cards[0]!.id,
+          firstCardId,
         cards,
         sizing: { width: "fill", height: "fit" },
         unavailableFallback: {
@@ -489,7 +495,7 @@ export function appendScreen(
     document.screens.find(
       (candidate) => candidate.id === document.initialScreenId
     ) ??
-    document.screens[0]!;
+    initialScreen(document);
   const screenId = allocateIdentifier(identifiers, `screen-${ordinal}`);
   const layoutId = allocateIdentifier(identifiers, `${screenId}-scroll`);
   const contentId = allocateIdentifier(identifiers, `${screenId}-content`);

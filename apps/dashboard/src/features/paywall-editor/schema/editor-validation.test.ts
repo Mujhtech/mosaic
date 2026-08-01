@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { collectEditorValidation } from "@/features/paywall-editor/hooks/use-editor-validation";
 import { validateEditorDocument } from "@/features/paywall-editor/schema/editor-validation";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { required } from "@/test/required";
 
 describe("editor validation", () => {
   it("reports the exact recursive JSON pointer for a nested component", () => {
@@ -13,19 +13,26 @@ describe("editor validation", () => {
       throw new Error("Missing focused template");
     }
     const document = cloneValue(template.document);
-    const headline = document.screens[0]!.layout.content.children.find(
-      (node) => node.id === "headline"
-    );
+    const headline = required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children.find((node) => node.id === "headline");
     if (!headline) {
       throw new Error("Missing headline");
     }
 
     headline.id = "Invalid headline";
-    document.screens[0]!.layout.content.children =
-      document.screens[0]!.layout.content.children.filter(
-        (node) => node !== headline
-      );
-    document.screens[0]!.layout.content.children.unshift({
+    required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children = required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children.filter((node) => node !== headline);
+    required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children.unshift({
       type: "stack",
       id: "nested-stack",
       direction: "vertical",
@@ -65,7 +72,7 @@ describe("editor validation", () => {
       throw new Error("Missing warning fixtures");
     }
 
-    document.screens[0]!.layout.background = {
+    required(document.screens[0], "document.screens[0]").layout.background = {
       type: "color",
       value: "#FFFFFFFF",
     };
@@ -108,7 +115,9 @@ describe("editor validation", () => {
   });
 
   it("warns symmetrically when authored Fill is on an unbounded axis", () => {
-    const document = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const document = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     const card = findNode(document, "monthly-card");
     const headline = findNode(document, "headline");
     if (card?.type !== "productCard" || !headline || headline.type !== "text") {

@@ -1,6 +1,5 @@
 import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
 import { DEFAULT_MOCK_PRODUCTS } from "@/features/paywall-editor/constants/editor-constants";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import {
@@ -15,6 +14,7 @@ import type {
   PreviewClient,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
+import { required } from "@/test/required";
 
 interface SocketEvent {
   data?: string;
@@ -333,7 +333,9 @@ describe("preview connection", () => {
   });
 
   it("waits for capabilities, deduplicates diagnostics, and replays with a stable session", async () => {
-    const document = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const document = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     const observed: { current?: ReturnType<typeof usePreviewConnection> } = {};
     const onRevisionDispatched = vi.fn();
 
@@ -477,7 +479,9 @@ describe("preview connection", () => {
   });
 
   it("ignores capability reports without a preceding connected identity", async () => {
-    const document = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const document = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
 
     function Harness() {
       usePreviewConnection({
@@ -504,7 +508,9 @@ describe("preview connection", () => {
   });
 
   it("rejects an endpoint that only negotiates the retired 0.1 protocol", async () => {
-    const document = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const document = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     const observed: { current?: ReturnType<typeof usePreviewConnection> } = {};
 
     function Harness() {
@@ -533,10 +539,14 @@ describe("preview connection", () => {
   });
 
   it("does not broadcast a draft above a connected client's reported byte limit", async () => {
-    const document = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const document = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     for (let index = 0; index < 14; index += 1) {
-      document.localization.locales.en!.strings[`test.large_${index}`] =
-        "x".repeat(5000);
+      required(
+        document.localization.locales.en,
+        "document.localization.locales.en"
+      ).strings[`test.large_${index}`] = "x".repeat(5000);
     }
     const observed: { current?: ReturnType<typeof usePreviewConnection> } = {};
 
@@ -571,11 +581,18 @@ describe("preview connection", () => {
   });
 
   it("answers a heartbeat while the current draft is invalid", async () => {
-    const invalidDocument = cloneValue(EDITOR_TEMPLATES[0]!.document);
-    invalidDocument.screens[0]!.layout.content.children =
-      invalidDocument.screens[0]!.layout.content.children.filter(
-        (node) => node.type !== "button" || node.action.type !== "purchase"
-      );
+    const invalidDocument = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
+    required(
+      invalidDocument.screens[0],
+      "invalidDocument.screens[0]"
+    ).layout.content.children = required(
+      invalidDocument.screens[0],
+      "invalidDocument.screens[0]"
+    ).layout.content.children.filter(
+      (node) => node.type !== "button" || node.action.type !== "purchase"
+    );
 
     function Harness() {
       usePreviewConnection({

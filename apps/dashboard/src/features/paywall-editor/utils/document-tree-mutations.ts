@@ -559,7 +559,9 @@ export function duplicateSubtree(
           id,
           cards,
           initialProductCardId:
-            nodeIdMap.get(node.initialProductCardId) ?? cards[0]!.id,
+            nodeIdMap.get(node.initialProductCardId) ??
+            cards[0]?.id ??
+            node.initialProductCardId,
           unavailableFallback: {
             ...cloneValue(node.unavailableFallback),
             message: duplicateText(node.unavailableFallback.message),

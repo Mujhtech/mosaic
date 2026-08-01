@@ -1,15 +1,17 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
 import { AUTOSAVE_DELAY_MS } from "@/features/paywall-editor/constants/editor-constants";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import type { MosaicDocument } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { useHostedDraftAutosave } from "@/features/paywalls/hooks/use-hosted-draft-autosave";
 import { HostedDraftConflictError } from "@/features/publishing/api/hosted-publishing-adapter";
+import { required } from "@/test/required";
 
 function editedDocument(headline: string, revision: number): MosaicDocument {
-  const document = cloneValue(EDITOR_TEMPLATES[0]!.document);
+  const document = cloneValue(
+    required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+  );
   document.revision = revision;
   const headlineNode = document.screens[0]?.layout.content.children.find(
     (node) => node.id === "headline"

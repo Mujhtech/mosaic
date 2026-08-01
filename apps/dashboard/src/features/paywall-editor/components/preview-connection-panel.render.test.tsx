@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-
 import { PreviewConnectionPanel } from "@/features/paywall-editor/components/preview-connection-panel";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import type { PreviewAggregate } from "@/features/paywall-editor/hooks/preview-connection-state";
@@ -12,8 +11,9 @@ import type {
   PreviewDiagnostic,
 } from "@/features/paywall-editor/types/editor";
 import { requiredPreviewCapabilities } from "@/lib/mosaic-protocol";
+import { required } from "@/test/required";
 
-const { document } = EDITOR_TEMPLATES[0]!;
+const { document } = required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]");
 
 function previewClient(
   platform: PreviewClient["platform"],

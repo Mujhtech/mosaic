@@ -1,6 +1,5 @@
 // biome-ignore-all lint/suspicious/noMisplacedAssertion: every assertion here sits in a named expect* helper that the tests call; the rule cannot see through the call to the it() that owns it
 import { describe, expect, it } from "vitest";
-
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { validateEditorDocument } from "@/features/paywall-editor/schema/editor-validation";
 import type {
@@ -40,6 +39,7 @@ import {
 } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { synchronizeProtocolMetadata } from "@/features/paywall-editor/utils/protocol-document";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
+import { required } from "@/test/required";
 
 function template(id: "focused" | "benefits" = "focused") {
   const match = EDITOR_TEMPLATES.find((entry) => entry.id === id);
@@ -50,16 +50,18 @@ function template(id: "focused" | "benefits" = "focused") {
 }
 
 function takeNode(document: MosaicDocument, id: string) {
-  const node = document.screens[0]!.layout.content.children.find(
-    (candidate) => candidate.id === id
-  );
+  const node = required(
+    document.screens[0],
+    "document.screens[0]"
+  ).layout.content.children.find((candidate) => candidate.id === id);
   if (!node) {
     throw new Error(`Missing test node ${id}`);
   }
-  document.screens[0]!.layout.content.children =
-    document.screens[0]!.layout.content.children.filter(
-      (candidate) => candidate.id !== id
-    );
+  required(document.screens[0], "document.screens[0]").layout.content.children =
+    required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children.filter((candidate) => candidate.id !== id);
   return node;
 }
 
@@ -102,7 +104,10 @@ function nestedDocument() {
   const headline = takeNode(document, "headline");
   const subtitle = takeNode(document, "subtitle");
   const restore = takeNode(document, "restore");
-  document.screens[0]!.layout.content.children.splice(
+  required(
+    document.screens[0],
+    "document.screens[0]"
+  ).layout.content.children.splice(
     1,
     0,
     stack("stack-a", [headline, stack("stack-b", [subtitle, restore])])
@@ -136,7 +141,7 @@ function rejected(result: TreeOperationResult, reason: string) {
 
 function allIdentifiers(document: MosaicDocument) {
   return [
-    document.screens[0]!.layout.content,
+    required(document.screens[0], "document.screens[0]").layout.content,
     ...flattenDocument(document).map((entry) => entry.node),
   ].flatMap((node) =>
     node.type === "featureList"
@@ -210,7 +215,8 @@ describe("document tree transforms", () => {
 
   it("creates an empty Stack and inserts blocks at root and nested locations", () => {
     const document = template();
-    const rootId = document.screens[0]!.layout.content.id;
+    const rootId = required(document.screens[0], "document.screens[0]").layout
+      .content.id;
     const created = createBlock(document, "stack");
 
     expect(created).toMatchObject({
@@ -245,8 +251,10 @@ describe("document tree transforms", () => {
   it("requires an explicit valid Countdown deadline and accepts an expired deadline unchanged", () => {
     const document = template();
     const location = {
-      parentId: document.screens[0]!.layout.content.id,
-      index: document.screens[0]!.layout.content.children.length,
+      parentId: required(document.screens[0], "document.screens[0]").layout
+        .content.id,
+      index: required(document.screens[0], "document.screens[0]").layout.content
+        .children.length,
     };
 
     rejected(
@@ -288,15 +296,18 @@ describe("document tree transforms", () => {
       index: 1,
     });
     expect(resolveLegacyInsertionLocation(document, "missing")).toEqual({
-      parentId: document.screens[0]!.layout.content.id,
-      index: document.screens[0]!.layout.content.children.length,
+      parentId: required(document.screens[0], "document.screens[0]").layout
+        .content.id,
+      index: required(document.screens[0], "document.screens[0]").layout.content
+        .children.length,
     });
   });
 
   it("allows multiple selectors and keeps an unbound purchase action validation-visible", () => {
     const document = template();
     const secondSelector = insertBlockAtLocation(document, "productSelector", {
-      parentId: document.screens[0]!.layout.content.id,
+      parentId: required(document.screens[0], "document.screens[0]").layout
+        .content.id,
       index: 4,
     });
     accepted(secondSelector);
@@ -316,18 +327,27 @@ describe("document tree transforms", () => {
     });
 
     const withoutCommerce = template();
-    withoutCommerce.screens[0]!.layout.content.children =
-      withoutCommerce.screens[0]!.layout.content.children.filter(
-        (node) => node.type !== "productSelector" && node.id !== "purchase"
-      );
+    required(
+      withoutCommerce.screens[0],
+      "withoutCommerce.screens[0]"
+    ).layout.content.children = required(
+      withoutCommerce.screens[0],
+      "withoutCommerce.screens[0]"
+    ).layout.content.children.filter(
+      (node) => node.type !== "productSelector" && node.id !== "purchase"
+    );
     const orphanButton = createBlock(withoutCommerce, "button");
     if (orphanButton.type !== "button") {
       throw new Error("Expected a Button");
     }
     orphanButton.action = { type: "purchase", productSelectorId: "plans" };
     const orphan = insertExistingNodeAtLocation(withoutCommerce, orphanButton, {
-      parentId: withoutCommerce.screens[0]!.layout.content.id,
-      index: withoutCommerce.screens[0]!.layout.content.children.length,
+      parentId: required(
+        withoutCommerce.screens[0],
+        "withoutCommerce.screens[0]"
+      ).layout.content.id,
+      index: required(withoutCommerce.screens[0], "withoutCommerce.screens[0]")
+        .layout.content.children.length,
     });
     accepted(orphan);
     expect(editorErrors(orphan.document)).toEqual([
@@ -341,8 +361,14 @@ describe("document tree transforms", () => {
       orphan.document,
       "productSelector",
       {
-        parentId: orphan.document.screens[0]!.layout.content.id,
-        index: orphan.document.screens[0]!.layout.content.children.length,
+        parentId: required(
+          orphan.document.screens[0],
+          "orphan.document.screens[0]"
+        ).layout.content.id,
+        index: required(
+          orphan.document.screens[0],
+          "orphan.document.screens[0]"
+        ).layout.content.children.length,
       }
     );
     accepted(laterSelector);
@@ -377,7 +403,8 @@ describe("document tree transforms", () => {
     );
     rejected(
       insertExistingNodeAtLocation(document, textNode, {
-        parentId: document.screens[0]!.layout.content.id,
+        parentId: required(document.screens[0], "document.screens[0]").layout
+          .content.id,
         index: -1,
       }),
       "invalid-index"
@@ -386,7 +413,8 @@ describe("document tree transforms", () => {
       document,
       stack("empty-stack", []),
       {
-        parentId: document.screens[0]!.layout.content.id,
+        parentId: required(document.screens[0], "document.screens[0]").layout
+          .content.id,
         index: 0,
       }
     );
@@ -425,7 +453,11 @@ describe("document tree transforms", () => {
             },
           },
         },
-        { parentId: document.screens[0]!.layout.content.id, index: 0 }
+        {
+          parentId: required(document.screens[0], "document.screens[0]").layout
+            .content.id,
+          index: 0,
+        }
       ),
       "duplicate-id"
     );
@@ -439,9 +471,9 @@ describe("document tree transforms", () => {
     });
     accepted(before);
     expect(
-      before.document.screens[0]!.layout.content.children.slice(0, 2).map(
-        (node) => node.id
-      )
+      required(before.document.screens[0], "before.document.screens[0]")
+        .layout.content.children.slice(0, 2)
+        .map((node) => node.id)
     ).toEqual(["headline", "close"]);
 
     const after = moveNode(document, "close", {
@@ -450,9 +482,9 @@ describe("document tree transforms", () => {
     });
     accepted(after);
     expect(
-      after.document.screens[0]!.layout.content.children.slice(0, 2).map(
-        (node) => node.id
-      )
+      required(after.document.screens[0], "after.document.screens[0]")
+        .layout.content.children.slice(0, 2)
+        .map((node) => node.id)
     ).toEqual(["headline", "close"]);
 
     const nested = nestedDocument();
@@ -481,7 +513,8 @@ describe("document tree transforms", () => {
     rejected(
       moveNode(document, "close", {
         placement: "inside",
-        targetId: document.screens[0]!.layout.content.id,
+        targetId: required(document.screens[0], "document.screens[0]").layout
+          .content.id,
         index: 0,
       }),
       "no-op"
@@ -549,20 +582,23 @@ describe("document tree transforms", () => {
       "invalid-index"
     );
     rejected(
-      moveNode(document, document.screens[0]!.layout.content.id, {
-        placement: "before",
-        targetId: "close",
-      }),
+      moveNode(
+        document,
+        required(document.screens[0], "document.screens[0]").layout.content.id,
+        {
+          placement: "before",
+          targetId: "close",
+        }
+      ),
       "root-immutable"
     );
 
     const soleChildDocument = template();
     const headline = takeNode(soleChildDocument, "headline");
-    soleChildDocument.screens[0]!.layout.content.children.splice(
-      1,
-      0,
-      stack("sole-stack", [headline])
-    );
+    required(
+      soleChildDocument.screens[0],
+      "soleChildDocument.screens[0]"
+    ).layout.content.children.splice(1, 0, stack("sole-stack", [headline]));
     const emptying = moveNode(soleChildDocument, "headline", {
       placement: "after",
       targetId: "sole-stack",
@@ -578,7 +614,10 @@ describe("document tree transforms", () => {
     const features = takeNode(document, "features");
     const selector = takeNode(document, "plans");
     const purchase = takeNode(document, "purchase");
-    document.screens[0]!.layout.content.children.splice(
+    required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children.splice(
       2,
       0,
       stack("commerce-stack", [features, selector, purchase])
@@ -645,7 +684,8 @@ describe("document tree transforms", () => {
 
   it("allocates collision-safe provider product IDs for added and duplicated Product Cards", () => {
     const source = template();
-    source.products[0]!.productId = "mosaic_product_3";
+    required(source.products[0], "source.products[0]").productId =
+      "mosaic_product_3";
 
     const appended = appendProductCard(source, "plans");
     if (!appended) {
@@ -685,7 +725,13 @@ describe("document tree transforms", () => {
       }),
       "invalid-node"
     );
-    rejected(duplicateNode(document, card.children[0]!.id), "invalid-node");
+    rejected(
+      duplicateNode(
+        document,
+        required(card.children[0], "card.children[0]").id
+      ),
+      "invalid-node"
+    );
     expect(appendProductBadge(document, card.id)).toBeNull();
     expect(card.children).toHaveLength(20);
   });
@@ -705,7 +751,8 @@ describe("document tree transforms", () => {
         ]),
       ]),
     ];
-    const root = document.screens[0]!.layout.content;
+    const root = required(document.screens[0], "document.screens[0]").layout
+      .content;
     const movingText = createBlock(document, "text");
     if (movingText.type !== "text") {
       throw new Error("Missing moving Text");
@@ -757,7 +804,13 @@ describe("document tree transforms", () => {
         {
           id: "copy-screen",
           presentation: { type: "screen" },
-          layout: { ...result.document.screens[0]!.layout, content: copy },
+          layout: {
+            ...required(
+              result.document.screens[0],
+              "result.document.screens[0]"
+            ).layout,
+            content: copy,
+          },
         },
       ],
     })
@@ -795,7 +848,10 @@ describe("document tree transforms", () => {
     expect(findNode(onlyChild.document, "restore")).toBeNull();
     expect(findStack(onlyChild.document, "stack-b")?.children).toEqual([]);
     rejected(
-      deleteNode(document, document.screens[0]!.layout.content.id),
+      deleteNode(
+        document,
+        required(document.screens[0], "document.screens[0]").layout.content.id
+      ),
       "root-immutable"
     );
   });
@@ -804,7 +860,7 @@ describe("document tree transforms", () => {
     const document = nestedDocument();
 
     expect(findAncestorStackIds(document, "subtitle")).toEqual([
-      document.screens[0]!.layout.content.id,
+      required(document.screens[0], "document.screens[0]").layout.content.id,
       "stack-a",
       "stack-b",
     ]);
@@ -825,9 +881,13 @@ describe("document tree transforms", () => {
         document,
         new Set(["missing", "headline", "stack-a", "stack-b"])
       ),
-    ]).toEqual([document.screens[0]!.layout.content.id, "stack-a", "stack-b"]);
+    ]).toEqual([
+      required(document.screens[0], "document.screens[0]").layout.content.id,
+      "stack-a",
+      "stack-b",
+    ]);
     expect([...revealNodeAncestors(document, "subtitle", new Set())]).toEqual([
-      document.screens[0]!.layout.content.id,
+      required(document.screens[0], "document.screens[0]").layout.content.id,
       "stack-a",
       "stack-b",
     ]);
@@ -836,8 +896,10 @@ describe("document tree transforms", () => {
   it("includes Carousel containers when revealing and protecting nested page content", () => {
     const document = template();
     const carouselInsert = insertBlockAtLocation(document, "carousel", {
-      parentId: document.screens[0]!.layout.content.id,
-      index: document.screens[0]!.layout.content.children.length,
+      parentId: required(document.screens[0], "document.screens[0]").layout
+        .content.id,
+      index: required(document.screens[0], "document.screens[0]").layout.content
+        .children.length,
     });
     accepted(carouselInsert);
     const carousel = findNode(carouselInsert.document, carouselInsert.nodeId);
@@ -855,15 +917,22 @@ describe("document tree transforms", () => {
     accepted(textInsert);
 
     expect(findAncestorNodeIds(textInsert.document, textInsert.nodeId)).toEqual(
-      [document.screens[0]!.layout.content.id, carousel.id, pageStack.id]
+      [
+        required(document.screens[0], "document.screens[0]").layout.content.id,
+        carousel.id,
+        pageStack.id,
+      ]
     );
     expect(
       findAncestorStackIds(textInsert.document, textInsert.nodeId)
-    ).toEqual([document.screens[0]!.layout.content.id, pageStack.id]);
+    ).toEqual([
+      required(document.screens[0], "document.screens[0]").layout.content.id,
+      pageStack.id,
+    ]);
     expect([
       ...revealNodeAncestors(textInsert.document, textInsert.nodeId, new Set()),
     ]).toEqual([
-      document.screens[0]!.layout.content.id,
+      required(document.screens[0], "document.screens[0]").layout.content.id,
       carousel.id,
       pageStack.id,
     ]);

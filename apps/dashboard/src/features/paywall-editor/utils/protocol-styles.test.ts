@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import {
   protocolGradientAngleToCss,
   resolvedBackground,
 } from "@/features/paywall-editor/utils/protocol-styles";
+import { required } from "@/test/required";
 
 describe("Protocol 0.2 preview styles", () => {
   it.each([
@@ -17,7 +17,7 @@ describe("Protocol 0.2 preview styles", () => {
   });
 
   it("renders physical gradient angles without any locale or RTL mirroring input", () => {
-    const { document } = EDITOR_TEMPLATES[0]!;
+    const { document } = required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]");
     const leftToRight = resolvedBackground(document, {
       type: "linearGradient",
       angle: 0,

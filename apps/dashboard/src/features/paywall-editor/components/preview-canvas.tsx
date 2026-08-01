@@ -626,7 +626,10 @@ export function PreviewCanvas({
       : {};
   const deviceNodes: CanvasDeviceFlowNode[] = document.screens.map(
     (screen, index) => {
-      const id = deviceNodeIdByScreenId.get(screen.id)!;
+      const id = deviceNodeIdByScreenId.get(screen.id);
+      if (!id) {
+        throw new Error(`No canvas node was created for screen ${screen.id}.`);
+      }
       const screenPresentation =
         (screen as Screen & { presentation?: { type: "screen" | "sheet" } })
           .presentation?.type ?? "screen";

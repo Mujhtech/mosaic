@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import {
   createPaywallWithDraft,
   PaywallCreatedWithoutDraftError,
 } from "@/features/paywalls/mutations/paywall-mutations";
 import type { HostedPublishingAdapter } from "@/features/publishing/api/hosted-publishing-adapter";
+import { required } from "@/test/required";
 
 describe("Paywall and first Draft creation", () => {
   it("retries the Draft against the Paywall preserved after a partial failure", async () => {
@@ -20,7 +20,7 @@ describe("Paywall and first Draft creation", () => {
       versions: [],
     };
     const draft = {
-      document: EDITOR_TEMPLATES[0]!.document,
+      document: required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document,
       environmentId: "env_01",
       id: "draft_01",
       paywallId: paywall.id,
@@ -36,7 +36,7 @@ describe("Paywall and first Draft creation", () => {
       createPaywall: vi.fn().mockResolvedValue(paywall),
     } as unknown as HostedPublishingAdapter;
     const request = {
-      document: EDITOR_TEMPLATES[0]!.document,
+      document: required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document,
       key: paywall.key,
       name: paywall.name,
     };

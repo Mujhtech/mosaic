@@ -5,11 +5,12 @@ import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
 import { EditPublishedVersionAction } from "@/features/paywalls/components/edit-published-version-action";
 import { HostedPublishingAdapterProvider } from "@/features/publishing/api/hosted-publishing-adapter-provider";
 import { createTestHostedPublishingAdapter } from "@/test/hosted-publishing-adapter";
+import { required } from "@/test/required";
 
 describe("EditPublishedVersionAction", () => {
   it("creates a new hosted Draft before opening the editor", async () => {
     const draft = {
-      document: EDITOR_TEMPLATES[0]!.document,
+      document: required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document,
       environmentId: "env_staging",
       id: "draft_new",
       paywallId: "paywall_01",

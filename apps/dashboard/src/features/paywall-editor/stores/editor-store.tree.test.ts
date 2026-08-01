@@ -1,6 +1,5 @@
 // biome-ignore-all lint/suspicious/noMisplacedAssertion: every assertion here sits in a named expect* helper that the tests call; the rule cannot see through the call to the it() that owns it
 import { describe, expect, it } from "vitest";
-
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { validateEditorDocument } from "@/features/paywall-editor/schema/editor-validation";
 import {
@@ -22,6 +21,7 @@ import {
   flattenDocument,
 } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
+import { required } from "@/test/required";
 
 function template(id: "focused" | "benefits" = "focused") {
   const match = EDITOR_TEMPLATES.find((entry) => entry.id === id);
@@ -32,16 +32,18 @@ function template(id: "focused" | "benefits" = "focused") {
 }
 
 function takeNode(document: MosaicDocument, id: string) {
-  const node = document.screens[0]!.layout.content.children.find(
-    (candidate) => candidate.id === id
-  );
+  const node = required(
+    document.screens[0],
+    "document.screens[0]"
+  ).layout.content.children.find((candidate) => candidate.id === id);
   if (!node) {
     throw new Error(`Missing test node ${id}`);
   }
-  document.screens[0]!.layout.content.children =
-    document.screens[0]!.layout.content.children.filter(
-      (candidate) => candidate.id !== id
-    );
+  required(document.screens[0], "document.screens[0]").layout.content.children =
+    required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children.filter((candidate) => candidate.id !== id);
   return node;
 }
 
@@ -63,7 +65,10 @@ function nestedDocument() {
   const headline = takeNode(document, "headline");
   const subtitle = takeNode(document, "subtitle");
   const restore = takeNode(document, "restore");
-  document.screens[0]!.layout.content.children.splice(
+  required(
+    document.screens[0],
+    "document.screens[0]"
+  ).layout.content.children.splice(
     1,
     0,
     stack("stack-a", [headline, stack("stack-b", [subtitle, restore])])
@@ -76,7 +81,10 @@ function commerceDocument() {
   const features = takeNode(document, "features");
   const selector = takeNode(document, "plans");
   const purchase = takeNode(document, "purchase");
-  document.screens[0]!.layout.content.children.splice(
+  required(
+    document.screens[0],
+    "document.screens[0]"
+  ).layout.content.children.splice(
     2,
     0,
     stack("commerce-stack", [features, selector, purchase])
@@ -109,7 +117,9 @@ function expectOneCommit(
   expect(emissions).toBe(1);
   expect(after.undoStack).toHaveLength(before.undoStack.length + 1);
   expect(after.redoStack).toHaveLength(0);
-  expect(after.document?.revision).toBe((before.document!.revision ?? 0) + 1);
+  expect(after.document?.revision).toBe(
+    (required(before.document, "before.document").revision ?? 0) + 1
+  );
   expect(after.localRevisionSequence).toBe(before.localRevisionSequence + 1);
   return acceptedResult;
 }
@@ -138,7 +148,9 @@ function expectNoCommit(
   expect(after.document).toEqual(before.document);
   expect(after.undoStack).toEqual(before.undoStack);
   expect(after.redoStack).toEqual(before.redoStack);
-  expect(after.document?.revision).toBe(before.document!.revision);
+  expect(after.document?.revision).toBe(
+    required(before.document, "before.document").revision
+  );
   expect(after.localRevisionSequence).toBe(before.localRevisionSequence);
 }
 
@@ -162,8 +174,13 @@ describe("editor store tree commands", () => {
     insertStore.loadTemplate(template());
     expectOneCommit(insertStore, () =>
       insertStore.insertComponentAt("text", {
-        parentId:
-          insertStore.getSnapshot().document!.screens[0]!.layout.content.id,
+        parentId: required(
+          required(
+            insertStore.getSnapshot().document,
+            "insertStore.getSnapshot().document"
+          ).screens[0],
+          "insertStore.getSnapshot().document!.screens[0]"
+        ).layout.content.id,
         index: 0,
       })
     );
@@ -231,9 +248,10 @@ describe("editor store tree commands", () => {
 
     const deletion = createEditorStore();
     const soleChildDocument = template();
-    soleChildDocument.screens[0]!.layout.content.children = [
-      takeNode(soleChildDocument, "headline"),
-    ];
+    required(
+      soleChildDocument.screens[0],
+      "soleChildDocument.screens[0]"
+    ).layout.content.children = [takeNode(soleChildDocument, "headline")];
     deletion.loadTemplate(soleChildDocument);
     deletion.selectComponent("headline");
     expectNoCommit(
@@ -246,7 +264,11 @@ describe("editor store tree commands", () => {
   it("supports explicit root and nested insertion targets and multiple selectors", () => {
     const store = createEditorStore();
     store.loadTemplate(nestedDocument());
-    const root = store.getSnapshot().document!.screens[0]!.layout.content;
+    const root = required(
+      required(store.getSnapshot().document, "store.getSnapshot().document")
+        .screens[0],
+      "store.getSnapshot().document!.screens[0]"
+    ).layout.content;
 
     const rootInsert = expectOneCommit(store, () =>
       store.insertComponentAt("stack", { parentId: root.id, index: 0 })
@@ -255,34 +277,42 @@ describe("editor store tree commands", () => {
       store.insertComponentAt("text", { parentId: "stack-b", index: 1 })
     );
     expect(
-      findStack(store.getSnapshot().document!, rootInsert.nodeId)?.children
+      findStack(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        rootInsert.nodeId
+      )?.children
     ).toHaveLength(0);
     expect(
-      findStack(store.getSnapshot().document!, "stack-b")?.children.map(
-        (node) => node.id
-      )
+      findStack(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        "stack-b"
+      )?.children.map((node) => node.id)
     ).toEqual(["subtitle", nestedInsert.nodeId, "restore"]);
 
     const secondSelector = expectOneCommit(store, () =>
       store.insertComponentAt("productSelector", {
         parentId: root.id,
-        index:
-          store.getSnapshot().document!.screens[0]!.layout.content.children
-            .length,
+        index: required(
+          required(store.getSnapshot().document, "store.getSnapshot().document")
+            .screens[0],
+          "store.getSnapshot().document!.screens[0]"
+        ).layout.content.children.length,
       })
     );
     expect(secondSelector.nodeId).not.toBe("plans");
     expect(
-      flattenDocument(store.getSnapshot().document!).filter(
-        (entry) => entry.node.type === "productSelector"
-      )
+      flattenDocument(
+        required(store.getSnapshot().document, "store.getSnapshot().document")
+      ).filter((entry) => entry.node.type === "productSelector")
     ).toHaveLength(2);
     const secondPurchase = expectOneCommit(store, () =>
       store.insertComponentAt("button", {
         parentId: root.id,
-        index:
-          store.getSnapshot().document!.screens[0]!.layout.content.children
-            .length,
+        index: required(
+          required(store.getSnapshot().document, "store.getSnapshot().document")
+            .screens[0],
+          "store.getSnapshot().document!.screens[0]"
+        ).layout.content.children.length,
       })
     );
     store.updateComponent(secondPurchase.nodeId, (node) =>
@@ -297,30 +327,40 @@ describe("editor store tree commands", () => {
         : node
     );
     expect(
-      validateEditorDocument(store.getSnapshot().document!).filter(
-        (issue) => issue.severity === "error"
-      )
+      validateEditorDocument(
+        required(store.getSnapshot().document, "store.getSnapshot().document")
+      ).filter((issue) => issue.severity === "error")
     ).toEqual([]);
     expect(
-      validatePaywallDocument(store.getSnapshot().document!).diagnostics
+      validatePaywallDocument(
+        required(store.getSnapshot().document, "store.getSnapshot().document")
+      ).diagnostics
     ).toEqual([]);
   });
 
   it("keeps a purchase inserted without a selector explicitly invalid after a selector is added", () => {
     const document = template();
-    document.screens[0]!.layout.content.children =
-      document.screens[0]!.layout.content.children.filter(
-        (node) => node.type !== "productSelector" && node.id !== "purchase"
-      );
+    required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children = required(
+      document.screens[0],
+      "document.screens[0]"
+    ).layout.content.children.filter(
+      (node) => node.type !== "productSelector" && node.id !== "purchase"
+    );
     const store = createEditorStore();
     store.loadTemplate(document);
 
     const purchase = expectOneCommit(store, () =>
       store.insertComponentAt("button", {
-        parentId: document.screens[0]!.layout.content.id,
-        index:
-          store.getSnapshot().document!.screens[0]!.layout.content.children
-            .length,
+        parentId: required(document.screens[0], "document.screens[0]").layout
+          .content.id,
+        index: required(
+          required(store.getSnapshot().document, "store.getSnapshot().document")
+            .screens[0],
+          "store.getSnapshot().document!.screens[0]"
+        ).layout.content.children.length,
       })
     );
     store.updateComponent(purchase.nodeId, (node) =>
@@ -329,7 +369,9 @@ describe("editor store tree commands", () => {
         : node
     );
     expect(
-      validateEditorDocument(store.getSnapshot().document!)
+      validateEditorDocument(
+        required(store.getSnapshot().document, "store.getSnapshot().document")
+      )
     ).toContainEqual(
       expect.objectContaining({
         code: "purchase.missingSelector",
@@ -339,20 +381,28 @@ describe("editor store tree commands", () => {
 
     const selector = expectOneCommit(store, () =>
       store.insertComponentAt("productSelector", {
-        parentId: document.screens[0]!.layout.content.id,
-        index:
-          store.getSnapshot().document!.screens[0]!.layout.content.children
-            .length,
+        parentId: required(document.screens[0], "document.screens[0]").layout
+          .content.id,
+        index: required(
+          required(store.getSnapshot().document, "store.getSnapshot().document")
+            .screens[0],
+          "store.getSnapshot().document!.screens[0]"
+        ).layout.content.children.length,
       })
     );
     expect(selector.nodeId).not.toBe("plans");
     expect(
-      findNode(store.getSnapshot().document!, purchase.nodeId)
+      findNode(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        purchase.nodeId
+      )
     ).toMatchObject({
       action: { productSelectorId: "plans" },
     });
     expect(
-      validateEditorDocument(store.getSnapshot().document!)
+      validateEditorDocument(
+        required(store.getSnapshot().document, "store.getSnapshot().document")
+      )
     ).toContainEqual(
       expect.objectContaining({
         code: "purchase.missingSelector",
@@ -378,21 +428,23 @@ describe("editor store tree commands", () => {
     store.selectComponent("plans");
     expectOneCommit(store, store.indentSelectedComponent);
     expect(
-      findStack(store.getSnapshot().document!, "stack-a")?.children.map(
-        (node) => node.id
-      )
+      findStack(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        "stack-a"
+      )?.children.map((node) => node.id)
     ).toEqual(["headline", "stack-b", "plans"]);
 
     expectOneCommit(store, store.outdentSelectedComponent);
     expect(
-      findStack(store.getSnapshot().document!, "stack-a")?.children.map(
-        (node) => node.id
-      )
+      findStack(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        "stack-a"
+      )?.children.map((node) => node.id)
     ).toEqual(["headline", "stack-b"]);
     expect(
-      flattenDocument(store.getSnapshot().document!).filter(
-        (entry) => entry.node.id === "plans"
-      )
+      flattenDocument(
+        required(store.getSnapshot().document, "store.getSnapshot().document")
+      ).filter((entry) => entry.node.id === "plans")
     ).toHaveLength(1);
     expect(
       store
@@ -406,7 +458,10 @@ describe("editor store tree commands", () => {
     store.loadTemplate(commerceDocument());
     store.selectComponent("commerce-stack");
     const duplicated = expectOneCommit(store, store.duplicateSelectedComponent);
-    const duplicatedDocument = store.getSnapshot().document!;
+    const duplicatedDocument = required(
+      store.getSnapshot().document,
+      "store.getSnapshot().document"
+    );
     const duplicatedStack = findStack(duplicatedDocument, duplicated.nodeId);
     if (!duplicatedStack) {
       throw new Error("Missing duplicated commerce Stack");
@@ -438,31 +493,45 @@ describe("editor store tree commands", () => {
 
     store.undo();
     expect(
-      findNode(store.getSnapshot().document!, duplicated.nodeId)
+      findNode(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        duplicated.nodeId
+      )
     ).toBeNull();
     expectExpandedIdsValid(store);
 
     store.redo();
     expect(
-      findStack(store.getSnapshot().document!, duplicated.nodeId)?.children
+      findStack(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        duplicated.nodeId
+      )?.children
     ).toEqual(duplicatedStack.children);
     expect(
-      validateEditorDocument(store.getSnapshot().document!).filter(
-        (issue) => issue.severity === "error"
-      )
+      validateEditorDocument(
+        required(store.getSnapshot().document, "store.getSnapshot().document")
+      ).filter((issue) => issue.severity === "error")
     ).toEqual([]);
-    expect(validatePaywallDocument(store.getSnapshot().document!).ok).toBe(
-      true
-    );
+    expect(
+      validatePaywallDocument(
+        required(store.getSnapshot().document, "store.getSnapshot().document")
+      ).ok
+    ).toBe(true);
 
     store.selectComponent(duplicated.nodeId);
     expectOneCommit(store, store.deleteSelectedComponent);
     expect(
-      findNode(store.getSnapshot().document!, duplicated.nodeId)
+      findNode(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        duplicated.nodeId
+      )
     ).toBeNull();
     store.undo();
     expect(
-      findNode(store.getSnapshot().document!, duplicated.nodeId)
+      findNode(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        duplicated.nodeId
+      )
     ).not.toBeNull();
   });
 
@@ -482,13 +551,18 @@ describe("editor store tree commands", () => {
     expect(emissions).toBe(1);
     expect(after.selectedComponentId).toBe("subtitle");
     expect([...after.expandedTreeNodes]).toEqual([
-      after.document!.screens[0]!.layout.content.id,
+      required(
+        required(after.document, "after.document").screens[0],
+        "after.document!.screens[0]"
+      ).layout.content.id,
       "stack-a",
       "stack-b",
     ]);
     expect(after.undoStack).toEqual(before.undoStack);
     expect(after.redoStack).toEqual(before.redoStack);
-    expect(after.document?.revision).toBe(before.document!.revision);
+    expect(after.document?.revision).toBe(
+      required(before.document, "before.document").revision
+    );
     expect(after.localRevisionSequence).toBe(before.localRevisionSequence);
   });
 
@@ -508,10 +582,20 @@ describe("editor store tree commands", () => {
     expectExpandedIdsValid(store);
 
     store.undo();
-    expect(findStack(store.getSnapshot().document!, "stack-b")).not.toBeNull();
+    expect(
+      findStack(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        "stack-b"
+      )
+    ).not.toBeNull();
     expectExpandedIdsValid(store);
     store.redo();
-    expect(findStack(store.getSnapshot().document!, "stack-b")).toBeNull();
+    expect(
+      findStack(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        "stack-b"
+      )
+    ).toBeNull();
     expectExpandedIdsValid(store);
 
     store.replaceDocument(nestedDocument());
@@ -523,7 +607,11 @@ describe("editor store tree commands", () => {
       hoveredComponentId: null,
     });
     expect([...store.getSnapshot().expandedTreeNodes]).toEqual([
-      store.getSnapshot().document!.screens[0]!.layout.content.id,
+      required(
+        required(store.getSnapshot().document, "store.getSnapshot().document")
+          .screens[0],
+        "store.getSnapshot().document!.screens[0]"
+      ).layout.content.id,
     ]);
 
     store.replaceDocument(nestedDocument());
@@ -536,10 +624,20 @@ describe("editor store tree commands", () => {
     });
     expectExpandedIdsValid(store);
     store.undo();
-    expect(findStack(store.getSnapshot().document!, "stack-b")).not.toBeNull();
+    expect(
+      findStack(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        "stack-b"
+      )
+    ).not.toBeNull();
     expectExpandedIdsValid(store);
     store.redo();
-    expect(findStack(store.getSnapshot().document!, "stack-b")).toBeNull();
+    expect(
+      findStack(
+        required(store.getSnapshot().document, "store.getSnapshot().document"),
+        "stack-b"
+      )
+    ).toBeNull();
     expectExpandedIdsValid(store);
   });
 

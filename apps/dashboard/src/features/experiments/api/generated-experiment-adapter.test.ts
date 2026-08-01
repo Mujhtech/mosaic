@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-
 import { createGeneratedDashboardClient } from "@/lib/api/generated-dashboard-client";
+import { required } from "@/test/required";
 import type { ExperimentDraftDocument } from "../types/experiment";
 import { ExperimentDraftConflictError } from "./experiment-adapter";
 import { createGeneratedExperimentAdapter } from "./generated-experiment-adapter";
@@ -115,10 +115,10 @@ describe("generated Experiment adapter", () => {
     );
 
     expect(version).toMatchObject({ id: "group-version-2", versionNumber: 2 });
-    expect(new URL(request!.url).pathname).toBe(
+    expect(new URL(required(request, "request").url).pathname).toBe(
       "/v1/projects/project/environments/env-staging/experiments/groups/group/versions"
     );
-    expect(await request!.clone().json()).toMatchObject({
+    expect(await required(request, "request").clone().json()).toMatchObject({
       holdoutBasisPoints: 1000,
       members: [
         { allocationBasisPoints: 4500, experimentId: "experiment-a" },
@@ -167,7 +167,7 @@ describe("generated Experiment adapter", () => {
 
     await adapter.saveDraft(scope, "experiment", draftDocument(), 7);
 
-    const update = requests[1]!;
+    const update = required(requests[1], "requests[1]");
     expect(update.headers.get("If-Match")).toBe('"experiment-draft:draft:7"');
     expect(update.headers.get("Idempotency-Key")).toBeTruthy();
     const body = (await update.clone().json()) as {

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import type { PaywallDesignSystem } from "@/features/paywall-editor/types/editor";
 import {
   clampGradientAngle,
@@ -7,6 +6,7 @@ import {
   isSafeTokenReplacement,
   updateGradientStopPosition,
 } from "@/features/paywall-editor/utils/style-authoring";
+import { required } from "@/test/required";
 
 describe("style authoring safeguards", () => {
   it("inserts gradient stops inside the largest gap without duplicating positions", () => {
@@ -19,7 +19,9 @@ describe("style authoring safeguards", () => {
     expect(
       stops.every(
         (stop, index) =>
-          index === 0 || stop.position > stops[index - 1]!.position
+          index === 0 ||
+          stop.position >
+            required(stops[index - 1], "stops[index - 1]").position
       )
     ).toBe(true);
   });

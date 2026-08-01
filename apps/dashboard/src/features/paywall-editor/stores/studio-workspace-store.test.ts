@@ -18,6 +18,7 @@ import type {
   StudioRecentInsertableType,
   StudioWorkspacePreferencesV1,
 } from "@/features/paywall-editor/types/studio-workspace";
+import { required } from "@/test/required";
 import canonicalFixture from "../../../../../../protocol/fixtures/v0.2/complete-paywall.json";
 
 function createMemoryStorage(initial: string | null = null) {
@@ -322,7 +323,10 @@ describe("Studio workspace store", () => {
 
     const writesBeforeMove = vi.mocked(memory.storage.setItem).mock.calls
       .length;
-    const movedType = expectedRecentInsertions[2]!;
+    const movedType = required(
+      expectedRecentInsertions[2],
+      "expectedRecentInsertions[2]"
+    );
     expect(store.recordRecentInsertion(movedType)).toBe(true);
     expect(vi.mocked(memory.storage.setItem)).toHaveBeenCalledTimes(
       writesBeforeMove + 1

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { PREVIEW_PROTOCOL_VERSION } from "@/features/paywall-editor/schema/preview-message";
 import type { PreviewClient } from "@/features/paywall-editor/types/editor";
 import { compatibilityWarnings } from "@/features/paywall-editor/utils/preview-compatibility";
 import { requiredPreviewCapabilities } from "@/lib/mosaic-protocol";
+import { required } from "@/test/required";
 
-const { document } = EDITOR_TEMPLATES[0]!;
+const { document } = required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]");
 
 function compatibleClient(): PreviewClient {
   return {
@@ -41,7 +41,10 @@ describe("preview compatibility", () => {
 
     const wrongDocumentVersion = compatibleClient();
     wrongDocumentVersion.supportedCapabilities[0] = {
-      ...wrongDocumentVersion.supportedCapabilities[0]!,
+      ...required(
+        wrongDocumentVersion.supportedCapabilities[0],
+        "wrongDocumentVersion.supportedCapabilities[0]"
+      ),
       version: "0.1",
     };
     expect(
@@ -50,7 +53,10 @@ describe("preview compatibility", () => {
 
     const wrongPreviewVersion = compatibleClient();
     wrongPreviewVersion.previewCapabilities[0] = {
-      ...wrongPreviewVersion.previewCapabilities[0]!,
+      ...required(
+        wrongPreviewVersion.previewCapabilities[0],
+        "wrongPreviewVersion.previewCapabilities[0]"
+      ),
       version: "0.1",
     };
     expect(

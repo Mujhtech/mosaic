@@ -18,6 +18,7 @@ import {
   focusInspectorValidationIssue,
   getInspectorFieldId,
 } from "@/features/paywall-editor/utils/property-inspector-navigation";
+import { required } from "@/test/required";
 import { chooseSelectOption } from "@/test/select";
 import {
   expectReadOnlyField,
@@ -33,7 +34,9 @@ import {
 
 describe("property inspector safety", () => {
   it("allows the former start destination to become a Sheet", async () => {
-    const appended = appendScreen(cloneValue(EDITOR_TEMPLATES[0]!.document));
+    const appended = appendScreen(
+      cloneValue(required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document)
+    );
     const document = {
       ...appended.document,
       initialScreenId: appended.screenId,
@@ -44,7 +47,9 @@ describe("property inspector safety", () => {
         <EditorStoreProvider>
           <InspectorHarness
             initialDocument={document}
-            selection={document.screens[0]!.layout.id}
+            selection={
+              required(document.screens[0], "document.screens[0]").layout.id
+            }
           />
         </EditorStoreProvider>
       </StudioWorkspaceStoreProvider>
@@ -184,7 +189,9 @@ describe("property inspector safety", () => {
   });
 
   it("focuses canonical localized-default diagnostics on the editable content field", async () => {
-    const invalidDocument = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const invalidDocument = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     const headline = findNode(invalidDocument, "headline");
     if (headline?.type !== "text") {
       throw new Error("Missing headline");
@@ -219,7 +226,9 @@ describe("property inspector safety", () => {
   });
 
   it("opens Advanced for canonical localization-key and feature-item-ID diagnostics", async () => {
-    const invalidTextDocument = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const invalidTextDocument = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     const headline = findNode(invalidTextDocument, "headline");
     if (headline?.type !== "text") {
       throw new Error("Missing headline");
@@ -254,7 +263,9 @@ describe("property inspector safety", () => {
     expectReadOnlyField("headline", "value.localizationKey", "InvalidKey");
     textRender.unmount();
 
-    const invalidFeatureDocument = cloneValue(EDITOR_TEMPLATES[1]!.document);
+    const invalidFeatureDocument = cloneValue(
+      required(EDITOR_TEMPLATES[1], "EDITOR_TEMPLATES[1]").document
+    );
     const features = findNode(invalidFeatureDocument, "features");
     if (features?.type !== "featureList" || !features.items[0]) {
       throw new Error("Missing feature list");
@@ -286,15 +297,22 @@ describe("property inspector safety", () => {
   });
 
   it("focuses exact nested padding, accessibility, action, fallback, and feature fields", async () => {
-    const invalidPadding = cloneValue(EDITOR_TEMPLATES[0]!.document);
-    invalidPadding.screens[0]!.layout.content.padding.top = -1;
+    const invalidPadding = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
+    required(
+      invalidPadding.screens[0],
+      "invalidPadding.screens[0]"
+    ).layout.content.padding.top = -1;
     await expectValidationIssueFocus({
       address: "padding.top",
       initialDocument: invalidPadding,
       selection: "paywall-content",
     });
 
-    const invalidHeading = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const invalidHeading = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     const heading = findNode(invalidHeading, "headline");
     if (heading?.type !== "text" || heading.accessibility.role !== "heading") {
       throw new Error("Missing heading");
@@ -306,7 +324,9 @@ describe("property inspector safety", () => {
       selection: "headline",
     });
 
-    const invalidAction = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const invalidAction = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     const purchase = findNode(invalidAction, "purchase");
     if (purchase?.type !== "button" || purchase.action.type !== "purchase") {
       throw new Error("Missing purchase button");
@@ -318,7 +338,9 @@ describe("property inspector safety", () => {
       selection: "purchase",
     });
 
-    const invalidFallback = cloneValue(EDITOR_TEMPLATES[0]!.document);
+    const invalidFallback = cloneValue(
+      required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
+    );
     const plans = findNode(invalidFallback, "plans");
     if (plans?.type !== "productSelector") {
       throw new Error("Missing product selector");
@@ -331,7 +353,9 @@ describe("property inspector safety", () => {
       selection: "plans",
     });
 
-    const invalidFeature = cloneValue(EDITOR_TEMPLATES[1]!.document);
+    const invalidFeature = cloneValue(
+      required(EDITOR_TEMPLATES[1], "EDITOR_TEMPLATES[1]").document
+    );
     const features = findNode(invalidFeature, "features");
     if (features?.type !== "featureList" || !features.items[0]) {
       throw new Error("Missing feature list");
