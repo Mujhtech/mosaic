@@ -440,11 +440,11 @@ export function usePreviewConnection(options: {
     const onMessage = (event: MessageEvent) => {
       /** Client presence, capability and heartbeat frames. */
       const handleLifecycleMessage = (
-        message: PreviewMessageEnvelope,
-        payload: PreviewMessageEnvelope["payload"]
+        frame: PreviewMessageEnvelope,
+        framePayload: PreviewMessageEnvelope["payload"]
       ): boolean => {
-        if (message.type === "previewClientConnected") {
-          const identity = recordValue(payload.client);
+        if (frame.type === "previewClientConnected") {
+          const identity = recordValue(framePayload.client);
           const renderer = recordValue(identity?.renderer);
           const application = recordValue(identity?.application);
           const device = recordValue(identity?.device);
@@ -457,7 +457,7 @@ export function usePreviewConnection(options: {
           setClients((current) => {
             const client: PreviewClient = {
               clientId,
-              sessionId: message.sessionId,
+              sessionId: frame.sessionId,
               platform: platformForRenderer(rendererId),
               displayName: stringValue(identity?.displayName, "Preview client"),
               renderer: {
@@ -480,7 +480,7 @@ export function usePreviewConnection(options: {
               supportedSchemaVersions: [],
               supportedCapabilities: [],
               previewCapabilities: [],
-              lastSeenAt: message.sentAt,
+              lastSeenAt: frame.sentAt,
             };
             return [
               client,
@@ -489,8 +489,8 @@ export function usePreviewConnection(options: {
           });
           return true;
         }
-        if (message.type === "previewClientDisconnected") {
-          const clientId = stringValue(payload.clientId);
+        if (frame.type === "previewClientDisconnected") {
+          const clientId = stringValue(framePayload.clientId);
           connectedClientIdsRef.current.delete(clientId);
           capabilityClientIdsRef.current.delete(clientId);
           clientDocumentLimitsRef.current.delete(clientId);
@@ -499,13 +499,13 @@ export function usePreviewConnection(options: {
           );
           return true;
         }
-        if (message.type === "capabilityReport") {
-          const clientId = stringValue(payload.clientId);
+        if (frame.type === "capabilityReport") {
+          const clientId = stringValue(framePayload.clientId);
           if (!(clientId && connectedClientIdsRef.current.has(clientId))) {
             return true;
           }
           capabilityClientIdsRef.current.add(clientId);
-          const limits = recordValue(payload.limits);
+          const limits = recordValue(framePayload.limits);
           const maxDocumentBytes = numberValue(limits?.maxDocumentBytes);
           if (maxDocumentBytes > 0) {
             clientDocumentLimitsRef.current.set(clientId, maxDocumentBytes);
@@ -516,16 +516,16 @@ export function usePreviewConnection(options: {
                 ? {
                     ...client,
                     supportedSchemaVersions: stringList(
-                      payload.supportedSchemaVersions
+                      framePayload.supportedSchemaVersions
                     ),
                     supportedCapabilities: reportedCapabilities(
-                      payload.supportedCapabilities
+                      framePayload.supportedCapabilities
                     ),
                     previewCapabilities: reportedCapabilities(
-                      payload.previewCapabilities
+                      framePayload.previewCapabilities
                     ),
                     maxDocumentBytes: maxDocumentBytes || undefined,
-                    lastSeenAt: message.sentAt,
+                    lastSeenAt: frame.sentAt,
                   }
                 : client
             )
@@ -536,27 +536,27 @@ export function usePreviewConnection(options: {
           });
           return true;
         }
-        if (message.type === "previewHeartbeat") {
-          const clientId = stringValue(payload.clientId);
-          const sequence = numberValue(payload.sequence);
+        if (frame.type === "previewHeartbeat") {
+          const clientId = stringValue(framePayload.clientId);
+          const sequence = numberValue(framePayload.sequence);
           if (
-            payload.kind === "ping" &&
+            framePayload.kind === "ping" &&
             clientId &&
             connectedClientIdsRef.current.has(clientId)
           ) {
             send(
               createHeartbeatPongMessage({
-                sessionId: message.sessionId,
+                sessionId: frame.sessionId,
                 clientId,
                 sequence,
-                protocolVersion: message.previewProtocolVersion,
+                protocolVersion: frame.previewProtocolVersion,
               })
             );
           }
           setClients((current) =>
             current.map((client) =>
               client.clientId === clientId
-                ? { ...client, lastSeenAt: message.sentAt }
+                ? { ...client, lastSeenAt: frame.sentAt }
                 : client
             )
           );
@@ -567,13 +567,13 @@ export function usePreviewConnection(options: {
 
       /** The frames that report what the renderer did with a draft. */
       const handleOutcomeMessage = (
-        message: PreviewMessageEnvelope,
-        payload: PreviewMessageEnvelope["payload"],
-        clientId: string
+        frame: PreviewMessageEnvelope,
+        framePayload: PreviewMessageEnvelope["payload"],
+        frameClientId: string
       ): boolean => {
-        if (message.type === "draftAccepted") {
+        if (frame.type === "draftAccepted") {
           recordAcknowledgement({
-            clientId,
+            clientId: frameClientId,
             editableDocumentId: incomingEditableDocumentId,
             revisionId: revision.revisionId,
             revisionSequence: revision.sequence,
@@ -582,9 +582,9 @@ export function usePreviewConnection(options: {
           });
           return true;
         }
-        if (message.type === "draftRejected") {
+        if (frame.type === "draftRejected") {
           recordAcknowledgement({
-            clientId,
+            clientId: frameClientId,
             editableDocumentId: incomingEditableDocumentId,
             revisionId: revision.revisionId,
             revisionSequence: revision.sequence,
@@ -592,14 +592,14 @@ export function usePreviewConnection(options: {
             message:
               "This update needs attention. The last working preview remains visible.",
           });
-          const rawDiagnostics = Array.isArray(payload.diagnostics)
-            ? payload.diagnostics
+          const rawDiagnostics = Array.isArray(framePayload.diagnostics)
+            ? framePayload.diagnostics
             : [];
           for (const raw of rawDiagnostics) {
             addDiagnostic(
               diagnosticFromProtocol({
                 raw,
-                clientId,
+                clientId: frameClientId,
                 revisionId: revision.revisionId,
                 revisionSequence: revision.sequence,
                 severity: "error",
@@ -610,13 +610,15 @@ export function usePreviewConnection(options: {
           }
           return true;
         }
-        if (message.type === "validationError") {
-          const errors = Array.isArray(payload.errors) ? payload.errors : [];
+        if (frame.type === "validationError") {
+          const errors = Array.isArray(framePayload.errors)
+            ? framePayload.errors
+            : [];
           for (const raw of errors) {
             addDiagnostic(
               diagnosticFromProtocol({
                 raw,
-                clientId,
+                clientId: frameClientId,
                 revisionId: revision.revisionId,
                 revisionSequence: revision.sequence,
                 severity: "error",
@@ -628,15 +630,15 @@ export function usePreviewConnection(options: {
           }
           return true;
         }
-        if (message.type === "renderWarning") {
-          const warnings = Array.isArray(payload.warnings)
-            ? payload.warnings
+        if (frame.type === "renderWarning") {
+          const warnings = Array.isArray(framePayload.warnings)
+            ? framePayload.warnings
             : [];
           for (const raw of warnings) {
             addDiagnostic(
               diagnosticFromProtocol({
                 raw,
-                clientId,
+                clientId: frameClientId,
                 revisionId: revision.revisionId,
                 revisionSequence: revision.sequence,
                 severity: "warning",
@@ -647,11 +649,11 @@ export function usePreviewConnection(options: {
           }
           return true;
         }
-        if (message.type === "renderFailure") {
+        if (frame.type === "renderFailure") {
           addDiagnostic(
             diagnosticFromProtocol({
-              raw: payload.failure,
-              clientId,
+              raw: framePayload.failure,
+              clientId: frameClientId,
               revisionId: revision.revisionId,
               revisionSequence: revision.sequence,
               severity: "error",

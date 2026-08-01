@@ -361,7 +361,7 @@ export function createPreviewRelay({
 
     socket.on("message", (data, isBinary) => {
       /** Frame-level checks every message has to pass. */
-      const rejectInvalidFrame = (message, meta) => {
+      const rejectInvalidFrame = () => {
         if (!validatePreviewMessage(message).ok) {
           socket.close(1008, "Invalid preview message");
           return true;
@@ -381,7 +381,7 @@ export function createPreviewRelay({
       };
 
       /** What a studio-role socket is allowed to send. */
-      const rejectStudioFrame = (message, meta) => {
+      const rejectStudioFrame = () => {
         if (meta.role === "studio") {
           if (!STUDIO_MESSAGE_TYPES.has(message.type)) {
             socket.close(1008, "Message direction is not allowed for Studio");
@@ -429,7 +429,7 @@ export function createPreviewRelay({
       };
 
       /** The connect frame carries the renderer's identity and capabilities. */
-      const handleClientConnected = (message, meta) => {
+      const handleClientConnected = () => {
         if (message.type === "previewClientConnected") {
           meta.clientId = message.payload.client.clientId;
           meta.phase = "awaitingCapability";
@@ -511,14 +511,14 @@ export function createPreviewRelay({
         socket.close(1007, "Invalid JSON");
         return;
       }
-      if (rejectInvalidFrame(message, meta)) {
+      if (rejectInvalidFrame()) {
         return;
       }
-      if (rejectStudioFrame(message, meta)) {
+      if (rejectStudioFrame()) {
         return;
       }
       meta.sessionId = message.sessionId;
-      if (handleClientConnected(message, meta)) {
+      if (handleClientConnected()) {
         return;
       }
       meta.lastActivityAt = Date.now();

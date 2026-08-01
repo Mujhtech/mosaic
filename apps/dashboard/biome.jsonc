@@ -29,6 +29,19 @@
         // been: see the useCallback pass across the feature components.
         "noJsxPropsBind": "off"
       },
+      "complexity": {
+        // The five worst offenders were decomposed: the canvas preview
+        // renderer, the document validator, the editor keydown handler, the
+        // preview socket message handler and the relay frame handler, together
+        // 102/97/93/92/89 down to clean/24/31/38/43. What is left tops out at
+        // 82 and is mostly React render callbacks, where splitting means
+        // extracting components rather than moving logic. 90 holds that line
+        // and still fails anything worse than today's worst.
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": 90 }
+        }
+      },
       "suspicious": {
         // Type-aware, and its inference disagrees with tsc. It reads
         // `data?.proposals ?? []` as a redundant coalesce where `data` is

@@ -802,23 +802,15 @@ function renderNodeContent(
 
 export function PreviewNode(props: PreviewNodeProps) {
   const {
-    carouselPages,
     document,
-    direction,
     editingComponentId,
     hiddenIds,
     hoveredComponentId,
     inheritedLocked,
     locale,
     lockedIds,
-    mockProducts,
-    mockPurchaseState,
     node,
-    now,
-    purchaseDisabledIds,
-    productLayerPreview,
     selectedComponentId,
-    selectedProducts,
     switchValues,
   } = props;
   const editor = useEditorActions();

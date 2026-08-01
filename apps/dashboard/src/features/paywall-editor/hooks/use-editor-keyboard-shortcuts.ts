@@ -227,13 +227,18 @@ export function useEditorKeyboardShortcuts(
       const modifier = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
       const snapshot = editor.getSnapshot();
-      if (
-        handleChord(event, key, modifier) ||
-        handleCommandShortcut(event, key, modifier) ||
-        handleHistoryShortcut(event, key, modifier, snapshot) ||
-        handleComponentShortcut(event, key, modifier) ||
-        handleArrowNavigation(event, key, modifier)
-      ) {
+      // Each returns whether it claimed the key; the first that does wins.
+      const shortcutHandlers = [
+        () => handleChord(event, key, modifier),
+        () => handleCommandShortcut(event, key, modifier),
+        () => handleHistoryShortcut(event, key, modifier, snapshot),
+        () => handleComponentShortcut(event, key, modifier),
+        () => handleArrowNavigation(event, key, modifier),
+      ];
+      for (const handle of shortcutHandlers) {
+        if (handle()) {
+          return;
+        }
       }
     }
 
