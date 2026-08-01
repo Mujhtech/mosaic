@@ -6,7 +6,7 @@ import type {
   MosaicDocument,
   ValidationIssue,
 } from "@/features/paywall-editor/types/editor";
-import { findNode } from "@/features/paywall-editor/utils/document-tree";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { resolveInspectorValidationIssue } from "@/features/paywall-editor/utils/property-inspector-navigation";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
 

@@ -33,7 +33,7 @@ import type {
   MosaicDocument,
   ProtocolColor,
 } from "@/features/paywall-editor/types/editor";
-import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree";
+import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
 import { updateLocalizedTextByKey } from "@/features/paywall-editor/utils/editor-transforms";
 import type { MosaicPaywallV02EdgeInsets } from "@/lib/mosaic-protocol";
 

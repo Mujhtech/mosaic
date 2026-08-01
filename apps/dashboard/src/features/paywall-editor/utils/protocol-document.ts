@@ -4,7 +4,7 @@ import type {
   ProtocolNode,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import { flattenDocument } from "@/features/paywall-editor/utils/document-tree";
+import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
 import type { MosaicPaywallV02CapabilityName } from "@/lib/mosaic-protocol";
 
 const PRODUCT_TOKEN = /\{\{\s*product\.(?:name|price)\s*\}\}/;

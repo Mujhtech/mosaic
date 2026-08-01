@@ -369,6 +369,7 @@ async function captureScreenshot(path) {
 async function waitForExport() {
   const exportDeadline = Date.now() + 10_000;
   while (Date.now() < exportDeadline) {
+    // biome-ignore lint/performance/noAwaitInLoops: polls the page until the condition holds, which is inherently sequential
     const files = (await readdir(artifactsDirectory)).filter((file) =>
       file.endsWith(".mosaic.json")
     );
@@ -384,6 +385,7 @@ async function waitFor(label, predicate, timeout = 15_000) {
   const waitDeadline = Date.now() + timeout;
   while (Date.now() < waitDeadline) {
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: polls the page until the condition holds, which is inherently sequential
       if (await predicate()) {
         return;
       }

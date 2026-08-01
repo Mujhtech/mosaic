@@ -32,11 +32,11 @@ import type {
   TreeOperationResult,
 } from "@/features/paywall-editor/types/editor";
 import type { StudioTool } from "@/features/paywall-editor/types/studio-workspace";
+import { resolveLegacyInsertionLocation } from "@/features/paywall-editor/utils/document-tree-mutations";
 import {
   findAncestorNodeIds,
   findNode,
-  resolveLegacyInsertionLocation,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-traversal";
 import { cn } from "@/lib/utils";
 
 type CommandGroup =

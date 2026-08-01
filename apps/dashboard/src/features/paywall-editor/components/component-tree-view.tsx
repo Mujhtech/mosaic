@@ -32,7 +32,7 @@ import {
   findParent,
   getSiblingBoundaries,
   parentEntryChildren,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-traversal";
 import type { ComponentTreeModel } from "./component-tree-controller";
 import type { LayerActionItemsProps } from "./component-tree-support";
 import {

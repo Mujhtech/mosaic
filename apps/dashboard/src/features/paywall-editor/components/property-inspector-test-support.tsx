@@ -24,10 +24,8 @@ import type {
   ValidationIssue,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import {
-  findNode,
-  insertBlockAtLocation,
-} from "@/features/paywall-editor/utils/document-tree";
+import { insertBlockAtLocation } from "@/features/paywall-editor/utils/document-tree-mutations";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import {
   focusInspectorValidationIssue,
   getInspectorFieldId,

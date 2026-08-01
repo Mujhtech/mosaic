@@ -29,10 +29,8 @@ import type {
   ProtocolNode,
   Visibility,
 } from "@/features/paywall-editor/types/editor";
-import {
-  flattenDocument,
-  resolveLocalizedText,
-} from "@/features/paywall-editor/utils/document-tree";
+import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
+import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { sizingMode } from "@/features/paywall-editor/utils/protocol-styles";
 import { fillAxisIsBounded } from "@/features/paywall-editor/utils/sizing";
 import type { MosaicPaywallV02Typography } from "@/lib/mosaic-protocol";

@@ -43,9 +43,9 @@ import type { ProtocolNode } from "@/features/paywall-editor/types/editor";
 import {
   appendProductBadge,
   appendProductCard,
-  findParent,
-  resolveLocalizedText,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-creation";
+import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
+import { findParent } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 export function ProductCardInspector({
   node,

@@ -4,12 +4,12 @@ import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle"
 import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  type PreviewAcknowledgement,
+  type PreviewAggregate,
+  previewAcknowledgementKey,
+} from "@/features/paywall-editor/hooks/preview-connection-state";
 import { useEditorSelection } from "@/features/paywall-editor/hooks/use-editor-selection";
-import type {
-  PreviewAcknowledgement,
-  PreviewAggregate,
-} from "@/features/paywall-editor/hooks/use-preview-connection";
-import { previewAcknowledgementKey } from "@/features/paywall-editor/hooks/use-preview-connection";
 import { PREVIEW_WEBSOCKET_SUBPROTOCOLS } from "@/features/paywall-editor/schema/preview-message";
 import type {
   MosaicDocument,

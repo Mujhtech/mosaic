@@ -37,11 +37,11 @@ import type {
   TreeOperationResult,
 } from "@/features/paywall-editor/types/editor";
 import { countdownInstantFromLocalInput } from "@/features/paywall-editor/utils/countdown";
+import { resolveLegacyInsertionLocation } from "@/features/paywall-editor/utils/document-tree-mutations";
 import {
   findAncestorNodeIds,
   findNode,
-  resolveLegacyInsertionLocation,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-traversal";
 
 const selectInsertionState = (state: EditorState) => ({
   document: state.document,

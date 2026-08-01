@@ -26,7 +26,7 @@ import type {
   ProtocolColor,
   ProtocolNode,
 } from "@/features/paywall-editor/types/editor";
-import { updateNode } from "@/features/paywall-editor/utils/document-tree";
+import { updateNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import type {
   MosaicPaywallV02EdgeInsets,
   MosaicPaywallV02ProductCardSelectedStyle,

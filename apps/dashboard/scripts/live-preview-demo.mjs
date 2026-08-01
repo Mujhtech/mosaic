@@ -205,6 +205,7 @@ while (Date.now() < holdDeadline) {
     }
     socket.send(JSON.stringify(heartbeat));
   }
+  // biome-ignore lint/performance/noAwaitInLoops: paces the demo; the next frame is meant to follow the delay
   await new Promise((resolve) =>
     setTimeout(resolve, Math.min(2000, holdDeadline - Date.now()))
   );
@@ -220,6 +221,7 @@ async function waitUntil(predicate) {
           `Acknowledged: ${[...acknowledgements].join(", ") || "none"}.`
       );
     }
+    // biome-ignore lint/performance/noAwaitInLoops: paces the demo; the next frame is meant to follow the delay
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }

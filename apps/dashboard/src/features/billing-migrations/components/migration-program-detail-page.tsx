@@ -213,10 +213,10 @@ export function MigrationProgramDetailPage({
   const divergenceCounts = useMemo(
     () =>
       (divergences.data ?? []).reduce(
-        (counts, item) => ({
-          ...counts,
-          [item.classification]: counts[item.classification] + 1,
-        }),
+        (counts, item) => {
+          counts[item.classification] += 1;
+          return counts;
+        },
         { blocking: 0, critical: 0, informational: 0, warning: 0 }
       ),
     [divergences.data]

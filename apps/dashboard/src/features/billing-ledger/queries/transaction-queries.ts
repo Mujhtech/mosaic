@@ -88,6 +88,7 @@ export function transactionFactQueryOptions(
     queryFn: async ({ signal }): Promise<TransactionFact | null> => {
       let cursor: string | undefined;
       for (let page = 0; page < FACT_LOOKUP_MAX_PAGES; page += 1) {
+        // biome-ignore lint/performance/noAwaitInLoops: cursor paging: each request needs the cursor the previous one returned
         const result = await listTransactionFacts({
           client: generatedDashboardClient,
           path: { environmentId, projectId },

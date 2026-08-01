@@ -78,12 +78,12 @@ import {
   getEditableCanvasText,
 } from "@/features/paywall-editor/utils/canvas-preview-interactions";
 import { isValidCountdownInstant } from "@/features/paywall-editor/utils/countdown";
+import { resolveLegacyInsertionLocation } from "@/features/paywall-editor/utils/document-tree-mutations";
 import {
   flattenDocument,
   initialScreen,
-  resolveLegacyInsertionLocation,
   screenContainingNode,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-traversal";
 import { updateLocalizedProperty } from "@/features/paywall-editor/utils/editor-transforms";
 import {
   evaluateVisibility,

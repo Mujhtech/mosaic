@@ -34,7 +34,7 @@ import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import {
   findNode,
   flattenDocument,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-traversal";
 
 const selectWorkspaceProbe = (snapshot: StudioWorkspaceSnapshot) => ({
   hiddenIds: snapshot.preferences.layerMetadata.canvasHiddenIds,

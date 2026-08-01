@@ -21,7 +21,7 @@ import {
   StudioWorkspaceStoreProvider,
   useStudioWorkspaceActions,
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
-import { flattenDocument } from "@/features/paywall-editor/utils/document-tree";
+import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { chooseSelectOption } from "@/test/select";
 
 type MetadataMode =

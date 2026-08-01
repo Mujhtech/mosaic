@@ -19,7 +19,7 @@ import {
   findNode,
   findStack,
   flattenDocument,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-traversal";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
 
 function template(id: "focused" | "benefits" = "focused") {

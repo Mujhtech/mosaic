@@ -122,6 +122,7 @@ async function mapWithConcurrency<T, R>(
       while (cursor < items.length) {
         const index = cursor;
         cursor += 1;
+        // biome-ignore lint/performance/noAwaitInLoops: this is the worker body of a bounded-concurrency pool; the parallelism is the `limit` workers around it
         results[index] = await transform(items[index]!);
       }
     })

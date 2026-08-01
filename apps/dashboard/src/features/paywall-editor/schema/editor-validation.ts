@@ -10,7 +10,7 @@ import {
   findAncestorNodes,
   flattenDocument,
   screenContainingNode,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-traversal";
 import { fillAxisIsBounded } from "@/features/paywall-editor/utils/sizing";
 import {
   resolveBackgroundToken,

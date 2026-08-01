@@ -16,7 +16,7 @@ import {
   StudioWorkspaceStoreProvider,
   useStudioWorkspaceSelector,
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
-import { flattenDocument } from "@/features/paywall-editor/utils/document-tree";
+import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 const selectDocument = (state: EditorState) => state.document;
 const selectSelectedTool = (snapshot: StudioWorkspaceSnapshot) =>

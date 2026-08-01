@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { RefObject } from "react";
 import { useCallback, useState } from "react";
 
+import { ConfirmDialog } from "@/components/feedback/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
 import {
@@ -63,19 +64,16 @@ function TemplatesPanel() {
   const document = useEditorStoreSelector(selectTemplateDocument);
   const editor = useEditorActions();
   const [notice, setNotice] = useState<string | null>(null);
+  const [pendingTemplate, setPendingTemplate] = useState<
+    (typeof EDITOR_TEMPLATES)[number] | null
+  >(null);
 
   if (!document) {
     return null;
   }
 
   function applyTemplate(template: (typeof EDITOR_TEMPLATES)[number]) {
-    if (
-      !window.confirm(
-        `Replace this single local draft with ${template.name}? Undo restores the current draft.`
-      )
-    ) {
-      return;
-    }
+    setPendingTemplate(null);
     const revisionBefore = editor.getSnapshot().document?.revision;
     editor.updateDocument(() => cloneValue(template.document));
     const changed = editor.getSnapshot().document?.revision !== revisionBefore;
@@ -116,7 +114,7 @@ function TemplatesPanel() {
             </p>
             <Button
               className="mt-3 w-full transition-none motion-reduce:transition-none"
-              onClick={() => applyTemplate(template)}
+              onClick={() => setPendingTemplate(template)}
               size="sm"
               type="button"
               variant="outline"
@@ -134,6 +132,26 @@ function TemplatesPanel() {
           {notice}
         </StatusMessage>
       ) : null}
+      <ConfirmDialog
+        confirmLabel="Replace draft"
+        description={
+          pendingTemplate
+            ? `Replace this single local draft with ${pendingTemplate.name}? Undo restores the current draft.`
+            : ""
+        }
+        onConfirm={() => {
+          if (pendingTemplate) {
+            applyTemplate(pendingTemplate);
+          }
+        }}
+        onOpenChange={(next) => {
+          if (!next) {
+            setPendingTemplate(null);
+          }
+        }}
+        open={pendingTemplate !== null}
+        title="Replace the open draft"
+      />
     </section>
   );
 }

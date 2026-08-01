@@ -21,7 +21,7 @@ import type {
   MockProductDefinition,
   MockPurchaseState,
 } from "@/features/paywall-editor/types/editor";
-import { findNode } from "@/features/paywall-editor/utils/document-tree";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 function AutosaveHarness({
   mockProducts,

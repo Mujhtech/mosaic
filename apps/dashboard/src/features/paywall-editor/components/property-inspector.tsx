@@ -17,7 +17,7 @@ import {
   useStudioWorkspaceSelector,
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import type { ValidationIssue } from "@/features/paywall-editor/types/editor";
-import { findAncestorNodeIds } from "@/features/paywall-editor/utils/document-tree";
+import { findAncestorNodeIds } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 export function PropertyInspector({
   issues = EMPTY_VALIDATION_ISSUES,

@@ -12,10 +12,8 @@ import { EditorStoreProvider } from "@/features/paywall-editor/stores/editor-sto
 import { StudioWorkspaceStoreProvider } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import type { ValidationIssue } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import {
-  appendScreen,
-  findNode,
-} from "@/features/paywall-editor/utils/document-tree";
+import { appendScreen } from "@/features/paywall-editor/utils/document-tree-creation";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import {
   focusInspectorValidationIssue,
   getInspectorFieldId,

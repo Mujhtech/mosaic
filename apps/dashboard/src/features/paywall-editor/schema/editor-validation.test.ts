@@ -4,7 +4,7 @@ import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
 import { collectEditorValidation } from "@/features/paywall-editor/hooks/use-editor-validation";
 import { validateEditorDocument } from "@/features/paywall-editor/schema/editor-validation";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import { findNode } from "@/features/paywall-editor/utils/document-tree";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 describe("editor validation", () => {
   it("reports the exact recursive JSON pointer for a nested component", () => {

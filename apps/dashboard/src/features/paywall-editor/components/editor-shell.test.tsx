@@ -17,7 +17,7 @@ import {
   useEditorStore,
 } from "@/features/paywall-editor/stores/editor-store-context";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import { findNode } from "@/features/paywall-editor/utils/document-tree";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 class ResizeObserverStub {
   disconnect() {

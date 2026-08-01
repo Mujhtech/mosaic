@@ -16,7 +16,7 @@ import type {
   MockPurchaseState,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import { findNode } from "@/features/paywall-editor/utils/document-tree";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { studioApplicationsErrorMessage } from "@/features/paywall-editor/utils/studio-applications-error";
 import { projectKeys } from "@/features/projects/queries/projects-query";
 import type { ProductList } from "@/generated/api";

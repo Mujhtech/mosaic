@@ -4,7 +4,7 @@ import type {
   ProtocolNode,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import { findNode } from "@/features/paywall-editor/utils/document-tree";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 export type LocalizedProperty = "value" | "label";
 

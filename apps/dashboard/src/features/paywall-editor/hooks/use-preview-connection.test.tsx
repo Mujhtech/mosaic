@@ -8,8 +8,8 @@ import {
   derivePreviewAggregate,
   type PreviewAcknowledgement,
   previewAcknowledgementKey,
-  usePreviewConnection,
-} from "@/features/paywall-editor/hooks/use-preview-connection";
+} from "@/features/paywall-editor/hooks/preview-connection-state";
+import { usePreviewConnection } from "@/features/paywall-editor/hooks/use-preview-connection";
 import type {
   MosaicDocument,
   PreviewClient,

@@ -49,6 +49,7 @@ async function connect(
 async function waitForMessages(messages, count) {
   const deadline = Date.now() + 2000;
   while (messages.length < count && Date.now() < deadline) {
+    // biome-ignore lint/performance/noAwaitInLoops: polls until the relay settles, which is inherently sequential
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   assert.equal(messages.length, count);

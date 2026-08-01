@@ -36,15 +36,6 @@ import type {
   PreviewDiagnostic,
 } from "@/features/paywall-editor/types/editor";
 
-export {
-  applyPreviewAcknowledgement,
-  derivePreviewAggregate,
-  type PreviewAcknowledgement,
-  type PreviewAcknowledgementConflict,
-  type PreviewAggregate,
-  previewAcknowledgementKey,
-} from "@/features/paywall-editor/hooks/preview-connection-state";
-
 import {
   validatePaywallDocument,
   validatePreviewMessage,

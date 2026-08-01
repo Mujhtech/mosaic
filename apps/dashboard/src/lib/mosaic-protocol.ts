@@ -68,6 +68,7 @@ export type {
   MosaicPreviewV02MockProduct,
   MosaicValidationResult,
 } from "../../../../protocol/browser/index.js";
+// biome-ignore lint/performance/noBarrelFile: the single adapter between the dashboard and the protocol package; splitting it would spread the relative path into ../../../../protocol/browser across 28 files
 export {
   canonicalSchemas,
   canonicalSchemasByVersion,

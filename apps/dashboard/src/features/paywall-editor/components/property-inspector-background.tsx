@@ -30,7 +30,7 @@ import type {
   ProtocolNode,
   ProtocolShadow,
 } from "@/features/paywall-editor/types/editor";
-import { updateNode } from "@/features/paywall-editor/utils/document-tree";
+import { updateNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import {
   appendBackgroundAsset,
   clampGradientAngle,

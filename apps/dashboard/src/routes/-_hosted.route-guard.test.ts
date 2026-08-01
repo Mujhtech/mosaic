@@ -91,6 +91,7 @@ describe("hosted route guard", () => {
       "//attacker.example/steal",
       "/\\attacker.example/steal",
     ]) {
+      // biome-ignore lint/performance/noAwaitInLoops: walks the guard sequence in order, which is what the test asserts
       const thrown = await runGuard(unauthenticated, hostile);
 
       expect(isRedirect(thrown)).toBe(true);

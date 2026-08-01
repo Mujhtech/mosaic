@@ -33,7 +33,7 @@ import {
   hostedStudioHref,
   type StudioSource,
 } from "@/features/paywall-editor/types/studio-source";
-import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree";
+import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
 import { studioApplicationsErrorMessage } from "@/features/paywall-editor/utils/studio-applications-error";
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query";
 import {

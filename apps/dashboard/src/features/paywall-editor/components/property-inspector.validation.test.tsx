@@ -5,7 +5,7 @@ import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
 import { EditorStoreProvider } from "@/features/paywall-editor/stores/editor-store-context";
 import { StudioWorkspaceStoreProvider } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import { appendScreen } from "@/features/paywall-editor/utils/document-tree";
+import { appendScreen } from "@/features/paywall-editor/utils/document-tree-creation";
 import { getInspectorFieldId } from "@/features/paywall-editor/utils/property-inspector-navigation";
 import {
   documentWithBlock,

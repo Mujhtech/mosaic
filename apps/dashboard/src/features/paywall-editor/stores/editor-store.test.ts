@@ -16,7 +16,7 @@ import {
 } from "@/features/paywall-editor/stores/editor-store-context";
 import type { MosaicDocument } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import { findNode } from "@/features/paywall-editor/utils/document-tree";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 function template(id: "focused" | "benefits" = "focused") {
   const match = EDITOR_TEMPLATES.find((entry) => entry.id === id);

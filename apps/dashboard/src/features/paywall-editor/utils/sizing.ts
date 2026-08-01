@@ -2,7 +2,7 @@ import type {
   MosaicDocument,
   ProtocolNode,
 } from "@/features/paywall-editor/types/editor";
-import { findParent } from "@/features/paywall-editor/utils/document-tree";
+import { findParent } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 export type SizingAxis = "width" | "height";
 

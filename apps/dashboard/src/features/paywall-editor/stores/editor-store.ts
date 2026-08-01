@@ -16,18 +16,20 @@ import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import {
   deleteNode,
   duplicateNode,
+  insertBlockAtLocation,
+  moveNode,
+  resolveLegacyInsertionLocation,
+} from "@/features/paywall-editor/utils/document-tree-mutations";
+import {
   findNode,
   findParent,
   getSiblingBoundaries,
   initialLayout,
-  insertBlockAtLocation,
-  moveNode,
   reconcileExpandedTreeNodes,
   rejectTreeOperation,
-  resolveLegacyInsertionLocation,
   revealNodeAncestors,
   updateNode,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-traversal";
 import { synchronizeProtocolMetadata } from "@/features/paywall-editor/utils/protocol-document";
 
 export interface EditorState {

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
+import { ConfirmDialog } from "@/components/feedback/confirm-dialog";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -45,6 +45,7 @@ import type {
   LocalProjectFile,
   MockProductDefinition,
   MockPurchaseState,
+  MosaicDocument,
 } from "@/features/paywall-editor/types/editor";
 import {
   hostedStudioBackHref,
@@ -181,6 +182,9 @@ function WorkspaceContent({
     status: "empty",
   });
   const [importError, setImportError] = useState<string | null>(null);
+  const [pendingImport, setPendingImport] = useState<MosaicDocument | null>(
+    null
+  );
   const [mockProducts, setMockProducts] = useState<MockProductDefinition[]>(
     () =>
       hostedDraft?.data
@@ -259,28 +263,29 @@ function WorkspaceContent({
       applyProject(autosave.project);
     }
   }, [applyProject, autosave]);
+  function applyImportedDocument(next: MosaicDocument) {
+    if (document) {
+      importDocument(next);
+    } else {
+      replaceDocument(next);
+    }
+    setMockProducts(unavailableMockProductsForDocument(next));
+    setMockPurchaseState("productUnavailable");
+    setImportError(null);
+    setPendingImport(null);
+  }
+
   async function importFile(file: File) {
     try {
       if (file.size > MAX_LOCAL_PROJECT_BYTES) {
         throw new Error("Choose a Mosaic file under 1 MB.");
       }
       const imported = parseImportedJson(await file.text());
-      if (
-        document &&
-        !window.confirm(
-          "Replace the open paywall with this file? You can undo once after import to restore the current paywall."
-        )
-      ) {
+      if (document) {
+        setPendingImport(imported.document);
         return;
       }
-      if (document) {
-        importDocument(imported.document);
-      } else {
-        replaceDocument(imported.document);
-      }
-      setMockProducts(unavailableMockProductsForDocument(imported.document));
-      setMockPurchaseState("productUnavailable");
-      setImportError(null);
+      applyImportedDocument(imported.document);
     } catch (error) {
       setImportError(
         error instanceof Error
@@ -337,14 +342,32 @@ function WorkspaceContent({
   }
 
   return (
-    <EditorShell
-      importError={importError}
-      mockProducts={activeMockProducts}
-      mockPurchaseState={activeMockPurchaseState}
-      onImport={importFile}
-      onProductsChange={setMockProducts}
-      onPurchaseStateChange={setMockPurchaseState}
-    />
+    <>
+      <EditorShell
+        importError={importError}
+        mockProducts={activeMockProducts}
+        mockPurchaseState={activeMockPurchaseState}
+        onImport={importFile}
+        onProductsChange={setMockProducts}
+        onPurchaseStateChange={setMockPurchaseState}
+      />
+      <ConfirmDialog
+        confirmLabel="Replace paywall"
+        description="Replace the open paywall with this file? You can undo once after import to restore the current paywall."
+        onConfirm={() => {
+          if (pendingImport) {
+            applyImportedDocument(pendingImport);
+          }
+        }}
+        onOpenChange={(next) => {
+          if (!next) {
+            setPendingImport(null);
+          }
+        }}
+        open={pendingImport !== null}
+        title="Replace the open paywall"
+      />
+    </>
   );
 }
 

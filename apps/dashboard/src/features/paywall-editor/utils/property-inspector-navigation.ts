@@ -7,7 +7,7 @@ import type {
 import {
   findNode,
   flattenDocument,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-traversal";
 
 const FEATURE_ITEM = /^items\.[^.]+$/;
 

@@ -80,6 +80,7 @@ export function useHostedDraftAutosave({
         setStatus("saving");
 
         try {
+          // biome-ignore lint/performance/noAwaitInLoops: drains the pending save queue in order; overlapping saves would race on the revision
           const saved = await saveDraft({
             document: cloneValue(candidate.document),
             draftId,

@@ -21,7 +21,7 @@ import type {
   MosaicDocument,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import { findNode } from "@/features/paywall-editor/utils/document-tree";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import canonicalFixture from "../../../../../../protocol/fixtures/v0.2/complete-paywall.json";
 
 const canonicalDocument = canonicalFixture as MosaicDocument;

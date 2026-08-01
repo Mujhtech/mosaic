@@ -27,7 +27,7 @@ import type {
   ProtocolNode,
 } from "@/features/paywall-editor/types/editor";
 import { getEditableCanvasText } from "@/features/paywall-editor/utils/canvas-preview-interactions";
-import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree";
+import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
 import {
   resolvedBackground,
   resolvedProtocolColor,
@@ -252,6 +252,7 @@ export function PreviewNode(props: PreviewNodeProps) {
           }}
         >
           {asset?.source.type === "remote" ? (
+            // biome-ignore lint/correctness/useImageSize: the frame above already reserves the box from the node's aspectRatio, and fixed attributes would fight the size-full sizing the preview depends on
             <img
               alt=""
               className="size-full"

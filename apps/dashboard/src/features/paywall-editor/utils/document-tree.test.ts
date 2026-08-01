@@ -16,8 +16,16 @@ import {
   appendProductCard,
   appendScreen,
   createBlock,
+} from "@/features/paywall-editor/utils/document-tree-creation";
+import {
   deleteNode,
   duplicateNode,
+  insertBlockAtLocation,
+  insertExistingNodeAtLocation,
+  moveNode,
+  resolveLegacyInsertionLocation,
+} from "@/features/paywall-editor/utils/document-tree-mutations";
+import {
   findAncestorNodeIds,
   findAncestorStackIds,
   findNode,
@@ -25,14 +33,10 @@ import {
   findStack,
   flattenDocument,
   getSiblingBoundaries,
-  insertBlockAtLocation,
-  insertExistingNodeAtLocation,
-  moveNode,
   reconcileExpandedTreeNodes,
-  resolveLegacyInsertionLocation,
   revealNodeAncestors,
   screenContainingNode,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-traversal";
 import { synchronizeProtocolMetadata } from "@/features/paywall-editor/utils/protocol-document";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
 

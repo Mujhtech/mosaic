@@ -32,7 +32,7 @@ import type {
   TreeMoveTarget,
   TreeOperationResult,
 } from "@/features/paywall-editor/types/editor";
-import { findAncestorNodeIds } from "@/features/paywall-editor/utils/document-tree";
+import { findAncestorNodeIds } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 export function hasCatalogPayload(event: DragEvent<HTMLDivElement>) {
   return (

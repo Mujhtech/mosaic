@@ -27,15 +27,15 @@ import type {
   TreeOperationResult,
 } from "@/features/paywall-editor/types/editor";
 import { isValidCountdownInstant } from "@/features/paywall-editor/utils/countdown";
+import { appendScreen } from "@/features/paywall-editor/utils/document-tree-creation";
+import { moveNode } from "@/features/paywall-editor/utils/document-tree-mutations";
 import {
-  appendScreen,
   findNode,
   findParent,
   getSiblingBoundaries,
-  moveNode,
   parentEntryChildren,
   screenContainingNode,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-traversal";
 import type {
   CatalogDropPreview,
   DropPreview,

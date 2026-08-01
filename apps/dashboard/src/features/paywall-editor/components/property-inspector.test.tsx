@@ -10,7 +10,7 @@ import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
 import { EditorStoreProvider } from "@/features/paywall-editor/stores/editor-store-context";
 import { StudioWorkspaceStoreProvider } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import { findNode } from "@/features/paywall-editor/utils/document-tree";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { chooseSelectOption } from "@/test/select";
 import {
   documentWithBlock,

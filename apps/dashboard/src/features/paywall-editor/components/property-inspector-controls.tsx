@@ -52,10 +52,8 @@ import {
 } from "@/features/paywall-editor/components/property-inspector-products";
 import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
 import type { ProtocolNode } from "@/features/paywall-editor/types/editor";
-import {
-  flattenDocument,
-  resolveLocalizedText,
-} from "@/features/paywall-editor/utils/document-tree";
+import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
+import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
 import type { MosaicPaywallV02BaseTypography } from "@/lib/mosaic-protocol";
 
 const SCREEN_INDEX = /^\/screens\/(\d+)/;

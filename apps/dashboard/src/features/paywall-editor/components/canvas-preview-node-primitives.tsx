@@ -9,7 +9,7 @@ import type {
   MosaicDocument,
   ProtocolNode,
 } from "@/features/paywall-editor/types/editor";
-import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree";
+import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
 import {
   axisSizingCss,
   resolvedBackground,

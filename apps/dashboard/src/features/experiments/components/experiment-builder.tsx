@@ -398,12 +398,14 @@ export function ExperimentBuilder({
   const conflict =
     error instanceof ExperimentDraftConflictError ? error : undefined;
   function applyEvenSplit(nextTreatmentCount = treatmentCount) {
-    splitFor(nextTreatmentCount + 1).forEach((allocation, index) =>
+    for (const [index, allocation] of splitFor(
+      nextTreatmentCount + 1
+    ).entries()) {
       form.setFieldValue(
         `allocation${index}` as "allocation0",
         String(allocation / 100)
-      )
-    );
+      );
+    }
   }
 
   return (

@@ -93,6 +93,7 @@ export function reconciliationRunQueryOptions(
     queryFn: async ({ signal }): Promise<ReconciliationRun | null> => {
       let cursor: string | undefined;
       for (let page = 0; page < RUN_LOOKUP_MAX_PAGES; page += 1) {
+        // biome-ignore lint/performance/noAwaitInLoops: cursor paging: each request needs the cursor the previous one returned
         const result = await listReconciliationRuns({
           client: generatedDashboardClient,
           path: { environmentId, projectId },

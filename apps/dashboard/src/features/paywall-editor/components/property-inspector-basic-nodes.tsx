@@ -51,7 +51,7 @@ import {
   findAncestorNodes,
   findNode,
   updateNode,
-} from "@/features/paywall-editor/utils/document-tree";
+} from "@/features/paywall-editor/utils/document-tree-traversal";
 import { createSeededLocalizedText } from "@/features/paywall-editor/utils/editor-transforms";
 import type {
   MosaicPaywallV02BaseTypography,

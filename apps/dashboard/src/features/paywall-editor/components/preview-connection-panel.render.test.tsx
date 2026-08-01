@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PreviewConnectionPanel } from "@/features/paywall-editor/components/preview-connection-panel";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
-import type { PreviewAggregate } from "@/features/paywall-editor/hooks/use-preview-connection";
+import type { PreviewAggregate } from "@/features/paywall-editor/hooks/preview-connection-state";
 import { PREVIEW_PROTOCOL_VERSION } from "@/features/paywall-editor/schema/preview-message";
 import { EditorStoreProvider } from "@/features/paywall-editor/stores/editor-store-context";
 import type {

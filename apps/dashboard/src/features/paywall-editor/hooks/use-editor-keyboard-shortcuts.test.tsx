@@ -10,7 +10,7 @@ import {
   useEditorActions,
   useEditorStore,
 } from "@/features/paywall-editor/stores/editor-store-context";
-import { findNode } from "@/features/paywall-editor/utils/document-tree";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 const ORIGINAL_HEADLINE = "Build a paywall people understand";
 const EDITED_HEADLINE = "Edited headline";

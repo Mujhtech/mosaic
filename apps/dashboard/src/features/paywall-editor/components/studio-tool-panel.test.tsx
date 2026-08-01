@@ -17,7 +17,7 @@ import {
   useStudioWorkspaceActions,
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import type { StudioTool } from "@/features/paywall-editor/types/studio-workspace";
-import { flattenDocument } from "@/features/paywall-editor/utils/document-tree";
+import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { chooseSelectOption } from "@/test/select";
 
 function InitializeTool({ tool }: { tool: StudioTool }) {
@@ -243,10 +243,6 @@ describe("StudioToolPanel", () => {
   });
 
   it("confirms and applies a template in place as one undoable document edit", async () => {
-    const confirm = vi
-      .spyOn(window, "confirm")
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true);
     renderTool("templates");
     await waitFor(() =>
       expect(
@@ -254,16 +250,23 @@ describe("StudioToolPanel", () => {
       ).toBeEnabled()
     );
 
+    // Declining leaves the open draft alone.
     fireEvent.click(screen.getByRole("button", { name: "Use Benefits first" }));
-    expect(confirm).toHaveBeenLastCalledWith(
-      "Replace this single local draft with Benefits first? Undo restores the current draft."
-    );
+    expect(
+      await screen.findByText(
+        "Replace this single local draft with Benefits first? Undo restores the current draft."
+      )
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getByTestId("tool-document-id")).toHaveTextContent(
       "focused-offer"
     );
     expect(screen.getByTestId("tool-undo-count")).toHaveTextContent("0");
 
     fireEvent.click(screen.getByRole("button", { name: "Use Benefits first" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Replace draft" })
+    );
     await waitFor(() =>
       expect(screen.getByTestId("tool-document-id")).toHaveTextContent(
         "benefits-first"

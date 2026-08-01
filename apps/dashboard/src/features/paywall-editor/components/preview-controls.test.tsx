@@ -9,7 +9,7 @@ import {
   useEditorStore,
 } from "@/features/paywall-editor/stores/editor-store-context";
 import { StudioWorkspaceStoreProvider } from "@/features/paywall-editor/stores/studio-workspace-store-context";
-import { findNode } from "@/features/paywall-editor/utils/document-tree";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { chooseSelectOption } from "@/test/select";
 
 function Harness() {

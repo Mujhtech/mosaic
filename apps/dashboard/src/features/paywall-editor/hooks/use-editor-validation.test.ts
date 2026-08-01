@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { collectEditorValidation } from "@/features/paywall-editor/hooks/use-editor-validation";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import { findNode } from "@/features/paywall-editor/utils/document-tree";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 describe("editor validation merge", () => {
   it("keeps one actionable error instead of oneOf branch noise for an empty headline", () => {

@@ -18,7 +18,7 @@ import {
   StudioWorkspaceStoreProvider,
   useStudioWorkspaceSelector,
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
-import { flattenDocument } from "@/features/paywall-editor/utils/document-tree";
+import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
 
 const selectRecentInsertions = (snapshot: StudioWorkspaceSnapshot) =>
   snapshot.preferences.recentInsertions;
