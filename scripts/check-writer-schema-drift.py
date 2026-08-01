@@ -37,6 +37,44 @@ import sys
 # Columns a writer never supplies because the database or a trigger does.
 GENERATED = re.compile(r"\bGENERATED\b|\bDEFAULT\b", re.IGNORECASE)
 
+# A table-level constraint rather than a column definition.
+TABLE_CONSTRAINT = re.compile(
+    r"(primary|unique|foreign|check|constraint|exclude|like)\b", re.IGNORECASE
+)
+
+
+def strip_line_comments(sql):
+    """Drop `--` comments, leaving the statement structure intact.
+
+    A comment sitting above a column is otherwise absorbed into that column's
+    definition, because definitions are split on commas. The chunk then starts
+    with `--`, so the column it documents is never recorded as required and the
+    comment is recorded instead. Quotes are tracked so a `--` inside a string
+    literal or an identifier stays put.
+    """
+    out = []
+    for line in sql.split("\n"):
+        quote = None
+        cut = None
+        index = 0
+        while index < len(line):
+            character = line[index]
+            if quote:
+                if character == quote:
+                    # A doubled quote escapes itself rather than closing.
+                    if index + 1 < len(line) and line[index + 1] == quote:
+                        index += 1
+                    else:
+                        quote = None
+            elif character in "'\"":
+                quote = character
+            elif character == "-" and line.startswith("--", index):
+                cut = index
+                break
+            index += 1
+        out.append(line if cut is None else line[:cut])
+    return "\n".join(out)
+
 
 def read_migrations(root):
     directory = os.path.join(root, "apps", "api", "migrations")
@@ -45,10 +83,47 @@ def read_migrations(root):
     for name in files:
         with open(os.path.join(directory, name)) as handle:
             body = handle.read()
-        # Only the Up section defines the live schema.
+        # Only the Up section defines the live schema. The split runs before
+        # comments are stripped, since the goose marker is itself a comment.
         up = body.split("-- +goose Down")[0]
-        text.append(up)
+        text.append(strip_line_comments(up))
     return "\n".join(text)
+
+
+def parse_trigger_supplied(sql):
+    """Return {table: set(columns a BEFORE INSERT trigger assigns)}.
+
+    A `BEFORE INSERT` trigger that sets `NEW.<column>` supplies the value ahead
+    of the NOT NULL check, exactly as a DEFAULT would, so a writer that omits
+    the column is correct rather than drifted.
+    """
+    bodies = {}
+    for match in re.finditer(
+        r"CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+([a-z_][a-z0-9_]*)\s*\(.*?\$\$(.*?)\$\$",
+        sql, re.IGNORECASE | re.DOTALL,
+    ):
+        bodies[match.group(1).lower()] = match.group(2)
+
+    supplied = {}
+    for match in re.finditer(
+        r"CREATE\s+TRIGGER\s+[a-z_][a-z0-9_]*\s+BEFORE\s+INSERT[^;]*?\bON\s+([a-z_][a-z0-9_]*)"
+        r"[^;]*?EXECUTE\s+(?:PROCEDURE|FUNCTION)\s+([a-z_][a-z0-9_]*)",
+        sql, re.IGNORECASE | re.DOTALL,
+    ):
+        table, function = match.group(1).lower(), match.group(2).lower()
+        body = bodies.get(function)
+        if not body:
+            continue
+        assigned = {
+            assignment.group(1).lower()
+            for assignment in re.finditer(r"NEW\.([a-z_][a-z0-9_]*)\s*:=", body, re.IGNORECASE)
+        }
+        assigned |= {
+            into.group(1).lower()
+            for into in re.finditer(r"\bINTO\s+NEW\.([a-z_][a-z0-9_]*)", body, re.IGNORECASE)
+        }
+        supplied.setdefault(table, set()).update(assigned)
+    return supplied
 
 
 def parse_schema(sql):
@@ -80,9 +155,12 @@ def parse_schema(sql):
             definition = definition.strip()
             if not definition:
                 continue
-            name = definition.split()[0].lower()
-            if name in {"primary", "unique", "foreign", "check", "constraint", "exclude", "like"}:
+            # A table constraint may open its parenthesis with no space, as in
+            # `CHECK((status='running')=...)`, so the keyword is matched on a
+            # word boundary rather than by splitting on whitespace.
+            if TABLE_CONSTRAINT.match(definition):
                 continue
+            name = definition.split()[0].lower()
             if "NOT NULL" in definition.upper() and not GENERATED.search(definition):
                 table_required.add(name)
         required[table] = table_required
@@ -160,10 +238,17 @@ def main():
     root = os.path.abspath(arguments.repo)
 
     try:
-        schema = parse_schema(read_migrations(root))
+        migrations = read_migrations(root)
     except OSError as error:
         print("cannot read migrations: %s" % error, file=sys.stderr)
         return 2
+
+    schema = parse_schema(migrations)
+    # A BEFORE INSERT trigger fills its columns before NOT NULL is checked, so
+    # the writers that omit them are correct.
+    for table, columns in parse_trigger_supplied(migrations).items():
+        if table in schema:
+            schema[table] -= columns
 
     writers, unchecked = parse_writers(root)
 
