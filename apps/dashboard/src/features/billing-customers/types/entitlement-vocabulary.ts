@@ -1,4 +1,8 @@
-import type { EntitlementEntry, EntitlementSourceSummary, Uncertainty } from "@/generated/api"
+import type {
+  EntitlementEntry,
+  EntitlementSourceSummary,
+  Uncertainty,
+} from "@/generated/api";
 
 /**
  * Frozen vocabulary for authoritative customer access.
@@ -30,18 +34,23 @@ import type { EntitlementEntry, EntitlementSourceSummary, Uncertainty } from "@/
  */
 
 /** The read-time access vocabulary. Wider than `EntitlementEntry["state"]`. */
-export type AccessState = EntitlementEntry["state"] | "unavailable"
+export type AccessState = EntitlementEntry["state"] | "unavailable";
 
-export type AccessTone = "attention" | "negative" | "neutral" | "positive"
+export type AccessTone = "attention" | "negative" | "neutral" | "positive";
 
-export const accessStates = ["active", "inactive", "unknown", "unavailable"] as const
+export const accessStates = [
+  "active",
+  "inactive",
+  "unknown",
+  "unavailable",
+] as const;
 
 const ACCESS_STATE_LABELS: Record<string, string> = {
   active: "Access active",
   inactive: "No access",
   unavailable: "Mosaic cannot answer",
   unknown: "Access undetermined",
-}
+};
 
 const ACCESS_STATE_TONES: Record<string, AccessTone> = {
   active: "positive",
@@ -51,11 +60,13 @@ const ACCESS_STATE_TONES: Record<string, AccessTone> = {
   inactive: "neutral",
   unavailable: "attention",
   unknown: "attention",
-}
+};
 
 export function accessStateLabel(value: string | undefined) {
-  if (!value) return "Access undetermined"
-  return ACCESS_STATE_LABELS[value] ?? "Access state Mosaic does not recognise"
+  if (!value) {
+    return "Access undetermined";
+  }
+  return ACCESS_STATE_LABELS[value] ?? "Access state Mosaic does not recognise";
 }
 
 /**
@@ -67,22 +78,28 @@ export function accessStateLabel(value: string | undefined) {
  * prevent.
  */
 export function accessStateTone(value: string | undefined): AccessTone {
-  if (!value) return "attention"
-  return ACCESS_STATE_TONES[value] ?? "attention"
+  if (!value) {
+    return "attention";
+  }
+  return ACCESS_STATE_TONES[value] ?? "attention";
 }
 
 const UNCERTAINTY_REASON_SENTENCES: Record<string, string> = {
-  conflicting_facts: "two store-confirmed facts contradict each other for this purchase",
+  conflicting_facts:
+    "two store-confirmed facts contradict each other for this purchase",
   identity_unresolved:
     "an identity conflict froze this purchase, so Mosaic will not attribute it to either candidate",
   missing_fact: "a fact this state depends on has not arrived",
   none: "no uncertainty was recorded",
   product_unresolved: "the store confirmed a Product this Project does not map",
   projection_failed: "the last projection run for this customer failed",
-  provider_unavailable: "the store could not be reached to confirm the current state",
-  stale_validation: "the newest store confirmation is older than the freshness threshold",
-  unsupported_provider_state: "the store reported a state this build does not model",
-}
+  provider_unavailable:
+    "the store could not be reached to confirm the current state",
+  stale_validation:
+    "the newest store confirmation is older than the freshness threshold",
+  unsupported_provider_state:
+    "the store reported a state this build does not model",
+};
 
 const UNCERTAINTY_REASON_LABELS: Record<string, string> = {
   conflicting_facts: "Conflicting facts",
@@ -94,25 +111,28 @@ const UNCERTAINTY_REASON_LABELS: Record<string, string> = {
   provider_unavailable: "Store unavailable",
   stale_validation: "Stale validation",
   unsupported_provider_state: "Unsupported store state",
-}
+};
 
 const EXPECTED_RESOLUTION_LABELS: Record<string, string> = {
   automatic_retry: "Mosaic retries automatically",
   customer_action: "The customer has to act",
   next_projection_run: "Resolves on the next projection run",
-  next_provider_notification: "Resolves when the store sends the next notification",
+  next_provider_notification:
+    "Resolves when the store sends the next notification",
   none_expected: "Nothing will resolve this on its own",
   operator_action: "An operator has to act",
-}
+};
 
 function humanize(value: string) {
-  const spaced = value.replaceAll("_", " ")
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+  const spaced = value.replaceAll("_", " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 export function uncertaintyReasonLabel(value: string | undefined) {
-  if (!value) return "None"
-  return UNCERTAINTY_REASON_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "None";
+  }
+  return UNCERTAINTY_REASON_LABELS[value] ?? humanize(value);
 }
 
 /**
@@ -120,16 +140,20 @@ export function uncertaintyReasonLabel(value: string | undefined) {
  * terminal punctuation because it is always embedded, never rendered alone.
  */
 export function uncertaintyReasonClause(value: string | undefined) {
-  if (!value) return "Mosaic recorded no reason"
+  if (!value) {
+    return "Mosaic recorded no reason";
+  }
   return (
     UNCERTAINTY_REASON_SENTENCES[value] ??
     `the store reported ${humanize(value).toLowerCase()}, which this build does not model`
-  )
+  );
 }
 
 export function expectedResolutionLabel(value: string | undefined) {
-  if (!value) return "Mosaic did not state how this resolves"
-  return EXPECTED_RESOLUTION_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "Mosaic did not state how this resolves";
+  }
+  return EXPECTED_RESOLUTION_LABELS[value] ?? humanize(value);
 }
 
 /**
@@ -141,19 +165,19 @@ export function expectedResolutionLabel(value: string | undefined) {
  */
 export function accessStateExplanation(
   value: string | undefined,
-  uncertainty?: Uncertainty | undefined,
+  uncertainty?: Uncertainty | undefined
 ): string {
   switch (value) {
     case "active":
-      return "Mosaic has determined this customer has access."
+      return "Mosaic has determined this customer has access.";
     case "inactive":
-      return "Mosaic has determined this customer does not have access. This is an answer, not a failure — the evidence was sufficient to decide."
+      return "Mosaic has determined this customer does not have access. This is an answer, not a failure — the evidence was sufficient to decide.";
     case "unavailable":
-      return "Mosaic could not answer. This describes Mosaic's own availability, not the customer: their access is unchanged and unjudged. This is not the same as inactive."
+      return "Mosaic could not answer. This describes Mosaic's own availability, not the customer: their access is unchanged and unjudged. This is not the same as inactive.";
     case "unknown":
-      return `Mosaic cannot currently determine access — ${uncertaintyReasonClause(uncertainty?.reason)}. This is not the same as inactive.`
+      return `Mosaic cannot currently determine access — ${uncertaintyReasonClause(uncertainty?.reason)}. This is not the same as inactive.`;
     default:
-      return "Mosaic reported an access state this build does not recognise. Treat it as undetermined rather than as a denial of access, and check whether the dashboard is older than the API."
+      return "Mosaic reported an access state this build does not recognise. Treat it as undetermined rather than as a denial of access, and check whether the dashboard is older than the API.";
   }
 }
 
@@ -162,8 +186,10 @@ export function accessStateExplanation(
  * about the customer. Surfaces use this to caption the pill correctly instead
  * of labelling a service failure as a customer attribute.
  */
-export function accessStateSubject(value: string | undefined): "customer" | "mosaic" {
-  return value === "unavailable" || value === "unknown" ? "mosaic" : "customer"
+export function accessStateSubject(
+  value: string | undefined
+): "customer" | "mosaic" {
+  return value === "unavailable" || value === "unknown" ? "mosaic" : "customer";
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +215,7 @@ const LIFECYCLE_STATE_LABELS: Record<string, string> = {
   superseded: "Superseded by a later purchase",
   trialing: "Trialing",
   unknown: "Lifecycle undetermined",
-}
+};
 
 const LIFECYCLE_STATE_TONES: Record<string, AccessTone> = {
   active: "positive",
@@ -202,7 +228,7 @@ const LIFECYCLE_STATE_TONES: Record<string, AccessTone> = {
   superseded: "neutral",
   trialing: "positive",
   unknown: "attention",
-}
+};
 
 const RENEWAL_INTENT_LABELS: Record<string, string> = {
   auto_renew_disabled: "Auto-renew disabled",
@@ -210,7 +236,7 @@ const RENEWAL_INTENT_LABELS: Record<string, string> = {
   paused: "Renewal paused",
   provider_managed: "Renewal managed by the store",
   unknown: "Renewal intent undetermined",
-}
+};
 
 const BILLING_STATE_LABELS: Record<string, string> = {
   current: "Billing current",
@@ -220,7 +246,7 @@ const BILLING_STATE_LABELS: Record<string, string> = {
   retrying: "Billing retrying",
   revoked: "Revoked",
   unknown: "Billing state undetermined",
-}
+};
 
 const BILLING_STATE_TONES: Record<string, AccessTone> = {
   current: "positive",
@@ -230,21 +256,27 @@ const BILLING_STATE_TONES: Record<string, AccessTone> = {
   retrying: "attention",
   revoked: "negative",
   unknown: "attention",
-}
+};
 
 export function lifecycleStateLabel(value: string | undefined) {
-  if (!value) return "Lifecycle undetermined"
-  return LIFECYCLE_STATE_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "Lifecycle undetermined";
+  }
+  return LIFECYCLE_STATE_LABELS[value] ?? humanize(value);
 }
 
 export function lifecycleStateTone(value: string | undefined): AccessTone {
-  if (!value) return "attention"
-  return LIFECYCLE_STATE_TONES[value] ?? "attention"
+  if (!value) {
+    return "attention";
+  }
+  return LIFECYCLE_STATE_TONES[value] ?? "attention";
 }
 
 export function renewalIntentLabel(value: string | undefined) {
-  if (!value) return "Renewal intent undetermined"
-  return RENEWAL_INTENT_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "Renewal intent undetermined";
+  }
+  return RENEWAL_INTENT_LABELS[value] ?? humanize(value);
 }
 
 /**
@@ -254,22 +286,28 @@ export function renewalIntentLabel(value: string | undefined) {
  * revoke early.
  */
 export function renewalIntentTone(value: string | undefined): AccessTone {
-  if (!value) return "attention"
-  return value === "unknown" ? "attention" : "neutral"
+  if (!value) {
+    return "attention";
+  }
+  return value === "unknown" ? "attention" : "neutral";
 }
 
 export function billingStateLabel(value: string | undefined) {
-  if (!value) return "Billing state undetermined"
-  return BILLING_STATE_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "Billing state undetermined";
+  }
+  return BILLING_STATE_LABELS[value] ?? humanize(value);
 }
 
 export function billingStateTone(value: string | undefined): AccessTone {
-  if (!value) return "attention"
-  return BILLING_STATE_TONES[value] ?? "attention"
+  if (!value) {
+    return "attention";
+  }
+  return BILLING_STATE_TONES[value] ?? "attention";
 }
 
 export function uncertaintyTone(value: string | undefined): AccessTone {
-  return !value || value === "none" ? "neutral" : "attention"
+  return !value || value === "none" ? "neutral" : "attention";
 }
 
 /**
@@ -281,17 +319,17 @@ export function uncertaintyTone(value: string | undefined): AccessTone {
  * sentence may be dropped, and neither may be replaced with "Cancelled".
  */
 export function subscriptionAccessStatement(input: {
-  accessState: string | undefined
-  periodEnd: string | undefined
-  renewalIntent: string | undefined
+  accessState: string | undefined;
+  periodEnd: string | undefined;
+  renewalIntent: string | undefined;
 }): { access: string; renewal: string } {
   const renewal =
     input.renewalIntent === "auto_renew_disabled"
       ? "Auto-renew disabled. The store will not charge again."
-      : renewalIntentLabel(input.renewalIntent)
+      : renewalIntentLabel(input.renewalIntent);
 
   if (input.accessState !== "active") {
-    return { access: accessStateLabel(input.accessState), renewal }
+    return { access: accessStateLabel(input.accessState), renewal };
   }
 
   return {
@@ -299,7 +337,7 @@ export function subscriptionAccessStatement(input: {
       ? `Active until ${formatEntitlementInstant(input.periodEnd)}`
       : "Active with no end Mosaic can state",
     renewal,
-  }
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -318,19 +356,22 @@ const EXPLANATION_SENTENCES: Record<string, string> = {
     "The store is retrying a failed charge and this Project's grant version allows access during billing retry.",
   active_grace_period:
     "The charge failed and the store opened a grace period. Both stores grant access during grace, and so does Mosaic.",
-  active_subscription_period: "The store confirmed a paid period that covers this instant.",
+  active_subscription_period:
+    "The store confirmed a paid period that covers this instant.",
   active_trial_period:
     "The store confirmed an introductory or free trial period covering this instant.",
   billing_disabled:
     "Mosaic Billing is turned off for this Project, so Mosaic holds no authoritative answer. This is a Mosaic state, not a customer state.",
   conflicting_facts:
     "Two store-confirmed facts contradict each other. Mosaic keeps both and declines to choose.",
-  family_shared_source: "Access comes from a Family Sharing transaction on another store account.",
+  family_shared_source:
+    "Access comes from a Family Sharing transaction on another store account.",
   grant_version_ended:
     "The grant version that applied to this purchase has ended and no later version grants this Entitlement.",
   identity_unresolved:
     "An identity conflict froze this purchase. Neither candidate customer is granted anything until an operator resolves it.",
-  no_qualifying_source: "No purchase Mosaic holds grants this Entitlement at this instant.",
+  no_qualifying_source:
+    "No purchase Mosaic holds grants this Entitlement at this instant.",
   permanent_one_time_purchase:
     "A non-consumable purchase grants this permanently. There is no expiry date to state.",
   product_unresolved:
@@ -345,20 +386,29 @@ const EXPLANATION_SENTENCES: Record<string, string> = {
     "A pause is scheduled but has not taken effect. Access continues until it does.",
   subscription_cancelled_access_until_period_end:
     "Auto-renew was turned off. Access continues until the validated period end; cancellation changes renewal intent only.",
-  subscription_expired: "The paid period ended and no later period was confirmed.",
-  subscription_paused: "The subscription is paused. Google's pause never grants access.",
-  subscription_refunded: "The store confirmed a refund effective at the recorded instant.",
-  subscription_revoked: "The store revoked this purchase effective at the recorded instant.",
+  subscription_expired:
+    "The paid period ended and no later period was confirmed.",
+  subscription_paused:
+    "The subscription is paused. Google's pause never grants access.",
+  subscription_refunded:
+    "The store confirmed a refund effective at the recorded instant.",
+  subscription_revoked:
+    "The store revoked this purchase effective at the recorded instant.",
   subscription_superseded:
     "A later purchase replaced this one. Nothing was deleted; the replacement is recorded explicitly.",
-  unsupported_provider_state: "The store reported a state this build does not model.",
-}
+  unsupported_provider_state:
+    "The store reported a state this build does not model.",
+};
 
 export function explanationSentence(code: string | undefined) {
-  if (!code) return "Mosaic recorded no explanation for this entry."
-  const sentence = EXPLANATION_SENTENCES[code]
-  if (sentence) return sentence
-  return `Mosaic reported the explanation code "${code}". This dashboard build has no copy for it, so the code is shown verbatim rather than paraphrased.`
+  if (!code) {
+    return "Mosaic recorded no explanation for this entry.";
+  }
+  const sentence = EXPLANATION_SENTENCES[code];
+  if (sentence) {
+    return sentence;
+  }
+  return `Mosaic reported the explanation code "${code}". This dashboard build has no copy for it, so the code is shown verbatim rather than paraphrased.`;
 }
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
@@ -368,28 +418,36 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   grace_period: "Subscription in grace",
   one_time_non_consumable: "One-time purchase",
   trial: "Trial",
-}
+};
 
 export function sourceTypeLabel(value: string | undefined) {
-  if (!value) return "Unclassified source"
-  return SOURCE_TYPE_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "Unclassified source";
+  }
+  return SOURCE_TYPE_LABELS[value] ?? humanize(value);
 }
 
 const SOURCE_STATE_LABELS: Record<string, string> = {
   granting: "Granting access",
   not_granting: "Not granting access",
   unknown: "Contribution undetermined",
-}
+};
 
 export function sourceStateLabel(value: string | undefined) {
-  if (!value) return "Contribution undetermined"
-  return SOURCE_STATE_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "Contribution undetermined";
+  }
+  return SOURCE_STATE_LABELS[value] ?? humanize(value);
 }
 
 export function sourceStateTone(value: string | undefined): AccessTone {
-  if (value === "granting") return "positive"
-  if (value === "not_granting") return "neutral"
-  return "attention"
+  if (value === "granting") {
+    return "positive";
+  }
+  if (value === "not_granting") {
+    return "neutral";
+  }
+  return "attention";
 }
 
 /**
@@ -397,10 +455,12 @@ export function sourceStateTone(value: string | undefined): AccessTone {
  * `end` as an expiry date, or as "expired", is the false-expiry bug the
  * aggregation rules exist to prevent.
  */
-export function sourceEndStatement(source: Pick<EntitlementSourceSummary, "end">) {
+export function sourceEndStatement(
+  source: Pick<EntitlementSourceSummary, "end">
+) {
   return source.end
     ? `Ends ${formatEntitlementInstant(source.end)}`
-    : "No finite end — this source does not expire"
+    : "No finite end — this source does not expire";
 }
 
 const PROJECTION_STATUS_LABELS: Record<string, string> = {
@@ -409,36 +469,46 @@ const PROJECTION_STATUS_LABELS: Record<string, string> = {
   failed: "Failed",
   pending: "Projection pending",
   stale: "Stale",
-}
+};
 
 const PROJECTION_STATUS_EXPLANATIONS: Record<string, string> = {
-  current: "The committed state reflects every fact Mosaic holds for this customer.",
+  current:
+    "The committed state reflects every fact Mosaic holds for this customer.",
   degraded:
     "Mosaic committed a state but could not use every input it wanted. Entries derived from the missing inputs read undetermined.",
   failed:
     "The last projection run failed. The previously committed state is preserved rather than replaced.",
   pending:
     "Facts are waiting to be projected. The committed state is older than the evidence, which is why entries can read undetermined rather than inactive.",
-  stale: "The committed state is older than the staleness threshold for this Environment.",
-}
+  stale:
+    "The committed state is older than the staleness threshold for this Environment.",
+};
 
 export function projectionStatusLabel(value: string | undefined) {
-  if (!value) return "Projection status unknown"
-  return PROJECTION_STATUS_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "Projection status unknown";
+  }
+  return PROJECTION_STATUS_LABELS[value] ?? humanize(value);
 }
 
 export function projectionStatusExplanation(value: string | undefined) {
-  if (!value) return "Mosaic did not report a projection status for this customer."
+  if (!value) {
+    return "Mosaic did not report a projection status for this customer.";
+  }
   return (
     PROJECTION_STATUS_EXPLANATIONS[value] ??
     "Mosaic reported a projection status this build does not recognise. Treat the committed state as possibly out of date."
-  )
+  );
 }
 
 export function projectionStatusTone(value: string | undefined): AccessTone {
-  if (value === "current") return "positive"
-  if (value === "failed") return "negative"
-  return "attention"
+  if (value === "current") {
+    return "positive";
+  }
+  if (value === "failed") {
+    return "negative";
+  }
+  return "attention";
 }
 
 /**
@@ -447,10 +517,14 @@ export function projectionStatusTone(value: string | undefined): AccessTone {
  * two different support answers.
  */
 export function formatEntitlementInstant(value: string | undefined) {
-  if (!value) return "—"
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return `${parsed.toISOString().slice(0, 19).replace("T", " ")} UTC`
+  if (!value) {
+    return "—";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return `${parsed.toISOString().slice(0, 19).replace("T", " ")} UTC`;
 }
 
 /**
@@ -460,7 +534,7 @@ export function formatEntitlementInstant(value: string | undefined) {
  * `recordedAt` are not merged on the ledger.
  */
 export const AUTHORITATIVE_TIMESTAMP_NOTE =
-  "As of is the instant the projection reasoned about. Last projected is when the projection run committed. They are never the same clock."
+  "As of is the instant the projection reasoned about. Last projected is when the projection run committed. They are never the same clock.";
 
 // ---------------------------------------------------------------------------
 // Customer, alias, and lineage vocabulary
@@ -481,7 +555,7 @@ const ALIAS_TYPE_LABELS: Record<string, string> = {
   application_user_id: "Application user ID",
   google_obfuscated_account_id: "Google obfuscated account ID",
   installation_id: "Installation ID",
-}
+};
 
 const ALIAS_TYPE_NOTES: Record<string, string> = {
   apple_app_account_token:
@@ -492,16 +566,20 @@ const ALIAS_TYPE_NOTES: Record<string, string> = {
     "Parsed server-side from Google's payload. Evidence of who made the purchase.",
   installation_id:
     "A device-local identifier. Evidence and attribution only — it can never create or select a customer, because a guessed installation ID would otherwise read someone else's entitlements.",
-}
+};
 
 export function aliasTypeLabel(value: string | undefined) {
-  if (!value) return "Unclassified alias"
-  return ALIAS_TYPE_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "Unclassified alias";
+  }
+  return ALIAS_TYPE_LABELS[value] ?? humanize(value);
 }
 
 export function aliasTypeNote(value: string | undefined) {
-  if (!value) return undefined
-  return ALIAS_TYPE_NOTES[value]
+  if (!value) {
+    return;
+  }
+  return ALIAS_TYPE_NOTES[value];
 }
 
 const SOURCE_AUTHORITY_LABELS: Record<string, string> = {
@@ -510,21 +588,25 @@ const SOURCE_AUTHORITY_LABELS: Record<string, string> = {
   restore: "Established by a restore",
   sdk_installation: "Asserted by an SDK installation",
   trusted_server: "Asserted by your backend",
-}
+};
 
 export function sourceAuthorityLabel(value: string | undefined) {
-  if (!value) return "Unknown authority"
-  return SOURCE_AUTHORITY_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "Unknown authority";
+  }
+  return SOURCE_AUTHORITY_LABELS[value] ?? humanize(value);
 }
 
 const VERIFICATION_STATUS_LABELS: Record<string, string> = {
   asserted: "Asserted",
   verified: "Verified",
-}
+};
 
 export function verificationStatusLabel(value: string | undefined) {
-  if (!value) return "Unclassified"
-  return VERIFICATION_STATUS_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "Unclassified";
+  }
+  return VERIFICATION_STATUS_LABELS[value] ?? humanize(value);
 }
 
 /**
@@ -537,25 +619,29 @@ export function verificationStatusLabel(value: string | undefined) {
  * to clean it up, and deleting it would strand a real purchase.
  */
 export function customerIdentityLabel(customer: {
-  identified?: boolean
-  purchaseAnchored?: boolean
+  identified?: boolean;
+  purchaseAnchored?: boolean;
 }) {
-  if (customer.identified) return "Identified"
-  if (customer.purchaseAnchored) return "Purchase-anchored · not yet identified"
-  return "No identity or purchase recorded"
+  if (customer.identified) {
+    return "Identified";
+  }
+  if (customer.purchaseAnchored) {
+    return "Purchase-anchored · not yet identified";
+  }
+  return "No identity or purchase recorded";
 }
 
 export function customerIdentityExplanation(customer: {
-  identified?: boolean
-  purchaseAnchored?: boolean
+  identified?: boolean;
+  purchaseAnchored?: boolean;
 }) {
   if (customer.identified) {
-    return "An application-user alias is active, so a person your backend named is attached to this customer."
+    return "An application-user alias is active, so a person your backend named is attached to this customer.";
   }
   if (customer.purchaseAnchored) {
-    return "A validated purchase is attached but no application-user alias is. This is the correct resting state for an anonymous purchase: the revenue is anchored to the store's own purchase chain, which survives reinstall and device changes, and identifying the user later attaches rather than merges."
+    return "A validated purchase is attached but no application-user alias is. This is the correct resting state for an anonymous purchase: the revenue is anchored to the store's own purchase chain, which survives reinstall and device changes, and identifying the user later attaches rather than merges.";
   }
-  return "Neither an application-user alias nor a purchase lineage is recorded in this Mosaic Environment."
+  return "Neither an application-user alias nor a purchase lineage is recorded in this Mosaic Environment.";
 }
 
 const CUSTOMER_STATUS_LABELS: Record<string, string> = {
@@ -563,17 +649,23 @@ const CUSTOMER_STATUS_LABELS: Record<string, string> = {
   active: "Active",
   anonymized: "Anonymized",
   frozen: "Frozen",
-}
+};
 
 export function customerStatusLabel(value: string | undefined) {
-  if (!value) return "Unclassified"
-  return CUSTOMER_STATUS_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "Unclassified";
+  }
+  return CUSTOMER_STATUS_LABELS[value] ?? humanize(value);
 }
 
 export function customerStatusTone(value: string | undefined): AccessTone {
-  if (value === "active") return "positive"
-  if (value === "frozen") return "attention"
-  return "neutral"
+  if (value === "active") {
+    return "positive";
+  }
+  if (value === "frozen") {
+    return "attention";
+  }
+  return "neutral";
 }
 
 const CUSTOMER_DIAGNOSTICS_LABELS: Record<string, string> = {
@@ -581,11 +673,13 @@ const CUSTOMER_DIAGNOSTICS_LABELS: Record<string, string> = {
   none: "None",
   projection_failed: "Projection failed",
   projection_stale: "Projection stale",
-}
+};
 
 export function customerDiagnosticsLabel(value: string | undefined) {
-  if (!value || value === "none") return "None"
-  return CUSTOMER_DIAGNOSTICS_LABELS[value] ?? humanize(value)
+  if (!value || value === "none") {
+    return "None";
+  }
+  return CUSTOMER_DIAGNOSTICS_LABELS[value] ?? humanize(value);
 }
 
 const LINEAGE_DIAGNOSTIC_LABELS: Record<string, string> = {
@@ -593,11 +687,13 @@ const LINEAGE_DIAGNOSTIC_LABELS: Record<string, string> = {
   identity_unresolved: "Identity unresolved",
   none: "None",
   product_unresolved: "Product unresolved",
-}
+};
 
 export function lineageDiagnosticLabel(value: string | undefined) {
-  if (!value || value === "none") return "None"
-  return LINEAGE_DIAGNOSTIC_LABELS[value] ?? humanize(value)
+  if (!value || value === "none") {
+    return "None";
+  }
+  return LINEAGE_DIAGNOSTIC_LABELS[value] ?? humanize(value);
 }
 
 /**
@@ -609,29 +705,37 @@ export function lineageDiagnosticLabel(value: string | undefined) {
  * person another person's purchases.
  */
 export const PROJECTION_FROZEN_NOTE =
-  "Projection is frozen for this Purchase Lineage while an identity conflict is open. The projector skips it and the last committed state is preserved, so nothing changes and neither candidate is granted anything. This is a safety state, not a failure."
+  "Projection is frozen for this Purchase Lineage while an identity conflict is open. The projector skips it and the last committed state is preserved, so nothing changes and neither candidate is granted anything. This is a safety state, not a failure.";
 
 const ONE_TIME_VALIDITY_LABELS: Record<string, string> = {
   owned: "Owned",
   refunded: "Refunded",
   revoked: "Revoked",
   unknown: "Validity undetermined",
-}
+};
 
 export function oneTimeValidityLabel(value: string | undefined) {
-  if (!value) return "Validity undetermined"
-  return ONE_TIME_VALIDITY_LABELS[value] ?? humanize(value)
+  if (!value) {
+    return "Validity undetermined";
+  }
+  return ONE_TIME_VALIDITY_LABELS[value] ?? humanize(value);
 }
 
 export function oneTimeValidityTone(value: string | undefined): AccessTone {
-  if (value === "owned") return "positive"
-  if (value === "revoked") return "negative"
-  if (value === "refunded") return "neutral"
-  return "attention"
+  if (value === "owned") {
+    return "positive";
+  }
+  if (value === "revoked") {
+    return "negative";
+  }
+  if (value === "refunded") {
+    return "neutral";
+  }
+  return "attention";
 }
 
 export function timelineEntryTypeLabel(value: string | undefined) {
-  return value ? humanize(value) : "Unclassified entry"
+  return value ? humanize(value) : "Unclassified entry";
 }
 
 /**
@@ -639,4 +743,4 @@ export function timelineEntryTypeLabel(value: string | undefined) {
  * the 9A boundary note now defers to.
  */
 export const AUTHORITATIVE_ACCESS_NOTE =
-  "Access shown here is computed only by the Mosaic projection engine from store-confirmed facts and the grant version that applied to each purchase. Nothing on these pages can grant or revoke access directly."
+  "Access shown here is computed only by the Mosaic projection engine from store-confirmed facts and the grant version that applied to each purchase. Nothing on these pages can grant or revoke access directly.";

@@ -2,51 +2,53 @@ import type {
   LocalRevision,
   MockCommerceState,
   MosaicDocument,
-} from "@/features/paywall-editor/types/editor"
+} from "@/features/paywall-editor/types/editor";
 import {
   localPreviewVersionPreference,
   localPreviewWebSocketProtocols,
-  previewMessageTypesByVersion,
+  type previewMessageTypesByVersion,
   validatePreviewMessage,
-} from "@/lib/mosaic-protocol"
+} from "@/lib/mosaic-protocol";
 
-export const PREVIEW_PROTOCOL_VERSION = "0.2" as const
-export const PREVIEW_WEBSOCKET_SUBPROTOCOL = localPreviewWebSocketProtocols["0.2"]
-export const PREVIEW_PROTOCOL_VERSIONS = localPreviewVersionPreference
+export const PREVIEW_PROTOCOL_VERSION = "0.2" as const;
+export const PREVIEW_WEBSOCKET_SUBPROTOCOL =
+  localPreviewWebSocketProtocols["0.2"];
+export const PREVIEW_PROTOCOL_VERSIONS = localPreviewVersionPreference;
 export const PREVIEW_WEBSOCKET_SUBPROTOCOLS = PREVIEW_PROTOCOL_VERSIONS.map(
-  (version) => localPreviewWebSocketProtocols[version],
-)
+  (version) => localPreviewWebSocketProtocols[version]
+);
 
-export type PreviewProtocolVersion = (typeof PREVIEW_PROTOCOL_VERSIONS)[number]
+export type PreviewProtocolVersion = (typeof PREVIEW_PROTOCOL_VERSIONS)[number];
 
-export type PreviewMessageType = (typeof previewMessageTypesByVersion)["0.2"][number]
+export type PreviewMessageType =
+  (typeof previewMessageTypesByVersion)["0.2"][number];
 
 export interface PreviewMessageEnvelope<TPayload = Record<string, unknown>> {
-  previewProtocolVersion: PreviewProtocolVersion
-  messageId: string
-  sessionId: string
-  sentAt: string
-  type: PreviewMessageType
-  payload: TPayload
+  messageId: string;
+  payload: TPayload;
+  previewProtocolVersion: PreviewProtocolVersion;
+  sentAt: string;
+  sessionId: string;
+  type: PreviewMessageType;
 }
 
 function safeToken(prefix: string) {
-  const random = globalThis.crypto?.randomUUID?.().replaceAll("-", "_")
-  return `${prefix}_${random ?? `${Date.now()}_${Math.round(Math.random() * 1_000_000)}`}`
+  const random = globalThis.crypto?.randomUUID?.().replaceAll("-", "_");
+  return `${prefix}_${random ?? `${Date.now()}_${Math.round(Math.random() * 1_000_000)}`}`;
 }
 
 export function localRevision(document: MosaicDocument): LocalRevision {
   return {
     revisionId: `revision_${document.id}_${document.revision}`,
     sequence: document.revision,
-  }
+  };
 }
 
 function envelope<TPayload>(
   sessionId: string,
   type: PreviewMessageType,
   payload: TPayload,
-  protocolVersion: PreviewProtocolVersion = PREVIEW_PROTOCOL_VERSION,
+  protocolVersion: PreviewProtocolVersion = PREVIEW_PROTOCOL_VERSION
 ): PreviewMessageEnvelope<TPayload> {
   return {
     previewProtocolVersion: protocolVersion,
@@ -55,43 +57,43 @@ function envelope<TPayload>(
     sentAt: new Date().toISOString(),
     type,
     payload,
-  }
+  };
 }
 
 export function createDraftUpdatedMessage(options: {
-  sessionId: string
-  editableDocumentId: string
-  document: MosaicDocument
-  locale: string
-  textScale: number
-  revision?: LocalRevision
+  sessionId: string;
+  editableDocumentId: string;
+  document: MosaicDocument;
+  locale: string;
+  textScale: number;
+  revision?: LocalRevision;
 }) {
   return envelope(options.sessionId, "draftUpdated", {
     editableDocumentId: options.editableDocumentId,
     revision: options.revision ?? localRevision(options.document),
     document: options.document,
     preview: { locale: options.locale, textScale: options.textScale },
-  })
+  });
 }
 
 export function createMockCommerceStateChangedMessage(options: {
-  sessionId: string
-  editableDocumentId: string
-  revision: LocalRevision
-  state: MockCommerceState
+  sessionId: string;
+  editableDocumentId: string;
+  revision: LocalRevision;
+  state: MockCommerceState;
 }) {
   return envelope(options.sessionId, "mockCommerceStateChanged", {
     editableDocumentId: options.editableDocumentId,
     stateRevision: options.revision,
     state: options.state,
-  })
+  });
 }
 
 export function createHeartbeatPongMessage(options: {
-  sessionId: string
-  clientId: string
-  sequence: number
-  protocolVersion?: PreviewProtocolVersion
+  sessionId: string;
+  clientId: string;
+  sequence: number;
+  protocolVersion?: PreviewProtocolVersion;
 }) {
   return envelope(
     options.sessionId,
@@ -101,39 +103,42 @@ export function createHeartbeatPongMessage(options: {
       kind: "pong" as const,
       sequence: options.sequence,
     },
-    options.protocolVersion,
-  )
+    options.protocolVersion
+  );
 }
 
 export function previewProtocolVersionForSubprotocol(
-  subprotocol: string,
+  subprotocol: string
 ): PreviewProtocolVersion | null {
   return (
     PREVIEW_PROTOCOL_VERSIONS.find(
-      (version) => localPreviewWebSocketProtocols[version] === subprotocol,
+      (version) => localPreviewWebSocketProtocols[version] === subprotocol
     ) ?? null
-  )
+  );
 }
 
 export function parsePreviewMessage(
   value: string,
-  expectedVersion?: PreviewProtocolVersion,
+  expectedVersion?: PreviewProtocolVersion
 ): PreviewMessageEnvelope | null {
-  let parsed: unknown
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(value)
+    parsed = JSON.parse(value);
   } catch {
-    return null
+    return null;
   }
-  const result = validatePreviewMessage(parsed)
-  if (!result.ok || (expectedVersion && result.value.previewProtocolVersion !== expectedVersion)) {
-    return null
+  const result = validatePreviewMessage(parsed);
+  if (
+    !result.ok ||
+    (expectedVersion && result.value.previewProtocolVersion !== expectedVersion)
+  ) {
+    return null;
   }
-  return result.value as PreviewMessageEnvelope
+  return result.value as PreviewMessageEnvelope;
 }
 
 export function recordValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
-    : null
+    : null;
 }

@@ -1,13 +1,13 @@
-import { QueryClient } from "@tanstack/react-query"
+import { QueryClient } from "@tanstack/react-query";
 
-import { ApiError } from "@/lib/api/errors"
+import { ApiError } from "@/lib/api/errors";
 
 function shouldRetryQuery(failureCount: number, error: unknown) {
   if (failureCount >= 2) {
-    return false
+    return false;
   }
 
-  return error instanceof ApiError ? error.retryable : true
+  return error instanceof ApiError ? error.retryable : true;
 }
 
 export function createDashboardQueryClient() {
@@ -22,5 +22,5 @@ export function createDashboardQueryClient() {
         staleTime: 30 * 1000,
       },
     },
-  })
+  });
 }

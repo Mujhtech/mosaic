@@ -1,10 +1,12 @@
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
-import { MigrationJourneyCockpit } from "@/features/billing-migrations/components/migration-journey-cockpit"
-import type { BillingMigrationProgram } from "@/generated/api"
+import { MigrationJourneyCockpit } from "@/features/billing-migrations/components/migration-journey-cockpit";
+import type { BillingMigrationProgram } from "@/generated/api";
 
-function terminalProgram(state: "failed" | "cancelled"): BillingMigrationProgram {
+function terminalProgram(
+  state: "failed" | "cancelled"
+): BillingMigrationProgram {
   return {
     authorityEpochBefore: 0,
     programId: `program_${state}`,
@@ -22,7 +24,7 @@ function terminalProgram(state: "failed" | "cancelled"): BillingMigrationProgram
     stabilizationDays: 7,
     state,
     stateVersion: 4,
-  }
+  };
 }
 
 describe("MigrationJourneyCockpit terminal recovery", () => {
@@ -31,24 +33,26 @@ describe("MigrationJourneyCockpit terminal recovery", () => {
       <MigrationJourneyCockpit
         baseHref="/migrations/program_failed"
         program={terminalProgram("failed")}
-      />,
-    )
+      />
+    );
     expect(
-      screen.getByRole("heading", { name: "Migration stopped after a failure" }),
-    ).toBeInTheDocument()
-    expect(screen.getByText(/evidence remain available/)).toBeInTheDocument()
-    expect(screen.queryByText("Connect source")).not.toBeInTheDocument()
-  })
+      screen.getByRole("heading", { name: "Migration stopped after a failure" })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/evidence remain available/)).toBeInTheDocument();
+    expect(screen.queryByText("Connect source")).not.toBeInTheDocument();
+  });
 
   it("shows cancelled recovery without implying the Program can resume", () => {
     render(
       <MigrationJourneyCockpit
         baseHref="/migrations/program_cancelled"
         program={terminalProgram("cancelled")}
-      />,
-    )
-    expect(screen.getByRole("heading", { name: "Migration cancelled" })).toBeInTheDocument()
-    expect(screen.getByText(/read-only and cannot resume/)).toBeInTheDocument()
-    expect(screen.queryByText("Connect source")).not.toBeInTheDocument()
-  })
-})
+      />
+    );
+    expect(
+      screen.getByRole("heading", { name: "Migration cancelled" })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/read-only and cannot resume/)).toBeInTheDocument();
+    expect(screen.queryByText("Connect source")).not.toBeInTheDocument();
+  });
+});

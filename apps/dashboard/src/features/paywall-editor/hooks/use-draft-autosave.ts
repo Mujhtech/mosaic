@@ -1,42 +1,48 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   AUTOSAVE_DELAY_MS,
   DEFAULT_MOCK_PRODUCTS,
-} from "@/features/paywall-editor/constants/editor-constants"
+} from "@/features/paywall-editor/constants/editor-constants";
 import {
   createLocalProjectFile,
   writeLocalProject,
-} from "@/features/paywall-editor/mutations/local-project-file"
+} from "@/features/paywall-editor/mutations/local-project-file";
 import {
   useEditorActions,
   useEditorStore,
-} from "@/features/paywall-editor/stores/editor-store-context"
+} from "@/features/paywall-editor/stores/editor-store-context";
 import type {
   MockProductDefinition,
   MockPurchaseState,
-} from "@/features/paywall-editor/types/editor"
+} from "@/features/paywall-editor/types/editor";
 
 export type AutosaveStatus =
-  "idle" | "unsaved" | "saving" | "saved" | "offline" | "conflict" | "failed"
+  | "idle"
+  | "unsaved"
+  | "saving"
+  | "saved"
+  | "offline"
+  | "conflict"
+  | "failed";
 
 export interface DraftAutosaveController {
-  status: AutosaveStatus
-  flush: () => boolean
-  retry: () => void
+  flush: () => boolean;
+  retry: () => void;
+  status: AutosaveStatus;
 }
 
 interface PendingAutosave {
-  fingerprint: string
-  preset: MockPurchaseState
-  project: ReturnType<typeof createLocalProjectFile>
-  revision: number
+  fingerprint: string;
+  preset: MockPurchaseState;
+  project: ReturnType<typeof createLocalProjectFile>;
+  revision: number;
 }
 
 export function useDraftAutosaveController(
   mockPurchaseState: MockPurchaseState,
   mockProducts: readonly MockProductDefinition[] = DEFAULT_MOCK_PRODUCTS,
-  enabled = true,
+  enabled = true
 ): DraftAutosaveController {
   const {
     document,
@@ -45,16 +51,16 @@ export function useDraftAutosaveController(
     textScale,
     localRevisionSequence,
     isDocumentTransactionActive,
-  } = useEditorStore()
-  const { markSaved } = useEditorActions()
-  const [status, setStatus] = useState<AutosaveStatus>("idle")
-  const lastSavedFingerprintRef = useRef("")
-  const pendingAutosaveRef = useRef<PendingAutosave | null>(null)
+  } = useEditorStore();
+  const { markSaved } = useEditorActions();
+  const [status, setStatus] = useState<AutosaveStatus>("idle");
+  const lastSavedFingerprintRef = useRef("");
+  const pendingAutosaveRef = useRef<PendingAutosave | null>(null);
   const compatibilityPreviewRef = useRef({
     locale: currentLocale,
     localRevisionSequence,
     textScale,
-  })
+  });
   useEffect(() => {
     // Locale and text scale are workspace-owned preview preferences. Keep their latest values
     // available for the next legitimate document or mock-commerce save without making a preview-
@@ -64,45 +70,62 @@ export function useDraftAutosaveController(
       locale: currentLocale,
       localRevisionSequence,
       textScale,
-    }
-  }, [currentLocale, localRevisionSequence, textScale])
+    };
+  }, [currentLocale, localRevisionSequence, textScale]);
 
   const attemptSave = useCallback(
     (pending: PendingAutosave) => {
-      if (pendingAutosaveRef.current?.fingerprint !== pending.fingerprint) return false
-      const saved = writeLocalProject(pending.project, pending.preset)
-
-      setStatus(saved ? "saved" : "failed")
-      if (saved) {
-        lastSavedFingerprintRef.current = pending.fingerprint
-        pendingAutosaveRef.current = null
-        markSaved(pending.revision)
+      if (pendingAutosaveRef.current?.fingerprint !== pending.fingerprint) {
+        return false;
       }
-      return saved
+      const saved = writeLocalProject(pending.project, pending.preset);
+
+      setStatus(saved ? "saved" : "failed");
+      if (saved) {
+        lastSavedFingerprintRef.current = pending.fingerprint;
+        pendingAutosaveRef.current = null;
+        markSaved(pending.revision);
+      }
+      return saved;
     },
-    [markSaved],
-  )
+    [markSaved]
+  );
 
   const retry = useCallback(() => {
-    if (!enabled || isDocumentTransactionActive) return
-    const pending = pendingAutosaveRef.current
-    if (!pending) return
-    setStatus("saving")
-    attemptSave(pending)
-  }, [attemptSave, enabled, isDocumentTransactionActive])
+    if (!enabled || isDocumentTransactionActive) {
+      return;
+    }
+    const pending = pendingAutosaveRef.current;
+    if (!pending) {
+      return;
+    }
+    setStatus("saving");
+    attemptSave(pending);
+  }, [attemptSave, enabled, isDocumentTransactionActive]);
 
   const flush = useCallback(() => {
-    if (!enabled) return true
-    if (isDocumentTransactionActive) return false
-    const pending = pendingAutosaveRef.current
-    if (!pending) return true
-    setStatus("saving")
-    return attemptSave(pending)
-  }, [attemptSave, enabled, isDocumentTransactionActive])
+    if (!enabled) {
+      return true;
+    }
+    if (isDocumentTransactionActive) {
+      return false;
+    }
+    const pending = pendingAutosaveRef.current;
+    if (!pending) {
+      return true;
+    }
+    setStatus("saving");
+    return attemptSave(pending);
+  }, [attemptSave, enabled, isDocumentTransactionActive]);
 
   useEffect(() => {
-    if (!enabled || !document || !editableDocumentId || isDocumentTransactionActive) return
-    const compatibilityPreview = compatibilityPreviewRef.current
+    if (
+      !(enabled && document && editableDocumentId) ||
+      isDocumentTransactionActive
+    ) {
+      return;
+    }
+    const compatibilityPreview = compatibilityPreviewRef.current;
     const project = createLocalProjectFile({
       editableDocumentId,
       document,
@@ -111,22 +134,24 @@ export function useDraftAutosaveController(
       mockPurchaseState,
       mockProducts,
       localRevisionSequence: compatibilityPreview.localRevisionSequence,
-    })
-    const fingerprint = JSON.stringify(project)
-    if (fingerprint === lastSavedFingerprintRef.current) return
+    });
+    const fingerprint = JSON.stringify(project);
+    if (fingerprint === lastSavedFingerprintRef.current) {
+      return;
+    }
     const pending = {
       fingerprint,
       preset: mockPurchaseState,
       project,
       revision: document.revision,
-    }
-    pendingAutosaveRef.current = pending
-    setStatus("saving")
+    };
+    pendingAutosaveRef.current = pending;
+    setStatus("saving");
     const timer = window.setTimeout(() => {
-      attemptSave(pending)
-    }, AUTOSAVE_DELAY_MS)
+      attemptSave(pending);
+    }, AUTOSAVE_DELAY_MS);
 
-    return () => window.clearTimeout(timer)
+    return () => window.clearTimeout(timer);
   }, [
     document,
     editableDocumentId,
@@ -135,15 +160,16 @@ export function useDraftAutosaveController(
     isDocumentTransactionActive,
     mockProducts,
     mockPurchaseState,
-  ])
+  ]);
 
-  return { status, flush, retry }
+  return { status, flush, retry };
 }
 
 export function useDraftAutosave(
   mockPurchaseState: MockPurchaseState,
   mockProducts: readonly MockProductDefinition[] = DEFAULT_MOCK_PRODUCTS,
-  enabled = true,
+  enabled = true
 ) {
-  return useDraftAutosaveController(mockPurchaseState, mockProducts, enabled).status
+  return useDraftAutosaveController(mockPurchaseState, mockProducts, enabled)
+    .status;
 }

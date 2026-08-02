@@ -1,34 +1,38 @@
-import type { ProviderConnection } from "@/generated/api"
+import type { ProviderConnection } from "@/generated/api";
 
 const PROVIDER_LABELS: Record<ProviderConnection["provider"], string> = {
   custom: "Custom provider",
   revenuecat: "RevenueCat",
-}
+};
 
-const INTEGRATION_LABELS: Record<ProviderConnection["integrationMode"], string> = {
+const INTEGRATION_LABELS: Record<
+  ProviderConnection["integrationMode"],
+  string
+> = {
   sdk_only: "SDK-only",
   server_connected: "Server-connected",
-}
+};
 
 export function ProviderConnectionsList({
   connections,
   organizationId,
   projectId,
 }: {
-  connections: readonly ProviderConnection[]
-  organizationId: string
-  projectId: string
+  connections: readonly ProviderConnection[];
+  organizationId: string;
+  projectId: string;
 }) {
   if (connections.length === 0) {
     return (
       <div className="rounded border border-dashed p-4">
-        <p className="text-sm font-semibold">No provider connections</p>
-        <p className="text-muted-foreground mt-1 text-sm leading-6">
-          Connect RevenueCat to synchronize its catalog into stable Mosaic Products. Credentials are
-          accepted once and are never returned by the API.
+        <p className="font-semibold text-sm">No provider connections</p>
+        <p className="mt-1 text-muted-foreground text-sm leading-6">
+          Connect RevenueCat to synchronize its catalog into stable Mosaic
+          Products. Credentials are accepted once and are never returned by the
+          API.
         </p>
       </div>
-    )
+    );
   }
 
   return (
@@ -38,12 +42,13 @@ export function ProviderConnectionsList({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="font-medium">{connection.name}</p>
-              <p className="text-muted-foreground mt-1 text-xs">
+              <p className="mt-1 text-muted-foreground text-xs">
                 {PROVIDER_LABELS[connection.provider]} ·{" "}
-                {INTEGRATION_LABELS[connection.integrationMode]} · {connection.mode}
+                {INTEGRATION_LABELS[connection.integrationMode]} ·{" "}
+                {connection.mode}
               </p>
             </div>
-            <span className="border-border bg-muted rounded-full border px-2.5 py-1 text-xs font-medium">
+            <span className="rounded-full border border-border bg-muted px-2.5 py-1 font-medium text-xs">
               {connection.status} · {connection.healthStatus}
             </span>
           </div>
@@ -67,18 +72,18 @@ export function ProviderConnectionsList({
             />
           </dl>
 
-          <p className="text-muted-foreground mt-3 text-xs leading-5">
+          <p className="mt-3 text-muted-foreground text-xs leading-5">
             {connection.integrationMode === "sdk_only"
               ? "The host app supplies this custom provider at runtime. Mosaic stores only this non-secret connection metadata."
               : "Mosaic stores non-secret connection metadata here; provider credentials are never displayed again."}
           </p>
           {connection.lastErrorCode ? (
-            <p className="text-destructive mt-2 text-xs" role="status">
+            <p className="mt-2 text-destructive text-xs" role="status">
               Last provider error: {connection.lastErrorCode}
             </p>
           ) : null}
           <a
-            className="text-primary mt-3 inline-flex text-sm font-medium hover:underline"
+            className="mt-3 inline-flex font-medium text-primary text-sm hover:underline"
             href={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers/${encodeURIComponent(connection.id)}`}
           >
             Open connection details
@@ -86,14 +91,14 @@ export function ProviderConnectionsList({
         </li>
       ))}
     </ul>
-  )
+  );
 }
 
 function ConnectionField({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="mt-1 text-sm font-medium">{value}</dd>
+      <dd className="mt-1 font-medium text-sm">{value}</dd>
     </div>
-  )
+  );
 }

@@ -1,8 +1,13 @@
-import { archiveAsset, getAssetUsage, listAssets, uploadAsset } from "@/generated/api/sdk.gen"
-import type { Asset } from "@/generated/api/types.gen"
-import type { AssetAdapter } from "@/features/assets/api/asset-adapter"
-import type { HostedAsset } from "@/features/publishing/api/hosted-publishing-adapter"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import type { AssetAdapter } from "@/features/assets/api/asset-adapter";
+import type { HostedAsset } from "@/features/publishing/api/hosted-publishing-adapter";
+import {
+  archiveAsset,
+  getAssetUsage,
+  listAssets,
+  uploadAsset,
+} from "@/generated/api/sdk.gen";
+import type { Asset } from "@/generated/api/types.gen";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 function mapAsset(asset: Asset): HostedAsset {
   return {
@@ -14,7 +19,7 @@ function mapAsset(asset: Asset): HostedAsset {
     name: asset.originalFilename,
     status: asset.status,
     url: asset.url,
-  }
+  };
 }
 
 export const generatedAssetAdapter: AssetAdapter = {
@@ -24,23 +29,23 @@ export const generatedAssetAdapter: AssetAdapter = {
       client: generatedDashboardClient,
       path: input,
       throwOnError: true,
-    })
+    });
   },
   async getAssetUsage(input) {
     const result = await getAssetUsage({
       client: generatedDashboardClient,
       path: input,
       throwOnError: true,
-    })
-    return result.data.data
+    });
+    return result.data.data;
   },
   async listAssets(projectId) {
     const result = await listAssets({
       client: generatedDashboardClient,
       path: { projectId },
       throwOnError: true,
-    })
-    return result.data.data.items.map(mapAsset)
+    });
+    return result.data.data.items.map(mapAsset);
   },
   async uploadAsset(input) {
     const result = await uploadAsset({
@@ -48,7 +53,7 @@ export const generatedAssetAdapter: AssetAdapter = {
       client: generatedDashboardClient,
       path: { projectId: input.projectId },
       throwOnError: true,
-    })
-    return mapAsset(result.data.data)
+    });
+    return mapAsset(result.data.data);
   },
-}
+};

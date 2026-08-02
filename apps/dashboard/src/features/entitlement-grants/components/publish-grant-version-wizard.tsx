@@ -1,15 +1,6 @@
-import { useState } from "react"
+import { useCallback, useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -18,10 +9,20 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { StatusPill } from "@/features/billing-ledger/components/billing-chrome"
+} from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { StatusPill } from "@/features/billing-ledger/components/billing-chrome";
 import {
   evaluatePublishGate,
+  type GrantProposal,
   grantPolicyFields,
   grantPolicyLabel,
   grantPolicyNote,
@@ -29,28 +30,29 @@ import {
   narrowingCodeExplanation,
   PAUSE_POLICY_NOTE,
   proposalFingerprint,
-  type GrantProposal,
-} from "@/features/entitlement-grants/types/grant-version-view"
-import type { Entitlement, GrantVersionImpact, Product } from "@/generated/api"
+} from "@/features/entitlement-grants/types/grant-version-view";
+import type { Entitlement, GrantVersionImpact, Product } from "@/generated/api";
 
-type PurchaseType = "auto_renewable_subscription" | "non_consumable"
+type PurchaseType = "auto_renewable_subscription" | "non_consumable";
 
 interface PublishGrantVersionWizardProps {
-  canManage: boolean
-  entitlementId: string
-  entitlements: readonly Entitlement[]
-  onPreview: (proposal: GrantProposal) => Promise<GrantVersionImpact | undefined>
-  onPublish: (proposal: GrantProposal) => Promise<void>
-  productId: string
-  products: readonly Product[]
-  triggerLabel?: string
+  canManage: boolean;
+  entitlementId: string;
+  entitlements: readonly Entitlement[];
+  onPreview: (
+    proposal: GrantProposal
+  ) => Promise<GrantVersionImpact | undefined>;
+  onPublish: (proposal: GrantProposal) => Promise<void>;
+  productId: string;
+  products: readonly Product[];
+  triggerLabel?: string;
 }
 
 /**
  * Creating the next grant version.
  *
  * Three deliberate steps, in this order and no other: describe the shape,
- * *see what it would touch*, then publish with a reason. The middle step is not
+ *see what it would touch*, then publish with a reason. The middle step is not
  * a review screen an operator can skip — it is the only place
  * `impactedActiveSources` is stated, and that number is the answer to "how many
  * customers could lose access". Preview writes nothing, including no audit
@@ -70,12 +72,19 @@ export function PublishGrantVersionWizard({
   products,
   triggerLabel = "Create new version",
 }: PublishGrantVersionWizardProps) {
-  const [open, setOpen] = useState(false)
-  const [step, setStep] = useState<"publish" | "review" | "shape">("shape")
-  const [impact, setImpact] = useState<GrantVersionImpact | undefined>(undefined)
-  const [previewedFingerprint, setPreviewedFingerprint] = useState<string | undefined>(undefined)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const handleClick4 = useCallback(() => setStep("review"), []);
+  const handleClick3 = useCallback(() => setStep("publish"), []);
+  const handleClick2 = useCallback(() => setStep("shape"), []);
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<"publish" | "review" | "shape">("shape");
+  const [impact, setImpact] = useState<GrantVersionImpact | undefined>(
+    undefined
+  );
+  const [previewedFingerprint, setPreviewedFingerprint] = useState<
+    string | undefined
+  >(undefined);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [proposal, setProposal] = useState<GrantProposal>({
     effectiveStart: defaultEffectiveStart(),
@@ -87,7 +96,7 @@ export function PublishGrantVersionWizard({
     productId,
     reason: "",
     supportedPurchaseTypes: ["auto_renewable_subscription"],
-  })
+  });
 
   /**
    * Any change to a published field discards the preview. The alternative —
@@ -96,24 +105,24 @@ export function PublishGrantVersionWizard({
    */
   function update(patch: Partial<GrantProposal>) {
     setProposal((current) => {
-      const next = { ...current, ...patch }
+      const next = { ...current, ...patch };
       if (proposalFingerprint(next) !== proposalFingerprint(current)) {
-        setImpact(undefined)
-        setPreviewedFingerprint(undefined)
-        setStep("shape")
+        setImpact(undefined);
+        setPreviewedFingerprint(undefined);
+        setStep("shape");
       }
-      return next
-    })
+      return next;
+    });
   }
 
   const productOptions = products.map((product) => ({
     label: product.internalName,
     value: product.id,
-  }))
+  }));
   const entitlementOptions = entitlements.map((entitlement) => ({
     label: entitlement.name,
     value: entitlement.id,
-  }))
+  }));
 
   const gate = evaluatePublishGate({
     canManage,
@@ -121,50 +130,66 @@ export function PublishGrantVersionWizard({
     isSubmitting: busy,
     previewedFingerprint,
     proposal,
-  })
+  });
 
-  function reset() {
-    setStep("shape")
-    setImpact(undefined)
-    setPreviewedFingerprint(undefined)
-    setError(null)
-    setBusy(false)
-  }
+  const reset = useCallback(() => {
+    setStep("shape");
+    setImpact(undefined);
+    setPreviewedFingerprint(undefined);
+    setError(null);
+    setBusy(false);
+  }, []);
 
-  async function preview() {
-    setBusy(true)
-    setError(null)
+  const preview = useCallback(async () => {
+    setBusy(true);
+    setError(null);
     try {
-      const result = await onPreview(proposal)
-      setImpact(result)
-      setPreviewedFingerprint(proposalFingerprint(proposal))
-      setStep("review")
+      const result = await onPreview(proposal);
+      setImpact(result);
+      setPreviewedFingerprint(proposalFingerprint(proposal));
+      setStep("review");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Mosaic could not preview this change.")
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Mosaic could not preview this change."
+      );
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  }, [onPreview, proposal]);
 
-  async function publish() {
-    setBusy(true)
-    setError(null)
+  const handleClick = useCallback(() => {
+    preview();
+  }, [preview]);
+  const publish = useCallback(async () => {
+    setBusy(true);
+    setError(null);
     try {
-      await onPublish(proposal)
-      setOpen(false)
-      reset()
+      await onPublish(proposal);
+      setOpen(false);
+      reset();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Mosaic could not publish this version.")
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Mosaic could not publish this version."
+      );
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  }, [onPublish, proposal, reset]);
 
+  const handleClick5 = useCallback(() => {
+    publish();
+  }, [publish]);
   return (
     <Dialog
       onOpenChange={(nextOpen) => {
-        setOpen(nextOpen)
-        if (!nextOpen) reset()
+        setOpen(nextOpen);
+        if (!nextOpen) {
+          reset();
+        }
       }}
       open={open}
     >
@@ -175,15 +200,20 @@ export function PublishGrantVersionWizard({
         <DialogHeader className="border-b p-5">
           <DialogTitle>Create a new grant version</DialogTitle>
           <DialogDescription>
-            Published versions are never edited. This creates the next version and closes the
-            current one at exactly its start, so the two intervals abut with no gap and no overlap.
+            Published versions are never edited. This creates the next version
+            and closes the current one at exactly its start, so the two
+            intervals abut with no gap and no overlap.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 p-5">
-          <ol className="text-muted-foreground flex flex-wrap gap-2 text-xs">
+          <ol className="flex flex-wrap gap-2 text-muted-foreground text-xs">
             <StepChip active={step === "shape"} index={1} label="Shape" />
-            <StepChip active={step === "review"} index={2} label="Impact preview" />
+            <StepChip
+              active={step === "review"}
+              index={2}
+              label="Impact preview"
+            />
             <StepChip active={step === "publish"} index={3} label="Publish" />
           </ol>
 
@@ -210,7 +240,9 @@ export function PublishGrantVersionWizard({
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="grant-version-entitlement">Entitlement</FieldLabel>
+                <FieldLabel htmlFor="grant-version-entitlement">
+                  Entitlement
+                </FieldLabel>
                 <Select
                   items={entitlementOptions}
                   onValueChange={(value) => update({ entitlementId: value })}
@@ -228,24 +260,31 @@ export function PublishGrantVersionWizard({
                   </SelectContent>
                 </Select>
                 <FieldDescription>
-                  One version history belongs to one (Product, Entitlement) pair.
+                  One version history belongs to one (Product, Entitlement)
+                  pair.
                 </FieldDescription>
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="grant-version-start">Takes effect at (local time)</FieldLabel>
+                <FieldLabel htmlFor="grant-version-start">
+                  Takes effect at (local time)
+                </FieldLabel>
                 <Input
                   id="grant-version-start"
                   onChange={(event) =>
-                    update({ effectiveStart: toIsoInstant(event.currentTarget.value) })
+                    update({
+                      effectiveStart: toIsoInstant(event.currentTarget.value),
+                    })
                   }
                   type="datetime-local"
                   value={toLocalInput(proposal.effectiveStart)}
                 />
                 <FieldDescription>
-                  The projection engine selects a version by each purchase&rsquo;s own effective
-                  time, not by now. A change that silently applied to yesterday is the failure grant
-                  versioning exists to prevent, so backdating is a separate, checked choice.
+                  The projection engine selects a version by each
+                  purchase&rsquo;s own effective time, not by now. A change that
+                  silently applied to yesterday is the failure grant versioning
+                  exists to prevent, so backdating is a separate, checked
+                  choice.
                 </FieldDescription>
               </Field>
 
@@ -253,49 +292,57 @@ export function PublishGrantVersionWizard({
                 <input
                   checked={proposal.retroactive === true}
                   className="mt-1"
-                  onChange={(event) => update({ retroactive: event.currentTarget.checked })}
+                  onChange={(event) =>
+                    update({ retroactive: event.currentTarget.checked })
+                  }
                   type="checkbox"
                 />
                 <span>
                   Backdate this version
-                  <span className="text-muted-foreground block text-xs leading-5">
-                    A retroactive version may add Entitlements or widen access policy, never remove
-                    or narrow either. Taking access from a customer who did nothing wrong is the one
-                    shape Mosaic refuses.
+                  <span className="block text-muted-foreground text-xs leading-5">
+                    A retroactive version may add Entitlements or widen access
+                    policy, never remove or narrow either. Taking access from a
+                    customer who did nothing wrong is the one shape Mosaic
+                    refuses.
                   </span>
                 </span>
               </label>
 
               <fieldset className="space-y-2">
-                <legend className="text-sm font-semibold">
+                <legend className="font-semibold text-sm">
                   Purchase types this version covers
                 </legend>
-                {(["auto_renewable_subscription", "non_consumable"] as PurchaseType[]).map(
-                  (type) => (
-                    <label className="flex items-center gap-2 text-sm" key={type}>
-                      <input
-                        checked={(proposal.supportedPurchaseTypes ?? []).includes(type)}
-                        onChange={(event) =>
-                          update({
-                            supportedPurchaseTypes: event.currentTarget.checked
-                              ? [...(proposal.supportedPurchaseTypes ?? []), type]
-                              : (proposal.supportedPurchaseTypes ?? []).filter(
-                                  (item) => item !== type,
-                                ),
-                          })
-                        }
-                        type="checkbox"
-                      />
-                      {type === "auto_renewable_subscription"
-                        ? "Auto-renewable subscription"
-                        : "Non-consumable"}
-                    </label>
-                  ),
-                )}
+                {(
+                  [
+                    "auto_renewable_subscription",
+                    "non_consumable",
+                  ] as PurchaseType[]
+                ).map((type) => (
+                  <label className="flex items-center gap-2 text-sm" key={type}>
+                    <input
+                      checked={(proposal.supportedPurchaseTypes ?? []).includes(
+                        type
+                      )}
+                      onChange={(event) =>
+                        update({
+                          supportedPurchaseTypes: event.currentTarget.checked
+                            ? [...(proposal.supportedPurchaseTypes ?? []), type]
+                            : (proposal.supportedPurchaseTypes ?? []).filter(
+                                (item) => item !== type
+                              ),
+                        })
+                      }
+                      type="checkbox"
+                    />
+                    {type === "auto_renewable_subscription"
+                      ? "Auto-renewable subscription"
+                      : "Non-consumable"}
+                  </label>
+                ))}
               </fieldset>
 
               <fieldset className="space-y-3">
-                <legend className="text-sm font-semibold">
+                <legend className="font-semibold text-sm">
                   Subscription states that grant access
                 </legend>
                 {grantPolicyFields.map((field) => (
@@ -303,20 +350,24 @@ export function PublishGrantVersionWizard({
                     <input
                       checked={proposal[field] === true}
                       className="mt-1"
-                      onChange={(event) => update({ [field]: event.currentTarget.checked })}
+                      onChange={(event) =>
+                        update({ [field]: event.currentTarget.checked })
+                      }
                       type="checkbox"
                     />
                     <span>
                       {grantPolicyLabel(field)}
                       {grantPolicyNote(field) ? (
-                        <span className="text-muted-foreground block text-xs leading-5">
+                        <span className="block text-muted-foreground text-xs leading-5">
                           {grantPolicyNote(field)}
                         </span>
                       ) : null}
                     </span>
                   </label>
                 ))}
-                <p className="text-muted-foreground text-xs leading-5">{PAUSE_POLICY_NOTE}</p>
+                <p className="text-muted-foreground text-xs leading-5">
+                  {PAUSE_POLICY_NOTE}
+                </p>
               </fieldset>
             </>
           ) : null}
@@ -324,7 +375,9 @@ export function PublishGrantVersionWizard({
           {step !== "shape" && impact ? (
             <div className="space-y-3">
               <div className="rounded border p-4">
-                <p className="text-sm leading-6 font-semibold">{impactHeadline(impact)}</p>
+                <p className="font-semibold text-sm leading-6">
+                  {impactHeadline(impact)}
+                </p>
                 <dl className="mt-3 grid gap-2 sm:grid-cols-2">
                   <ImpactRow
                     label="Purchases currently granting access"
@@ -343,16 +396,19 @@ export function PublishGrantVersionWizard({
                     value={impact.impactedProducts ?? 0}
                   />
                 </dl>
-                <p className="text-muted-foreground mt-3 text-xs leading-5">
-                  Every count is from current committed state — the snapshot each customer&rsquo;s
-                  pointer names, not the whole snapshot history. Previewing writes nothing, not even
-                  an audit event.
+                <p className="mt-3 text-muted-foreground text-xs leading-5">
+                  Every count is from current committed state — the snapshot
+                  each customer&rsquo;s pointer names, not the whole snapshot
+                  history. Previewing writes nothing, not even an audit event.
                 </p>
               </div>
 
               {impact.additiveSuperset === false ? (
-                <div className="border-destructive/35 bg-destructive/10 rounded border p-4">
-                  <StatusPill label="Publish would be refused" tone="negative" />
+                <div className="rounded border border-destructive/35 bg-destructive/10 p-4">
+                  <StatusPill
+                    label="Publish would be refused"
+                    tone="negative"
+                  />
                   <p className="mt-2 text-sm leading-6">
                     {narrowingCodeExplanation(impact.narrowingCode)}
                   </p>
@@ -363,21 +419,23 @@ export function PublishGrantVersionWizard({
 
           {step === "publish" ? (
             <Field>
-              <FieldLabel htmlFor="grant-version-reason">Reason for this change</FieldLabel>
+              <FieldLabel htmlFor="grant-version-reason">
+                Reason for this change
+              </FieldLabel>
               <Input
                 id="grant-version-reason"
                 onChange={(event) => {
                   // The value is read before the updater runs: React nulls
                   // `currentTarget` once the handler returns, so a lazy read
                   // inside the updater throws.
-                  const reason = event.currentTarget.value
-                  setProposal((current) => ({ ...current, reason }))
+                  const reason = event.currentTarget.value;
+                  setProposal((current) => ({ ...current, reason }));
                 }}
                 value={proposal.reason ?? ""}
               />
               <FieldDescription>
-                Recorded with the version and the audit event. It is what an investigation reads
-                months from now.
+                Recorded with the version and the audit event. It is what an
+                investigation reads months from now.
               </FieldDescription>
             </Field>
           ) : null}
@@ -392,18 +450,18 @@ export function PublishGrantVersionWizard({
         <DialogFooter className="flex-col border-t p-5 sm:flex-col sm:justify-start">
           <div className="flex flex-wrap gap-2">
             {step === "shape" ? (
-              <Button disabled={busy} onClick={() => void preview()} type="button">
+              <Button disabled={busy} onClick={handleClick} type="button">
                 {busy ? "Previewing…" : "Preview impact"}
               </Button>
             ) : null}
             {step === "review" ? (
               <>
-                <Button onClick={() => setStep("shape")} type="button" variant="outline">
+                <Button onClick={handleClick2} type="button" variant="outline">
                   Back to shape
                 </Button>
                 <Button
                   disabled={impact?.additiveSuperset === false}
-                  onClick={() => setStep("publish")}
+                  onClick={handleClick3}
                   type="button"
                 >
                   Continue to publish
@@ -412,65 +470,88 @@ export function PublishGrantVersionWizard({
             ) : null}
             {step === "publish" ? (
               <>
-                <Button onClick={() => setStep("review")} type="button" variant="outline">
+                <Button onClick={handleClick4} type="button" variant="outline">
                   Back to impact
                 </Button>
-                <Button disabled={!gate.allowed} onClick={() => void publish()} type="button">
+                <Button
+                  disabled={!gate.allowed}
+                  onClick={handleClick5}
+                  type="button"
+                >
                   {busy ? "Publishing…" : "Publish new version"}
                 </Button>
               </>
             ) : null}
           </div>
           {gate.explanation && step === "publish" ? (
-            <p className="text-muted-foreground text-xs leading-5">{gate.explanation}</p>
+            <p className="text-muted-foreground text-xs leading-5">
+              {gate.explanation}
+            </p>
           ) : null}
           <p className="text-muted-foreground text-xs leading-5">
-            Publishing enqueues a reprojection for every Billing Customer whose current snapshot
-            cites this Product, in the same transaction as the version itself.
+            Publishing enqueues a reprojection for every Billing Customer whose
+            current snapshot cites this Product, in the same transaction as the
+            version itself.
           </p>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
-function StepChip({ active, index, label }: { active: boolean; index: number; label: string }) {
+function StepChip({
+  active,
+  index,
+  label,
+}: {
+  active: boolean;
+  index: number;
+  label: string;
+}) {
   return (
     <li>
       <span
         className={`inline-flex rounded-full border px-2.5 py-1 ${
-          active ? "border-primary/35 bg-primary/10 text-primary font-medium" : "border-border"
+          active
+            ? "border-primary/35 bg-primary/10 font-medium text-primary"
+            : "border-border"
         }`}
       >
         {index}. {label}
       </span>
     </li>
-  )
+  );
 }
 
 function ImpactRow({ label, value }: { label: string; value: number }) {
   return (
     <div>
       <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="text-sm font-semibold">{value}</dd>
+      <dd className="font-semibold text-sm">{value}</dd>
     </div>
-  )
+  );
 }
 
 function defaultEffectiveStart() {
-  return new Date(Date.now() + 5 * 60 * 1000).toISOString()
+  return new Date(Date.now() + 5 * 60 * 1000).toISOString();
 }
 
 function toLocalInput(iso: string | undefined) {
-  if (!iso) return ""
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return ""
-  const offset = parsed.getTimezoneOffset() * 60_000
-  return new Date(parsed.getTime() - offset).toISOString().slice(0, 16)
+  if (!iso) {
+    return "";
+  }
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  const offset = parsed.getTimezoneOffset() * 60_000;
+  return new Date(parsed.getTime() - offset).toISOString().slice(0, 16);
 }
 
 function toIsoInstant(local: string) {
-  if (!local) return ""
-  const parsed = new Date(local)
-  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString()
+  if (!local) {
+    return "";
+  }
+  const parsed = new Date(local);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
 }

@@ -1,0 +1,91 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": [
+    "ultracite/biome/core",
+    "ultracite/biome/react",
+    "ultracite/biome/tanstack",
+    "ultracite/biome/vitest"
+  ],
+  "javascript": {
+    // Vite `define` constants, typed in src/build-info.d.ts.
+    "globals": [
+      "__MOSAIC_BUILD_TIME__",
+      "__MOSAIC_COMMIT__",
+      "__MOSAIC_VERSION__"
+    ]
+  },
+  "linter": {
+    "rules": {
+      "performance": {
+        // `delete` removes an optional field from a protocol document; the
+        // suggested `= undefined` leaves the key in place, which changes
+        // Object.keys, `in`, and deep-equality against a fixture. The two are
+        // not interchangeable here.
+        "noDelete": "off",
+
+        // Most of what remains is a handler inside a .map that closes over the
+        // row it renders, where useCallback is not available and the fix is a
+        // child component per list. The handlers that could be lifted have
+        // been: see the useCallback pass across the feature components.
+        "noJsxPropsBind": "off"
+      },
+      "complexity": {
+        // The five worst offenders were decomposed: the canvas preview
+        // renderer, the document validator, the editor keydown handler, the
+        // preview socket message handler and the relay frame handler, together
+        // 102/97/93/92/89 down to clean/24/31/38/43. What is left tops out at
+        // 82 and is mostly React render callbacks, where splitting means
+        // extracting components rather than moving logic. 90 holds that line
+        // and still fails anything worse than today's worst.
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": 90 }
+        }
+      },
+      "suspicious": {
+        // Type-aware, and its inference disagrees with tsc. It reads
+        // `data?.proposals ?? []` as a redundant coalesce where `data` is
+        // `LifecycleData | undefined`; removing it, as the rule asks, spreads
+        // undefined and fails to compile (TS2488). It also resolves
+        // `Exclude<...>` to never, so reachable switch cases read as dead, and
+        // misses a `let` reassigned inside a closure. A rule that is wrong
+        // about types is worse than no rule, because acting on it breaks code.
+        "noUnnecessaryConditions": "off"
+      }
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        // Object key order is observable here (locale precedence via
+        // Object.keys, protocol document field order), so leave it alone.
+        "useSortedKeys": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.test.mjs"],
+      "linter": {
+        "rules": {
+          "performance": {
+            // Testing Library name matchers are regex literals by design. The
+            // rule guards against recompiling in a hot path, which a matcher
+            // evaluated once per assertion is not.
+            "useTopLevelRegex": "off"
+          }
+        }
+      }
+    }
+  ],
+  "files": {
+    "includes": [
+      "!dist",
+      "!.output",
+      "!coverage",
+      "!src/generated",
+      "!src/routeTree.gen.ts",
+      "!package-lock.json"
+    ]
+  }
+}

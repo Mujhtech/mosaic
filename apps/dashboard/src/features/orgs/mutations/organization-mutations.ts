@@ -1,8 +1,10 @@
-import { mutationOptions, type QueryClient } from "@tanstack/react-query"
-
-import { createOrganization, type CreateOrganizationRequest } from "@/generated/api"
-import { organizationKeys } from "@/features/orgs/queries/organizations-query"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import { organizationKeys } from "@/features/orgs/queries/organizations-query";
+import {
+  type CreateOrganizationRequest,
+  createOrganization,
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 export function createOrganizationMutationOptions(queryClient: QueryClient) {
   return mutationOptions({
@@ -11,9 +13,10 @@ export function createOrganizationMutationOptions(queryClient: QueryClient) {
         body,
         client: generatedDashboardClient,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: organizationKeys.all }),
-  })
+    onSuccess: async () =>
+      queryClient.invalidateQueries({ queryKey: organizationKeys.all }),
+  });
 }

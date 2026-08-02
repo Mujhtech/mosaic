@@ -1,10 +1,10 @@
-import { DefinitionRow } from "@/features/billing-ledger/components/billing-chrome"
+import { DefinitionRow } from "@/features/billing-ledger/components/billing-chrome";
 import {
   formatBillingTimestamp,
   ledgerEntryTypeLabel,
-} from "@/features/billing-ledger/types/billing-vocabulary"
-import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import type { BillingLedgerEntry, TransactionFact } from "@/generated/api"
+} from "@/features/billing-ledger/types/billing-vocabulary";
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page";
+import type { BillingLedgerEntry, TransactionFact } from "@/generated/api";
 
 /**
  * The source Raw Billing Input, described through the append-only Billing Event
@@ -22,16 +22,18 @@ export function RawInputPanel({
   entries,
   fact,
 }: {
-  entries: readonly BillingLedgerEntry[]
-  fact: TransactionFact
+  entries: readonly BillingLedgerEntry[];
+  fact: TransactionFact;
 }) {
   const related = entries
     .filter(
       (entry) =>
         (fact.sourceRawInputId && entry.rawInputId === fact.sourceRawInputId) ||
-        (fact.id && entry.transactionFactId === fact.id),
+        (fact.id && entry.transactionFactId === fact.id)
     )
-    .sort((a, b) => Date.parse(b.occurredAt ?? "") - Date.parse(a.occurredAt ?? ""))
+    .sort(
+      (a, b) => Date.parse(b.occurredAt ?? "") - Date.parse(a.occurredAt ?? "")
+    );
 
   return (
     <WorkflowPanel
@@ -39,7 +41,10 @@ export function RawInputPanel({
       title="Source input and ledger trail"
     >
       <dl>
-        <DefinitionRow label="Raw Billing Input" value={fact.sourceRawInputId ?? "—"} />
+        <DefinitionRow
+          label="Raw Billing Input"
+          value={fact.sourceRawInputId ?? "—"}
+        />
         <DefinitionRow
           label="Producing Validation Attempt"
           value={fact.validationAttemptId ?? "—"}
@@ -47,13 +52,17 @@ export function RawInputPanel({
         <DefinitionRow label="Transaction Fact" value={fact.id ?? "—"} />
         <DefinitionRow
           label="Fact version"
-          value={fact.factVersion === undefined ? "—" : String(fact.factVersion)}
+          value={
+            fact.factVersion === undefined ? "—" : String(fact.factVersion)
+          }
         />
       </dl>
 
-      <h3 className="mt-5 text-xs font-semibold tracking-wide uppercase">Billing Ledger entries</h3>
+      <h3 className="mt-5 font-semibold text-xs uppercase tracking-wide">
+        Billing Ledger entries
+      </h3>
       {related.length === 0 ? (
-        <p className="text-muted-foreground mt-2 text-sm">
+        <p className="mt-2 text-muted-foreground text-sm">
           No ledger entry for this input is inside the recent ledger window.
         </p>
       ) : (
@@ -63,19 +72,26 @@ export function RawInputPanel({
               className="flex flex-wrap items-baseline justify-between gap-2 rounded border p-3"
               key={entry.id}
             >
-              <span className="text-sm font-medium">{ledgerEntryTypeLabel(entry.entryType)}</span>
-              <span className="text-muted-foreground text-xs" title={entry.occurredAt}>
+              <span className="font-medium text-sm">
+                {ledgerEntryTypeLabel(entry.entryType)}
+              </span>
+              <span
+                className="text-muted-foreground text-xs"
+                title={entry.occurredAt}
+              >
                 {formatBillingTimestamp(entry.occurredAt)}
-                {entry.correlationId ? ` · correlation ${entry.correlationId}` : ""}
+                {entry.correlationId
+                  ? ` · correlation ${entry.correlationId}`
+                  : ""}
               </span>
             </li>
           ))}
         </ol>
       )}
-      <p className="text-muted-foreground mt-4 text-xs leading-5">
-        The ledger has no update operation. Entries are appended in the order events happened and
-        are never edited or removed.
+      <p className="mt-4 text-muted-foreground text-xs leading-5">
+        The ledger has no update operation. Entries are appended in the order
+        events happened and are never edited or removed.
       </p>
     </WorkflowPanel>
-  )
+  );
 }

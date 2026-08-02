@@ -1,24 +1,24 @@
-import { useState } from "react"
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 
 interface ReviewFact {
-  label: string
-  value: string
+  label: string;
+  value: string;
 }
 
 interface Props {
-  actionLabel: string
-  binding: string
-  disabledReason: string | null
-  facts: readonly ReviewFact[]
-  impactSummary?: string
-  confirmationCopy?: string
-  isPending: boolean
-  onConfirm: () => void
-  pendingLabel: string
-  title: string
-  variant?: "default" | "outline"
+  actionLabel: string;
+  binding: string;
+  confirmationCopy?: string;
+  disabledReason: string | null;
+  facts: readonly ReviewFact[];
+  impactSummary?: string;
+  isPending: boolean;
+  onConfirm: () => void;
+  pendingLabel: string;
+  title: string;
+  variant?: "default" | "outline";
 }
 
 export function MigrationImpactReviewAction({
@@ -34,18 +34,21 @@ export function MigrationImpactReviewAction({
   title,
   variant = "default",
 }: Props) {
-  const [confirmedBinding, setConfirmedBinding] = useState<string | null>(null)
-  const confirmed = confirmedBinding === binding
-  const explanationId = `${binding.replaceAll(/[^a-zA-Z0-9_-]/g, "-")}-explanation`
+  const [confirmedBinding, setConfirmedBinding] = useState<string | null>(null);
+  const confirmed = confirmedBinding === binding;
+  const explanationId = `${binding.replaceAll(/[^a-zA-Z0-9_-]/g, "-")}-explanation`;
+  const buttonLabel = isPending ? pendingLabel : actionLabel;
   return (
     <section className="rounded border border-dashed p-3">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      <p className="text-muted-foreground mt-1 text-xs">Impact: {impactSummary}</p>
+      <h3 className="font-semibold text-sm">{title}</h3>
+      <p className="mt-1 text-muted-foreground text-xs">
+        Impact: {impactSummary}
+      </p>
       <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
         {facts.map((fact) => (
           <div key={fact.label}>
             <dt className="text-muted-foreground">{fact.label}</dt>
-            <dd className="font-medium break-all">{fact.value}</dd>
+            <dd className="break-all font-medium">{fact.value}</dd>
           </div>
         ))}
       </dl>
@@ -54,7 +57,9 @@ export function MigrationImpactReviewAction({
           aria-label={`Confirm ${actionLabel}`}
           checked={confirmed}
           disabled={Boolean(disabledReason) || isPending}
-          onChange={(event) => setConfirmedBinding(event.currentTarget.checked ? binding : null)}
+          onChange={(event) =>
+            setConfirmedBinding(event.currentTarget.checked ? binding : null)
+          }
           type="checkbox"
         />
         {confirmationCopy}
@@ -68,13 +73,13 @@ export function MigrationImpactReviewAction({
         type="button"
         variant={variant}
       >
-        {isPending ? pendingLabel : actionLabel}
+        {buttonLabel}
       </Button>
       {disabledReason ? (
-        <p className="text-muted-foreground mt-2 text-sm" id={explanationId}>
+        <p className="mt-2 text-muted-foreground text-sm" id={explanationId}>
           {disabledReason}
         </p>
       ) : null}
     </section>
-  )
+  );
 }

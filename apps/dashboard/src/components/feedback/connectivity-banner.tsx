@@ -1,21 +1,21 @@
-import { WifiSlashIcon } from "@phosphor-icons/react/dist/ssr/WifiSlash"
+import { WifiSlashIcon } from "@phosphor-icons/react/dist/ssr/WifiSlash";
 
-import { useConnectivityStatus } from "@/hooks/use-connectivity-status"
+import { useConnectivityStatus } from "@/hooks/use-connectivity-status";
 
 /**
  * Always-mounted status region. It stays in the tree so assistive technology
  * announces the transition rather than a region appearing from nowhere.
  */
 export function ConnectivityBanner() {
-  const { isDegraded, isOffline } = useConnectivityStatus()
-  const visible = isDegraded || isOffline
+  const { isDegraded, isOffline } = useConnectivityStatus();
+  const visible = isDegraded || isOffline;
 
   return (
     <div
       aria-live="polite"
       className={
         visible
-          ? "bg-destructive/10 border-destructive/30 text-foreground fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 border-b px-4 py-2 text-sm"
+          ? "fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 border-destructive/30 border-b bg-destructive/10 px-4 py-2 text-foreground text-sm"
           : "sr-only"
       }
       data-slot="connectivity-banner"
@@ -32,5 +32,5 @@ export function ConnectivityBanner() {
         </>
       ) : null}
     </div>
-  )
+  );
 }

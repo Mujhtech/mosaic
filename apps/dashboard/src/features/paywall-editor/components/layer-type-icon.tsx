@@ -1,50 +1,54 @@
-import { BrowserIcon } from "@phosphor-icons/react/dist/ssr/Browser"
-import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard"
-import { CursorClickIcon } from "@phosphor-icons/react/dist/ssr/CursorClick"
-import { SlideshowIcon } from "@phosphor-icons/react/dist/ssr/Slideshow"
-import { ImageIcon } from "@phosphor-icons/react/dist/ssr/Image"
-import { ListChecksIcon } from "@phosphor-icons/react/dist/ssr/ListChecks"
-import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package"
-import { ShapesIcon } from "@phosphor-icons/react/dist/ssr/Shapes"
-import { StackIcon } from "@phosphor-icons/react/dist/ssr/Stack"
-import { TextTIcon } from "@phosphor-icons/react/dist/ssr/TextT"
-import { TimerIcon } from "@phosphor-icons/react/dist/ssr/Timer"
-import { TagIcon } from "@phosphor-icons/react/dist/ssr/Tag"
-import { ToggleRightIcon } from "@phosphor-icons/react/dist/ssr/ToggleRight"
+import { BrowserIcon } from "@phosphor-icons/react/dist/ssr/Browser";
+import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
+import { CursorClickIcon } from "@phosphor-icons/react/dist/ssr/CursorClick";
+import { ImageIcon } from "@phosphor-icons/react/dist/ssr/Image";
+import { ListChecksIcon } from "@phosphor-icons/react/dist/ssr/ListChecks";
+import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package";
+import { ShapesIcon } from "@phosphor-icons/react/dist/ssr/Shapes";
+import { SlideshowIcon } from "@phosphor-icons/react/dist/ssr/Slideshow";
+import { StackIcon } from "@phosphor-icons/react/dist/ssr/Stack";
+import { TagIcon } from "@phosphor-icons/react/dist/ssr/Tag";
+import { TextTIcon } from "@phosphor-icons/react/dist/ssr/TextT";
+import { TimerIcon } from "@phosphor-icons/react/dist/ssr/Timer";
+import { ToggleRightIcon } from "@phosphor-icons/react/dist/ssr/ToggleRight";
 
-import type { ProtocolNode } from "@/features/paywall-editor/types/editor"
+import type { ProtocolNode } from "@/features/paywall-editor/types/editor";
 
-export type LayerType = ProtocolNode["type"] | "scrollContainer"
+export type LayerType = ProtocolNode["type"] | "scrollContainer";
 
 export function LayerTypeIcon({ type }: { type: LayerType }) {
-  const props = { "aria-hidden": true, "data-layer-type-icon": type } as const
+  const props = { "aria-hidden": true, "data-layer-type-icon": type } as const;
 
   switch (type) {
     case "scrollContainer":
-      return <BrowserIcon {...props} />
+      return <BrowserIcon {...props} />;
     case "stack":
-      return <StackIcon {...props} />
+      return <StackIcon {...props} />;
     case "carousel":
-      return <SlideshowIcon {...props} />
+      return <SlideshowIcon {...props} />;
     case "switch":
-      return <ToggleRightIcon {...props} />
+      return <ToggleRightIcon {...props} />;
     case "countdown":
-      return <TimerIcon {...props} />
+      return <TimerIcon {...props} />;
     case "text":
-      return <TextTIcon {...props} />
+      return <TextTIcon {...props} />;
     case "image":
-      return <ImageIcon {...props} />
+      return <ImageIcon {...props} />;
     case "icon":
-      return <ShapesIcon {...props} />
+      return <ShapesIcon {...props} />;
     case "featureList":
-      return <ListChecksIcon {...props} />
+      return <ListChecksIcon {...props} />;
     case "productSelector":
-      return <CreditCardIcon {...props} />
+      return <CreditCardIcon {...props} />;
     case "productCard":
-      return <PackageIcon {...props} />
+      return <PackageIcon {...props} />;
     case "productBadge":
-      return <TagIcon {...props} />
+      return <TagIcon {...props} />;
     case "button":
-      return <CursorClickIcon {...props} />
+      return <CursorClickIcon {...props} />;
+    default: {
+      const unhandled: never = type;
+      throw new Error(`Unhandled type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }

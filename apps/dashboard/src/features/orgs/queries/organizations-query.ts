@@ -1,13 +1,14 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
-import { getOrganization, listOrganizations } from "@/generated/api"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { getOrganization, listOrganizations } from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 export const organizationKeys = {
   all: ["organizations"] as const,
-  detail: (organizationId: string) => ["organizations", "detail", organizationId] as const,
+  detail: (organizationId: string) =>
+    ["organizations", "detail", organizationId] as const,
   list: () => ["organizations", "list"] as const,
-}
+};
 
 export function organizationsQueryOptions() {
   return queryOptions({
@@ -17,10 +18,10 @@ export function organizationsQueryOptions() {
         client: generatedDashboardClient,
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function organizationQueryOptions(organizationId: string) {
@@ -32,8 +33,8 @@ export function organizationQueryOptions(organizationId: string) {
         path: { organizationId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }

@@ -1,9 +1,9 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
 import type {
   DecisionScope,
   PlacementDecisionsAdapter,
-} from "@/features/placement-decisions/api/placement-decisions-adapter"
+} from "@/features/placement-decisions/api/placement-decisions-adapter";
 
 export const placementDecisionKeys = {
   all: ["placement-decisions"] as const,
@@ -26,31 +26,34 @@ export const placementDecisionKeys = {
       "overrides",
       adapter,
     ] as const,
-}
+};
 
 export function placementDecisionQueryOptions(
   scope: DecisionScope,
-  adapter: PlacementDecisionsAdapter,
+  adapter: PlacementDecisionsAdapter
 ) {
   return queryOptions({
     queryKey: placementDecisionKeys.detail(scope, adapter),
     queryFn: () => adapter.getPlacementDecision(scope),
-  })
+  });
 }
 
 export function attributeDefinitionsQueryOptions(
   projectId: string,
-  adapter: PlacementDecisionsAdapter,
+  adapter: PlacementDecisionsAdapter
 ) {
   return queryOptions({
     queryKey: placementDecisionKeys.attributes(projectId, adapter),
     queryFn: () => adapter.listAttributes(projectId),
-  })
+  });
 }
 
-export function qaOverridesQueryOptions(scope: DecisionScope, adapter: PlacementDecisionsAdapter) {
+export function qaOverridesQueryOptions(
+  scope: DecisionScope,
+  adapter: PlacementDecisionsAdapter
+) {
   return queryOptions({
     queryKey: placementDecisionKeys.overrides(scope, adapter),
     queryFn: () => adapter.listOverrides(scope),
-  })
+  });
 }

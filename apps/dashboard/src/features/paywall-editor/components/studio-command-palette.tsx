@@ -1,130 +1,167 @@
-import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise"
-import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise"
-import { CommandIcon } from "@phosphor-icons/react/dist/ssr/Command"
-import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy"
-import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut"
-import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple"
-import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass"
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
-import { SidebarSimpleIcon } from "@phosphor-icons/react/dist/ssr/SidebarSimple"
-import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal"
-import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash"
-import { UploadSimpleIcon } from "@phosphor-icons/react/dist/ssr/UploadSimple"
-import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle"
-import { XIcon } from "@phosphor-icons/react/dist/ssr/X"
-import { useRef, useState } from "react"
-import type { KeyboardEvent, ReactNode } from "react"
-
-import { Button } from "@/components/ui/button"
-import { COMPONENT_CATALOG } from "@/features/paywall-editor/components/component-catalog"
-import { useEditorHistory } from "@/features/paywall-editor/hooks/use-editor-history"
-import { STUDIO_SHORTCUT_HINTS } from "@/features/paywall-editor/hooks/use-editor-keyboard-shortcuts"
-import { LiveAnnouncer } from "@/components/feedback/live-announcer"
-import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
-import type { StudioWorkspaceSnapshot } from "@/features/paywall-editor/stores/studio-workspace-store"
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise";
+import { CommandIcon } from "@phosphor-icons/react/dist/ssr/Command";
+import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy";
+import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
+import { SidebarSimpleIcon } from "@phosphor-icons/react/dist/ssr/SidebarSimple";
+import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
+import { UploadSimpleIcon } from "@phosphor-icons/react/dist/ssr/UploadSimple";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
+import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
+import type { KeyboardEvent, ReactNode } from "react";
+import { useRef, useState } from "react";
+import { LiveAnnouncer } from "@/components/feedback/live-announcer";
+import { Button } from "@/components/ui/button";
+import { COMPONENT_CATALOG } from "@/features/paywall-editor/components/component-catalog";
+import { useEditorHistory } from "@/features/paywall-editor/hooks/use-editor-history";
+import { STUDIO_SHORTCUT_HINTS } from "@/features/paywall-editor/hooks/use-editor-keyboard-shortcuts";
+import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
+import type { StudioWorkspaceSnapshot } from "@/features/paywall-editor/stores/studio-workspace-store";
 import {
   useStudioWorkspaceActions,
   useStudioWorkspaceSelector,
-} from "@/features/paywall-editor/stores/studio-workspace-store-context"
+} from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import type {
   InsertableBlockType,
   MosaicDocument,
   TreeOperationResult,
-} from "@/features/paywall-editor/types/editor"
-import type { StudioTool } from "@/features/paywall-editor/types/studio-workspace"
+} from "@/features/paywall-editor/types/editor";
+import type { StudioTool } from "@/features/paywall-editor/types/studio-workspace";
+import { resolveLegacyInsertionLocation } from "@/features/paywall-editor/utils/document-tree-mutations";
 import {
   findAncestorNodeIds,
   findNode,
-  resolveLegacyInsertionLocation,
-} from "@/features/paywall-editor/utils/document-tree"
-import { cn } from "@/lib/utils"
+} from "@/features/paywall-editor/utils/document-tree-traversal";
+import { cn } from "@/lib/utils";
 
-type CommandGroup = "Add content" | "Navigate" | "Edit" | "Canvas" | "Workspace" | "File"
-type CommandIconName = "add" | "navigate" | "edit" | "canvas" | "workspace" | "file"
+type CommandGroup =
+  | "Add content"
+  | "Navigate"
+  | "Edit"
+  | "Canvas"
+  | "Workspace"
+  | "File";
+type CommandIconName =
+  | "add"
+  | "navigate"
+  | "edit"
+  | "canvas"
+  | "workspace"
+  | "file";
 
 interface StudioCommand {
-  readonly id: string
-  readonly label: string
-  readonly description: string
-  readonly group: CommandGroup
-  readonly icon: CommandIconName
-  readonly keywords?: readonly string[]
-  readonly shortcut?: string
-  readonly disabled?: boolean
-  readonly disabledReason?: string
-  readonly run: () => boolean | void
+  readonly description: string;
+  readonly disabled?: boolean;
+  readonly disabledReason?: string;
+  readonly group: CommandGroup;
+  readonly icon: CommandIconName;
+  readonly id: string;
+  readonly keywords?: readonly string[];
+  readonly label: string;
+  readonly run: () => void;
+  readonly shortcut?: string;
 }
 
 export interface StudioCommandPaletteProps {
-  readonly onExport: () => void
-  readonly onOpenChange: (open: boolean) => void
-  readonly onRequestImport: () => void
-  readonly onWorkspaceCommand: (command: StudioWorkspaceCommand) => void
-  readonly open: boolean
+  readonly onExport: () => void;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onRequestImport: () => void;
+  readonly onWorkspaceCommand: (command: StudioWorkspaceCommand) => void;
+  readonly open: boolean;
 }
 
 export type StudioWorkspaceCommand =
-  "expand-left" | "toggle-left" | "toggle-properties" | "toggle-diagnostics" | "reset"
+  | "expand-left"
+  | "toggle-left"
+  | "toggle-properties"
+  | "toggle-diagnostics"
+  | "reset";
 
-const selectWorkspacePreferences = (snapshot: StudioWorkspaceSnapshot) => snapshot.preferences
-const COMMAND_GROUP_IDS: Readonly<Record<CommandGroup, string>> = Object.freeze({
-  "Add content": "studio-command-group-add-content",
-  Navigate: "studio-command-group-navigate",
-  Edit: "studio-command-group-edit",
-  Canvas: "studio-command-group-canvas",
-  Workspace: "studio-command-group-workspace",
-  File: "studio-command-group-file",
-})
+const selectWorkspacePreferences = (snapshot: StudioWorkspaceSnapshot) =>
+  snapshot.preferences;
+const COMMAND_GROUP_IDS: Readonly<Record<CommandGroup, string>> = Object.freeze(
+  {
+    "Add content": "studio-command-group-add-content",
+    Navigate: "studio-command-group-navigate",
+    Edit: "studio-command-group-edit",
+    Canvas: "studio-command-group-canvas",
+    Workspace: "studio-command-group-workspace",
+    File: "studio-command-group-file",
+  }
+);
 const TOOL_SHORTCUTS: Partial<Record<StudioTool, string>> = Object.freeze({
   layers: STUDIO_SHORTCUT_HINTS.openLayers,
   components: STUDIO_SHORTCUT_HINTS.openComponents,
   products: STUDIO_SHORTCUT_HINTS.openProducts,
   localization: STUDIO_SHORTCUT_HINTS.openLocalization,
-})
+});
 
 function PaletteIcon({ name }: { readonly name: CommandIconName }) {
   switch (name) {
     case "add":
-      return <PlusIcon aria-hidden />
+      return <PlusIcon aria-hidden />;
     case "navigate":
-      return <SidebarSimpleIcon aria-hidden />
+      return <SidebarSimpleIcon aria-hidden />;
     case "edit":
-      return <CopyIcon aria-hidden />
+      return <CopyIcon aria-hidden />;
     case "canvas":
-      return <CornersOutIcon aria-hidden />
+      return <CornersOutIcon aria-hidden />;
     case "workspace":
-      return <SlidersHorizontalIcon aria-hidden />
+      return <SlidersHorizontalIcon aria-hidden />;
     case "file":
-      return <DownloadSimpleIcon aria-hidden />
+      return <DownloadSimpleIcon aria-hidden />;
+    default: {
+      const unhandled: never = name;
+      throw new Error(`Unhandled name: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
 function insertionBlockedByLock(
   document: MosaicDocument,
   parentId: string,
-  lockedIds: readonly string[],
+  lockedIds: readonly string[]
 ) {
-  const locked = new Set(lockedIds)
+  const locked = new Set(lockedIds);
   return (
     locked.has(parentId) ||
-    findAncestorNodeIds(document, parentId).some((ancestorId) => locked.has(ancestorId))
-  )
+    findAncestorNodeIds(document, parentId).some((ancestorId) =>
+      locked.has(ancestorId)
+    )
+  );
 }
 
 function commandMatches(command: StudioCommand, query: string) {
-  if (!query) return true
-  const haystack = [command.label, command.description, command.group, ...(command.keywords ?? [])]
+  if (!query) {
+    return true;
+  }
+  const haystack = [
+    command.label,
+    command.description,
+    command.group,
+    ...(command.keywords ?? []),
+  ]
     .join(" ")
-    .toLocaleLowerCase()
-  return haystack.includes(query)
+    .toLocaleLowerCase();
+  return haystack.includes(query);
 }
 
 function commandIconForEdit(commandId: string): ReactNode {
-  if (commandId === "undo") return <ArrowCounterClockwiseIcon aria-hidden />
-  if (commandId === "redo") return <ArrowClockwiseIcon aria-hidden />
-  if (commandId === "delete-selection") return <TrashIcon aria-hidden />
-  return <PaletteIcon name="edit" />
+  if (commandId === "undo") {
+    return <ArrowCounterClockwiseIcon aria-hidden />;
+  }
+  if (commandId === "redo") {
+    return <ArrowClockwiseIcon aria-hidden />;
+  }
+  if (commandId === "delete-selection") {
+    return <TrashIcon aria-hidden />;
+  }
+  return <PaletteIcon name="edit" />;
 }
 
 // Command filtering, roving focus, and execution share one dialog lifecycle; command metadata and
@@ -137,111 +174,129 @@ export function StudioCommandPalette({
   onWorkspaceCommand,
   open,
 }: StudioCommandPaletteProps) {
-  const editor = useEditorActions()
-  const history = useEditorHistory()
-  const preferences = useStudioWorkspaceSelector(selectWorkspacePreferences)
-  const workspace = useStudioWorkspaceActions()
-  const [query, setQuery] = useState("")
-  const [notice, setNotice] = useState<string | null>(null)
-  const listRef = useRef<HTMLDivElement>(null)
+  const editor = useEditorActions();
+  const history = useEditorHistory();
+  const preferences = useStudioWorkspaceSelector(selectWorkspacePreferences);
+  const workspace = useStudioWorkspaceActions();
+  const [query, setQuery] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  const editorSnapshot = editor.getSnapshot()
-  const document = editorSnapshot.document
-  const selectedNode = document ? findNode(document, editorSnapshot.selectedComponentId) : null
-  const lockedIdSet = new Set(preferences.layerMetadata.lockedIds)
+  const editorSnapshot = editor.getSnapshot();
+  const { document } = editorSnapshot;
+  const selectedNode = document
+    ? findNode(document, editorSnapshot.selectedComponentId)
+    : null;
+  const lockedIdSet = new Set(preferences.layerMetadata.lockedIds);
   const selectedLocked = Boolean(
     selectedNode &&
-    [selectedNode.id, ...findAncestorNodeIds(document as MosaicDocument, selectedNode.id)].some(
-      (id) => lockedIdSet.has(id),
-    ),
-  )
+      [
+        selectedNode.id,
+        ...findAncestorNodeIds(document as MosaicDocument, selectedNode.id),
+      ].some((id) => lockedIdSet.has(id))
+  );
 
   function closePalette() {
-    setQuery("")
-    setNotice(null)
-    onOpenChange(false)
+    setQuery("");
+    setNotice(null);
+    onOpenChange(false);
   }
 
   function focusCommand(relativeIndex: number, from?: HTMLElement) {
     const commands = Array.from(
       listRef.current?.querySelectorAll<HTMLButtonElement>(
-        "[data-studio-command]:not(:disabled)",
-      ) ?? [],
-    )
-    if (commands.length === 0) return
-    const currentIndex = from ? commands.indexOf(from as HTMLButtonElement) : -1
-    const nextIndex =
-      currentIndex < 0
-        ? relativeIndex < 0
-          ? commands.length - 1
-          : 0
-        : (currentIndex + relativeIndex + commands.length) % commands.length
-    commands[nextIndex]?.focus()
+        "[data-studio-command]:not(:disabled)"
+      ) ?? []
+    );
+    if (commands.length === 0) {
+      return;
+    }
+    const currentIndex = from
+      ? commands.indexOf(from as HTMLButtonElement)
+      : -1;
+    const nextIndex = (() => {
+      if (currentIndex < 0) {
+        return (() => {
+          if (relativeIndex < 0) {
+            return commands.length - 1;
+          }
+          return 0;
+        })();
+      }
+      return (currentIndex + relativeIndex + commands.length) % commands.length;
+    })();
+    commands[nextIndex]?.focus();
   }
 
   function handleCommandKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     if (event.key === "ArrowDown") {
-      event.preventDefault()
-      focusCommand(1, event.currentTarget)
+      event.preventDefault();
+      focusCommand(1, event.currentTarget);
     } else if (event.key === "ArrowUp") {
-      event.preventDefault()
-      focusCommand(-1, event.currentTarget)
+      event.preventDefault();
+      focusCommand(-1, event.currentTarget);
     } else if (event.key === "Home") {
-      event.preventDefault()
-      focusCommand(1)
+      event.preventDefault();
+      focusCommand(1);
     } else if (event.key === "End") {
-      event.preventDefault()
-      focusCommand(-1)
+      event.preventDefault();
+      focusCommand(-1);
     }
   }
 
   function reportTreeResult(result: TreeOperationResult) {
     if (result.status === "accepted") {
-      closePalette()
-      return true
+      closePalette();
+      return true;
     }
-    setNotice(`${result.message} ${result.recovery}`)
-    return false
+    setNotice(`${result.message} ${result.recovery}`);
+    return false;
   }
 
   function insertComponent(type: InsertableBlockType) {
-    const snapshot = editor.getSnapshot()
-    const currentDocument = snapshot.document
+    const snapshot = editor.getSnapshot();
+    const currentDocument = snapshot.document;
     if (!currentDocument || snapshot.isDocumentTransactionActive) {
-      setNotice("Finish the current edit before adding another component.")
-      return false
+      setNotice("Finish the current edit before adding another component.");
+      return false;
     }
 
     const location = resolveLegacyInsertionLocation(
       currentDocument,
       snapshot.selectedComponentId,
-      type,
-    )
-    const parent = findNode(currentDocument, location.parentId)
+      type
+    );
+    const parent = findNode(currentDocument, location.parentId);
     if (parent?.type !== "stack" && parent?.type !== "button") {
-      setNotice("Select Content Stack, Button, or another visible Stack and try again.")
-      return false
+      setNotice(
+        "Select Content Stack, Button, or another visible Stack and try again."
+      );
+      return false;
     }
     if (
       insertionBlockedByLock(
         currentDocument,
         location.parentId,
-        preferences.layerMetadata.lockedIds,
+        preferences.layerMetadata.lockedIds
       )
     ) {
-      setNotice("Unlock the destination Stack in Layers before adding content.")
-      return false
+      setNotice(
+        "Unlock the destination Stack in Layers before adding content."
+      );
+      return false;
     }
 
-    const result = editor.insertComponentAt(type, location)
-    if (result.status === "accepted") workspace.recordRecentInsertion(type)
-    return reportTreeResult(result)
+    const result = editor.insertComponentAt(type, location);
+    if (result.status === "accepted") {
+      workspace.recordRecentInsertion(type);
+    }
+    return reportTreeResult(result);
   }
 
   function openTool(tool: StudioTool) {
-    workspace.setSelectedTool(tool)
-    onWorkspaceCommand("expand-left")
-    closePalette()
+    workspace.setSelectedTool(tool);
+    onWorkspaceCommand("expand-left");
+    closePalette();
   }
 
   const commands: StudioCommand[] = [
@@ -258,23 +313,23 @@ export function StudioCommandPalette({
       disabledReason: "Finish the current edit first.",
       run: () => {
         if (entry.type === "countdown") {
-          openTool("components")
-          return true
+          openTool("components");
+          return true;
         }
-        return insertComponent(entry.type)
+        return insertComponent(entry.type);
       },
     })),
-    ...(["layers", "components", "products", "localization"] as const).map<StudioCommand>(
-      (tool) => ({
-        id: `open-${tool}`,
-        label: `Open ${tool.charAt(0).toUpperCase()}${tool.slice(1)}`,
-        description: `Show the ${tool} tool without leaving Studio.`,
-        group: "Navigate",
-        icon: "navigate",
-        shortcut: TOOL_SHORTCUTS[tool],
-        run: () => openTool(tool),
-      }),
-    ),
+    ...(
+      ["layers", "components", "products", "localization"] as const
+    ).map<StudioCommand>((tool) => ({
+      id: `open-${tool}`,
+      label: `Open ${tool.charAt(0).toUpperCase()}${tool.slice(1)}`,
+      description: `Show the ${tool} tool without leaving Studio.`,
+      group: "Navigate",
+      icon: "navigate",
+      shortcut: TOOL_SHORTCUTS[tool],
+      run: () => openTool(tool),
+    })),
     {
       id: "undo",
       label: "Undo",
@@ -285,8 +340,8 @@ export function StudioCommandPalette({
       disabled: !history.canUndo,
       disabledReason: "There is nothing to undo.",
       run: () => {
-        history.undo()
-        closePalette()
+        history.undo();
+        closePalette();
       },
     },
     {
@@ -299,8 +354,8 @@ export function StudioCommandPalette({
       disabled: !history.canRedo,
       disabledReason: "There is nothing to redo.",
       run: () => {
-        history.redo()
-        closePalette()
+        history.redo();
+        closePalette();
       },
     },
     {
@@ -310,19 +365,30 @@ export function StudioCommandPalette({
       group: "Edit",
       icon: "edit",
       shortcut: STUDIO_SHORTCUT_HINTS.duplicateSelection,
-      disabled: !selectedNode || selectedLocked || editorSnapshot.isDocumentTransactionActive,
-      disabledReason: selectedLocked ? "Unlock the selected layer first." : "Select a component.",
+      disabled:
+        !selectedNode ||
+        selectedLocked ||
+        editorSnapshot.isDocumentTransactionActive,
+      disabledReason: selectedLocked
+        ? "Unlock the selected layer first."
+        : "Select a component.",
       run: () => reportTreeResult(editor.duplicateSelectedComponent()),
     },
     {
       id: "delete-selection",
       label: "Delete selection",
-      description: "Delete the selected component when its parent remains valid.",
+      description:
+        "Delete the selected component when its parent remains valid.",
       group: "Edit",
       icon: "edit",
       shortcut: STUDIO_SHORTCUT_HINTS.deleteSelection,
-      disabled: !selectedNode || selectedLocked || editorSnapshot.isDocumentTransactionActive,
-      disabledReason: selectedLocked ? "Unlock the selected layer first." : "Select a component.",
+      disabled:
+        !selectedNode ||
+        selectedLocked ||
+        editorSnapshot.isDocumentTransactionActive,
+      disabledReason: selectedLocked
+        ? "Unlock the selected layer first."
+        : "Select a component.",
       run: () => reportTreeResult(editor.deleteSelectedComponent()),
     },
     {
@@ -333,8 +399,8 @@ export function StudioCommandPalette({
       icon: "canvas",
       shortcut: STUDIO_SHORTCUT_HINTS.fitCanvas,
       run: () => {
-        workspace.setCanvasPreference("fitMode", "fit")
-        closePalette()
+        workspace.setCanvasPreference("fitMode", "fit");
+        closePalette();
       },
     },
     {
@@ -349,8 +415,8 @@ export function StudioCommandPalette({
           ...preferences.canvas,
           fitMode: "manual",
           zoom: 1,
-        })
-        closePalette()
+        });
+        closePalette();
       },
     },
     {
@@ -363,21 +429,23 @@ export function StudioCommandPalette({
       run: () => {
         workspace.setCanvasPreference(
           "appearance",
-          preferences.canvas.appearance === "light" ? "dark" : "light",
-        )
-        closePalette()
+          preferences.canvas.appearance === "light" ? "dark" : "light"
+        );
+        closePalette();
       },
     },
     {
       id: "toggle-left",
-      label: preferences.panels.left.collapsed ? "Expand left panel" : "Collapse left panel",
+      label: preferences.panels.left.collapsed
+        ? "Expand left panel"
+        : "Collapse left panel",
       description: "Collapse or expand the active Studio tool panel.",
       group: "Workspace",
       icon: "workspace",
       shortcut: STUDIO_SHORTCUT_HINTS.toggleLeft,
       run: () => {
-        onWorkspaceCommand("toggle-left")
-        closePalette()
+        onWorkspaceCommand("toggle-left");
+        closePalette();
       },
     },
     {
@@ -388,20 +456,23 @@ export function StudioCommandPalette({
       icon: "workspace",
       shortcut: STUDIO_SHORTCUT_HINTS.toggleProperties,
       run: () => {
-        onWorkspaceCommand("toggle-properties")
-        closePalette()
+        onWorkspaceCommand("toggle-properties");
+        closePalette();
       },
     },
     {
       id: "toggle-diagnostics",
-      label: preferences.panels.diagnostics.collapsed ? "Show diagnostics" : "Collapse diagnostics",
-      description: "Show or collapse validation and connected-preview diagnostics.",
+      label: preferences.panels.diagnostics.collapsed
+        ? "Show diagnostics"
+        : "Collapse diagnostics",
+      description:
+        "Show or collapse validation and connected-preview diagnostics.",
       group: "Workspace",
       icon: "workspace",
       shortcut: STUDIO_SHORTCUT_HINTS.toggleDiagnostics,
       run: () => {
-        onWorkspaceCommand("toggle-diagnostics")
-        closePalette()
+        onWorkspaceCommand("toggle-diagnostics");
+        closePalette();
       },
     },
     {
@@ -411,8 +482,8 @@ export function StudioCommandPalette({
       group: "Workspace",
       icon: "workspace",
       run: () => {
-        onWorkspaceCommand("reset")
-        closePalette()
+        onWorkspaceCommand("reset");
+        closePalette();
       },
     },
     {
@@ -422,8 +493,8 @@ export function StudioCommandPalette({
       group: "File",
       icon: "file",
       run: () => {
-        onRequestImport()
-        closePalette()
+        onRequestImport();
+        closePalette();
       },
     },
     {
@@ -433,44 +504,48 @@ export function StudioCommandPalette({
       group: "File",
       icon: "file",
       run: () => {
-        onExport()
-        closePalette()
+        onExport();
+        closePalette();
       },
     },
-  ]
+  ];
 
-  const normalizedQuery = query.trim().toLocaleLowerCase()
-  const visibleCommands = commands.filter((command) => commandMatches(command, normalizedQuery))
-  const groupedCommands = visibleCommands.reduce<Map<CommandGroup, StudioCommand[]>>(
-    (groups, command) => {
-      const group = groups.get(command.group) ?? []
-      group.push(command)
-      groups.set(command.group, group)
-      return groups
-    },
-    new Map(),
-  )
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleCommands = commands.filter((command) =>
+    commandMatches(command, normalizedQuery)
+  );
+  const groupedCommands = visibleCommands.reduce<
+    Map<CommandGroup, StudioCommand[]>
+  >((groups, command) => {
+    const group = groups.get(command.group) ?? [];
+    group.push(command);
+    groups.set(command.group, group);
+    return groups;
+  }, new Map());
 
   return (
     <DialogPrimitive.Root
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) closePalette()
+        if (!nextOpen) {
+          closePalette();
+        }
       }}
       open={open}
     >
       <DialogPrimitive.Portal>
         <DialogPrimitive.Backdrop className="fixed inset-0 z-60 bg-black/20 backdrop-blur-[1px]" />
-        <DialogPrimitive.Popup className="bg-popover text-popover-foreground fixed top-[12vh] left-1/2 z-60 flex max-h-[min(72vh,680px)] w-[min(92vw,680px)] -translate-x-1/2 flex-col overflow-hidden rounded border shadow-2xl outline-none">
-          <div className="border-border flex items-start gap-3 border-b p-4">
-            <span className="bg-muted grid size-9 shrink-0 place-items-center rounded">
+        <DialogPrimitive.Popup className="fixed top-[12vh] left-1/2 z-60 flex max-h-[min(72vh,680px)] w-[min(92vw,680px)] -translate-x-1/2 flex-col overflow-hidden rounded border bg-popover text-popover-foreground shadow-2xl outline-none">
+          <div className="flex items-start gap-3 border-border border-b p-4">
+            <span className="grid size-9 shrink-0 place-items-center rounded bg-muted">
               <CommandIcon aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
-              <DialogPrimitive.Title className="text-sm font-semibold">
+              <DialogPrimitive.Title className="font-semibold text-sm">
                 Studio commands
               </DialogPrimitive.Title>
-              <DialogPrimitive.Description className="text-muted-foreground mt-0.5 text-xs">
-                Search local editing, canvas, workspace, import, and export actions.
+              <DialogPrimitive.Description className="mt-0.5 text-muted-foreground text-xs">
+                Search local editing, canvas, workspace, import, and export
+                actions.
               </DialogPrimitive.Description>
             </div>
             <DialogPrimitive.Close
@@ -481,25 +556,25 @@ export function StudioCommandPalette({
             </DialogPrimitive.Close>
           </div>
 
-          <label className="border-border relative block border-b">
+          <label className="relative block border-border border-b">
             <MagnifyingGlassIcon
               aria-hidden
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2"
+              className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground"
             />
             <span className="sr-only">Search Studio commands</span>
             <input
-              className="focus-visible:ring-ring h-12 w-full bg-transparent pr-4 pl-11 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset"
+              className="h-12 w-full bg-transparent pr-4 pl-11 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
               onChange={(event) => {
-                setQuery(event.target.value)
-                setNotice(null)
+                setQuery(event.target.value);
+                setNotice(null);
               }}
               onKeyDown={(event) => {
                 if (event.key === "ArrowDown") {
-                  event.preventDefault()
-                  focusCommand(1)
+                  event.preventDefault();
+                  focusCommand(1);
                 } else if (event.key === "ArrowUp") {
-                  event.preventDefault()
-                  focusCommand(-1)
+                  event.preventDefault();
+                  focusCommand(-1);
                 }
               }}
               placeholder="Search commands…"
@@ -511,13 +586,15 @@ export function StudioCommandPalette({
           {/* Filtering happens without any visible focus change, so the result
               count is announced instead. */}
           <LiveAnnouncer
-            message={
-              query.trim().length === 0
-                ? undefined
-                : visibleCommands.length === 1
-                  ? "1 command matches."
-                  : `${visibleCommands.length} commands match.`
-            }
+            message={(() => {
+              if (query.trim().length === 0) {
+                return;
+              }
+              if (visibleCommands.length === 1) {
+                return "1 command matches.";
+              }
+              return `${visibleCommands.length} commands match.`;
+            })()}
           />
 
           <div className="min-h-0 flex-1 overflow-y-auto p-2" ref={listRef}>
@@ -525,7 +602,7 @@ export function StudioCommandPalette({
               Array.from(groupedCommands, ([group, groupCommands]) => (
                 <section aria-labelledby={COMMAND_GROUP_IDS[group]} key={group}>
                   <h2
-                    className="text-muted-foreground px-2 pt-3 pb-1 text-xs font-semibold first:pt-1"
+                    className="px-2 pt-3 pb-1 font-semibold text-muted-foreground text-xs first:pt-1"
                     id={COMMAND_GROUP_IDS[group]}
                   >
                     {group}
@@ -534,9 +611,11 @@ export function StudioCommandPalette({
                     {groupCommands.map((command) => (
                       <button
                         aria-describedby={
-                          command.disabled ? `studio-command-disabled-${command.id}` : undefined
+                          command.disabled
+                            ? `studio-command-disabled-${command.id}`
+                            : undefined
                         }
-                        className="focus-visible:ring-ring hover:bg-muted flex w-full items-center gap-3 rounded px-3 py-2 text-left focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex w-full items-center gap-3 rounded px-3 py-2 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                         data-studio-command
                         disabled={command.disabled}
                         key={command.id}
@@ -544,23 +623,30 @@ export function StudioCommandPalette({
                         onKeyDown={handleCommandKeyDown}
                         type="button"
                       >
-                        <span className="text-muted-foreground grid size-7 shrink-0 place-items-center">
-                          {command.group === "Edit" ? (
-                            commandIconForEdit(command.id)
-                          ) : command.id === "import-document" ? (
-                            <UploadSimpleIcon aria-hidden />
-                          ) : command.id === "toggle-diagnostics" ? (
-                            <WarningCircleIcon aria-hidden />
-                          ) : (
-                            <PaletteIcon name={command.icon} />
-                          )}
+                        <span className="grid size-7 shrink-0 place-items-center text-muted-foreground">
+                          {(() => {
+                            if (command.group === "Edit") {
+                              return commandIconForEdit(command.id);
+                            }
+                            if (command.id === "import-document") {
+                              return <UploadSimpleIcon aria-hidden />;
+                            }
+                            if (command.id === "toggle-diagnostics") {
+                              return <WarningCircleIcon aria-hidden />;
+                            }
+                            return <PaletteIcon name={command.icon} />;
+                          })()}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-medium">{command.label}</span>
+                          <span className="block font-medium text-sm">
+                            {command.label}
+                          </span>
                           <span
-                            className="text-muted-foreground block truncate text-xs"
+                            className="block truncate text-muted-foreground text-xs"
                             id={
-                              command.disabled ? `studio-command-disabled-${command.id}` : undefined
+                              command.disabled
+                                ? `studio-command-disabled-${command.id}`
+                                : undefined
                             }
                           >
                             {command.disabled
@@ -569,7 +655,7 @@ export function StudioCommandPalette({
                           </span>
                         </span>
                         {command.shortcut ? (
-                          <kbd className="border-border bg-muted text-muted-foreground rounded border px-1.5 py-0.5 text-[10px] whitespace-nowrap">
+                          <kbd className="whitespace-nowrap rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                             {command.shortcut}
                           </kbd>
                         ) : null}
@@ -580,8 +666,8 @@ export function StudioCommandPalette({
               ))
             ) : (
               <div className="p-8 text-center">
-                <p className="text-sm font-medium">No commands match</p>
-                <p className="text-muted-foreground mt-1 text-xs">
+                <p className="font-medium text-sm">No commands match</p>
+                <p className="mt-1 text-muted-foreground text-xs">
                   Try a component, workspace, canvas, import, or export action.
                 </p>
               </div>
@@ -590,15 +676,16 @@ export function StudioCommandPalette({
 
           <div
             className={cn(
-              "border-border min-h-9 border-t px-4 py-2 text-xs",
-              notice ? "text-destructive" : "text-muted-foreground",
+              "min-h-9 border-border border-t px-4 py-2 text-xs",
+              notice ? "text-destructive" : "text-muted-foreground"
             )}
             role="status"
           >
-            {notice || "Arrow keys move through commands. Enter activates the focused command."}
+            {notice ||
+              "Arrow keys move through commands. Enter activates the focused command."}
           </div>
         </DialogPrimitive.Popup>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
-  )
+  );
 }

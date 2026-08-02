@@ -36,11 +36,21 @@ jobs:
             -e MINIO_ROOT_USER=mosaic_ci -e MINIO_ROOT_PASSWORD=mosaic_ci_secret \
             minio/minio:RELEASE.2025-07-23T15-54-02Z server /data
           for i in $(seq 1 30); do
-            curl -fsS http://localhost:9000/minio/health/live && break; sleep 2
+            curl -fsS http://localhost:9000/minio/health/live && break
+            sleep 2
           done
-          docker run --rm --network host \
+          # The loop above exits on its last iteration whether or not MinIO ever
+          # answered, so failure has to be its own statement: otherwise the
+          # bucket step is the first thing to notice, and it reports a client
+          # error rather than an unreachable server.
+          curl -fsS http://localhost:9000/minio/health/live >/dev/null || {
+            echo "MinIO did not become ready"; docker logs mosaic-ci-minio | tail -50; exit 1;
+          }
+          # `mc` is the image's entrypoint, so an `sh -c` argument is read as an
+          # mc subcommand and fails with "`sh` is not a recognized command".
+          docker run --rm --network host --entrypoint sh \
             minio/mc:RELEASE.2025-07-21T05-28-08Z \
-            sh -c "mc alias set ci http://localhost:9000 mosaic_ci mosaic_ci_secret && mc mb --ignore-existing ci/mosaic-ci-assets"
+            -c "mc alias set ci http://localhost:9000 mosaic_ci mosaic_ci_secret && mc mb --ignore-existing ci/mosaic-ci-assets"
       - uses: actions/setup-go@v5
         with:
           go-version-file: apps/api/go.mod
@@ -112,6 +122,15 @@ jobs:
       - name: Install
         working-directory: apps/dashboard
         run: npm ci
+      # apps/dashboard/scripts/*.mjs reach protocol/browser/index.js by relative
+      # path rather than as a declared dependency, so its runtime deps resolve
+      # from protocol/node_modules — which installing the dashboard alone never
+      # creates. The relay test is the step that notices, and only in a clean
+      # checkout: any working copy that has built the protocol package has the
+      # directory already and passes.
+      - name: Install protocol runtime dependencies
+        working-directory: protocol
+        run: npm ci --omit=dev
       - name: Check (format, lint, typecheck, tests, relay, build)
         working-directory: apps/dashboard
         run: npm run check
@@ -133,15 +152,36 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+      # `dart format` picks its style from the package's language version, which
+      # it reads from .dart_tool/package_config.json. On a fresh checkout that
+      # file does not exist yet, so it falls back to the newest language version
+      # and applies the tall style introduced in Dart 3.7 — rewriting 86 of 90
+      # files against a package that declares `sdk: ">=3.4.0"`. Resolving first
+      # pins the language version to 3.4 and the formatter to the style the
+      # sources are actually written in. One `pub get` here also resolves the
+      # example package, which the format step covers.
+      - name: Resolve packages
+        working-directory: sdk/flutter
+        run: |
+          # Every package with a pubspec, not just the root: `flutter pub get`
+          # here resolves the root and the example, but packages/* are separate
+          # and analyze covers them, so unresolved they report as missing URIs.
+          for pubspec in $(find . -name pubspec.yaml -not -path "*/build/*" | sort); do
+            (cd "$(dirname "$pubspec")" && flutter pub get)
+          done
       - name: Format
         working-directory: sdk/flutter
         run: dart format --output=none --set-exit-if-changed lib test example/lib
       - name: Analyze
         working-directory: sdk/flutter
         run: flutter analyze
+      # Goldens are rasterised output, so they encode the host's font rendering
+      # and the Flutter version that produced them. The baselines are macOS and
+      # this runner is Linux on a channel that moves, so comparing here fails on
+      # the environment rather than on the renderer. See sdk/flutter/dart_test.yaml.
       - name: Tests
         working-directory: sdk/flutter
-        run: flutter test
+        run: flutter test --exclude-tags golden
 
   android:
     runs-on: ubuntu-latest

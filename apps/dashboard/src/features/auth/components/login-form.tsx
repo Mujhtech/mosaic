@@ -1,5 +1,5 @@
-import { HostedCredentialForm } from "@/features/auth/components/hosted-credential-form"
-import { cn } from "@/lib/utils"
+import { HostedCredentialForm } from "@/features/auth/components/hosted-credential-form";
+import { cn } from "@/lib/utils";
 
 export function LoginForm({
   className,
@@ -10,5 +10,5 @@ export function LoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <HostedCredentialForm mode="login" returnTo={returnTo} />
     </div>
-  )
+  );
 }

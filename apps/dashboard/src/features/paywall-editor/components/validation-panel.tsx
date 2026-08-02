@@ -1,76 +1,94 @@
-import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle"
-import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle"
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 
-import { useEditorSelection } from "@/features/paywall-editor/hooks/use-editor-selection"
-import type { ValidationIssue } from "@/features/paywall-editor/types/editor"
+import { useEditorSelection } from "@/features/paywall-editor/hooks/use-editor-selection";
+import type { ValidationIssue } from "@/features/paywall-editor/types/editor";
 
 export function ValidationPanel({
   issues,
   onNavigate,
 }: {
-  issues: readonly ValidationIssue[]
-  onNavigate?: (issue: ValidationIssue) => void
+  issues: readonly ValidationIssue[];
+  onNavigate?: (issue: ValidationIssue) => void;
 }) {
-  const { selectComponent } = useEditorSelection()
+  const { selectComponent } = useEditorSelection();
 
   return (
     <section aria-labelledby="validation-title">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <h2
+            className="font-semibold text-sm focus:outline-none"
             id="validation-title"
-            className="text-sm font-semibold focus:outline-none"
             tabIndex={-1}
           >
             Validation
           </h2>
-          <p className="text-muted-foreground mt-0.5 text-xs">
+          <p className="mt-0.5 text-muted-foreground text-xs">
             Fix issues without leaving the editor
           </p>
         </div>
         <span
-          aria-live="polite"
           aria-atomic="true"
-          className={`rounded-full px-2 py-1 text-xs font-medium ${
-            issues.length === 0 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"
+          aria-live="polite"
+          className={`rounded-full px-2 py-1 font-medium text-xs ${
+            issues.length === 0
+              ? "bg-emerald-100 text-emerald-800"
+              : "bg-amber-100 text-amber-900"
           }`}
         >
           {issues.length === 0 ? "Ready" : `${issues.length} to fix`}
         </span>
       </div>
       {issues.length === 0 ? (
-        <div className="flex items-start gap-2 rounded bg-emerald-50 p-3 text-sm text-emerald-900">
-          <CheckCircleIcon className="mt-0.5 shrink-0" aria-hidden weight="fill" />
-          <p>This paywall is valid and ready to send to native previews or export.</p>
+        <div className="flex items-start gap-2 rounded bg-emerald-50 p-3 text-emerald-900 text-sm">
+          <CheckCircleIcon
+            aria-hidden
+            className="mt-0.5 shrink-0"
+            weight="fill"
+          />
+          <p>
+            This paywall is valid and ready to send to native previews or
+            export.
+          </p>
         </div>
       ) : (
         <ul className="space-y-2">
           {issues.map((issue) => (
             <li
+              className="rounded border border-destructive/25 p-3"
               key={`${issue.code}:${issue.documentPath}`}
-              className="border-destructive/25 rounded border p-3"
             >
               <div className="flex items-start gap-2">
                 <WarningCircleIcon
-                  className="text-destructive mt-0.5 shrink-0"
                   aria-hidden
+                  className="mt-0.5 shrink-0 text-destructive"
                   weight="fill"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{issue.message}</p>
-                  <p className="text-muted-foreground mt-1 text-xs">{issue.recovery}</p>
+                  <p className="font-medium text-sm">{issue.message}</p>
+                  <p className="mt-1 text-muted-foreground text-xs">
+                    {issue.recovery}
+                  </p>
                   <button
-                    type="button"
-                    className="text-primary mt-2 text-xs font-semibold hover:underline"
+                    className="mt-2 font-semibold text-primary text-xs hover:underline"
                     onClick={() => {
-                      if (onNavigate) onNavigate(issue)
-                      else selectComponent(issue.componentId ?? null)
+                      if (onNavigate) {
+                        onNavigate(issue);
+                      } else {
+                        selectComponent(issue.componentId ?? null);
+                      }
                     }}
+                    type="button"
                   >
-                    {issue.componentId ? "Fix in Properties" : "Show recovery controls"}
+                    {issue.componentId
+                      ? "Fix in Properties"
+                      : "Show recovery controls"}
                   </button>
-                  <details className="text-muted-foreground mt-2 text-[11px]">
-                    <summary className="cursor-pointer">Diagnostic details</summary>
+                  <details className="mt-2 text-[11px] text-muted-foreground">
+                    <summary className="cursor-pointer">
+                      Diagnostic details
+                    </summary>
                     <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2">
                       <dt>Code</dt>
                       <dd className="break-all">{issue.code}</dd>
@@ -85,5 +103,5 @@ export function ValidationPanel({
         </ul>
       )}
     </section>
-  )
+  );
 }

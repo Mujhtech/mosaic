@@ -1,9 +1,9 @@
-import { useState } from "react"
-import { useForm } from "@tanstack/react-form"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link } from "@tanstack/react-router"
+import { useForm } from "@tanstack/react-form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -13,29 +13,41 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Field, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { createPlanMutationOptions } from "@/features/catalog/mutations/catalog-mutations"
-import { plansQueryOptions } from "@/features/catalog/queries/catalog-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
+} from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { createPlanMutationOptions } from "@/features/catalog/mutations/catalog-mutations";
+import { plansQueryOptions } from "@/features/catalog/queries/catalog-query";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import { workspaceScopeParams } from "@/lib/routing/workspace-params";
 
 interface PlansPageProps {
-  organizationId: string
-  projectId: string
+  organizationId: string;
+  projectId: string;
 }
 
 export function PlansPage({ organizationId, projectId }: PlansPageProps) {
-  const queryClient = useQueryClient()
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
-  const plans = useQuery({ ...plansQueryOptions(projectId), enabled: scopeReady })
-  const mutation = useMutation(createPlanMutationOptions(projectId, queryClient))
-  const items = plans.data?.items ?? []
-  const [createOpen, setCreateOpen] = useState(false)
+  const queryClient = useQueryClient();
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
+  const plans = useQuery({
+    ...plansQueryOptions(projectId),
+    enabled: scopeReady,
+  });
+  const mutation = useMutation(
+    createPlanMutationOptions(projectId, queryClient)
+  );
+  const items = plans.data?.items ?? [];
+  const [createOpen, setCreateOpen] = useState(false);
   const form = useForm({
     defaultValues: { description: "", key: "", name: "" },
     onSubmit: async ({ value }) => {
@@ -43,11 +55,11 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
         description: value.description.trim() || undefined,
         key: value.key.trim(),
         name: value.name.trim(),
-      })
-      form.reset()
-      setCreateOpen(false)
+      });
+      form.reset();
+      setCreateOpen(false);
     },
-  })
+  });
   const state = resolveHostedQueryState({
     emptyDescription:
       "Create a Plan such as Premium, then add Monthly and Yearly Products and define the access they grant.",
@@ -56,11 +68,13 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
     isEmpty: scopeReady && plans.isSuccess && items.length === 0,
     isPending: project.isPending || (scopeReady && plans.isPending),
     loadingDescription: "Loading project Plans.",
-    onRetry: () => void plans.refetch(),
+    onRetry: () => {
+      plans.refetch();
+    },
     permissionDescription:
       "Project membership is required to view Plans; owner or admin is required to change them.",
-  })
-  const canManagePlans = state.kind === "empty" || state.kind === "ready"
+  });
+  const canManagePlans = state.kind === "empty" || state.kind === "ready";
 
   if (scopeMismatch) {
     return (
@@ -74,16 +88,16 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
   const createDialog = (
     <Dialog
       onOpenChange={(open) => {
-        setCreateOpen(open)
+        setCreateOpen(open);
         if (!open) {
-          form.reset()
-          mutation.reset()
+          form.reset();
+          mutation.reset();
         }
       }}
       open={createOpen}
@@ -92,16 +106,16 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
       <DialogContent>
         <form
           onSubmit={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            void form.handleSubmit()
+            event.preventDefault();
+            event.stopPropagation();
+            form.handleSubmit();
           }}
         >
           <DialogHeader>
             <DialogTitle>Create Plan</DialogTitle>
             <DialogDescription>
-              A Plan is what you sell; Products are its monthly, yearly, or lifetime purchase
-              options.
+              A Plan is what you sell; Products are its monthly, yearly, or
+              lifetime purchase options.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 px-4">
@@ -124,7 +138,9 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
                   <FieldLabel htmlFor="plan-key">Key</FieldLabel>
                   <Input
                     id="plan-key"
-                    onChange={(event) => field.handleChange(event.target.value.toLowerCase())}
+                    onChange={(event) =>
+                      field.handleChange(event.target.value.toLowerCase())
+                    }
                     placeholder="premium"
                     value={field.state.value}
                   />
@@ -134,7 +150,9 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
             <form.Field name="description">
               {(field) => (
                 <Field>
-                  <FieldLabel htmlFor="plan-description">Description</FieldLabel>
+                  <FieldLabel htmlFor="plan-description">
+                    Description
+                  </FieldLabel>
                   <Input
                     id="plan-description"
                     onChange={(event) => field.handleChange(event.target.value)}
@@ -151,7 +169,9 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
             ) : null}
           </div>
           <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              Cancel
+            </DialogClose>
             <Button disabled={mutation.isPending} type="submit">
               {mutation.isPending ? "Creating…" : "Create Plan"}
             </Button>
@@ -159,7 +179,7 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
         </form>
       </DialogContent>
     </Dialog>
-  )
+  );
 
   return (
     <WorkspacePage
@@ -174,13 +194,19 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
             {items.map((plan) => (
               <li className="rounded border p-4" key={plan.id}>
                 <p className="font-semibold">{plan.name}</p>
-                <p className="text-muted-foreground mt-1 font-mono text-xs">{plan.key}</p>
-                <p className="text-muted-foreground mt-2 text-sm">
+                <p className="mt-1 font-mono text-muted-foreground text-xs">
+                  {plan.key}
+                </p>
+                <p className="mt-2 text-muted-foreground text-sm">
                   {plan.description ?? "No description"}
                 </p>
                 <Link
-                  className="text-primary mt-4 inline-flex text-sm font-medium hover:underline"
-                  params={(prev) => ({ ...prev, planId: plan.id })}
+                  className="mt-4 inline-flex font-medium text-primary text-sm hover:underline"
+                  params={(prev) => ({
+                    ...prev,
+                    ...workspaceScopeParams(prev),
+                    planId: plan.id,
+                  })}
                   to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId"
                 >
                   Manage Products
@@ -191,5 +217,5 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }

@@ -1,4 +1,4 @@
-import type { QuarantineRecord } from "@/generated/api"
+import type { QuarantineRecord } from "@/generated/api";
 
 /**
  * Quarantine recovery.
@@ -28,13 +28,15 @@ export const QUARANTINE_RECOVERY_ACTION_KINDS = [
   "replace_store_credential",
   "review_application_scope",
   "review_environment_scope",
-] as const
+] as const;
 
-export type QuarantineRecoveryActionKind = (typeof QUARANTINE_RECOVERY_ACTION_KINDS)[number]
+export type QuarantineRecoveryActionKind =
+  (typeof QUARANTINE_RECOVERY_ACTION_KINDS)[number];
 
 /** The complete set of audited REST operations quarantine recovery may call. */
 export type QuarantineRecoveryOperation =
-  "closeQuarantineRecordSuperseded" | "retryQuarantinedInput"
+  | "closeQuarantineRecordSuperseded"
+  | "retryQuarantinedInput";
 
 export interface QuarantineRecoveryAction {
   /**
@@ -42,12 +44,12 @@ export interface QuarantineRecoveryAction {
    * Transaction Fact from an operator's assertion, so this is the only route to
    * one.
    */
-  consultsStore: boolean
-  description: string
-  kind: QuarantineRecoveryActionKind
-  label: string
+  consultsStore: boolean;
+  description: string;
+  kind: QuarantineRecoveryActionKind;
+  label: string;
   /** Absent for navigational guidance that changes nothing. */
-  operation?: QuarantineRecoveryOperation
+  operation?: QuarantineRecoveryOperation;
 }
 
 const REPAIR_MAPPING: QuarantineRecoveryAction = {
@@ -56,7 +58,7 @@ const REPAIR_MAPPING: QuarantineRecoveryAction = {
     "Open the Mosaic Product this store Product should map to. Replacing a mapping keeps the previous one in history, so past resolutions stay reproducible.",
   kind: "repair_product_mapping",
   label: "Repair Product mapping",
-}
+};
 
 const RETRY_VALIDATION: QuarantineRecoveryAction = {
   consultsStore: true,
@@ -65,7 +67,7 @@ const RETRY_VALIDATION: QuarantineRecoveryAction = {
   kind: "retry_provider_validation",
   label: "Re-run validation",
   operation: "retryQuarantinedInput",
-}
+};
 
 const CLOSE_SUPERSEDED: QuarantineRecoveryAction = {
   consultsStore: false,
@@ -74,7 +76,7 @@ const CLOSE_SUPERSEDED: QuarantineRecoveryAction = {
   kind: "close_superseded",
   label: "Close as superseded",
   operation: "closeQuarantineRecordSuperseded",
-}
+};
 
 const REPLACE_CREDENTIAL: QuarantineRecoveryAction = {
   consultsStore: false,
@@ -82,7 +84,7 @@ const REPLACE_CREDENTIAL: QuarantineRecoveryAction = {
     "This input cannot be validated until a working Store Server Credential exists for its Store Environment. Rotate or add one, then re-run validation.",
   kind: "replace_store_credential",
   label: "Review Store Server Credentials",
-}
+};
 
 const REVIEW_APPLICATION_SCOPE: QuarantineRecoveryAction = {
   consultsStore: false,
@@ -90,7 +92,7 @@ const REVIEW_APPLICATION_SCOPE: QuarantineRecoveryAction = {
     "The verified bundle or package identifier is outside this credential's Application scope. Correct the scope on the credential rather than attributing the input by hand.",
   kind: "review_application_scope",
   label: "Review Application scope",
-}
+};
 
 const REVIEW_ENVIRONMENT_SCOPE: QuarantineRecoveryAction = {
   consultsStore: false,
@@ -98,11 +100,14 @@ const REVIEW_ENVIRONMENT_SCOPE: QuarantineRecoveryAction = {
     "Mosaic Environment and Store Environment must agree with the credential this input arrived on. Sandbox and production are always separate connections.",
   kind: "review_environment_scope",
   label: "Review Environment alignment",
-}
+};
 
-type ReasonCode = NonNullable<QuarantineRecord["reasonCode"]>
+type ReasonCode = NonNullable<QuarantineRecord["reasonCode"]>;
 
-const ACTIONS_BY_REASON: Record<ReasonCode, readonly QuarantineRecoveryAction[]> = {
+const ACTIONS_BY_REASON: Record<
+  ReasonCode,
+  readonly QuarantineRecoveryAction[]
+> = {
   application_mismatch: [REVIEW_APPLICATION_SCOPE, RETRY_VALIDATION],
   credential_revoked: [REPLACE_CREDENTIAL],
   credential_unavailable: [REPLACE_CREDENTIAL, RETRY_VALIDATION],
@@ -123,7 +128,7 @@ const ACTIONS_BY_REASON: Record<ReasonCode, readonly QuarantineRecoveryAction[]>
   unsupported_product_type: [CLOSE_SUPERSEDED],
   unsupported_transaction_type: [CLOSE_SUPERSEDED],
   validation_exhausted: [RETRY_VALIDATION, CLOSE_SUPERSEDED],
-}
+};
 
 /**
  * Copy for the reasons that offer no action, so the view renders an explanation
@@ -132,13 +137,13 @@ const ACTIONS_BY_REASON: Record<ReasonCode, readonly QuarantineRecoveryAction[]>
 const NO_ACTION_EXPLANATIONS: Partial<Record<ReasonCode, string>> = {
   signature_invalid:
     "A payload that fails signature verification is never accepted by retrying. Treat it as a possible forged or misdirected delivery: confirm the endpoint configured at the store, and rotate the intake token if the endpoint may have leaked.",
-}
+};
 
 export function quarantineNoActionExplanation(reasonCode: string | undefined) {
   if (reasonCode && reasonCode in NO_ACTION_EXPLANATIONS) {
-    return NO_ACTION_EXPLANATIONS[reasonCode as ReasonCode]
+    return NO_ACTION_EXPLANATIONS[reasonCode as ReasonCode];
   }
-  return "This record is closed. Its history is retained as evidence and cannot be edited."
+  return "This record is closed. Its history is retained as evidence and cannot be edited.";
 }
 
 /**
@@ -147,9 +152,16 @@ export function quarantineNoActionExplanation(reasonCode: string | undefined) {
  * phase excludes.
  */
 export function quarantineRecoveryActions(
-  record: Pick<QuarantineRecord, "reasonCode" | "status">,
+  record: Pick<QuarantineRecord, "reasonCode" | "status">
 ): readonly QuarantineRecoveryAction[] {
-  if (record.status === "closed_after_success" || record.status === "closed_superseded") return []
-  if (!record.reasonCode) return []
-  return ACTIONS_BY_REASON[record.reasonCode] ?? []
+  if (
+    record.status === "closed_after_success" ||
+    record.status === "closed_superseded"
+  ) {
+    return [];
+  }
+  if (!record.reasonCode) {
+    return [];
+  }
+  return ACTIONS_BY_REASON[record.reasonCode] ?? [];
 }

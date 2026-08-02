@@ -1,23 +1,26 @@
-import { BatteryHighIcon } from "@phosphor-icons/react/dist/ssr/BatteryHigh"
-import { CellSignalFullIcon } from "@phosphor-icons/react/dist/ssr/CellSignalFull"
-import { WifiHighIcon } from "@phosphor-icons/react/dist/ssr/WifiHigh"
-import type { CSSProperties, MouseEvent, ReactNode } from "react"
-
-import type {
-  CanvasDeviceMaterial,
-  CanvasDevicePreset,
-} from "@/features/paywall-editor/constants/canvas-devices"
+import { BatteryHighIcon } from "@phosphor-icons/react/dist/ssr/BatteryHigh";
+import { CellSignalFullIcon } from "@phosphor-icons/react/dist/ssr/CellSignalFull";
+import { WifiHighIcon } from "@phosphor-icons/react/dist/ssr/WifiHigh";
+import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import type {
   CanvasDeviceGeometry,
   CanvasDeviceNodeGeometry,
-} from "@/features/paywall-editor/components/canvas-preview-geometry"
-import type { MosaicDocument, Screen, StackComponent } from "@/features/paywall-editor/types/editor"
-import type { StudioCanvasPreferences } from "@/features/paywall-editor/types/studio-workspace"
+} from "@/features/paywall-editor/components/canvas-preview-geometry";
+import type {
+  CanvasDeviceMaterial,
+  CanvasDevicePreset,
+} from "@/features/paywall-editor/constants/canvas-devices";
+import type {
+  MosaicDocument,
+  Screen,
+  StackComponent,
+} from "@/features/paywall-editor/types/editor";
+import type { StudioCanvasPreferences } from "@/features/paywall-editor/types/studio-workspace";
 import {
   resolvedBackground,
   resolvedProtocolColor,
   resolvedShadow,
-} from "@/features/paywall-editor/utils/protocol-styles"
+} from "@/features/paywall-editor/utils/protocol-styles";
 
 const FRAME_MATERIALS: Record<CanvasDeviceMaterial, CSSProperties> = {
   aluminum: {
@@ -36,31 +39,37 @@ const FRAME_MATERIALS: Record<CanvasDeviceMaterial, CSSProperties> = {
     background:
       "linear-gradient(145deg, #e0e1df 0%, #7f827f 18%, #303330 50%, #b9bbb8 80%, #545754 100%)",
   },
-}
+};
 
 function alignmentStyle(alignment: StackComponent["crossAxisAlignment"]) {
   switch (alignment) {
     case "start":
-      return "flex-start"
+      return "flex-start";
     case "center":
-      return "center"
+      return "center";
     case "end":
-      return "flex-end"
+      return "flex-end";
     case "stretch":
-      return "stretch"
+      return "stretch";
+    default: {
+      const unhandled: never = alignment;
+      throw new Error(`Unhandled alignment: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
-function distributionStyle(distribution: StackComponent["mainAxisDistribution"]) {
-  return distribution === "spaceBetween" ? "space-between" : distribution
+function distributionStyle(
+  distribution: StackComponent["mainAxisDistribution"]
+) {
+  return distribution === "spaceBetween" ? "space-between" : distribution;
 }
 
 function HardwareButtons({
   orientation,
   preset,
 }: {
-  orientation: StudioCanvasPreferences["orientation"]
-  preset: CanvasDevicePreset
+  orientation: StudioCanvasPreferences["orientation"];
+  preset: CanvasDevicePreset;
 }) {
   if (preset.formFactor === "tablet") {
     return orientation === "portrait" ? (
@@ -73,7 +82,7 @@ function HardwareButtons({
         <span className="absolute top-16 -right-[3px] h-16 w-[4px] rounded-full bg-zinc-700" />
         <span className="absolute -bottom-[3px] left-24 h-[4px] w-20 rounded-full bg-zinc-700" />
       </>
-    )
+    );
   }
 
   return orientation === "portrait" ? (
@@ -88,71 +97,75 @@ function HardwareButtons({
       <span className="absolute -top-[4px] left-44 h-[5px] w-20 rounded-t-full bg-zinc-700" />
       <span className="absolute -bottom-[4px] left-40 h-[5px] w-28 rounded-b-full bg-zinc-700" />
     </>
-  )
+  );
 }
 
 function DeviceSensor({
   orientation,
   preset,
 }: {
-  orientation: StudioCanvasPreferences["orientation"]
-  preset: CanvasDevicePreset
+  orientation: StudioCanvasPreferences["orientation"];
+  preset: CanvasDevicePreset;
 }) {
-  const landscape = orientation === "landscape"
+  const landscape = orientation === "landscape";
 
   if (preset.frame.sensor === "bezel-camera") {
     return (
       <span
-        aria-hidden
-        data-device-sensor="bezel-camera"
+        aria-hidden="true"
         className={`absolute z-50 size-[7px] rounded-full bg-black ring-1 ring-white/15 ${
-          landscape ? "top-1/2 left-[6px] -translate-y-1/2" : "top-[6px] left-1/2 -translate-x-1/2"
+          landscape
+            ? "top-1/2 left-[6px] -translate-y-1/2"
+            : "top-[6px] left-1/2 -translate-x-1/2"
         }`}
+        data-device-sensor="bezel-camera"
       />
-    )
+    );
   }
 
   if (preset.frame.sensor === "dynamic-island") {
     return (
       <span
-        aria-hidden
-        data-device-sensor="dynamic-island"
+        aria-hidden="true"
         className={`pointer-events-none absolute z-[70] bg-black shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] ${
           landscape
             ? "top-1/2 left-[15px] h-[104px] w-[32px] -translate-y-1/2 rounded-[17px]"
             : "top-[18px] left-1/2 h-[32px] w-[104px] -translate-x-1/2 rounded-[17px]"
         }`}
+        data-device-sensor="dynamic-island"
       >
         <span
-          aria-hidden
-          data-device-camera-lens
+          aria-hidden="true"
           className={`absolute size-[7px] rounded-full bg-[#101923] shadow-[inset_0_0_0_1px_rgba(75,112,139,0.45)] ring-1 ring-[#273848] ${
             landscape
               ? "bottom-[10px] left-1/2 -translate-x-1/2"
               : "top-1/2 right-[10px] -translate-y-1/2"
           }`}
+          data-device-camera-lens
         />
       </span>
-    )
+    );
   }
 
   return (
     <span
-      aria-hidden
-      data-device-sensor="punch-hole"
+      aria-hidden="true"
       className={`pointer-events-none absolute z-[70] size-[13px] rounded-full bg-black shadow-[0_0_0_2px_rgba(0,0,0,0.16)] ${
-        landscape ? "top-1/2 left-[13px] -translate-y-1/2" : "top-[13px] left-1/2 -translate-x-1/2"
+        landscape
+          ? "top-1/2 left-[13px] -translate-y-1/2"
+          : "top-[13px] left-1/2 -translate-x-1/2"
       }`}
+      data-device-sensor="punch-hole"
     >
       <span className="absolute top-[3px] left-[3px] size-[3px] rounded-full bg-sky-900/80" />
     </span>
-  )
+  );
 }
 
 function IosCellularSignal({ compact }: { compact: boolean }) {
   return (
     <svg
-      aria-hidden
+      aria-hidden="true"
       className={compact ? "h-[10px] w-[15px]" : "h-[13px] w-[19px]"}
       data-system-icon="ios-cellular"
       fill="currentColor"
@@ -163,13 +176,13 @@ function IosCellularSignal({ compact }: { compact: boolean }) {
       <rect height="10" rx="1.25" width="3.5" x="11" y="4" />
       <rect height="14" rx="1.25" width="3.5" x="16.5" y="0" />
     </svg>
-  )
+  );
 }
 
 function IosWifiSignal({ compact }: { compact: boolean }) {
   return (
     <svg
-      aria-hidden
+      aria-hidden="true"
       className={compact ? "h-[10px] w-[14px]" : "h-[14px] w-[19px]"}
       data-system-icon="ios-wifi"
       fill="none"
@@ -189,13 +202,13 @@ function IosWifiSignal({ compact }: { compact: boolean }) {
       />
       <circle cx="10" cy="12.6" fill="currentColor" r="1.55" />
     </svg>
-  )
+  );
 }
 
 function IosBattery({ compact, dark }: { compact: boolean; dark: boolean }) {
   return (
     <svg
-      aria-hidden
+      aria-hidden="true"
       className={compact ? "h-[10px] w-[22px]" : "h-[14px] w-[29px]"}
       data-battery-percent="82"
       data-system-icon="ios-battery"
@@ -211,7 +224,14 @@ function IosBattery({ compact, dark }: { compact: boolean; dark: boolean }) {
         x="0.75"
         y="1"
       />
-      <rect fill="currentColor" height="9" rx="2" width="18.1" x="2.5" y="2.5" />
+      <rect
+        fill="currentColor"
+        height="9"
+        rx="2"
+        width="18.1"
+        x="2.5"
+        y="2.5"
+      />
       <path
         d="M26.7 4.25C27.8 4.65 28.5 5.65 28.5 7C28.5 8.35 27.8 9.35 26.7 9.75V4.25Z"
         fill="currentColor"
@@ -228,32 +248,46 @@ function IosBattery({ compact, dark }: { compact: boolean; dark: boolean }) {
         82
       </text>
     </svg>
-  )
+  );
 }
 
-function IosStatusIndicators({ compact, dark }: { compact: boolean; dark: boolean }) {
+function IosStatusIndicators({
+  compact,
+  dark,
+}: {
+  compact: boolean;
+  dark: boolean;
+}) {
   return (
     <span className={`flex items-center ${compact ? "gap-1" : "gap-[7px]"}`}>
       <IosCellularSignal compact={compact} />
       <IosWifiSignal compact={compact} />
       <IosBattery compact={compact} dark={dark} />
     </span>
-  )
+  );
 }
 
 function AndroidStatusIndicators({ compact }: { compact: boolean }) {
   return (
     <span className="flex items-center gap-1.5">
       <CellSignalFullIcon
-        aria-hidden
+        aria-hidden="true"
         className={compact ? "size-3" : "size-[14px]"}
         weight="fill"
       />
-      <WifiHighIcon aria-hidden className={compact ? "size-3" : "size-[14px]"} weight="bold" />
+      <WifiHighIcon
+        aria-hidden="true"
+        className={compact ? "size-3" : "size-[14px]"}
+        weight="bold"
+      />
       <span className={compact ? "text-[10px]" : "text-[11px]"}>82%</span>
-      <BatteryHighIcon aria-hidden className={compact ? "size-[14px]" : "size-4"} weight="fill" />
+      <BatteryHighIcon
+        aria-hidden="true"
+        className={compact ? "size-[14px]" : "size-4"}
+        weight="fill"
+      />
     </span>
-  )
+  );
 }
 
 function SystemStatusBar({
@@ -261,21 +295,42 @@ function SystemStatusBar({
   orientation,
   preset,
 }: {
-  appearance: StudioCanvasPreferences["appearance"]
-  orientation: StudioCanvasPreferences["orientation"]
-  preset: CanvasDevicePreset
+  appearance: StudioCanvasPreferences["appearance"];
+  orientation: StudioCanvasPreferences["orientation"];
+  preset: CanvasDevicePreset;
 }) {
-  const isTablet = preset.formFactor === "tablet"
-  const isLandscape = orientation === "landscape"
-  const dark = appearance === "dark"
-  const time = preset.platform === "ios" ? "9:41" : "12:45"
-  const statusBarHeight = isTablet ? 26 : isLandscape ? 28 : preset.platform === "ios" ? 62 : 34
-  const inlinePadding =
-    preset.id === "iphone-17-pro-max" ? 40 : preset.id === "iphone-17-pro" ? 35 : isTablet ? 18 : 22
+  const isTablet = preset.formFactor === "tablet";
+  const isLandscape = orientation === "landscape";
+  const dark = appearance === "dark";
+  const time = preset.platform === "ios" ? "9:41" : "12:45";
+  const statusBarHeight = (() => {
+    if (isTablet) {
+      return 26;
+    }
+    if (isLandscape) {
+      return 28;
+    }
+    if (preset.platform === "ios") {
+      return 62;
+    }
+    return 34;
+  })();
+  const inlinePadding = (() => {
+    if (preset.id === "iphone-17-pro-max") {
+      return 40;
+    }
+    if (preset.id === "iphone-17-pro") {
+      return 35;
+    }
+    if (isTablet) {
+      return 18;
+    }
+    return 22;
+  })();
 
   return (
     <div
-      aria-hidden
+      aria-hidden="true"
       className={`pointer-events-none absolute inset-x-0 top-0 z-[60] flex items-start justify-between font-semibold tracking-tight ${
         dark ? "text-white" : "text-slate-950"
       }`}
@@ -284,18 +339,31 @@ function SystemStatusBar({
       dir="ltr"
       style={{
         height: statusBarHeight,
-        paddingBlockStart: isTablet ? 7 : isLandscape ? 7 : preset.platform === "ios" ? 18 : 9,
+        paddingBlockStart: (() => {
+          if (isTablet) {
+            return 7;
+          }
+          if (isLandscape) {
+            return 7;
+          }
+          if (preset.platform === "ios") {
+            return 18;
+          }
+          return 9;
+        })(),
         paddingInline: inlinePadding,
       }}
     >
       <span
-        className={
-          isTablet
-            ? "text-[11px] leading-none"
-            : preset.platform === "ios"
-              ? "text-[15px] leading-none"
-              : "text-[13px] leading-none"
-        }
+        className={(() => {
+          if (isTablet) {
+            return "text-[11px] leading-none";
+          }
+          if (preset.platform === "ios") {
+            return "text-[15px] leading-none";
+          }
+          return "text-[13px] leading-none";
+        })()}
         style={{
           fontFamily:
             "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif",
@@ -312,24 +380,24 @@ function SystemStatusBar({
         <AndroidStatusIndicators compact={isTablet} />
       )}
     </div>
-  )
+  );
 }
 
 function SystemGestureBar({
   appearance,
   platform,
 }: {
-  appearance: StudioCanvasPreferences["appearance"]
-  platform: CanvasDevicePreset["platform"]
+  appearance: StudioCanvasPreferences["appearance"];
+  platform: CanvasDevicePreset["platform"];
 }) {
   return (
     <span
-      aria-hidden
+      aria-hidden="true"
       className={`pointer-events-none absolute bottom-[7px] left-1/2 z-[60] h-[5px] -translate-x-1/2 rounded-full ${
         appearance === "dark" ? "bg-white/80" : "bg-slate-950/80"
       } ${platform === "ios" ? "w-32" : "w-24"}`}
     />
-  )
+  );
 }
 
 export function CanvasPreviewDevice({
@@ -352,35 +420,40 @@ export function CanvasPreviewDevice({
   onRootClick,
   onRootSelect,
 }: {
-  active: boolean
-  canvas: StudioCanvasPreferences
-  children: ReactNode
-  direction: "ltr" | "rtl"
-  document: MosaicDocument
-  geometry: CanvasDeviceGeometry
-  initial: boolean
-  layout: Screen["layout"]
-  nodeGeometry: CanvasDeviceNodeGeometry
-  presentation: "screen" | "sheet"
-  preset: CanvasDevicePreset
-  rootHidden: boolean
-  screenLabel: string
-  selectedComponentId: string | null
-  zoom: number
-  onFrameSelect: () => void
-  onRootClick: (event: MouseEvent<HTMLDivElement>) => void
-  onRootSelect: () => void
+  active: boolean;
+  canvas: StudioCanvasPreferences;
+  children: ReactNode;
+  direction: "ltr" | "rtl";
+  document: MosaicDocument;
+  geometry: CanvasDeviceGeometry;
+  initial: boolean;
+  layout: Screen["layout"];
+  nodeGeometry: CanvasDeviceNodeGeometry;
+  presentation: "screen" | "sheet";
+  preset: CanvasDevicePreset;
+  rootHidden: boolean;
+  screenLabel: string;
+  selectedComponentId: string | null;
+  zoom: number;
+  onFrameSelect: () => void;
+  onRootClick: (event: MouseEvent<HTMLFieldSetElement>) => void;
+  onRootSelect: () => void;
 }) {
-  const root = layout.content
-  const layoutBackground = resolvedBackground(document, layout.background)
-  const rootBackground = resolvedBackground(document, root.appearance?.background)
-  const respectsSafeArea = layout.safeArea === "respect"
-  const safeArea = respectsSafeArea ? geometry.safeArea : { top: 0, right: 0, bottom: 0, left: 0 }
+  const root = layout.content;
+  const layoutBackground = resolvedBackground(document, layout.background);
+  const rootBackground = resolvedBackground(
+    document,
+    root.appearance?.background
+  );
+  const respectsSafeArea = layout.safeArea === "respect";
+  const safeArea = respectsSafeArea
+    ? geometry.safeArea
+    : { top: 0, right: 0, bottom: 0, left: 0 };
 
   return (
-    <div
+    <fieldset
       aria-label={`${preset.label}, ${preset.displayLabel}, ${canvas.orientation}, ${Math.round(zoom * 100)}% zoom`}
-      className="group/device relative select-none"
+      className="group/device relative min-w-0 select-none"
       data-canvas-fit-mode={canvas.fitMode}
       data-device-height={geometry.height}
       data-device-id={preset.id}
@@ -388,7 +461,6 @@ export function CanvasPreviewDevice({
       data-device-width={geometry.width}
       data-effective-zoom={zoom.toFixed(3)}
       data-presentation={presentation}
-      role="group"
       style={{ height: nodeGeometry.height, width: nodeGeometry.width }}
     >
       <div
@@ -397,29 +469,29 @@ export function CanvasPreviewDevice({
       >
         <button
           aria-label={`${screenLabel} ${presentation} frame`}
-          className={`border-border/70 bg-background/95 text-foreground flex min-w-0 items-center gap-1.5 rounded-full border px-3 py-1.5 font-semibold shadow-sm backdrop-blur focus-visible:ring-2 focus-visible:outline-none ${
-            active ? "ring-primary ring-2" : ""
+          className={`flex min-w-0 items-center gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 py-1.5 font-semibold text-foreground shadow-sm backdrop-blur focus-visible:outline-none focus-visible:ring-2 ${
+            active ? "ring-2 ring-primary" : ""
           }`}
           data-testid="device-name-label"
           onClick={(event) => {
-            event.stopPropagation()
-            onFrameSelect()
+            event.stopPropagation();
+            onFrameSelect();
           }}
           type="button"
         >
           <span className="max-w-40 truncate">{screenLabel}</span>
-          <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[10px] font-medium uppercase">
+          <span className="rounded bg-muted px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground uppercase">
             {presentation}
           </span>
           {initial ? (
-            <span className="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[10px] font-medium uppercase">
+            <span className="rounded bg-primary/10 px-1.5 py-0.5 font-medium text-[10px] text-primary uppercase">
               Start
             </span>
           ) : null}
           <span className="sr-only">{preset.label}</span>
         </button>
         <span
-          className="border-border/60 bg-background/90 text-muted-foreground pointer-events-none truncate rounded-full border px-3 py-1.5 font-medium shadow-sm backdrop-blur"
+          className="pointer-events-none truncate rounded-full border border-border/60 bg-background/90 px-3 py-1.5 font-medium text-muted-foreground shadow-sm backdrop-blur"
           data-testid="device-size-label"
         >
           {preset.label} · {preset.displayLabel}
@@ -440,7 +512,9 @@ export function CanvasPreviewDevice({
         <DeviceSensor orientation={canvas.orientation} preset={preset} />
         <div
           className={`nodrag nowheel nopan relative h-full w-full overflow-y-auto overscroll-contain ${
-            canvas.appearance === "dark" ? "bg-slate-950 text-slate-50" : "bg-white text-slate-950"
+            canvas.appearance === "dark"
+              ? "bg-slate-950 text-slate-50"
+              : "bg-white text-slate-950"
           }`}
           dir={direction}
           style={{
@@ -454,10 +528,13 @@ export function CanvasPreviewDevice({
             orientation={canvas.orientation}
             preset={preset}
           />
-          <SystemGestureBar appearance={canvas.appearance} platform={preset.platform} />
+          <SystemGestureBar
+            appearance={canvas.appearance}
+            platform={preset.platform}
+          />
           {layoutBackground.video ? (
             <video
-              aria-hidden
+              aria-hidden="true"
               autoPlay
               className="pointer-events-none absolute inset-0 z-0 size-full"
               loop
@@ -466,15 +543,19 @@ export function CanvasPreviewDevice({
               poster={layoutBackground.video.poster}
               src={layoutBackground.video.src}
               style={{
-                objectFit: layoutBackground.video.contentMode === "fill" ? "cover" : "contain",
+                objectFit:
+                  layoutBackground.video.contentMode === "fill"
+                    ? "cover"
+                    : "contain",
               }}
+              tabIndex={-1}
             />
           ) : null}
 
           {canvas.safeArea ? (
             <div
-              aria-hidden
-              className="pointer-events-none absolute z-40 border border-dashed border-fuchsia-500/70"
+              aria-hidden="true"
+              className="pointer-events-none absolute z-40 border border-fuchsia-500/70 border-dashed"
               data-testid="canvas-safe-area"
               style={{
                 insetBlockEnd: geometry.safeArea.bottom,
@@ -487,43 +568,54 @@ export function CanvasPreviewDevice({
 
           {presentation === "sheet" ? (
             <div
-              aria-hidden
+              aria-hidden="true"
               className="pointer-events-none absolute inset-0 z-[8] bg-slate-950/45"
             />
           ) : null}
 
-          <div
-            className={`z-10 flex flex-col ${
-              presentation === "sheet"
-                ? "absolute inset-x-0 bottom-0 max-h-[88%] min-h-[36%] overflow-y-auto rounded-t-[28px] shadow-[0_-18px_50px_-24px_rgba(15,23,42,0.65)]"
-                : "relative min-h-full"
-            } ${selectedComponentId === root.id ? "ring-primary ring-2 ring-inset" : ""}`}
-            data-component-id={root.id}
-            data-sheet-surface={presentation === "sheet" ? "true" : undefined}
-            onClick={onRootClick}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" && event.key !== " ") return
-              event.preventDefault()
-              onRootSelect()
-            }}
+          {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: selecting the root is also reachable from the Layers tree; it cannot be a button because it contains the Paywall's own controls */}
+          <fieldset
             // The Paywall root contains the entire interactive Paywall, so it
             // is a labelled group rather than a button.
             aria-current={selectedComponentId === root.id ? "true" : undefined}
             aria-label="Paywall root content"
-            role="group"
+            className={`z-10 flex flex-col ${
+              presentation === "sheet"
+                ? "absolute inset-x-0 bottom-0 max-h-[88%] min-h-[36%] overflow-y-auto rounded-t-[28px] shadow-[0_-18px_50px_-24px_rgba(15,23,42,0.65)]"
+                : "relative min-h-full"
+            } ${selectedComponentId === root.id ? "ring-2 ring-primary ring-inset" : ""}`}
+            data-component-id={root.id}
+            data-sheet-surface={presentation === "sheet" ? "true" : undefined}
+            onClick={onRootClick}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") {
+                return;
+              }
+              event.preventDefault();
+              onRootSelect();
+            }}
             style={{
               alignItems: alignmentStyle(root.crossAxisAlignment),
               ...rootBackground.style,
               backgroundColor:
                 rootBackground.style.backgroundColor ??
-                (rootBackground.style.background
-                  ? undefined
-                  : presentation === "sheet"
-                    ? canvas.appearance === "dark"
-                      ? "#020617"
-                      : "#ffffff"
-                    : undefined),
-              borderColor: resolvedProtocolColor(document, root.appearance?.border?.color),
+                (() => {
+                  if (rootBackground.style.background) {
+                    return;
+                  }
+                  if (presentation === "sheet") {
+                    return (() => {
+                      if (canvas.appearance === "dark") {
+                        return "#020617";
+                      }
+                      return "#ffffff";
+                    })();
+                  }
+                })(),
+              borderColor: resolvedProtocolColor(
+                document,
+                root.appearance?.border?.color
+              ),
               borderRadius:
                 presentation === "sheet"
                   ? `${Math.max(28, root.appearance?.cornerRadius ?? 0)}px ${Math.max(28, root.appearance?.cornerRadius ?? 0)}px 0 0`
@@ -538,15 +630,16 @@ export function CanvasPreviewDevice({
               isolation: "isolate",
               overflow: root.appearance?.clipContent ? "hidden" : undefined,
               paddingBlockEnd: root.padding.bottom + safeArea.bottom,
-              paddingBlockStart: root.padding.top + (presentation === "sheet" ? 0 : safeArea.top),
+              paddingBlockStart:
+                root.padding.top +
+                (presentation === "sheet" ? 0 : safeArea.top),
               paddingInlineEnd: root.padding.end + safeArea.right,
               paddingInlineStart: root.padding.start + safeArea.left,
             }}
-            tabIndex={0}
           >
             {rootBackground.video ? (
               <video
-                aria-hidden
+                aria-hidden="true"
                 autoPlay
                 className="pointer-events-none absolute inset-0 z-0 size-full rounded-[inherit]"
                 loop
@@ -555,20 +648,25 @@ export function CanvasPreviewDevice({
                 poster={rootBackground.video.poster}
                 src={rootBackground.video.src}
                 style={{
-                  objectFit: rootBackground.video.contentMode === "fill" ? "cover" : "contain",
+                  objectFit:
+                    rootBackground.video.contentMode === "fill"
+                      ? "cover"
+                      : "contain",
                 }}
+                tabIndex={-1}
               />
             ) : null}
             {rootHidden ? (
-              <div className="m-auto max-w-xs rounded border border-dashed border-slate-300 p-5 text-center text-sm opacity-70">
-                Content Stack is hidden on the canvas. Show it from Layers to preview its content.
+              <div className="m-auto max-w-xs rounded border border-slate-300 border-dashed p-5 text-center text-sm opacity-70">
+                Content Stack is hidden on the canvas. Show it from Layers to
+                preview its content.
               </div>
             ) : (
               children
             )}
-          </div>
+          </fieldset>
         </div>
       </div>
-    </div>
-  )
+    </fieldset>
+  );
 }

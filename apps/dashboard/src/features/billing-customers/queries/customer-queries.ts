@@ -1,14 +1,14 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
 import {
   getBillingCustomerEntitlementSnapshot,
   getBillingSubscription,
   getOperatorBillingCustomer,
-  listBillingCustomers,
   listBillingCustomerSubscriptions,
+  listBillingCustomers,
   listBillingSubscriptionTimeline,
-} from "@/generated/api"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 /**
  * Authoritative customer reads.
@@ -20,16 +20,57 @@ import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
  */
 export const customerKeys = {
   detail: (projectId: string, environmentId: string, customerId: string) =>
-    ["billing-customers", projectId, environmentId, "customer", customerId] as const,
-  entitlements: (projectId: string, environmentId: string, customerId: string) =>
-    ["billing-customers", projectId, environmentId, "entitlements", customerId] as const,
-  list: (projectId: string, environmentId: string, filters: Record<string, unknown>) =>
-    ["billing-customers", projectId, environmentId, "customers", filters] as const,
+    [
+      "billing-customers",
+      projectId,
+      environmentId,
+      "customer",
+      customerId,
+    ] as const,
+  entitlements: (
+    projectId: string,
+    environmentId: string,
+    customerId: string
+  ) =>
+    [
+      "billing-customers",
+      projectId,
+      environmentId,
+      "entitlements",
+      customerId,
+    ] as const,
+  list: (
+    projectId: string,
+    environmentId: string,
+    filters: Record<string, unknown>
+  ) =>
+    [
+      "billing-customers",
+      projectId,
+      environmentId,
+      "customers",
+      filters,
+    ] as const,
   scope: (projectId: string, environmentId: string) =>
     ["billing-customers", projectId, environmentId] as const,
-  subscription: (projectId: string, environmentId: string, instanceId: string) =>
-    ["billing-customers", projectId, environmentId, "subscription", instanceId] as const,
-  subscriptions: (projectId: string, environmentId: string, customerId: string, cursor?: string) =>
+  subscription: (
+    projectId: string,
+    environmentId: string,
+    instanceId: string
+  ) =>
+    [
+      "billing-customers",
+      projectId,
+      environmentId,
+      "subscription",
+      instanceId,
+    ] as const,
+  subscriptions: (
+    projectId: string,
+    environmentId: string,
+    customerId: string,
+    cursor?: string
+  ) =>
     [
       "billing-customers",
       projectId,
@@ -38,7 +79,12 @@ export const customerKeys = {
       customerId,
       cursor ?? null,
     ] as const,
-  timeline: (projectId: string, environmentId: string, instanceId: string, cursor?: string) =>
+  timeline: (
+    projectId: string,
+    environmentId: string,
+    instanceId: string,
+    cursor?: string
+  ) =>
     [
       "billing-customers",
       projectId,
@@ -47,31 +93,33 @@ export const customerKeys = {
       instanceId,
       cursor ?? null,
     ] as const,
-}
+};
 
 /** The page size every paged customer surface asks for. */
-export const CUSTOMER_PAGE_SIZE = 50
+export const CUSTOMER_PAGE_SIZE = 50;
 
 export interface CustomerListFilters {
-  conflictedOnly?: boolean
-  cursor?: string
-  identified?: boolean
-  limit?: number
-  status?: "absorbed" | "active" | "anonymized" | "frozen"
+  conflictedOnly?: boolean;
+  cursor?: string;
+  identified?: boolean;
+  limit?: number;
+  status?: "absorbed" | "active" | "anonymized" | "frozen";
 }
 
 export function billingCustomersQueryOptions(
   projectId: string,
   environmentId: string,
-  filters: CustomerListFilters = {},
+  filters: CustomerListFilters = {}
 ) {
   const query = {
     limit: filters.limit ?? 25,
     ...(filters.cursor ? { cursor: filters.cursor } : {}),
     ...(filters.status ? { status: filters.status } : {}),
-    ...(filters.identified === undefined ? {} : { identified: filters.identified }),
+    ...(filters.identified === undefined
+      ? {}
+      : { identified: filters.identified }),
     ...(filters.conflictedOnly ? { conflictedOnly: true } : {}),
-  }
+  };
   return queryOptions({
     queryKey: customerKeys.list(projectId, environmentId, query),
     queryFn: async ({ signal }) => {
@@ -81,17 +129,17 @@ export function billingCustomersQueryOptions(
         query,
         signal,
         throwOnError: true,
-      })
+      });
       return {
         items: result.data.data?.items ?? [],
         nextCursor: result.data.data?.nextCursor,
-      }
+      };
     },
-  })
+  });
 }
 
 /** How often a customer surface re-reads while a projection is outstanding. */
-export const PROJECTION_POLL_INTERVAL_MS = 5000
+export const PROJECTION_POLL_INTERVAL_MS = 5000;
 
 /**
  * Poll only while something is genuinely expected to move, and stop the moment
@@ -112,18 +160,22 @@ export const PROJECTION_POLL_INTERVAL_MS = 5000
  */
 export function projectionRefetchInterval(
   state: string | undefined,
-  recomputeQueued: boolean,
+  recomputeQueued: boolean
 ): number | false {
-  if (state === "current") return false
-  if (state === "pending" || recomputeQueued) return PROJECTION_POLL_INTERVAL_MS
-  return false
+  if (state === "current") {
+    return false;
+  }
+  if (state === "pending" || recomputeQueued) {
+    return PROJECTION_POLL_INTERVAL_MS;
+  }
+  return false;
 }
 
 export function billingCustomerQueryOptions(
   projectId: string,
   environmentId: string,
   customerId: string,
-  recomputeQueued = false,
+  recomputeQueued = false
 ) {
   return queryOptions({
     queryKey: customerKeys.detail(projectId, environmentId, customerId),
@@ -133,12 +185,15 @@ export function billingCustomerQueryOptions(
         path: { customerId, environmentId, projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     refetchInterval: (query) =>
-      projectionRefetchInterval(query.state.data?.projectionStatus?.state, recomputeQueued),
-  })
+      projectionRefetchInterval(
+        query.state.data?.projectionStatus?.state,
+        recomputeQueued
+      ),
+  });
 }
 
 /**
@@ -150,7 +205,7 @@ export function customerEntitlementSnapshotQueryOptions(
   projectId: string,
   environmentId: string,
   customerId: string,
-  recomputeQueued = false,
+  recomputeQueued = false
 ) {
   return queryOptions({
     queryKey: customerKeys.entitlements(projectId, environmentId, customerId),
@@ -160,12 +215,15 @@ export function customerEntitlementSnapshotQueryOptions(
         path: { customerId, environmentId, projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     refetchInterval: (query) =>
-      projectionRefetchInterval(query.state.data?.projectionStatus?.state, recomputeQueued),
-  })
+      projectionRefetchInterval(
+        query.state.data?.projectionStatus?.state,
+        recomputeQueued
+      ),
+  });
 }
 
 /**
@@ -180,10 +238,15 @@ export function customerSubscriptionsQueryOptions(
   projectId: string,
   environmentId: string,
   customerId: string,
-  cursor?: string,
+  cursor?: string
 ) {
   return queryOptions({
-    queryKey: customerKeys.subscriptions(projectId, environmentId, customerId, cursor),
+    queryKey: customerKeys.subscriptions(
+      projectId,
+      environmentId,
+      customerId,
+      cursor
+    ),
     queryFn: async ({ signal }) => {
       const result = await listBillingCustomerSubscriptions({
         client: generatedDashboardClient,
@@ -191,19 +254,19 @@ export function customerSubscriptionsQueryOptions(
         query: { limit: CUSTOMER_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
         signal,
         throwOnError: true,
-      })
+      });
       return {
         items: result.data.data?.items ?? [],
         nextCursor: result.data.data?.nextCursor,
-      }
+      };
     },
-  })
+  });
 }
 
 export function subscriptionQueryOptions(
   projectId: string,
   environmentId: string,
-  instanceId: string,
+  instanceId: string
 ) {
   return queryOptions({
     queryKey: customerKeys.subscription(projectId, environmentId, instanceId),
@@ -213,10 +276,10 @@ export function subscriptionQueryOptions(
         path: { environmentId, instanceId, projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 /**
@@ -234,10 +297,15 @@ export function subscriptionTimelineQueryOptions(
   projectId: string,
   environmentId: string,
   instanceId: string,
-  cursor?: string,
+  cursor?: string
 ) {
   return queryOptions({
-    queryKey: customerKeys.timeline(projectId, environmentId, instanceId, cursor),
+    queryKey: customerKeys.timeline(
+      projectId,
+      environmentId,
+      instanceId,
+      cursor
+    ),
     queryFn: async ({ signal }) => {
       const result = await listBillingSubscriptionTimeline({
         client: generatedDashboardClient,
@@ -245,11 +313,11 @@ export function subscriptionTimelineQueryOptions(
         query: { limit: CUSTOMER_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
         signal,
         throwOnError: true,
-      })
+      });
       return {
         items: result.data.data?.items ?? [],
         nextCursor: result.data.data?.nextCursor,
-      }
+      };
     },
-  })
+  });
 }

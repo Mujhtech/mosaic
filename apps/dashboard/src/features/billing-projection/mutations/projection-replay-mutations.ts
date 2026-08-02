@@ -1,8 +1,10 @@
-import { mutationOptions, type QueryClient } from "@tanstack/react-query"
-
-import { createBillingProjectionReplay, type CreateProjectionReplayRequest } from "@/generated/api"
-import { projectionHealthKeys } from "@/features/billing-projection/queries/projection-health-queries"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import { projectionHealthKeys } from "@/features/billing-projection/queries/projection-health-queries";
+import {
+  type CreateProjectionReplayRequest,
+  createBillingProjectionReplay,
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 /**
  * Replay runs synchronously and answers with its comparison, so there is no job
@@ -12,7 +14,7 @@ import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
 export function createProjectionReplayMutationOptions(
   projectId: string,
   environmentId: string,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
     mutationFn: async (request: CreateProjectionReplayRequest) => {
@@ -21,12 +23,12 @@ export function createProjectionReplayMutationOptions(
         client: generatedDashboardClient,
         path: { environmentId, projectId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async () =>
       queryClient.invalidateQueries({
         queryKey: projectionHealthKeys.detail(projectId, environmentId),
       }),
-  })
+  });
 }

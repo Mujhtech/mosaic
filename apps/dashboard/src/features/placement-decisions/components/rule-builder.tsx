@@ -1,23 +1,26 @@
-import { ArrowDownIcon } from "@phosphor-icons/react/dist/ssr/ArrowDown"
-import { ArrowUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowUp"
-import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy"
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
-import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash"
+import { ArrowDownIcon } from "@phosphor-icons/react/dist/ssr/ArrowDown";
+import { ArrowUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowUp";
+import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy";
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 
-import { Button } from "@/components/ui/button"
-import { ConditionEditor } from "@/features/placement-decisions/components/condition-editor"
-import { OutcomeEditor } from "@/features/placement-decisions/components/outcome-editor"
+import { Button } from "@/components/ui/button";
+import { ConditionEditor } from "@/features/placement-decisions/components/condition-editor";
+import { OutcomeEditor } from "@/features/placement-decisions/components/outcome-editor";
 import type {
   AttributeDefinition,
   DecisionValidationIssue,
   NamedFallback,
   PlacementRule,
-} from "@/features/placement-decisions/types/placement-decision"
-import { duplicateRule, moveRule } from "@/features/placement-decisions/types/rule-priority"
-import type { HostedPaywallListItem } from "@/features/publishing/api/hosted-publishing-adapter"
+} from "@/features/placement-decisions/types/placement-decision";
+import {
+  duplicateRule,
+  moveRule,
+} from "@/features/placement-decisions/types/rule-priority";
+import type { HostedPaywallListItem } from "@/features/publishing/api/hosted-publishing-adapter";
 
 function identifier(prefix: string) {
-  return `${prefix}-${typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : Date.now().toString(36)}`
+  return `${prefix}-${typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : Date.now().toString(36)}`;
 }
 
 function createRule(priority: number): PlacementRule {
@@ -47,7 +50,7 @@ function createRule(priority: number): PlacementRule {
     name: "New rule",
     outcome: { reason: "no_safe_decision", type: "unavailable" },
     priority,
-  }
+  };
 }
 
 export function RuleBuilder({
@@ -58,34 +61,41 @@ export function RuleBuilder({
   paywalls,
   rules,
 }: {
-  attributes: readonly AttributeDefinition[]
-  fallbacks: readonly NamedFallback[]
-  issues: readonly DecisionValidationIssue[]
-  onChange: (rules: readonly PlacementRule[]) => void
-  paywalls: readonly HostedPaywallListItem[]
-  rules: readonly PlacementRule[]
+  attributes: readonly AttributeDefinition[];
+  fallbacks: readonly NamedFallback[];
+  issues: readonly DecisionValidationIssue[];
+  onChange: (rules: readonly PlacementRule[]) => void;
+  paywalls: readonly HostedPaywallListItem[];
+  rules: readonly PlacementRule[];
 }) {
-  const ordered = [...rules].sort((left, right) => left.priority - right.priority)
+  const ordered = [...rules].sort(
+    (left, right) => left.priority - right.priority
+  );
 
   return (
     <section aria-labelledby="rules-heading" className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold" id="rules-heading">
+          <h2 className="font-semibold text-base" id="rules-heading">
             Rules
           </h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Lowest priority number runs first. The first true enabled Rule wins; false and unknown
-            continue.
+          <p className="mt-1 text-muted-foreground text-sm">
+            Lowest priority number runs first. The first true enabled Rule wins;
+            false and unknown continue.
           </p>
-          <p className="text-muted-foreground mt-1 text-xs">
-            New Rules start disabled with a safe unavailable outcome. Review the conditions and
-            decision before enabling them.
+          <p className="mt-1 text-muted-foreground text-xs">
+            New Rules start disabled with a safe unavailable outcome. Review the
+            conditions and decision before enabling them.
           </p>
         </div>
         <Button
           disabled={rules.length >= 100}
-          onClick={() => onChange([...ordered, createRule((ordered.at(-1)?.priority ?? -10) + 10)])}
+          onClick={() =>
+            onChange([
+              ...ordered,
+              createRule((ordered.at(-1)?.priority ?? -10) + 10),
+            ])
+          }
           type="button"
         >
           <PlusIcon aria-hidden /> Add Rule
@@ -93,54 +103,55 @@ export function RuleBuilder({
       </div>
 
       {ordered.length === 0 ? (
-        <div className="border-border rounded border border-dashed p-6 text-center">
+        <div className="rounded border border-border border-dashed p-6 text-center">
           <p className="font-medium">No advanced Rules</p>
-          <p className="text-muted-foreground mt-1 text-sm">
-            The default decision remains compatible with the existing simple Placement binding.
+          <p className="mt-1 text-muted-foreground text-sm">
+            The default decision remains compatible with the existing simple
+            Placement binding.
           </p>
         </div>
       ) : null}
 
       <ol className="space-y-4">
         {ordered.map((rule, index) => {
-          const ruleIssues = issues.filter((issue) => issue.ruleId === rule.id)
+          const ruleIssues = issues.filter((issue) => issue.ruleId === rule.id);
           return (
             <li
-              className="border-border scroll-mt-28 rounded border"
+              className="scroll-mt-28 rounded border border-border"
               id={`rule-${rule.id}`}
               key={rule.id}
               tabIndex={-1}
             >
-              <div className="bg-muted/30 flex flex-wrap items-center gap-2 border-b p-3">
-                <span
-                  className="bg-background rounded border px-2 py-1 font-mono text-xs"
-                  aria-label={`Priority ${rule.priority}`}
-                >
+              <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 p-3">
+                <span className="rounded border bg-background px-2 py-1 font-mono text-xs">
+                  <span className="sr-only">Priority </span>
                   {rule.priority}
                 </span>
                 <input
                   aria-label="Rule name"
-                  className="border-input bg-background h-8 min-w-44 flex-1 rounded border px-2 text-sm font-semibold"
+                  className="h-8 min-w-44 flex-1 rounded border border-input bg-background px-2 font-semibold text-sm"
                   onChange={(event) =>
                     onChange(
                       ordered.map((item) =>
-                        item.id === rule.id ? { ...item, name: event.currentTarget.value } : item,
-                      ),
+                        item.id === rule.id
+                          ? { ...item, name: event.currentTarget.value }
+                          : item
+                      )
                     )
                   }
                   value={rule.name}
                 />
-                <label className="flex items-center gap-2 text-xs font-medium">
+                <label className="flex items-center gap-2 font-medium text-xs">
                   <input
                     checked={rule.enabled}
-                    className="accent-primary size-4"
+                    className="size-4 accent-primary"
                     onChange={(event) =>
                       onChange(
                         ordered.map((item) =>
                           item.id === rule.id
                             ? { ...item, enabled: event.currentTarget.checked }
-                            : item,
-                        ),
+                            : item
+                        )
                       )
                     }
                     type="checkbox"
@@ -169,7 +180,11 @@ export function RuleBuilder({
                 </Button>
                 <Button
                   aria-label={`Duplicate ${rule.name}`}
-                  onClick={() => onChange(duplicateRule(ordered, rule.id, identifier("rule")))}
+                  onClick={() =>
+                    onChange(
+                      duplicateRule(ordered, rule.id, identifier("rule"))
+                    )
+                  }
                   size="icon"
                   type="button"
                   variant="ghost"
@@ -178,7 +193,9 @@ export function RuleBuilder({
                 </Button>
                 <Button
                   aria-label={`Remove ${rule.name}`}
-                  onClick={() => onChange(ordered.filter((item) => item.id !== rule.id))}
+                  onClick={() =>
+                    onChange(ordered.filter((item) => item.id !== rule.id))
+                  }
                   size="icon"
                   type="button"
                   variant="ghost"
@@ -193,7 +210,9 @@ export function RuleBuilder({
                   issues={ruleIssues}
                   onChange={(conditions) =>
                     onChange(
-                      ordered.map((item) => (item.id === rule.id ? { ...item, conditions } : item)),
+                      ordered.map((item) =>
+                        item.id === rule.id ? { ...item, conditions } : item
+                      )
                     )
                   }
                   value={rule.conditions}
@@ -204,59 +223,73 @@ export function RuleBuilder({
                     id={`rule-${rule.id}-outcome`}
                     onChange={(outcome) =>
                       onChange(
-                        ordered.map((item) => (item.id === rule.id ? { ...item, outcome } : item)),
+                        ordered.map((item) =>
+                          item.id === rule.id ? { ...item, outcome } : item
+                        )
                       )
                     }
                     paywalls={paywalls}
                     value={rule.outcome}
                   />
-                  <fieldset className="border-border rounded border p-3">
-                    <legend className="px-1 text-xs font-semibold">Percentage rollout</legend>
-                    <label className="mt-2 grid gap-1 text-xs font-medium">
+                  <fieldset className="rounded border border-border p-3">
+                    <legend className="px-1 font-semibold text-xs">
+                      Percentage rollout
+                    </legend>
+                    <label className="mt-2 grid gap-1 font-medium text-xs">
                       Traffic percentage
                       <div className="flex items-center gap-2">
                         <input
-                          className="border-input bg-background h-9 w-24 rounded border px-2 text-sm"
+                          className="h-9 w-24 rounded border border-input bg-background px-2 text-sm"
                           max={100}
                           min={0}
                           onChange={(event) => {
-                            const percentage = Number(event.currentTarget.value)
+                            const percentage = Number(
+                              event.currentTarget.value
+                            );
                             onChange(
                               ordered.map((item) =>
                                 item.id === rule.id
                                   ? {
                                       ...item,
                                       rollout:
-                                        Number.isFinite(percentage) && percentage < 100
-                                          ? { thresholdBasisPoints: Math.round(percentage * 100) }
+                                        Number.isFinite(percentage) &&
+                                        percentage < 100
+                                          ? {
+                                              thresholdBasisPoints: Math.round(
+                                                percentage * 100
+                                              ),
+                                            }
                                           : undefined,
                                     }
-                                  : item,
-                              ),
-                            )
+                                  : item
+                              )
+                            );
                           }}
                           step={0.01}
                           type="number"
-                          value={(rule.rollout?.thresholdBasisPoints ?? 10_000) / 100}
+                          value={
+                            (rule.rollout?.thresholdBasisPoints ?? 10_000) / 100
+                          }
                         />
                         <span aria-hidden>%</span>
                       </div>
                     </label>
                     <div
-                      className="bg-muted mt-3 h-2 overflow-hidden rounded-full"
-                      role="img"
                       aria-label={`${(rule.rollout?.thresholdBasisPoints ?? 10_000) / 100} percent allocation`}
+                      className="mt-3 h-2 overflow-hidden rounded-full bg-muted"
+                      role="img"
                     >
                       <div
-                        className="bg-primary h-full"
+                        className="h-full bg-primary"
                         style={{
                           width: `${(rule.rollout?.thresholdBasisPoints ?? 10_000) / 100}%`,
                         }}
                       />
                     </div>
-                    <p className="text-muted-foreground mt-2 text-xs">
-                      Stable traffic control using the selected assignment identity. This is not an
-                      Experiment or a significance estimate.
+                    <p className="mt-2 text-muted-foreground text-xs">
+                      Stable traffic control using the selected assignment
+                      identity. This is not an Experiment or a significance
+                      estimate.
                     </p>
                   </fieldset>
                   {ruleIssues
@@ -277,9 +310,9 @@ export function RuleBuilder({
                 </div>
               </div>
             </li>
-          )
+          );
         })}
       </ol>
     </section>
-  )
+  );
 }

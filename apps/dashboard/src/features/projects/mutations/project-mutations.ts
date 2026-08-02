@@ -1,15 +1,14 @@
-import { mutationOptions, type QueryClient } from "@tanstack/react-query"
-
+import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import { projectKeys } from "@/features/projects/queries/projects-query";
 import {
   archiveProject,
+  type CreateApplicationRequest,
+  type CreateProjectRequest,
   createApplication,
   createProject,
   restoreProject,
-  type CreateApplicationRequest,
-  type CreateProjectRequest,
-} from "@/generated/api"
-import { projectKeys } from "@/features/projects/queries/projects-query"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 export function createProjectMutationOptions(queryClient: QueryClient) {
   return mutationOptions({
@@ -18,14 +17,18 @@ export function createProjectMutationOptions(queryClient: QueryClient) {
         body,
         client: generatedDashboardClient,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: projectKeys.all }),
-  })
+    onSuccess: async () =>
+      queryClient.invalidateQueries({ queryKey: projectKeys.all }),
+  });
 }
 
-export function createApplicationMutationOptions(projectId: string, queryClient: QueryClient) {
+export function createApplicationMutationOptions(
+  projectId: string,
+  queryClient: QueryClient
+) {
   return mutationOptions({
     mutationFn: async (body: CreateApplicationRequest) => {
       const result = await createApplication({
@@ -33,28 +36,31 @@ export function createApplicationMutationOptions(projectId: string, queryClient:
         client: generatedDashboardClient,
         path: { projectId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async () =>
-      queryClient.invalidateQueries({ queryKey: projectKeys.applications(projectId) }),
-  })
+      queryClient.invalidateQueries({
+        queryKey: projectKeys.applications(projectId),
+      }),
+  });
 }
 
 export function projectLifecycleMutationOptions(
   queryClient: QueryClient,
-  action: "archive" | "restore",
+  action: "archive" | "restore"
 ) {
   return mutationOptions({
     mutationFn: async (projectId: string) => {
-      const request = action === "archive" ? archiveProject : restoreProject
+      const request = action === "archive" ? archiveProject : restoreProject;
       const result = await request({
         client: generatedDashboardClient,
         path: { projectId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: projectKeys.all }),
-  })
+    onSuccess: async () =>
+      queryClient.invalidateQueries({ queryKey: projectKeys.all }),
+  });
 }

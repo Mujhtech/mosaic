@@ -1,7 +1,7 @@
-import { HeadContent, Scripts } from "@tanstack/react-router"
-import type { ReactNode } from "react"
+import { HeadContent, Scripts } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 
-import { runtimeConfigScript } from "@/config/environment"
+import { runtimeConfigScript } from "@/config/environment";
 
 export function RootDocument({ children }: { children: ReactNode }) {
   return (
@@ -15,6 +15,7 @@ export function RootDocument({ children }: { children: ReactNode }) {
             API host. The value is resolved identically on the server and the
             client, so hydration stays stable. */}
         <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: the runtime config must be inlined before any bundle runs, and the value is JSON.stringify'd and <-escaped in runtimeConfigScript
           dangerouslySetInnerHTML={{ __html: runtimeConfigScript() }}
           suppressHydrationWarning
         />
@@ -22,5 +23,5 @@ export function RootDocument({ children }: { children: ReactNode }) {
         <Scripts />
       </body>
     </html>
-  )
+  );
 }

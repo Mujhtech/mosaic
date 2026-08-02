@@ -24,14 +24,13 @@
     "preview:relay": "node scripts/local-preview-relay.mjs",
     "build": "vite build",
     "start": "srvx --prod -s ../client dist/server/server.js",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "lint": "eslint . --max-warnings=0",
+    "lint": "ultracite check",
+    "lint:fix": "ultracite fix",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:relay": "node --test scripts/local-preview-relay.test.mjs",
     "test:watch": "vitest",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:relay && npm run build"
+    "check": "npm run lint && npm run typecheck && npm run test && npm run test:relay && npm run build"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -56,10 +55,9 @@
     "ws": "^8.21.1"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@biomejs/biome": "^2.5.6",
     "@hey-api/openapi-ts": "0.99.0",
     "@tailwindcss/vite": "^4.3.3",
-    "@tanstack/eslint-plugin-query": "^5.101.2",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -68,16 +66,10 @@
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.3",
-    "eslint": "^10.7.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.3",
-    "globals": "^17.7.0",
     "jsdom": "^29.1.1",
-    "prettier": "^3.9.5",
-    "prettier-plugin-tailwindcss": "^0.8.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.64.0",
+    "ultracite": "^7.9.4",
     "vite": "^8.1.5",
     "vitest": "^4.1.10"
   }

@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react"
+import { fireEvent, screen } from "@testing-library/react";
 
 /**
  * Chooses an option from a `Select`.
@@ -12,10 +12,13 @@ import { fireEvent, screen } from "@testing-library/react"
  * list picks an item, and a lone `click` leaves the value untouched — silently,
  * which is what makes it worth stating here.
  */
-export async function chooseSelectOption(trigger: HTMLElement, optionName: string | RegExp) {
-  fireEvent.click(trigger)
-  const option = await screen.findByRole("option", { name: optionName })
-  fireEvent.pointerDown(option)
-  fireEvent.pointerUp(option)
-  fireEvent.click(option)
+export async function chooseSelectOption(
+  trigger: HTMLElement,
+  optionName: string | RegExp
+) {
+  fireEvent.click(trigger);
+  const option = await screen.findByRole("option", { name: optionName });
+  fireEvent.pointerDown(option);
+  fireEvent.pointerUp(option);
+  fireEvent.click(option);
 }

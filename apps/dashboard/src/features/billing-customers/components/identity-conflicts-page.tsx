@@ -1,28 +1,31 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query";
 
-import { EmptyState } from "@/components/feedback/empty-state"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { StatusPill } from "@/features/billing-ledger/components/billing-chrome"
-import { identityConflictsQueryOptions } from "@/features/billing-customers/queries/conflict-queries"
+import { EmptyState } from "@/components/feedback/empty-state";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { identityConflictsQueryOptions } from "@/features/billing-customers/queries/conflict-queries";
 import {
   CONFLICT_FREEZE_NOTE,
   CONFLICT_PROJECT_SCOPE_NOTE,
   conflictActionLabel,
   conflictDiagnosticExplanation,
-} from "@/features/billing-customers/types/conflict-resolution"
-import { formatEntitlementInstant } from "@/features/billing-customers/types/entitlement-vocabulary"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { WorkflowPanel, WorkspacePage } from "@/features/orgs/components/workspace-page"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
-import { billingIdentityConflictHref } from "@/lib/routing/workspace-hrefs"
+} from "@/features/billing-customers/types/conflict-resolution";
+import { formatEntitlementInstant } from "@/features/billing-customers/types/entitlement-vocabulary";
+import { StatusPill } from "@/features/billing-ledger/components/billing-chrome";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import { billingIdentityConflictHref } from "@/lib/routing/workspace-hrefs";
 
 interface IdentityConflictsPageProps {
-  environmentId: string
-  onStatusChange: (status: "open" | "resolved") => void
-  organizationId: string
-  projectId: string
-  status: "open" | "resolved"
+  environmentId: string;
+  onStatusChange: (status: "open" | "resolved") => void;
+  organizationId: string;
+  projectId: string;
+  status: "open" | "resolved";
 }
 
 /**
@@ -41,25 +44,28 @@ export function IdentityConflictsPage({
   projectId,
   status,
 }: IdentityConflictsPageProps) {
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
   const conflicts = useQuery({
     ...identityConflictsQueryOptions(projectId, status),
     enabled: scopeReady,
-  })
+  });
 
-  const error = project.error ?? conflicts.error
+  const error = project.error ?? conflicts.error;
   const state = resolveHostedQueryState({
     error,
     isEmpty: false,
     isPending: project.isPending || (scopeReady && conflicts.isPending),
     loadingDescription: "Loading identity conflicts for this Project.",
     onRetry: () => {
-      void conflicts.refetch()
+      conflicts.refetch();
     },
     permissionDescription:
       "Organization owner or admin permission is required to read identity conflicts.",
     scope: { environmentId, organizationId, projectId },
-  })
+  });
 
   if (scopeMismatch) {
     return (
@@ -73,11 +79,11 @@ export function IdentityConflictsPage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
-  const scope = { environmentId, organizationId, projectId }
-  const items = conflicts.data ?? []
+  const scope = { environmentId, organizationId, projectId };
+  const items = conflicts.data ?? [];
 
   return (
     <WorkspacePage
@@ -85,8 +91,12 @@ export function IdentityConflictsPage({
       eyebrow="Mosaic Billing · Identity"
       title="Identity conflicts"
     >
-      <p className="text-muted-foreground text-xs leading-5">{CONFLICT_PROJECT_SCOPE_NOTE}</p>
-      <p className="text-muted-foreground text-xs leading-5">{CONFLICT_FREEZE_NOTE}</p>
+      <p className="text-muted-foreground text-xs leading-5">
+        {CONFLICT_PROJECT_SCOPE_NOTE}
+      </p>
+      <p className="text-muted-foreground text-xs leading-5">
+        {CONFLICT_FREEZE_NOTE}
+      </p>
 
       <HostedResourceBoundary state={state}>
         <WorkflowPanel title="Status">
@@ -112,7 +122,11 @@ export function IdentityConflictsPage({
                 ? "No identity conflict is open in this Project. That is the healthy state: every purchase Mosaic holds has exactly one customer with a claim on it."
                 : "No identity conflict has been resolved in this Project yet."
             }
-            title={status === "open" ? "No open identity conflicts" : "No resolved conflicts"}
+            title={
+              status === "open"
+                ? "No open identity conflicts"
+                : "No resolved conflicts"
+            }
           />
         ) : (
           <WorkflowPanel title={`${items.length} ${status} conflict(s)`}>
@@ -121,21 +135,34 @@ export function IdentityConflictsPage({
                 <li className="rounded border p-4" key={conflict.conflictId}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <a
-                      className="text-primary font-mono text-sm font-semibold break-all"
-                      href={billingIdentityConflictHref(scope, conflict.conflictId ?? "") ?? "#"}
+                      className="break-all font-mono font-semibold text-primary text-sm"
+                      href={
+                        billingIdentityConflictHref(
+                          scope,
+                          conflict.conflictId ?? ""
+                        ) ?? "#"
+                      }
                     >
                       {conflict.conflictId}
                     </a>
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusPill
-                        label={conflict.scope === "alias" ? "Alias" : "Purchase Lineage"}
+                        label={
+                          conflict.scope === "alias"
+                            ? "Alias"
+                            : "Purchase Lineage"
+                        }
                         tone="neutral"
                       />
                       <StatusPill
                         label={
-                          conflict.status === "open" ? "Frozen · awaiting an operator" : "Resolved"
+                          conflict.status === "open"
+                            ? "Frozen · awaiting an operator"
+                            : "Resolved"
                         }
-                        tone={conflict.status === "open" ? "attention" : "neutral"}
+                        tone={
+                          conflict.status === "open" ? "attention" : "neutral"
+                        }
                       />
                     </div>
                   </div>
@@ -144,7 +171,7 @@ export function IdentityConflictsPage({
                     {conflictDiagnosticExplanation(conflict.diagnosticCode)}
                   </p>
 
-                  <p className="text-muted-foreground mt-2 text-xs">
+                  <p className="mt-2 text-muted-foreground text-xs">
                     Opened {formatEntitlementInstant(conflict.openedAt)}
                     {conflict.resolvedAt
                       ? ` · resolved ${formatEntitlementInstant(conflict.resolvedAt)} as “${conflictActionLabel(conflict.resolutionAction)}”`
@@ -157,5 +184,5 @@ export function IdentityConflictsPage({
         )}
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }

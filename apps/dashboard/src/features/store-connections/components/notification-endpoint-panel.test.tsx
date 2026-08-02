@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
-import { NotificationEndpointPanel } from "@/features/store-connections/components/notification-endpoint-panel"
+import { NotificationEndpointPanel } from "@/features/store-connections/components/notification-endpoint-panel";
 
 /**
  * Risk: the Store Notification intake token stays in the DOM after the operator
@@ -13,44 +13,50 @@ import { NotificationEndpointPanel } from "@/features/store-connections/componen
  * state change, which no unit test on a pure module can observe.
  */
 
-const INTAKE_TOKEN = "mk_live_fixtureintaketoken0123456789"
-const ENDPOINT = `https://billing.example.test/v1/billing/apple/notifications/${INTAKE_TOKEN}`
+const INTAKE_TOKEN = "mk_live_fixtureintaketoken0123456789";
+const ENDPOINT = `https://billing.example.test/v1/billing/apple/notifications/${INTAKE_TOKEN}`;
 
 describe("one-time Store Notification endpoint", () => {
   it("reveals the endpoint once, copies it, and leaves no trace of the intake token after dismissal", async () => {
-    const writeToClipboard = vi.fn(async () => undefined)
-    const onDismiss = vi.fn()
+    const writeToClipboard = vi.fn(async () => undefined);
+    const onDismiss = vi.fn();
 
     render(
       <NotificationEndpointPanel
         endpointUrl={ENDPOINT}
         onDismiss={onDismiss}
         writeToClipboard={writeToClipboard}
-      />,
-    )
+      />
+    );
 
-    expect(screen.getByText(ENDPOINT)).toBeVisible()
+    expect(screen.getByText(ENDPOINT)).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy endpoint URL" }))
-    expect(writeToClipboard).toHaveBeenCalledWith(ENDPOINT)
-    expect(await screen.findByRole("button", { name: "Copied" })).toBeVisible()
+    fireEvent.click(screen.getByRole("button", { name: "Copy endpoint URL" }));
+    expect(writeToClipboard).toHaveBeenCalledWith(ENDPOINT);
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeVisible();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Dismiss the one-time notification endpoint" }),
-    )
+      screen.getByRole("button", {
+        name: "Dismiss the one-time notification endpoint",
+      })
+    );
 
-    expect(onDismiss).toHaveBeenCalled()
+    expect(onDismiss).toHaveBeenCalled();
     // The prop still holds the URL: the component must not render it again.
-    expect(document.body.innerHTML).not.toContain(INTAKE_TOKEN)
-    expect(screen.queryByText(ENDPOINT)).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Copy endpoint URL" })).not.toBeInTheDocument()
-    expect(screen.getByText(/Mosaic cannot display it again/)).toBeVisible()
-  })
+    expect(document.body.innerHTML).not.toContain(INTAKE_TOKEN);
+    expect(screen.queryByText(ENDPOINT)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Copy endpoint URL" })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/Mosaic cannot display it again/)).toBeVisible();
+  });
 
   it("shows no endpoint and no copy control when nothing was just issued", () => {
-    render(<NotificationEndpointPanel onDismiss={vi.fn()} />)
+    render(<NotificationEndpointPanel onDismiss={vi.fn()} />);
 
-    expect(screen.queryByRole("button", { name: "Copy endpoint URL" })).not.toBeInTheDocument()
-    expect(document.body.innerHTML).not.toContain(INTAKE_TOKEN)
-  })
-})
+    expect(
+      screen.queryByRole("button", { name: "Copy endpoint URL" })
+    ).not.toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain(INTAKE_TOKEN);
+  });
+});

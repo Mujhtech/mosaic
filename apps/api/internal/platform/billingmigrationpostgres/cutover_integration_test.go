@@ -339,12 +339,61 @@ func TestCutoverPreparationRequiresAuthoritativeEvidenceAndDistinctProductionApp
 	if _, err := service.PromoteReady(ctx, billingmigration.Actor{ID: "owner_one"}, billingmigration.PromoteReadyInput{ProjectID: "project_one", ProgramID: "program_ready", ExpectedStateVersion: 6}); !errors.Is(err, billingmigration.ErrConflict) {
 		t.Fatalf("unsupported in-window version bypassed by outside-window flag: %v", err)
 	}
-	if err := goose.DownContext(ctx, db, "."); err == nil || !strings.Contains(err.Error(), "immutable cohort or rollback proposal evidence exists") {
+}
+
+func TestExecutionPrerequisiteRollbackGuardRetainsCohortEvidence(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_TEST_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
+	}
+	configuration, err := pgx.ParseConfig(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := stdlib.OpenDB(*configuration)
+	t.Cleanup(func() { _ = db.Close() })
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	t.Cleanup(cancel)
+	if _, err = db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public`); err != nil {
+		t.Fatal(err)
+	}
+	goose.SetBaseFS(migrations.Files)
+	if err = goose.SetDialect("postgres"); err != nil {
+		t.Fatal(err)
+	}
+	if err = goose.UpContext(ctx, db, "."); err != nil {
+		t.Fatal(err)
+	}
+	seedMigrationTenant(t, ctx, db)
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
+	// A frozen cohort set is 00054 evidence and nothing later, so the program
+	// is seeded by hand rather than via seedReadyProgram: that helper also
+	// writes final-delta jobs and prepared pointers, and 00055 refuses to roll
+	// back over those — 54 would never be reached and its guard never
+	// exercised.
+	for _, statement := range []string{
+		`INSERT INTO billing_migration_credentials(id,project_id,provider,external_project_id,status,envelope_version,algorithm,key_id,nonce,ciphertext,fingerprint,created_by_actor_id,created_at) VALUES('credential_ready','project_one','revenuecat','rc','active',1,'AES-256-GCM','key',decode(repeat('01',12),'hex'),decode(repeat('02',16),'hex'),decode(repeat('03',32),'hex'),'owner_one',$1)`,
+		`INSERT INTO billing_migration_programs(id,project_id,environment_id,source_adapter,source_adapter_version,credential_id,state,state_version,authority_epoch_before,stabilization_days,rollback_window_days,scope_digest,policy_digest,idempotency_key,request_digest,created_by_actor_id,created_at,updated_at) VALUES('program_ready','project_one','environment_one','revenuecat','v2','credential_ready','shadowing',4,0,7,7,decode(repeat('61',32),'hex'),decode(repeat('62',32),'hex'),'ready-program',decode(repeat('63',32),'hex'),'owner_one',$1,$1)`,
+		`INSERT INTO billing_migration_final_deltas(id,program_id,project_id,state_version,manifest_digest,mapping_digest,evidence_digest,final_watermark_digest,source_watermark,provider_watermark,shadow_watermark,delta_digest,completed_at) VALUES('delta_guard','program_ready','project_one',4,decode(repeat('65',32),'hex'),decode(repeat('66',32),'hex'),decode(repeat('67',32),'hex'),decode(repeat('96',32),'hex'),$1,$1,$1,decode(repeat('97',32),'hex'),$1)`,
+		`INSERT INTO billing_migration_final_delta_cohort_sets(id,final_delta_id,program_id,project_id,customer_count,cohort_digest,frozen_at) VALUES('cohort_guard','delta_guard','program_ready','project_one',1,decode(repeat('99',32),'hex'),$1)`,
+	} {
+		if _, err = db.ExecContext(ctx, statement, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = goose.DownToContext(ctx, db, ".", 54); err != nil {
+		t.Fatalf("down to 54: %v", err)
+	}
+	if err = goose.DownToContext(ctx, db, ".", 53); err == nil || !strings.Contains(err.Error(), "immutable cohort or rollback proposal evidence exists") {
 		t.Fatalf("migration 54 evidence guard error=%v", err)
 	}
-	version, err := goose.GetDBVersionContext(ctx, db)
-	if err != nil || version != 54 {
-		t.Fatalf("guarded rollback version=%d err=%v", version, err)
+	version, versionErr := goose.GetDBVersionContext(ctx, db)
+	if versionErr != nil || version != 54 {
+		t.Fatalf("guarded rollback version=%d err=%v", version, versionErr)
+	}
+	var cohorts int
+	if err = db.QueryRowContext(ctx, `SELECT count(*) FROM billing_migration_final_delta_cohort_sets`).Scan(&cohorts); err != nil || cohorts != 1 {
+		t.Fatalf("guard lost cohorts count=%d err=%v", cohorts, err)
 	}
 }
 

@@ -1,8 +1,8 @@
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
-import { SubscriptionStateAxes } from "@/features/billing-customers/components/subscription-state-axes"
-import type { BillingSubscriptionSnapshot } from "@/generated/api"
+import { SubscriptionStateAxes } from "@/features/billing-customers/components/subscription-state-axes";
+import type { BillingSubscriptionSnapshot } from "@/generated/api";
 
 /**
  * The cancelled-but-still-current subscription.
@@ -24,27 +24,35 @@ describe("subscription state axes", () => {
     renewalIntent: "auto_renew_disabled",
     subscriptionInstanceId: "sub_01",
     uncertaintyReason: "none",
-  }
+  };
 
   it("renders auto-renew disabled and access until the period end, never inactive", () => {
-    render(<SubscriptionStateAxes subscription={cancelledButCurrent} />)
+    render(<SubscriptionStateAxes subscription={cancelledButCurrent} />);
 
-    expect(screen.getByText("Auto-renew disabled")).toBeInTheDocument()
-    expect(screen.getByText("Active until 2026-09-01 12:00:00 UTC")).toBeInTheDocument()
-    expect(screen.queryByText("No access")).not.toBeInTheDocument()
-  })
+    expect(screen.getByText("Auto-renew disabled")).toBeInTheDocument();
+    expect(
+      screen.getByText("Active until 2026-09-01 12:00:00 UTC")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No access")).not.toBeInTheDocument();
+  });
 
   it("keeps the five axes separate rather than merging them into one status", () => {
-    render(<SubscriptionStateAxes subscription={cancelledButCurrent} />)
+    render(<SubscriptionStateAxes subscription={cancelledButCurrent} />);
 
-    for (const axis of ["Access", "Lifecycle", "Renewal intent", "Billing state", "Uncertainty"]) {
-      expect(screen.getByText(axis)).toBeInTheDocument()
+    for (const axis of [
+      "Access",
+      "Lifecycle",
+      "Renewal intent",
+      "Billing state",
+      "Uncertainty",
+    ]) {
+      expect(screen.getByText(axis)).toBeInTheDocument();
     }
     // Access and lifecycle disagreeing with renewal intent is the whole point:
     // all three are true simultaneously and none is summarised away.
-    expect(screen.getByText("Access active")).toBeInTheDocument()
-    expect(screen.getByText("Billing current")).toBeInTheDocument()
-  })
+    expect(screen.getByText("Access active")).toBeInTheDocument();
+    expect(screen.getByText("Billing current")).toBeInTheDocument();
+  });
 
   it("does not present an undetermined subscription as having no access", () => {
     render(
@@ -57,13 +65,15 @@ describe("subscription state axes", () => {
           subscriptionInstanceId: "sub_02",
           uncertaintyReason: "provider_unavailable",
         }}
-      />,
-    )
+      />
+    );
 
     // The pill and the summary sentence both say it, which is the point: there
     // is no reading of this component that produces "inactive".
-    expect(screen.getAllByText("Access undetermined").length).toBeGreaterThan(0)
-    expect(screen.queryByText("No access")).not.toBeInTheDocument()
-    expect(screen.getByText("Store unavailable")).toBeInTheDocument()
-  })
-})
+    expect(screen.getAllByText("Access undetermined").length).toBeGreaterThan(
+      0
+    );
+    expect(screen.queryByText("No access")).not.toBeInTheDocument();
+    expect(screen.getByText("Store unavailable")).toBeInTheDocument();
+  });
+});

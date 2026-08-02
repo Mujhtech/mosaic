@@ -1,33 +1,49 @@
-import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour"
-import { useForm } from "@tanstack/react-form"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { Link, useNavigate } from "@tanstack/react-router"
+import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
+import { useForm } from "@tanstack/react-form";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
 
-import { Button } from "@/components/ui/button"
-import { buttonVariants } from "@/components/ui/button-variants"
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { authenticateMutationOptions } from "@/features/auth/mutations/auth-mutations"
-import { validatePassword } from "@/features/auth/types/credential-validation"
-import { safeInternalReturnTo } from "@/features/auth/types/hosted-access"
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { authenticateMutationOptions } from "@/features/auth/mutations/auth-mutations";
+import { validatePassword } from "@/features/auth/types/credential-validation";
+import { safeInternalReturnTo } from "@/features/auth/types/hosted-access";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface HostedCredentialFormProps {
-  mode: "login" | "signup"
-  returnTo?: string
+  mode: "login" | "signup";
+  returnTo?: string;
 }
 
 function validateEmail(value: string) {
-  const email = value.trim()
-  if (!email) return "Enter an email address."
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Enter a valid email address."
-  return undefined
+  const email = value.trim();
+  if (!email) {
+    return "Enter an email address.";
+  }
+  if (!EMAIL_PATTERN.test(email)) {
+    return "Enter a valid email address.";
+  }
 }
 
-export function HostedCredentialForm({ mode, returnTo }: HostedCredentialFormProps) {
-  const isSignup = mode === "signup"
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const authenticate = useMutation(authenticateMutationOptions(mode, queryClient))
+export function HostedCredentialForm({
+  mode,
+  returnTo,
+}: HostedCredentialFormProps) {
+  const isSignup = mode === "signup";
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const authenticate = useMutation(
+    authenticateMutationOptions(mode, queryClient)
+  );
   const form = useForm({
     defaultValues: { email: "", name: "", password: "" },
     onSubmit: async ({ value }) => {
@@ -35,35 +51,42 @@ export function HostedCredentialForm({ mode, returnTo }: HostedCredentialFormPro
         email: value.email.trim(),
         name: value.name.trim(),
         password: value.password,
-      })
-      await navigate({ href: safeInternalReturnTo(returnTo), replace: true })
+      });
+      await navigate({ href: safeInternalReturnTo(returnTo), replace: true });
     },
-  })
+  });
 
   return (
     <div className="flex flex-col gap-6">
       <form
         onSubmit={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          void form.handleSubmit()
+          event.preventDefault();
+          event.stopPropagation();
+          form.handleSubmit();
         }}
       >
         <FieldGroup>
           <div className="flex flex-col items-center gap-2 text-center">
-            <Link className="flex flex-col items-center gap-2 font-medium" to="/studio">
-              <span className="bg-primary text-primary-foreground grid size-9 place-items-center rounded">
+            <Link
+              className="flex flex-col items-center gap-2 font-medium"
+              to="/studio"
+            >
+              <span className="grid size-9 place-items-center rounded bg-primary text-primary-foreground">
                 <SquaresFourIcon aria-hidden weight="fill" />
               </span>
               <span className="sr-only">Mosaic Studio</span>
             </Link>
-            <h1 className="text-xl font-bold">
+            <h1 className="font-bold text-xl">
               {isSignup ? "Create a Mosaic account" : "Sign in to Mosaic"}
             </h1>
             <FieldDescription>
               {isSignup ? "Already have an account? " : "Need an account? "}
               <Link
-                search={returnTo ? { returnTo: safeInternalReturnTo(returnTo) } : undefined}
+                search={
+                  returnTo
+                    ? { returnTo: safeInternalReturnTo(returnTo) }
+                    : undefined
+                }
                 to={isSignup ? "/login" : "/signup"}
               >
                 {isSignup ? "Sign in" : "Create one"}
@@ -75,22 +98,34 @@ export function HostedCredentialForm({ mode, returnTo }: HostedCredentialFormPro
             <form.Field
               name="name"
               validators={{
-                onBlur: ({ value }) => (value.trim() ? undefined : "Enter your name."),
-                onSubmit: ({ value }) => (value.trim() ? undefined : "Enter your name."),
+                onBlur: ({ value }) =>
+                  value.trim() ? undefined : "Enter your name.",
+                onSubmit: ({ value }) =>
+                  value.trim() ? undefined : "Enter your name.",
               }}
             >
               {(field) => (
-                <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
+                <Field
+                  data-invalid={field.state.meta.errors.length > 0 || undefined}
+                >
                   <FieldLabel htmlFor="signup-name">Name</FieldLabel>
                   <Input
-                    aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                    aria-invalid={
+                      field.state.meta.errors.length > 0 || undefined
+                    }
                     autoComplete="name"
                     id="signup-name"
                     onBlur={field.handleBlur}
-                    onChange={(event) => field.handleChange(event.currentTarget.value)}
+                    onChange={(event) =>
+                      field.handleChange(event.currentTarget.value)
+                    }
                     value={field.state.value}
                   />
-                  <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
+                  <FieldError
+                    errors={field.state.meta.errors.map((message) => ({
+                      message,
+                    }))}
+                  />
                 </Field>
               )}
             </form.Field>
@@ -104,19 +139,27 @@ export function HostedCredentialForm({ mode, returnTo }: HostedCredentialFormPro
             }}
           >
             {(field) => (
-              <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
+              <Field
+                data-invalid={field.state.meta.errors.length > 0 || undefined}
+              >
                 <FieldLabel htmlFor={`${mode}-email`}>Email</FieldLabel>
                 <Input
                   aria-invalid={field.state.meta.errors.length > 0 || undefined}
                   autoComplete="email"
                   id={`${mode}-email`}
                   onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onChange={(event) =>
+                    field.handleChange(event.currentTarget.value)
+                  }
                   placeholder="developer@example.com"
                   type="email"
                   value={field.state.value}
                 />
-                <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
+                <FieldError
+                  errors={field.state.meta.errors.map((message) => ({
+                    message,
+                  }))}
+                />
               </Field>
             )}
           </form.Field>
@@ -129,21 +172,31 @@ export function HostedCredentialForm({ mode, returnTo }: HostedCredentialFormPro
             }}
           >
             {(field) => (
-              <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
+              <Field
+                data-invalid={field.state.meta.errors.length > 0 || undefined}
+              >
                 <FieldLabel htmlFor={`${mode}-password`}>Password</FieldLabel>
                 <Input
                   aria-invalid={field.state.meta.errors.length > 0 || undefined}
                   autoComplete={isSignup ? "new-password" : "current-password"}
                   id={`${mode}-password`}
                   onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onChange={(event) =>
+                    field.handleChange(event.currentTarget.value)
+                  }
                   type="password"
                   value={field.state.value}
                 />
                 <FieldDescription>
-                  {isSignup ? "Use at least 12 characters." : "Enter your account password."}
+                  {isSignup
+                    ? "Use at least 12 characters."
+                    : "Enter your account password."}
                 </FieldDescription>
-                <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
+                <FieldError
+                  errors={field.state.meta.errors.map((message) => ({
+                    message,
+                  }))}
+                />
               </Field>
             )}
           </form.Field>
@@ -155,19 +208,30 @@ export function HostedCredentialForm({ mode, returnTo }: HostedCredentialFormPro
           ) : null}
 
           <Field>
-            <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+            <form.Subscribe
+              selector={(state) => [state.canSubmit, state.isSubmitting]}
+            >
               {([canSubmit, isSubmitting]) => (
                 <Button
-                  disabled={!canSubmit || isSubmitting || authenticate.isPending}
+                  disabled={
+                    !canSubmit || isSubmitting || authenticate.isPending
+                  }
                   type="submit"
                 >
-                  {authenticate.isPending
-                    ? isSignup
-                      ? "Creating account…"
-                      : "Signing in…"
-                    : isSignup
-                      ? "Create account"
-                      : "Sign in"}
+                  {(() => {
+                    if (authenticate.isPending) {
+                      return (() => {
+                        if (isSignup) {
+                          return "Creating account…";
+                        }
+                        return "Signing in…";
+                      })();
+                    }
+                    if (isSignup) {
+                      return "Create account";
+                    }
+                    return "Sign in";
+                  })()}
                 </Button>
               )}
             </form.Subscribe>
@@ -192,12 +256,15 @@ export function HostedCredentialForm({ mode, returnTo }: HostedCredentialFormPro
             </span>
           </div> */}
           <Field>
-            <Link className={buttonVariants({ variant: "outline" })} to="/studio">
+            <Link
+              className={buttonVariants({ variant: "outline" })}
+              to="/studio"
+            >
               Continue without an account
             </Link>
           </Field>
         </FieldGroup>
       </form>
     </div>
-  )
+  );
 }

@@ -1,0 +1,13 @@
+# Declared so the `golden` tag is a known tag rather than a typo warning.
+#
+# Golden files are rasterised output: they depend on the host platform's font
+# rendering and on the Flutter version that produced them. The baselines here
+# were generated on macOS, and CI runs Linux against the stable channel, which
+# moves — so the same widget legitimately produces different pixels there and
+# the comparison fails for reasons unrelated to the renderer.
+#
+# CI therefore runs `flutter test --exclude-tags golden`; the goldens stay as a
+# local check to run on the platform that produced them, refreshed with
+# `flutter test --update-goldens`.
+tags:
+  golden:

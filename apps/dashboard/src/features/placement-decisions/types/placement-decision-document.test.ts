@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest";
 
-import { toContractRuleSet } from "@/features/placement-decisions/types/placement-decision-document"
+import { toContractRuleSet } from "@/features/placement-decisions/types/placement-decision-document";
 
 describe("Placement decision document authoring", () => {
   it("persists numeric priority and an intentional no-paywall outcome in the protocol contract", () => {
@@ -77,20 +77,20 @@ describe("Placement decision document authoring", () => {
         environmentKey: "staging",
         placementKey: "export_pdf",
         projectId: "project",
-      },
-    )
+      }
+    );
 
     expect(document.rules.map((rule) => [rule.id, rule.priority])).toEqual([
       ["rule-first", 0],
       ["rule-later", 20],
-    ])
-    expect(document.defaultOutcome).toEqual({ type: "no_paywall" })
+    ]);
+    expect(document.defaultOutcome).toEqual({ type: "no_paywall" });
     expect(document.rules[1]?.conditions).toMatchObject({
       children: [
         { operand: { type: "string", value: "ios" } },
         { operand: { type: "semantic_version", value: "2.3.0" } },
       ],
       type: "all",
-    })
-  })
-})
+    });
+  });
+});

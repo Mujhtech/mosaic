@@ -2,8 +2,8 @@ import type {
   DocumentNode,
   MosaicDocument,
   ProtocolNode,
-} from "@/features/paywall-editor/types/editor"
-import { synchronizeProtocolMetadata } from "@/features/paywall-editor/utils/protocol-document"
+} from "@/features/paywall-editor/types/editor";
+import { synchronizeProtocolMetadata } from "@/features/paywall-editor/utils/protocol-document";
 
 const STRINGS = {
   en: {
@@ -13,7 +13,8 @@ const STRINGS = {
     "paywall.features.label": "What is included",
     "paywall.headline": "Build a paywall people understand",
     "paywall.hero.placeholder": "Preview image unavailable",
-    "paywall.legal": "Subscriptions renew automatically unless cancelled before renewal.",
+    "paywall.legal":
+      "Subscriptions renew automatically unless cancelled before renewal.",
     "paywall.products.label": "Choose a plan",
     "paywall.products.hint": "Choose one available plan before continuing",
     "paywall.products.monthly": "Monthly",
@@ -34,14 +35,17 @@ const STRINGS = {
     "paywall.feature.native": "Auf jeder Plattform nativ",
     "paywall.feature.preview": "Jede Änderung sofort in der Vorschau sehen",
     "paywall.features.label": "Was enthalten ist",
-    "paywall.headline": "Erstelle eine Bezahlschranke, die Menschen sofort verstehen",
+    "paywall.headline":
+      "Erstelle eine Bezahlschranke, die Menschen sofort verstehen",
     "paywall.hero.placeholder": "Vorschaubild ist nicht verfügbar",
     "paywall.legal":
       "Abonnements verlängern sich automatisch, sofern sie nicht vor dem Verlängerungsdatum gekündigt werden.",
     "paywall.products.label": "Wähle einen Tarif",
-    "paywall.products.hint": "Wähle vor dem Fortfahren einen verfügbaren Tarif aus",
+    "paywall.products.hint":
+      "Wähle vor dem Fortfahren einen verfügbaren Tarif aus",
     "paywall.products.monthly": "Monatlich",
-    "paywall.products.unavailable": "Tarife sind vorübergehend nicht verfügbar.",
+    "paywall.products.unavailable":
+      "Tarife sind vorübergehend nicht verfügbar.",
     "paywall.products.yearly": "Jährlich",
     "paywall.products.yearly.badge": "Bestes Angebot",
     "paywall.purchase": "Weiter",
@@ -60,7 +64,8 @@ const STRINGS = {
     "paywall.features.label": "المزايا المتضمنة",
     "paywall.headline": "أنشئ شاشة دفع واضحة وسهلة الفهم",
     "paywall.hero.placeholder": "صورة المعاينة غير متاحة",
-    "paywall.legal": "تتجدد الاشتراكات تلقائيًا ما لم يتم إلغاؤها قبل موعد التجديد.",
+    "paywall.legal":
+      "تتجدد الاشتراكات تلقائيًا ما لم يتم إلغاؤها قبل موعد التجديد.",
     "paywall.products.label": "اختر خطة",
     "paywall.products.hint": "اختر خطة متاحة قبل المتابعة",
     "paywall.products.monthly": "شهري",
@@ -76,13 +81,13 @@ const STRINGS = {
     "paywall.subtitle":
       "عدّل مستندًا أصليًا واحدًا وعاين النتيجة فورًا في Flutter وSwiftUI وCompose.",
   },
-} as const
+} as const;
 
 function text(
   id: string,
   localizationKey: string,
   defaultValue: string,
-  style: "title" | "body" | "caption" = "body",
+  style: "title" | "body" | "caption" = "body"
 ): Extract<ProtocolNode, { type: "text" }> {
   return {
     type: "text",
@@ -90,27 +95,44 @@ function text(
     value: { default: defaultValue, localizationKey },
     typography: {
       style,
-      fontSize: style === "title" ? 32 : style === "caption" ? 13 : 16,
-      lineHeightMultiplier: style === "title" ? 1.2 : style === "caption" ? 1.4 : 1.5,
+      fontSize: (() => {
+        if (style === "title") {
+          return 32;
+        }
+        if (style === "caption") {
+          return 13;
+        }
+        return 16;
+      })(),
+      lineHeightMultiplier: (() => {
+        if (style === "title") {
+          return 1.2;
+        }
+        if (style === "caption") {
+          return 1.4;
+        }
+        return 1.5;
+      })(),
       weight: style === "title" ? "bold" : "regular",
       color: style === "caption" ? "text.secondary" : "text.primary",
       alignment: "center",
     },
     sizing: { width: "fill", height: "fit" },
-    accessibility: style === "title" ? { role: "heading", level: 1 } : { role: "text" },
-  }
+    accessibility:
+      style === "title" ? { role: "heading", level: 1 } : { role: "text" },
+  };
 }
 
 function fitText(
   id: string,
   localizationKey: string,
   defaultValue: string,
-  style: "title" | "body" | "caption" = "body",
+  style: "title" | "body" | "caption" = "body"
 ): Extract<ProtocolNode, { type: "text" }> {
   return {
     ...text(id, localizationKey, defaultValue, style),
     sizing: { width: "fit", height: "fit" },
-  }
+  };
 }
 
 function baseDocument(id: string, children: DocumentNode[]): MosaicDocument {
@@ -140,12 +162,18 @@ function baseDocument(id: string, children: DocumentNode[]): MosaicDocument {
       {
         id: "monthly-plan",
         productId: "mosaic_pro_monthly",
-        label: { default: "Monthly", localizationKey: "paywall.products.monthly" },
+        label: {
+          default: "Monthly",
+          localizationKey: "paywall.products.monthly",
+        },
       },
       {
         id: "yearly-plan",
         productId: "mosaic_pro_yearly",
-        label: { default: "Yearly", localizationKey: "paywall.products.yearly" },
+        label: {
+          default: "Yearly",
+          localizationKey: "paywall.products.yearly",
+        },
       },
     ],
     initialScreenId: "main",
@@ -172,7 +200,7 @@ function baseDocument(id: string, children: DocumentNode[]): MosaicDocument {
         },
       },
     ],
-  })
+  });
 }
 
 const CLOSE_BUTTON: DocumentNode = {
@@ -185,8 +213,10 @@ const CLOSE_BUTTON: DocumentNode = {
   children: [fitText("close-label", "paywall.close", "Close")],
   action: { type: "close" },
   appearance: { background: { type: "color", value: "transparent" } },
-  accessibility: { label: { default: "Close", localizationKey: "paywall.close" } },
-}
+  accessibility: {
+    label: { default: "Close", localizationKey: "paywall.close" },
+  },
+};
 
 const PRODUCT_SELECTOR: DocumentNode = {
   type: "productSelector",
@@ -206,19 +236,33 @@ const PRODUCT_SELECTOR: DocumentNode = {
       crossAxisAlignment: "start",
       children: [
         {
-          ...text("monthly-name", "paywall.products.monthly.card_name", "{{ product.name }}"),
+          ...text(
+            "monthly-name",
+            "paywall.products.monthly.card_name",
+            "{{ product.name }}"
+          ),
           typography: {
-            ...text("monthly-name", "paywall.products.monthly.card_name", "{{ product.name }}")
-              .typography,
+            ...text(
+              "monthly-name",
+              "paywall.products.monthly.card_name",
+              "{{ product.name }}"
+            ).typography,
             alignment: "start",
             color: "text.secondary",
           },
         },
         {
-          ...text("monthly-price", "paywall.products.monthly.card_price", "{{ product.price }}"),
+          ...text(
+            "monthly-price",
+            "paywall.products.monthly.card_price",
+            "{{ product.price }}"
+          ),
           typography: {
-            ...text("monthly-price", "paywall.products.monthly.card_price", "{{ product.price }}")
-              .typography,
+            ...text(
+              "monthly-price",
+              "paywall.products.monthly.card_price",
+              "{{ product.price }}"
+            ).typography,
             alignment: "start",
             weight: "semibold",
           },
@@ -248,19 +292,33 @@ const PRODUCT_SELECTOR: DocumentNode = {
       crossAxisAlignment: "start",
       children: [
         {
-          ...text("yearly-name", "paywall.products.yearly.card_name", "{{ product.name }}"),
+          ...text(
+            "yearly-name",
+            "paywall.products.yearly.card_name",
+            "{{ product.name }}"
+          ),
           typography: {
-            ...text("yearly-name", "paywall.products.yearly.card_name", "{{ product.name }}")
-              .typography,
+            ...text(
+              "yearly-name",
+              "paywall.products.yearly.card_name",
+              "{{ product.name }}"
+            ).typography,
             alignment: "start",
             color: "text.secondary",
           },
         },
         {
-          ...text("yearly-price", "paywall.products.yearly.card_price", "{{ product.price }}"),
+          ...text(
+            "yearly-price",
+            "paywall.products.yearly.card_price",
+            "{{ product.price }}"
+          ),
           typography: {
-            ...text("yearly-price", "paywall.products.yearly.card_price", "{{ product.price }}")
-              .typography,
+            ...text(
+              "yearly-price",
+              "paywall.products.yearly.card_price",
+              "{{ product.price }}"
+            ).typography,
             alignment: "start",
             weight: "semibold",
           },
@@ -274,7 +332,12 @@ const PRODUCT_SELECTOR: DocumentNode = {
           mainAxisDistribution: "center",
           crossAxisAlignment: "center",
           children: [
-            text("yearly-badge-label", "paywall.products.yearly.badge", "Best value", "caption"),
+            text(
+              "yearly-badge-label",
+              "paywall.products.yearly.badge",
+              "Best value",
+              "caption"
+            ),
           ],
           styles: {
             default: {
@@ -313,13 +376,16 @@ const PRODUCT_SELECTOR: DocumentNode = {
     },
   },
   accessibility: {
-    label: { default: "Choose a plan", localizationKey: "paywall.products.label" },
+    label: {
+      default: "Choose a plan",
+      localizationKey: "paywall.products.label",
+    },
     hint: {
       default: "Choose one available plan before continuing",
       localizationKey: "paywall.products.hint",
     },
   },
-}
+};
 
 const PURCHASE_BUTTON: DocumentNode = {
   type: "button",
@@ -338,7 +404,11 @@ const PURCHASE_BUTTON: DocumentNode = {
     },
   ],
   inProgressChildren: [
-    text("purchase-progress", "paywall.purchase.progress", "Processing purchase…"),
+    text(
+      "purchase-progress",
+      "paywall.purchase.progress",
+      "Processing purchase…"
+    ),
   ],
   appearance: {
     background: { type: "color", value: "action.primary" },
@@ -353,7 +423,7 @@ const PURCHASE_BUTTON: DocumentNode = {
       localizationKey: "paywall.purchase.accessibility",
     },
   },
-}
+};
 
 const RESTORE_BUTTON: DocumentNode = {
   type: "button",
@@ -364,7 +434,11 @@ const RESTORE_BUTTON: DocumentNode = {
   crossAxisAlignment: "center",
   children: [fitText("restore-label", "paywall.restore", "Restore purchases")],
   inProgressChildren: [
-    text("restore-progress", "paywall.restore.progress", "Restoring purchases…"),
+    text(
+      "restore-progress",
+      "paywall.restore.progress",
+      "Restoring purchases…"
+    ),
   ],
   sizing: { width: "fit", height: "fit" },
   action: { type: "restore" },
@@ -374,13 +448,14 @@ const RESTORE_BUTTON: DocumentNode = {
       localizationKey: "paywall.restore.accessibility",
     },
   },
-}
+};
 
 const LEGAL_TEXT: DocumentNode = {
   type: "text",
   id: "legal",
   value: {
-    default: "Subscriptions renew automatically unless cancelled before renewal.",
+    default:
+      "Subscriptions renew automatically unless cancelled before renewal.",
     localizationKey: "paywall.legal",
   },
   typography: {
@@ -393,7 +468,7 @@ const LEGAL_TEXT: DocumentNode = {
   },
   sizing: { width: "fill", height: "fit" },
   accessibility: { role: "text" },
-}
+};
 
 const FEATURE_LIST: DocumentNode = {
   type: "featureList",
@@ -404,7 +479,10 @@ const FEATURE_LIST: DocumentNode = {
   items: [
     {
       id: "native-everywhere",
-      text: { default: "Native on every platform", localizationKey: "paywall.feature.native" },
+      text: {
+        default: "Native on every platform",
+        localizationKey: "paywall.feature.native",
+      },
     },
     {
       id: "instant-preview",
@@ -423,45 +501,61 @@ const FEATURE_LIST: DocumentNode = {
     alignment: "start",
   },
   accessibility: {
-    label: { default: "What is included", localizationKey: "paywall.features.label" },
+    label: {
+      default: "What is included",
+      localizationKey: "paywall.features.label",
+    },
   },
-}
+};
 
 export interface EditorTemplate {
-  id: string
-  name: string
-  description: string
-  document: MosaicDocument
+  description: string;
+  document: MosaicDocument;
+  id: string;
+  name: string;
 }
 
-export const EDITOR_TEMPLATES: readonly EditorTemplate[] = [
-  {
-    id: "focused",
-    name: "Focused offer",
-    description: "A concise subscription choice with a clear value proposition.",
-    document: baseDocument("focused-offer", [
-      CLOSE_BUTTON,
-      text("headline", "paywall.headline", STRINGS.en["paywall.headline"], "title"),
-      text("subtitle", "paywall.subtitle", STRINGS.en["paywall.subtitle"]),
-      PRODUCT_SELECTOR,
-      PURCHASE_BUTTON,
-      RESTORE_BUTTON,
-      LEGAL_TEXT,
-    ]),
-  },
-  {
-    id: "benefits",
-    name: "Benefits first",
-    description: "Lead with product benefits before asking someone to choose a plan.",
-    document: baseDocument("benefits-first", [
-      CLOSE_BUTTON,
-      text("headline", "paywall.headline", STRINGS.en["paywall.headline"], "title"),
-      text("subtitle", "paywall.subtitle", STRINGS.en["paywall.subtitle"]),
-      FEATURE_LIST,
-      PRODUCT_SELECTOR,
-      PURCHASE_BUTTON,
-      RESTORE_BUTTON,
-      LEGAL_TEXT,
-    ]),
-  },
-]
+export const EDITOR_TEMPLATES: readonly [EditorTemplate, ...EditorTemplate[]] =
+  [
+    {
+      id: "focused",
+      name: "Focused offer",
+      description:
+        "A concise subscription choice with a clear value proposition.",
+      document: baseDocument("focused-offer", [
+        CLOSE_BUTTON,
+        text(
+          "headline",
+          "paywall.headline",
+          STRINGS.en["paywall.headline"],
+          "title"
+        ),
+        text("subtitle", "paywall.subtitle", STRINGS.en["paywall.subtitle"]),
+        PRODUCT_SELECTOR,
+        PURCHASE_BUTTON,
+        RESTORE_BUTTON,
+        LEGAL_TEXT,
+      ]),
+    },
+    {
+      id: "benefits",
+      name: "Benefits first",
+      description:
+        "Lead with product benefits before asking someone to choose a plan.",
+      document: baseDocument("benefits-first", [
+        CLOSE_BUTTON,
+        text(
+          "headline",
+          "paywall.headline",
+          STRINGS.en["paywall.headline"],
+          "title"
+        ),
+        text("subtitle", "paywall.subtitle", STRINGS.en["paywall.subtitle"]),
+        FEATURE_LIST,
+        PRODUCT_SELECTOR,
+        PURCHASE_BUTTON,
+        RESTORE_BUTTON,
+        LEGAL_TEXT,
+      ]),
+    },
+  ];

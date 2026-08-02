@@ -1,14 +1,18 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
-import { getStoreServerCredential, listStoreServerCredentials } from "@/generated/api"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import {
+  getStoreServerCredential,
+  listStoreServerCredentials,
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 export const storeConnectionKeys = {
   all: (projectId: string) => ["store-connections", projectId] as const,
   detail: (projectId: string, credentialId: string) =>
     ["store-connections", projectId, "detail", credentialId] as const,
-  list: (projectId: string) => ["store-connections", projectId, "list"] as const,
-}
+  list: (projectId: string) =>
+    ["store-connections", projectId, "list"] as const,
+};
 
 export function storeCredentialsQueryOptions(projectId: string) {
   return queryOptions({
@@ -19,13 +23,16 @@ export function storeCredentialsQueryOptions(projectId: string) {
         path: { projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data?.items ?? []
+      });
+      return result.data.data?.items ?? [];
     },
-  })
+  });
 }
 
-export function storeCredentialQueryOptions(projectId: string, credentialId: string) {
+export function storeCredentialQueryOptions(
+  projectId: string,
+  credentialId: string
+) {
   return queryOptions({
     queryKey: storeConnectionKeys.detail(projectId, credentialId),
     queryFn: async ({ signal }) => {
@@ -34,8 +41,8 @@ export function storeCredentialQueryOptions(projectId: string, credentialId: str
         path: { credentialId, projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }

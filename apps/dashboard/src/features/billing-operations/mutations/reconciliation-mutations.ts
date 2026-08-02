@@ -1,8 +1,10 @@
-import { mutationOptions, type QueryClient } from "@tanstack/react-query"
-
-import { createReconciliationRun, type CreateReconciliationRunRequest } from "@/generated/api"
-import { reconciliationKeys } from "@/features/billing-operations/queries/reconciliation-queries"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import { reconciliationKeys } from "@/features/billing-operations/queries/reconciliation-queries";
+import {
+  type CreateReconciliationRunRequest,
+  createReconciliationRun,
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 /**
  * Reconciliation is restart-safe and idempotent: discovered inputs enter the
@@ -14,7 +16,7 @@ import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
 export function createReconciliationRunMutationOptions(
   projectId: string,
   environmentId: string,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
     mutationFn: async (body: CreateReconciliationRunRequest) => {
@@ -23,13 +25,13 @@ export function createReconciliationRunMutationOptions(
         client: generatedDashboardClient,
         path: { environmentId, projectId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSettled: async () => {
       await queryClient.invalidateQueries({
         queryKey: reconciliationKeys.scope(projectId, environmentId),
-      })
+      });
     },
-  })
+  });
 }

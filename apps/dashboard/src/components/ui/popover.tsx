@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
+import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 function Popover(props: PopoverPrimitive.Root.Props) {
-  return <PopoverPrimitive.Root data-slot="popover" {...props} />
+  return <PopoverPrimitive.Root data-slot="popover" {...props} />;
 }
 
 function PopoverTrigger(props: PopoverPrimitive.Trigger.Props) {
-  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
+  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />;
 }
 
 function PopoverContent({
@@ -21,7 +21,10 @@ function PopoverContent({
   sideOffset = 8,
   ...props
 }: PopoverPrimitive.Popup.Props &
-  Pick<PopoverPrimitive.Positioner.Props, "align" | "alignOffset" | "side" | "sideOffset">) {
+  Pick<
+    PopoverPrimitive.Positioner.Props,
+    "align" | "alignOffset" | "side" | "sideOffset"
+  >) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Positioner
@@ -33,8 +36,8 @@ function PopoverContent({
       >
         <PopoverPrimitive.Popup
           className={cn(
-            "bg-popover text-popover-foreground ring-foreground/10 w-80 origin-(--transform-origin) rounded p-4 shadow-xl ring-1 transition-[transform,opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] outline-none data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transform-none motion-reduce:transition-opacity",
-            className,
+            "w-80 origin-(--transform-origin) rounded bg-popover p-4 text-popover-foreground shadow-xl outline-none ring-1 ring-foreground/10 transition-[transform,opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] data-ending-style:scale-[0.98] data-starting-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transform-none motion-reduce:transition-opacity",
+            className
           )}
           data-slot="popover-content"
           {...props}
@@ -43,27 +46,36 @@ function PopoverContent({
         </PopoverPrimitive.Popup>
       </PopoverPrimitive.Positioner>
     </PopoverPrimitive.Portal>
-  )
+  );
 }
 
 function PopoverTitle({ className, ...props }: PopoverPrimitive.Title.Props) {
   return (
     <PopoverPrimitive.Title
-      className={cn("text-sm font-semibold", className)}
+      className={cn("font-semibold text-sm", className)}
       data-slot="popover-title"
       {...props}
     />
-  )
+  );
 }
 
-function PopoverDescription({ className, ...props }: PopoverPrimitive.Description.Props) {
+function PopoverDescription({
+  className,
+  ...props
+}: PopoverPrimitive.Description.Props) {
   return (
     <PopoverPrimitive.Description
       className={cn("text-muted-foreground text-xs leading-5", className)}
       data-slot="popover-description"
       {...props}
     />
-  )
+  );
 }
 
-export { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger }
+export {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverTitle,
+  PopoverTrigger,
+};

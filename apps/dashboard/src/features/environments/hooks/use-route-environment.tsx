@@ -1,6 +1,6 @@
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { useActiveEnvironment } from "@/features/environments/hooks/use-active-environment"
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { useActiveEnvironment } from "@/features/environments/hooks/use-active-environment";
 
 /**
  * Turns the Environment alias in the address into the id a page needs.
@@ -17,9 +17,11 @@ import { useActiveEnvironment } from "@/features/environments/hooks/use-active-e
  * Environment for, which is what a hand-edited or stale address looks like.
  */
 export function useRouteEnvironment() {
-  const { pathEnvironment, query } = useActiveEnvironment()
+  const { pathEnvironment, query } = useActiveEnvironment();
 
-  if (pathEnvironment) return { environmentId: pathEnvironment.id, fallback: undefined }
+  if (pathEnvironment) {
+    return { environmentId: pathEnvironment.id, fallback: undefined };
+  }
 
   const state = resolveHostedQueryState({
     emptyDescription:
@@ -31,12 +33,17 @@ export function useRouteEnvironment() {
     isEmpty: query.isSuccess,
     isPending: query.isPending,
     loadingDescription: "Loading the project's environments.",
-    onRetry: () => void query.refetch(),
-    permissionDescription: "Project membership is required to read this environment.",
-  })
+    onRetry: () => {
+      query.refetch();
+    },
+    permissionDescription:
+      "Project membership is required to read this environment.",
+  });
 
   return {
     environmentId: undefined,
-    fallback: <HostedResourceBoundary state={state}>{null}</HostedResourceBoundary>,
-  }
+    fallback: (
+      <HostedResourceBoundary state={state}>{null}</HostedResourceBoundary>
+    ),
+  };
 }

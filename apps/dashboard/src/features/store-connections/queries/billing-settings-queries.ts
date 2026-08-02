@@ -1,8 +1,8 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
-import { getBillingHealth } from "@/generated/api"
-import { ApiError } from "@/lib/api/errors"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { getBillingHealth } from "@/generated/api";
+import { ApiError } from "@/lib/api/errors";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 /**
  * Whether Mosaic Billing is enabled for a Project.
@@ -22,26 +22,33 @@ export const billingSettingsKeys = {
   detail: (projectId: string, probeEnvironmentId: string) =>
     ["billing-settings", projectId, probeEnvironmentId] as const,
   scope: (projectId: string) => ["billing-settings", projectId] as const,
-}
+};
 
-export function billingSettingsQueryOptions(projectId: string, probeEnvironmentId: string) {
+export function billingSettingsQueryOptions(
+  projectId: string,
+  probeEnvironmentId: string
+) {
   return queryOptions({
     queryKey: billingSettingsKeys.detail(projectId, probeEnvironmentId),
-    queryFn: async ({ signal }): Promise<{ billingEnabled: boolean | null }> => {
+    queryFn: async ({
+      signal,
+    }): Promise<{ billingEnabled: boolean | null }> => {
       try {
         const result = await getBillingHealth({
           client: generatedDashboardClient,
           path: { environmentId: probeEnvironmentId, projectId },
           signal,
           throwOnError: true,
-        })
-        const billingEnabled = result.data.data?.billingEnabled
-        return { billingEnabled: billingEnabled ?? null }
+        });
+        const billingEnabled = result.data.data?.billingEnabled;
+        return { billingEnabled: billingEnabled ?? null };
       } catch (error) {
         // A 404 means the probe Environment is gone, not that billing is off.
-        if (error instanceof ApiError && error.status === 404) return { billingEnabled: null }
-        throw error
+        if (error instanceof ApiError && error.status === 404) {
+          return { billingEnabled: null };
+        }
+        throw error;
       }
     },
-  })
+  });
 }

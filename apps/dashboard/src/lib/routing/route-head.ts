@@ -8,29 +8,30 @@
  * replace the root defaults without the route having to restate them.
  */
 
-import type { AnyRouteMatch } from "@tanstack/react-router"
+import type { AnyRouteMatch } from "@tanstack/react-router";
 
 /** Product name appended to every page title. */
-export const APP_NAME = "Mosaic Studio"
+export const APP_NAME = "Mosaic Studio";
 
 /** Description used when a route does not describe itself. */
-export const APP_DESCRIPTION = "Build and operate native monetization experiences with Mosaic."
+export const APP_DESCRIPTION =
+  "Build and operate native monetization experiences with Mosaic.";
 
 /** Separator between the page title and the product name. */
-const TITLE_SEPARATOR = " · "
+const TITLE_SEPARATOR = " · ";
 
 export interface RouteHeadOptions {
   /** Overrides the inherited description. Omit to keep the parent's. */
-  description?: string
+  description?: string;
   /**
    * Page title without the product suffix, for example `"Paywalls"`. Omit to
    * fall back to the bare product name.
    */
-  title?: string
+  title?: string;
 }
 
 export interface RouteHead {
-  meta: NonNullable<AnyRouteMatch["meta"]>
+  meta: NonNullable<AnyRouteMatch["meta"]>;
 }
 
 /**
@@ -42,17 +43,22 @@ export interface RouteHead {
  * })
  * ```
  */
-export function routeHead({ description, title }: RouteHeadOptions = {}): RouteHead {
-  const meta: NonNullable<AnyRouteMatch["meta"]> = [{ title: pageTitle(title) }]
+export function routeHead({
+  description,
+  title,
+}: RouteHeadOptions = {}): RouteHead {
+  const meta: NonNullable<AnyRouteMatch["meta"]> = [
+    { title: pageTitle(title) },
+  ];
 
   if (description) {
-    meta.push({ content: description, name: "description" })
+    meta.push({ content: description, name: "description" });
   }
 
-  return { meta }
+  return { meta };
 }
 
 /** Suffixes a page title with the product name. */
 export function pageTitle(title?: string): string {
-  return title ? `${title}${TITLE_SEPARATOR}${APP_NAME}` : APP_NAME
+  return title ? `${title}${TITLE_SEPARATOR}${APP_NAME}` : APP_NAME;
 }

@@ -1,18 +1,23 @@
-import { useMemo } from "react"
+import { useMemo } from "react";
 
-import { validateEditorDocument } from "@/features/paywall-editor/schema/editor-validation"
-import { useEditorStore } from "@/features/paywall-editor/stores/editor-store-context"
-import type { MosaicDocument, ValidationIssue } from "@/features/paywall-editor/types/editor"
-import { findNode } from "@/features/paywall-editor/utils/document-tree"
-import { resolveInspectorValidationIssue } from "@/features/paywall-editor/utils/property-inspector-navigation"
-import { validatePaywallDocument } from "@/lib/mosaic-protocol"
+import { validateEditorDocument } from "@/features/paywall-editor/schema/editor-validation";
+import { useEditorStore } from "@/features/paywall-editor/stores/editor-store-context";
+import type {
+  MosaicDocument,
+  ValidationIssue,
+} from "@/features/paywall-editor/types/editor";
+import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { resolveInspectorValidationIssue } from "@/features/paywall-editor/utils/property-inspector-navigation";
+import { validatePaywallDocument } from "@/lib/mosaic-protocol";
 
 function canonicalIssue(
-  diagnostic: ReturnType<typeof validatePaywallDocument> extends { diagnostics: infer T }
+  diagnostic: ReturnType<typeof validatePaywallDocument> extends {
+    diagnostics: infer T;
+  }
     ? T extends readonly (infer D)[]
       ? D
       : never
-    : never,
+    : never
 ): ValidationIssue {
   return {
     code: diagnostic.code,
@@ -22,18 +27,28 @@ function canonicalIssue(
     property: diagnostic.location.property,
     documentPath: diagnostic.location.documentPath,
     recovery: diagnostic.recovery.message,
-  }
+  };
 }
 
 function isSupportedAddress(document: MosaicDocument, issue: ValidationIssue) {
   const target =
-    document.screens.find((screen) => issue.componentId === screen.layout.id)?.layout ??
-    (issue.componentId ? findNode(document, issue.componentId) : null)
-  if (!target) return false
-  const root = issue.property?.split(".")[0]
-  if (!root) return false
-  const shared = new Set(["id", "type"])
-  const nodeShared = new Set([...shared, "appearance", "outerInsets", "visibility"])
+    document.screens.find((screen) => issue.componentId === screen.layout.id)
+      ?.layout ??
+    (issue.componentId ? findNode(document, issue.componentId) : null);
+  if (!target) {
+    return false;
+  }
+  const root = issue.property?.split(".")[0];
+  if (!root) {
+    return false;
+  }
+  const shared = new Set(["id", "type"]);
+  const nodeShared = new Set([
+    ...shared,
+    "appearance",
+    "outerInsets",
+    "visibility",
+  ]);
   const supportedByType: Record<typeof target.type, ReadonlySet<string>> = {
     scrollContainer: new Set([
       ...shared,
@@ -53,7 +68,13 @@ function isSupportedAddress(document: MosaicDocument, issue: ValidationIssue) {
       "sizing",
       "children",
     ]),
-    text: new Set([...nodeShared, "value", "typography", "sizing", "accessibility"]),
+    text: new Set([
+      ...nodeShared,
+      "value",
+      "typography",
+      "sizing",
+      "accessibility",
+    ]),
     image: new Set([
       ...nodeShared,
       "assetId",
@@ -147,73 +168,107 @@ function isSupportedAddress(document: MosaicDocument, issue: ValidationIssue) {
       "sizing",
       "accessibility",
     ]),
-  }
-  return supportedByType[target.type].has(root)
+  };
+  return supportedByType[target.type].has(root);
 }
 
 function conditionalAccessibilityBranchDecision(
   document: MosaicDocument,
-  issue: ValidationIssue,
+  issue: ValidationIssue
 ): boolean | null {
   const target =
-    document.screens.find((screen) => issue.componentId === screen.layout.id)?.layout ??
-    (issue.componentId ? findNode(document, issue.componentId) : null)
-  if (!target) return null
+    document.screens.find((screen) => issue.componentId === screen.layout.id)
+      ?.layout ??
+    (issue.componentId ? findNode(document, issue.componentId) : null);
+  if (!target) {
+    return null;
+  }
 
-  const address = issue.property ?? ""
+  const address = issue.property ?? "";
   if (target.type === "text" || target.type === "countdown") {
-    const role = target.accessibility.role
+    const { role } = target.accessibility;
     if (address === "accessibility.role" && issue.code === "schema.const") {
-      return role === "text" || role === "heading"
+      return role === "text" || role === "heading";
     }
     if (address === "accessibility.level") {
-      if (role === "heading") return issue.code === "schema.additionalProperties"
-      if (role === "text") return issue.code !== "schema.additionalProperties"
-      return true
+      if (role === "heading") {
+        return issue.code === "schema.additionalProperties";
+      }
+      if (role === "text") {
+        return issue.code !== "schema.additionalProperties";
+      }
+      return true;
     }
     if (address === "accessibility.hidden") {
-      return issue.code !== "schema.additionalProperties"
+      return issue.code !== "schema.additionalProperties";
     }
     if (
       address === "accessibility.label" &&
-      (issue.code === "schema.required" || issue.code === "schema.additionalProperties")
+      (issue.code === "schema.required" ||
+        issue.code === "schema.additionalProperties")
     ) {
-      return true
+      return true;
     }
   }
 
   if (target.type === "image" || target.type === "icon") {
-    const hidden = target.accessibility.hidden
+    const { hidden } = target.accessibility;
     if (address === "accessibility.hidden" && issue.code === "schema.const") {
-      return typeof hidden === "boolean"
+      return typeof hidden === "boolean";
     }
-    if (address === "accessibility.label" || address.startsWith("accessibility.label.")) {
+    if (
+      address === "accessibility.label" ||
+      address.startsWith("accessibility.label.")
+    ) {
       if (hidden === true) {
-        return !(issue.code === "schema.additionalProperties" && address === "accessibility.label")
+        return !(
+          issue.code === "schema.additionalProperties" &&
+          address === "accessibility.label"
+        );
       }
       if (hidden === false) {
-        return issue.code === "schema.additionalProperties" && address === "accessibility.label"
+        return (
+          issue.code === "schema.additionalProperties" &&
+          address === "accessibility.label"
+        );
       }
-      return true
+      return true;
     }
   }
 
-  return null
+  return null;
 }
 
 function isSchemaBranchNoise(document: MosaicDocument, issue: ValidationIssue) {
-  if (!issue.code.startsWith("schema.")) return false
-  const conditionalAccessibility = conditionalAccessibilityBranchDecision(document, issue)
-  if (conditionalAccessibility !== null) return conditionalAccessibility
-  const supportedAddress = isSupportedAddress(document, issue)
-  if (issue.code === "schema.oneOf") return true
-  if (issue.code === "schema.required") return !supportedAddress
-  if (issue.code === "schema.additionalProperties") return supportedAddress
-  return issue.code === "schema.const" && issue.property === "type" && supportedAddress
+  if (!issue.code.startsWith("schema.")) {
+    return false;
+  }
+  const conditionalAccessibility = conditionalAccessibilityBranchDecision(
+    document,
+    issue
+  );
+  if (conditionalAccessibility !== null) {
+    return conditionalAccessibility;
+  }
+  const supportedAddress = isSupportedAddress(document, issue);
+  if (issue.code === "schema.oneOf") {
+    return true;
+  }
+  if (issue.code === "schema.required") {
+    return !supportedAddress;
+  }
+  if (issue.code === "schema.additionalProperties") {
+    return supportedAddress;
+  }
+  return (
+    issue.code === "schema.const" &&
+    issue.property === "type" &&
+    supportedAddress
+  );
 }
 
 export function collectEditorValidation(document: MosaicDocument) {
-  const editorIssues = validateEditorDocument(document)
+  const editorIssues = validateEditorDocument(document);
   const displayEditorIssues = editorIssues.filter(
     (candidate) =>
       candidate.code !== "localization.missingKey" ||
@@ -221,55 +276,72 @@ export function collectEditorValidation(document: MosaicDocument) {
         (issue) =>
           issue.code === "localization.emptyValue" &&
           issue.componentId === candidate.componentId &&
-          issue.property === candidate.property,
-      ),
-  )
-  const canonical = validatePaywallDocument(document)
+          issue.property === candidate.property
+      )
+  );
+  const canonical = validatePaywallDocument(document);
   if (canonical.ok) {
     return {
-      issues: displayEditorIssues.map((issue) => resolveInspectorValidationIssue(document, issue)),
+      issues: displayEditorIssues.map((issue) =>
+        resolveInspectorValidationIssue(document, issue)
+      ),
       contractValid: true,
-    }
+    };
   }
 
-  const additionalCanonicalIssues: ValidationIssue[] = []
-  const seenCanonicalIssues = new Set<string>()
+  const additionalCanonicalIssues: ValidationIssue[] = [];
+  const seenCanonicalIssues = new Set<string>();
   for (const diagnostic of canonical.diagnostics) {
-    const contractIssue = resolveInspectorValidationIssue(document, canonicalIssue(diagnostic))
-    const issueKey = `${contractIssue.code}:${contractIssue.documentPath}`
-    if (isSchemaBranchNoise(document, contractIssue) || seenCanonicalIssues.has(issueKey)) continue
-    seenCanonicalIssues.add(issueKey)
+    const contractIssue = resolveInspectorValidationIssue(
+      document,
+      canonicalIssue(diagnostic)
+    );
+    const issueKey = `${contractIssue.code}:${contractIssue.documentPath}`;
+    if (
+      isSchemaBranchNoise(document, contractIssue) ||
+      seenCanonicalIssues.has(issueKey)
+    ) {
+      continue;
+    }
+    seenCanonicalIssues.add(issueKey);
     const coveredByEditorIssue = editorIssues.some(
       (editorIssue) =>
         editorIssue.documentPath === contractIssue.documentPath ||
         contractIssue.documentPath.startsWith(`${editorIssue.documentPath}/`) ||
         (editorIssue.componentId === contractIssue.componentId &&
-          editorIssue.property === contractIssue.property),
-    )
-    if (!coveredByEditorIssue) additionalCanonicalIssues.push(contractIssue)
+          editorIssue.property === contractIssue.property)
+    );
+    if (!coveredByEditorIssue) {
+      additionalCanonicalIssues.push(contractIssue);
+    }
   }
   return {
     issues: [
-      ...displayEditorIssues.map((issue) => resolveInspectorValidationIssue(document, issue)),
+      ...displayEditorIssues.map((issue) =>
+        resolveInspectorValidationIssue(document, issue)
+      ),
       ...additionalCanonicalIssues,
     ],
     contractValid: false,
-  }
+  };
 }
 
 export function useEditorValidation() {
-  const { document } = useEditorStore()
+  const { document } = useEditorStore();
   const { issues, contractValid } = useMemo(
-    () => (document ? collectEditorValidation(document) : { issues: [], contractValid: false }),
-    [document],
-  )
-  const errors = issues.filter((entry) => entry.severity === "error")
-  const warnings = issues.filter((entry) => entry.severity === "warning")
+    () =>
+      document
+        ? collectEditorValidation(document)
+        : { issues: [], contractValid: false },
+    [document]
+  );
+  const errors = issues.filter((entry) => entry.severity === "error");
+  const warnings = issues.filter((entry) => entry.severity === "warning");
 
   return {
     issues,
     errors,
     warnings,
     isValid: !!document && contractValid && errors.length === 0,
-  }
+  };
 }

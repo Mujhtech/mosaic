@@ -28,16 +28,20 @@ export const PROVIDER_RECOVERY_ACTIONS = [
   "selectOffer",
   "resolveMapping",
   "reviewObservation",
-] as const
+] as const;
 
-export type ProviderRecoveryAction = (typeof PROVIDER_RECOVERY_ACTIONS)[number]
+export type ProviderRecoveryAction = (typeof PROVIDER_RECOVERY_ACTIONS)[number];
 export type ProviderRecoveryDestination =
-  "access" | "applications" | "lifecycle" | "mapping" | "providers"
+  | "access"
+  | "applications"
+  | "lifecycle"
+  | "mapping"
+  | "providers";
 
 export interface ProviderRecoveryDescriptor {
-  destination: ProviderRecoveryDestination
-  label: string
-  message: string
+  destination: ProviderRecoveryDestination;
+  label: string;
+  message: string;
 }
 
 const RECOVERY: Record<ProviderRecoveryAction, ProviderRecoveryDescriptor> = {
@@ -59,7 +63,8 @@ const RECOVERY: Record<ProviderRecoveryAction, ProviderRecoveryDescriptor> = {
   assignProvider: {
     destination: "providers",
     label: "Select active provider",
-    message: "Select the purchase provider for this Environment and Application.",
+    message:
+      "Select the purchase provider for this Environment and Application.",
   },
   assignProviderConnection: {
     destination: "providers",
@@ -69,27 +74,32 @@ const RECOVERY: Record<ProviderRecoveryAction, ProviderRecoveryDescriptor> = {
   selectCompatibleProvider: {
     destination: "providers",
     label: "Select compatible provider",
-    message: "Choose the built-in or connected provider for this Application platform.",
+    message:
+      "Choose the built-in or connected provider for this Application platform.",
   },
   createApplication: {
     destination: "applications",
     label: "Register Application",
-    message: "Register the iOS or Android Application required by this publishing scope.",
+    message:
+      "Register the iOS or Android Application required by this publishing scope.",
   },
   createNativeProviderMapping: {
     destination: "mapping",
     label: "Add native store mapping",
-    message: "Add the exact native store Product identifier for this Application.",
+    message:
+      "Add the exact native store Product identifier for this Application.",
   },
   addGoogleBasePlan: {
     destination: "mapping",
     label: "Add Google base plan",
-    message: "Add the exact Google Play base plan and explicitly choose no offer or one offer.",
+    message:
+      "Add the exact Google Play base plan and explicitly choose no offer or one offer.",
   },
   runNativeProviderTest: {
     destination: "mapping",
     label: "Run native store test",
-    message: "This mapping is configured but has no accepted test-client observation.",
+    message:
+      "This mapping is configured but has no accepted test-client observation.",
   },
   rerunNativeProviderTest: {
     destination: "mapping",
@@ -100,7 +110,8 @@ const RECOVERY: Record<ProviderRecoveryAction, ProviderRecoveryDescriptor> = {
   archiveDuplicateMappings: {
     destination: "mapping",
     label: "Review duplicate mappings",
-    message: "Archive duplicate active mappings so this scope resolves to exactly one mapping.",
+    message:
+      "Archive duplicate active mappings so this scope resolves to exactly one mapping.",
   },
   syncProviderMetadata: {
     destination: "mapping",
@@ -115,7 +126,8 @@ const RECOVERY: Record<ProviderRecoveryAction, ProviderRecoveryDescriptor> = {
   updateConnectionScopes: {
     destination: "providers",
     label: "Update connection scopes",
-    message: "Add this Environment and Application to the Provider Connection scope.",
+    message:
+      "Add this Environment and Application to the Provider Connection scope.",
   },
   assignProductionConnection: {
     destination: "providers",
@@ -125,17 +137,20 @@ const RECOVERY: Record<ProviderRecoveryAction, ProviderRecoveryDescriptor> = {
   reviewProductionConnectionUse: {
     destination: "providers",
     label: "Review production connection",
-    message: "Review and explicitly acknowledge production connection use in this Environment.",
+    message:
+      "Review and explicitly acknowledge production connection use in this Environment.",
   },
   testOrReconnectProvider: {
     destination: "providers",
     label: "Test or reconnect provider",
-    message: "Test the Provider Connection and reconnect it if its credentials are unavailable.",
+    message:
+      "Test the Provider Connection and reconnect it if its credentials are unavailable.",
   },
   createOrSyncProviderMapping: {
     destination: "mapping",
     label: "Create or refresh mapping",
-    message: "Create the connected-provider mapping or refresh its catalog metadata.",
+    message:
+      "Create the connected-provider mapping or refresh its catalog metadata.",
   },
   reviewProviderProduct: {
     destination: "mapping",
@@ -150,7 +165,8 @@ const RECOVERY: Record<ProviderRecoveryAction, ProviderRecoveryDescriptor> = {
   replaceProviderEntitlementMapping: {
     destination: "mapping",
     label: "Replace provider Access mapping",
-    message: "Replace the incompatible provider Access mapping while preserving history.",
+    message:
+      "Replace the incompatible provider Access mapping while preserving history.",
   },
   addEntitlementGrant: {
     destination: "access",
@@ -165,7 +181,8 @@ const RECOVERY: Record<ProviderRecoveryAction, ProviderRecoveryDescriptor> = {
   selectActiveProvider: {
     destination: "providers",
     label: "Select active provider",
-    message: "Select the purchase provider for this Environment and Application.",
+    message:
+      "Select the purchase provider for this Environment and Application.",
   },
   selectBasePlan: {
     destination: "mapping",
@@ -187,24 +204,30 @@ const RECOVERY: Record<ProviderRecoveryAction, ProviderRecoveryDescriptor> = {
     label: "Review test evidence",
     message: "Review the latest scoped test-client observation.",
   },
+};
+
+export function isProviderRecoveryAction(
+  value: string
+): value is ProviderRecoveryAction {
+  return value in RECOVERY;
 }
 
-export function isProviderRecoveryAction(value: string): value is ProviderRecoveryAction {
-  return value in RECOVERY
-}
-
-export function providerRecoveryDescriptor(action: string): ProviderRecoveryDescriptor {
-  if (isProviderRecoveryAction(action)) return RECOVERY[action]
+export function providerRecoveryDescriptor(
+  action: string
+): ProviderRecoveryDescriptor {
+  if (isProviderRecoveryAction(action)) {
+    return RECOVERY[action];
+  }
   return {
     destination: "providers",
     label: "Review Purchase setup",
     message: "Purchase setup needs attention before publishing.",
-  }
+  };
 }
 
 export function providerRecoveryHref(
   action: string,
-  destinations: Record<ProviderRecoveryDestination, string>,
+  destinations: Record<ProviderRecoveryDestination, string>
 ) {
-  return destinations[providerRecoveryDescriptor(action).destination]
+  return destinations[providerRecoveryDescriptor(action).destination];
 }

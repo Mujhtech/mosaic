@@ -1,8 +1,13 @@
-import { useForm } from "@tanstack/react-form"
-import { useState } from "react"
+import { useForm } from "@tanstack/react-form";
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field";
 import {
   Sheet,
   SheetContent,
@@ -11,15 +16,15 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@/components/ui/sheet"
+} from "@/components/ui/sheet";
 import {
   validateApplePrivateKey,
   validateGoogleServiceAccount,
-} from "@/features/store-connections/types/store-credential-input"
+} from "@/features/store-connections/types/store-credential-input";
 
 interface RotateStoreCredentialSheetProps {
-  onRotate: (secret: string) => Promise<void>
-  provider: "app_store" | "google_play" | undefined
+  onRotate: (secret: string) => Promise<void>;
+  provider: "app_store" | "google_play" | undefined;
 }
 
 /**
@@ -32,34 +37,38 @@ export function RotateStoreCredentialSheet({
   onRotate,
   provider,
 }: RotateStoreCredentialSheetProps) {
-  const [open, setOpen] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  const apple = provider !== "google_play"
+  const [open, setOpen] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const apple = provider !== "google_play";
 
   const form = useForm({
     defaultValues: { secret: "" },
     onSubmit: async ({ value }) => {
-      setSubmitError(null)
+      setSubmitError(null);
       try {
-        await onRotate(value.secret)
-        form.reset()
-        setOpen(false)
+        await onRotate(value.secret);
+        form.reset();
+        setOpen(false);
       } catch (error) {
         setSubmitError(
-          error instanceof Error ? error.message : "Mosaic could not rotate this credential.",
-        )
+          error instanceof Error
+            ? error.message
+            : "Mosaic could not rotate this credential."
+        );
       } finally {
-        form.setFieldValue("secret", "")
+        form.setFieldValue("secret", "");
       }
     },
-  })
+  });
 
   return (
     <Sheet
       onOpenChange={(nextOpen) => {
-        setOpen(nextOpen)
-        setSubmitError(null)
-        if (!nextOpen) form.reset()
+        setOpen(nextOpen);
+        setSubmitError(null);
+        if (!nextOpen) {
+          form.reset();
+        }
       }}
       open={open}
     >
@@ -78,9 +87,9 @@ export function RotateStoreCredentialSheet({
         <form
           className="flex flex-1 flex-col"
           onSubmit={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            void form.handleSubmit()
+            event.preventDefault();
+            event.stopPropagation();
+            form.handleSubmit();
           }}
         >
           <div className="space-y-5 p-5">
@@ -88,7 +97,9 @@ export function RotateStoreCredentialSheet({
               name="secret"
               validators={{
                 onSubmit: ({ value }) =>
-                  apple ? validateApplePrivateKey(value) : validateGoogleServiceAccount(value),
+                  apple
+                    ? validateApplePrivateKey(value)
+                    : validateGoogleServiceAccount(value),
               }}
             >
               {(field) => (
@@ -102,18 +113,25 @@ export function RotateStoreCredentialSheet({
                     aria-describedby="rotate-store-credential-help"
                     aria-invalid={field.state.meta.errors.length > 0}
                     autoComplete="off"
-                    className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/40 min-h-32 w-full rounded border px-3 py-2 font-mono text-xs outline-none focus-visible:ring-3"
+                    className="min-h-32 w-full rounded border border-input bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40"
                     id="rotate-store-credential-secret"
                     onBlur={field.handleBlur}
-                    onChange={(event) => field.handleChange(event.currentTarget.value)}
+                    onChange={(event) =>
+                      field.handleChange(event.currentTarget.value)
+                    }
                     spellCheck={false}
                     value={field.state.value}
                   />
                   <FieldDescription id="rotate-store-credential-help">
-                    Entered once and cleared after this attempt. Nothing already recorded is
-                    removed: the ledger is the evidence a rotation is usually part of investigating.
+                    Entered once and cleared after this attempt. Nothing already
+                    recorded is removed: the ledger is the evidence a rotation
+                    is usually part of investigating.
                   </FieldDescription>
-                  <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
+                  <FieldError
+                    errors={field.state.meta.errors.map((message) => ({
+                      message,
+                    }))}
+                  />
                 </Field>
               )}
             </form.Field>
@@ -126,7 +144,11 @@ export function RotateStoreCredentialSheet({
           <SheetFooter className="border-t p-5">
             <form.Subscribe selector={(state) => state.isSubmitting}>
               {(isSubmitting) => (
-                <Button disabled={isSubmitting} type="submit" variant="destructive">
+                <Button
+                  disabled={isSubmitting}
+                  type="submit"
+                  variant="destructive"
+                >
                   {isSubmitting ? "Rotating…" : "Rotate credential"}
                 </Button>
               )}
@@ -135,5 +157,5 @@ export function RotateStoreCredentialSheet({
         </form>
       </SheetContent>
     </Sheet>
-  )
+  );
 }

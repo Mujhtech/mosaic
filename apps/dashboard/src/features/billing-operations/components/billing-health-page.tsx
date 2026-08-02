@@ -1,37 +1,43 @@
-import { useQuery } from "@tanstack/react-query"
-import type { ReactNode } from "react"
+import { useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 
-import { buttonVariants } from "@/components/ui/button-variants"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
+import { buttonVariants } from "@/components/ui/button-variants";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
 import {
   BillingBoundaryNote,
   StatusPill,
-} from "@/features/billing-ledger/components/billing-chrome"
+} from "@/features/billing-ledger/components/billing-chrome";
 import {
   BILLING_OPTIONAL_NOTE,
   formatBillingTimestamp,
   formatDurationSeconds,
   providerLabel,
   storeEnvironmentLabel,
-} from "@/features/billing-ledger/types/billing-vocabulary"
-import { billingHealthQueryOptions } from "@/features/billing-operations/queries/billing-health-queries"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
-import { storeCredentialsQueryOptions } from "@/features/store-connections/queries/store-connection-queries"
+} from "@/features/billing-ledger/types/billing-vocabulary";
+import { billingHealthQueryOptions } from "@/features/billing-operations/queries/billing-health-queries";
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import { storeCredentialsQueryOptions } from "@/features/store-connections/queries/store-connection-queries";
 import {
   storeCredentialHealthExplanation,
   storeCredentialHealthLabel,
   storeCredentialIsUnhealthy,
-} from "@/features/store-connections/types/store-connection-view"
-import { storeConnectionHref, storeConnectionsHref } from "@/lib/routing/workspace-hrefs"
+} from "@/features/store-connections/types/store-connection-view";
+import {
+  storeConnectionHref,
+  storeConnectionsHref,
+} from "@/lib/routing/workspace-hrefs";
 
 interface BillingHealthPageProps {
-  environmentId: string
-  organizationId: string
-  projectId: string
+  environmentId: string;
+  organizationId: string;
+  projectId: string;
 }
 
 /**
@@ -46,40 +52,49 @@ export function BillingHealthPage({
   organizationId,
   projectId,
 }: BillingHealthPageProps) {
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
-  const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
+  const environments = useQuery({
+    ...environmentsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
   const health = useQuery({
     ...billingHealthQueryOptions(projectId, environmentId),
     enabled: scopeReady,
-  })
+  });
   const credentials = useQuery({
     ...storeCredentialsQueryOptions(projectId),
     enabled: scopeReady,
-  })
+  });
 
   const environmentName =
-    environments.data?.items.find((item) => item.id === environmentId)?.name ?? environmentId
-  const data = health.data
+    environments.data?.items.find((item) => item.id === environmentId)?.name ??
+    environmentId;
+  const { data } = health;
   const environmentCredentials = (credentials.data ?? []).filter(
-    (credential) => credential.environmentId === environmentId,
-  )
+    (credential) => credential.environmentId === environmentId
+  );
 
-  const error = project.error ?? environments.error ?? health.error ?? credentials.error
+  const error =
+    project.error ?? environments.error ?? health.error ?? credentials.error;
   const state = resolveHostedQueryState({
     error,
     isEmpty: false,
     isPending:
       project.isPending ||
-      (scopeReady && (environments.isPending || health.isPending || credentials.isPending)),
+      (scopeReady &&
+        (environments.isPending || health.isPending || credentials.isPending)),
     loadingDescription: `Loading Mosaic Billing health for the ${environmentName} Mosaic Environment.`,
     onRetry: () => {
-      void health.refetch()
-      void credentials.refetch()
+      health.refetch();
+      credentials.refetch();
     },
     permissionDescription:
       "Organization owner or admin permission is required to read Mosaic Billing health.",
     scope: { environmentId, organizationId, projectId },
-  })
+  });
 
   if (scopeMismatch) {
     return (
@@ -93,15 +108,17 @@ export function BillingHealthPage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
-  const base = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/billing/${encodeURIComponent(environmentId)}`
-  const connectionsHref = storeConnectionsHref({ organizationId, projectId }) ?? "#"
-  const backlogSeconds = data?.oldestQueuedAgeSeconds
-  const backlogUnhealthy = typeof backlogSeconds === "number" && backlogSeconds > 900
-  const quarantineOpen = data?.openQuarantineCount ?? 0
-  const unhealthyCredentials = data?.unhealthyCredentials ?? 0
+  const base = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/billing/${encodeURIComponent(environmentId)}`;
+  const connectionsHref =
+    storeConnectionsHref({ organizationId, projectId }) ?? "#";
+  const backlogSeconds = data?.oldestQueuedAgeSeconds;
+  const backlogUnhealthy =
+    typeof backlogSeconds === "number" && backlogSeconds > 900;
+  const quarantineOpen = data?.openQuarantineCount ?? 0;
+  const unhealthyCredentials = data?.unhealthyCredentials ?? 0;
 
   return (
     <WorkspacePage
@@ -115,10 +132,13 @@ export function BillingHealthPage({
         {data?.billingEnabled === false ? (
           <WorkflowPanel title="Mosaic Billing is turned off for this Project">
             <p className="text-sm leading-6">
-              No store input is accepted or recorded while billing is off. Observations from SDKs
-              are permanently rejected so their queues drain rather than retrying forever.
+              No store input is accepted or recorded while billing is off.
+              Observations from SDKs are permanently rejected so their queues
+              drain rather than retrying forever.
             </p>
-            <p className="text-muted-foreground mt-2 text-sm leading-6">{BILLING_OPTIONAL_NOTE}</p>
+            <p className="mt-2 text-muted-foreground text-sm leading-6">
+              {BILLING_OPTIONAL_NOTE}
+            </p>
             <a className={`${buttonVariants()} mt-4`} href={connectionsHref}>
               Open Mosaic Billing setup
             </a>
@@ -131,8 +151,9 @@ export function BillingHealthPage({
             recovery={
               backlogUnhealthy ? (
                 <span>
-                  The oldest queued input has waited {formatDurationSeconds(backlogSeconds)}.
-                  Validation is falling behind or a worker is stalled.
+                  The oldest queued input has waited{" "}
+                  {formatDurationSeconds(backlogSeconds)}. Validation is falling
+                  behind or a worker is stalled.
                 </span>
               ) : undefined
             }
@@ -161,7 +182,11 @@ export function BillingHealthPage({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Metric label="Recorded facts" tone="neutral" value={String(data?.factCount ?? 0)} />
+          <Metric
+            label="Recorded facts"
+            tone="neutral"
+            value={String(data?.factCount ?? 0)}
+          />
           <Metric
             label="Last fact recorded"
             tone="neutral"
@@ -187,8 +212,14 @@ export function BillingHealthPage({
         >
           {environmentCredentials.length === 0 ? (
             <div className="text-sm leading-6">
-              <p>No Store Server Credential is registered for the {environmentName} Environment.</p>
-              <a className="text-primary mt-2 inline-flex font-semibold" href={connectionsHref}>
+              <p>
+                No Store Server Credential is registered for the{" "}
+                {environmentName} Environment.
+              </p>
+              <a
+                className="mt-2 inline-flex font-semibold text-primary"
+                href={connectionsHref}
+              >
                 Add a Store Server Credential
               </a>
             </div>
@@ -197,32 +228,39 @@ export function BillingHealthPage({
               {environmentCredentials.map((credential) => (
                 <li className="rounded border p-4" key={credential.id}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">{credential.name}</p>
+                    <p className="font-semibold text-sm">{credential.name}</p>
                     <StatusPill
-                      label={storeCredentialHealthLabel(credential.healthStatus)}
-                      tone={
-                        credential.healthStatus === "healthy"
-                          ? "positive"
-                          : credential.healthStatus === "untested"
-                            ? "neutral"
-                            : "negative"
-                      }
+                      label={storeCredentialHealthLabel(
+                        credential.healthStatus
+                      )}
+                      tone={(() => {
+                        if (credential.healthStatus === "healthy") {
+                          return "positive";
+                        }
+                        if (credential.healthStatus === "untested") {
+                          return "neutral";
+                        }
+                        return "negative";
+                      })()}
                     />
                   </div>
-                  <p className="text-muted-foreground mt-1 text-xs">
+                  <p className="mt-1 text-muted-foreground text-xs">
                     {providerLabel(credential.provider)} · Store Environment{" "}
-                    {storeEnvironmentLabel(credential.storeEnvironment)} · last tested{" "}
-                    {formatBillingTimestamp(credential.lastTestedAt)}
+                    {storeEnvironmentLabel(credential.storeEnvironment)} · last
+                    tested {formatBillingTimestamp(credential.lastTestedAt)}
                   </p>
-                  <p className="text-muted-foreground mt-2 text-sm leading-6">
+                  <p className="mt-2 text-muted-foreground text-sm leading-6">
                     {storeCredentialHealthExplanation(credential.healthStatus)}
                   </p>
-                  {storeCredentialIsUnhealthy(credential) || credential.status === "revoked" ? (
+                  {storeCredentialIsUnhealthy(credential) ||
+                  credential.status === "revoked" ? (
                     <a
-                      className="text-primary mt-2 inline-flex text-sm font-semibold"
+                      className="mt-2 inline-flex font-semibold text-primary text-sm"
                       href={
-                        storeConnectionHref({ organizationId, projectId }, credential.id ?? "") ??
-                        "#"
+                        storeConnectionHref(
+                          { organizationId, projectId },
+                          credential.id ?? ""
+                        ) ?? "#"
                       }
                     >
                       Test or rotate this credential
@@ -239,10 +277,11 @@ export function BillingHealthPage({
             so the link states the difference rather than just offering a jump. */}
         <WorkflowPanel title="Is the access answer still current?">
           <p className="text-sm leading-6">
-            This page answers whether store input is still becoming facts. Whether the authoritative
-            answer Mosaic gives about a customer&rsquo;s access is still current is a separate
-            question with a separate queue: a healthy intake pipeline and a stalled projection queue
-            look identical from here.
+            This page answers whether store input is still becoming facts.
+            Whether the authoritative answer Mosaic gives about a
+            customer&rsquo;s access is still current is a separate question with
+            a separate queue: a healthy intake pipeline and a stalled projection
+            queue look identical from here.
           </p>
           <a
             className={`${buttonVariants({ variant: "outline" })} mt-3`}
@@ -253,22 +292,24 @@ export function BillingHealthPage({
         </WorkflowPanel>
 
         <WorkflowPanel title="What this view cannot tell you yet">
-          <ul className="text-muted-foreground list-disc space-y-2 pl-5 text-sm leading-6">
+          <ul className="list-disc space-y-2 pl-5 text-muted-foreground text-sm leading-6">
             <li>
-              Per-credential intake counts, the timestamp of the last accepted Store Notification,
-              and signature-verification failure counts are recorded as server telemetry and are not
-              exposed by the billing health resource. Use the deployment&rsquo;s metrics for those
+              Per-credential intake counts, the timestamp of the last accepted
+              Store Notification, and signature-verification failure counts are
+              recorded as server telemetry and are not exposed by the billing
+              health resource. Use the deployment&rsquo;s metrics for those
               until the contract carries them.
             </li>
             <li>
-              A validation failure rate is not published; the queue depth, the open quarantine
-              count, and the attempt history on each fact are the signals available here.
+              A validation failure rate is not published; the queue depth, the
+              open quarantine count, and the attempt history on each fact are
+              the signals available here.
             </li>
           </ul>
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }
 
 function Metric({
@@ -279,28 +320,38 @@ function Metric({
   tone,
   value,
 }: {
-  href?: string
-  hrefLabel?: string
-  label: string
-  recovery?: ReactNode
-  tone: "attention" | "negative" | "neutral" | "positive"
-  value: string
+  href?: string;
+  hrefLabel?: string;
+  label: string;
+  recovery?: ReactNode;
+  tone: "attention" | "negative" | "neutral" | "positive";
+  value: string;
 }) {
   return (
     <div className="rounded border p-4">
       <p className="text-muted-foreground text-xs">{label}</p>
-      <p className="mt-1 text-sm font-semibold">{value}</p>
+      <p className="mt-1 font-semibold text-sm">{value}</p>
       {tone !== "neutral" && tone !== "positive" ? (
         <div className="mt-2">
-          <StatusPill label={tone === "negative" ? "Needs attention" : "Watch"} tone={tone} />
+          <StatusPill
+            label={tone === "negative" ? "Needs attention" : "Watch"}
+            tone={tone}
+          />
         </div>
       ) : null}
-      {recovery ? <p className="text-muted-foreground mt-2 text-xs leading-5">{recovery}</p> : null}
+      {recovery ? (
+        <p className="mt-2 text-muted-foreground text-xs leading-5">
+          {recovery}
+        </p>
+      ) : null}
       {href && hrefLabel ? (
-        <a className="text-primary mt-2 inline-flex text-xs font-semibold" href={href}>
+        <a
+          className="mt-2 inline-flex font-semibold text-primary text-xs"
+          href={href}
+        >
           {hrefLabel}
         </a>
       ) : null}
     </div>
-  )
+  );
 }

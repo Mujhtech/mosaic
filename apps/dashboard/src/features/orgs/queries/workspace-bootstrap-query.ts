@@ -1,11 +1,11 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
-import { getWorkspaceBootstrap } from "@/generated/api"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { getWorkspaceBootstrap } from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 export const workspaceBootstrapKeys = {
   all: ["workspace-bootstrap"] as const,
-}
+};
 
 /**
  * One read that answers both "which Organizations does this operator have?" and
@@ -21,8 +21,8 @@ export function workspaceBootstrapQueryOptions() {
         client: generatedDashboardClient,
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }

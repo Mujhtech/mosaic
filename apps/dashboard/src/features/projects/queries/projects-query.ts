@@ -1,19 +1,20 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
-import { getProject, listApplications, listProjects } from "@/generated/api"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { getProject, listApplications, listProjects } from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 export const projectKeys = {
   all: ["projects"] as const,
-  applications: (projectId: string) => ["projects", projectId, "applications"] as const,
+  applications: (projectId: string) =>
+    ["projects", projectId, "applications"] as const,
   detail: (projectId: string) => ["projects", "detail", projectId] as const,
   list: (organizationId: string, status: "active" | "archived" = "active") =>
     ["projects", "list", organizationId, status] as const,
-}
+};
 
 export function projectsQueryOptions(
   organizationId: string,
-  status: "active" | "archived" = "active",
+  status: "active" | "archived" = "active"
 ) {
   return queryOptions({
     queryKey: projectKeys.list(organizationId, status),
@@ -23,10 +24,10 @@ export function projectsQueryOptions(
         query: { organizationId, status },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function projectQueryOptions(projectId: string) {
@@ -38,10 +39,10 @@ export function projectQueryOptions(projectId: string) {
         path: { projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function applicationsQueryOptions(projectId: string) {
@@ -53,8 +54,8 @@ export function applicationsQueryOptions(projectId: string) {
         path: { projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }

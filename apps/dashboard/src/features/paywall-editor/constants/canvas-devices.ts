@@ -1,34 +1,37 @@
-import type { StudioCanvasDevice } from "@/features/paywall-editor/types/studio-workspace"
+import type { StudioCanvasDevice } from "@/features/paywall-editor/types/studio-workspace";
 
-export type CanvasDevicePlatform = "ios" | "android"
-export type CanvasDeviceFormFactor = "phone" | "tablet"
-export type CanvasDeviceSensor = "dynamic-island" | "bezel-camera" | "punch-hole"
-export type CanvasDeviceMaterial = "aluminum" | "graphite" | "pixel" | "galaxy"
+export type CanvasDevicePlatform = "ios" | "android";
+export type CanvasDeviceFormFactor = "phone" | "tablet";
+export type CanvasDeviceSensor =
+  | "dynamic-island"
+  | "bezel-camera"
+  | "punch-hole";
+export type CanvasDeviceMaterial = "aluminum" | "graphite" | "pixel" | "galaxy";
 
 export interface CanvasDevicePreset {
-  readonly id: StudioCanvasDevice
-  readonly label: string
-  readonly group: "iPhone" | "iPad" | "Google Pixel" | "Samsung Galaxy"
-  readonly platform: CanvasDevicePlatform
-  readonly formFactor: CanvasDeviceFormFactor
-  readonly displayLabel: string
-  readonly portrait: {
-    readonly width: number
-    readonly height: number
-    readonly safeArea: {
-      readonly top: number
-      readonly right: number
-      readonly bottom: number
-      readonly left: number
-    }
-  }
+  readonly displayLabel: string;
+  readonly formFactor: CanvasDeviceFormFactor;
   readonly frame: {
-    readonly bezel: number
-    readonly outerRadius: number
-    readonly screenRadius: number
-    readonly sensor: CanvasDeviceSensor
-    readonly material: CanvasDeviceMaterial
-  }
+    readonly bezel: number;
+    readonly outerRadius: number;
+    readonly screenRadius: number;
+    readonly sensor: CanvasDeviceSensor;
+    readonly material: CanvasDeviceMaterial;
+  };
+  readonly group: "iPhone" | "iPad" | "Google Pixel" | "Samsung Galaxy";
+  readonly id: StudioCanvasDevice;
+  readonly label: string;
+  readonly platform: CanvasDevicePlatform;
+  readonly portrait: {
+    readonly width: number;
+    readonly height: number;
+    readonly safeArea: {
+      readonly top: number;
+      readonly right: number;
+      readonly bottom: number;
+      readonly left: number;
+    };
+  };
 }
 
 export const CANVAS_DEVICE_PRESETS = [
@@ -252,16 +255,25 @@ export const CANVAS_DEVICE_PRESETS = [
       material: "galaxy",
     },
   },
-] as const satisfies readonly CanvasDevicePreset[]
+] as const satisfies readonly CanvasDevicePreset[];
 
 const DEVICE_PRESET_BY_ID = new Map(
-  CANVAS_DEVICE_PRESETS.map((preset) => [preset.id, preset] as const),
-)
+  CANVAS_DEVICE_PRESETS.map((preset) => [preset.id, preset] as const)
+);
 
-export const CANVAS_DEVICE_GROUPS = ["iPhone", "iPad", "Google Pixel", "Samsung Galaxy"] as const
+export const CANVAS_DEVICE_GROUPS = [
+  "iPhone",
+  "iPad",
+  "Google Pixel",
+  "Samsung Galaxy",
+] as const;
 
-export function getCanvasDevicePreset(device: StudioCanvasDevice): CanvasDevicePreset {
-  const preset = DEVICE_PRESET_BY_ID.get(device)
-  if (!preset) throw new Error(`Unknown Studio canvas device: ${device}`)
-  return preset
+export function getCanvasDevicePreset(
+  device: StudioCanvasDevice
+): CanvasDevicePreset {
+  const preset = DEVICE_PRESET_BY_ID.get(device);
+  if (!preset) {
+    throw new Error(`Unknown Studio canvas device: ${device}`);
+  }
+  return preset;
 }

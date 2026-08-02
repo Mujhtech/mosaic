@@ -1,4 +1,10 @@
 import {
+  type AnalyticsFreshness,
+  type AnalyticsJob,
+  type AnalyticsMetric,
+  type AnalyticsPrivacyPreview,
+  type AnalyticsResult,
+  type AnalyticsSettings,
   compareAnalyticsPaywallVersions,
   createAnalyticsEventExport,
   createAnalyticsPrivacyDeletion,
@@ -13,18 +19,11 @@ import {
   getAnalyticsSettings,
   previewAnalyticsPrivacyRequest,
   updateAnalyticsSettings,
-  type AnalyticsFreshness,
-  type AnalyticsJob,
-  type AnalyticsMetric,
-  type AnalyticsPrivacyPreview,
-  type AnalyticsResult,
-  type AnalyticsSettings,
-} from "@/generated/api"
+} from "@/generated/api";
 import {
-  createGeneratedDashboardClient,
+  type createGeneratedDashboardClient,
   generatedDashboardClient as defaultGeneratedDashboardClient,
-} from "@/lib/api/generated-dashboard-client"
-import type { AnalyticsAdapter } from "./analytics-adapter"
+} from "@/lib/api/generated-dashboard-client";
 import type {
   AnalyticsFilters,
   AsyncJob,
@@ -33,7 +32,8 @@ import type {
   IssueRow,
   MetricValue,
   PaywallComparisonRow,
-} from "../types/analytics"
+} from "../types/analytics";
+import type { AnalyticsAdapter } from "./analytics-adapter";
 
 function query(filters: AnalyticsFilters) {
   return {
@@ -44,13 +44,13 @@ function query(filters: AnalyticsFilters) {
     platform: filters.platform,
     locale: filters.locale,
     applicationVersion: filters.applicationVersion,
-  }
+  };
 }
 
 function exclusiveDayEnd(date: string) {
-  const end = new Date(`${date}T00:00:00.000Z`)
-  end.setUTCDate(end.getUTCDate() + 1)
-  return end.toISOString()
+  const end = new Date(`${date}T00:00:00.000Z`);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return end.toISOString();
 }
 
 function normalizeSettings(settings: AnalyticsSettings) {
@@ -58,27 +58,30 @@ function normalizeSettings(settings: AnalyticsSettings) {
     enabled: settings.collectionEnabled,
     rawRetentionDays: settings.rawRetentionDays,
     updatedAt: settings.updatedAt,
-  }
+  };
 }
 
 function normalizeFreshness(freshness: AnalyticsFreshness): Freshness {
   const latestReceived = freshness.latestReceivedAt
     ? new Date(freshness.latestReceivedAt).getTime()
-    : undefined
+    : undefined;
   const latestAggregated = freshness.latestAggregatedAt
     ? new Date(freshness.latestAggregatedAt).getTime()
-    : undefined
+    : undefined;
   return {
     latestReceivedAt: freshness.latestReceivedAt,
     latestAggregatedAt: freshness.latestAggregatedAt,
     lateEventPolicy: freshness.lateEventPolicy,
-    aggregateState:
-      latestAggregated === undefined
-        ? "unavailable"
-        : latestReceived !== undefined && latestReceived > latestAggregated
-          ? "delayed"
-          : "current",
-  }
+    aggregateState: (() => {
+      if (latestAggregated === undefined) {
+        return "unavailable";
+      }
+      if (latestReceived !== undefined && latestReceived > latestAggregated) {
+        return "delayed";
+      }
+      return "current";
+    })(),
+  };
 }
 
 function normalizeMetric(metric: AnalyticsMetric): MetricValue {
@@ -94,14 +97,28 @@ function normalizeMetric(metric: AnalyticsMetric): MetricValue {
     attributionWindow: metric.attributionWindow,
     timezone: metric.timezone,
     definition: metric.definition,
-  }
+  };
 }
 
 function normalizeJob(job: AnalyticsJob): AsyncJob {
-  const type =
-    job.kind === "events" ? "event_export" : job.format ? "identity_export" : "identity_deletion"
-  const state =
-    job.status === "recomputing" ? "leased" : job.status === "expired" ? "failed" : job.status
+  const type = (() => {
+    if (job.kind === "events") {
+      return "event_export";
+    }
+    if (job.format) {
+      return "identity_export";
+    }
+    return "identity_deletion";
+  })();
+  const state = (() => {
+    if (job.status === "recomputing") {
+      return "leased";
+    }
+    if (job.status === "expired") {
+      return "failed";
+    }
+    return job.status;
+  })();
   return {
     id: job.id,
     type,
@@ -115,7 +132,7 @@ function normalizeJob(job: AnalyticsJob): AsyncJob {
       job.status === "completed"
         ? `${job.affectedEventCount ?? job.rowCount ?? 0} events and ${job.affectedSessionCount ?? 0} sessions affected.`
         : undefined,
-  }
+  };
 }
 
 function normalizePreview(response: AnalyticsPrivacyPreview): IdentityPreview {
@@ -131,16 +148,16 @@ function normalizePreview(response: AnalyticsPrivacyPreview): IdentityPreview {
     sessionCount: response.affectedSessions,
     relationshipCount: 0,
     expiresAt: "",
-  }
+  };
 }
 
 function funnelReport(
   funnel: "placements" | "paywalls" | "products" | "purchases",
-  response: AnalyticsResult,
+  response: AnalyticsResult
 ) {
   const steps = response.metrics.map((metric, index, metrics) => {
-    const previous = metrics[index - 1]
-    const available = metric.value !== undefined
+    const previous = metrics[index - 1];
+    const available = metric.value !== undefined;
     return {
       id: metric.id,
       label: metric.id.replaceAll("_", " "),
@@ -156,34 +173,41 @@ function funnelReport(
         previous.numerator >= metric.numerator
           ? (previous.numerator - metric.numerator) / previous.numerator
           : undefined,
-    }
-  })
+    };
+  });
   return {
     title: `${funnel[0]?.toUpperCase()}${funnel.slice(1)} funnel`,
     correlationKey: "Exact contract correlation identifiers within 24 hours",
     sampleSize:
-      response.metrics.find((metric) => metric.id === "paywall_presentations")?.numerator ??
+      response.metrics.find((metric) => metric.id === "paywall_presentations")
+        ?.numerator ??
       response.metrics[0]?.denominator ??
       0,
     steps,
     warnings: response.metrics.flatMap((metric) => metric.warnings ?? []),
     freshness: normalizeFreshness(response.freshness),
-  }
+  };
 }
 
 function comparisonRows(response: AnalyticsResult) {
-  const grouped = new Map<string, AnalyticsMetric[]>()
+  const grouped = new Map<string, AnalyticsMetric[]>();
   for (const metric of response.metrics) {
-    const versionId = metric.dimensions?.paywall_version_id
-    if (!versionId) continue
-    grouped.set(versionId, [...(grouped.get(versionId) ?? []), metric])
+    const versionId = metric.dimensions?.paywall_version_id;
+    if (!versionId) {
+      continue;
+    }
+    grouped.set(versionId, [...(grouped.get(versionId) ?? []), metric]);
   }
-  const rows: PaywallComparisonRow[] = []
+  const rows: PaywallComparisonRow[] = [];
   for (const [paywallVersionId, metrics] of grouped) {
     const selected =
-      metrics.find((metric) => metric.id === "presentation_to_client_completed_purchase_rate") ??
-      metrics[0]
-    if (!selected) continue
+      metrics.find(
+        (metric) =>
+          metric.id === "presentation_to_client_completed_purchase_rate"
+      ) ?? metrics[0];
+    if (!selected) {
+      continue;
+    }
     rows.push({
       paywallId: "",
       paywallVersionId,
@@ -191,35 +215,46 @@ function comparisonRows(response: AnalyticsResult) {
       versionNumber: 0,
       metric: normalizeMetric(selected),
       presentations:
-        metrics.find((metric) => metric.id === "paywall_presentations")?.numerator ??
+        metrics.find((metric) => metric.id === "paywall_presentations")
+          ?.numerator ??
         selected.denominator ??
         0,
-    })
+    });
   }
-  return rows
+  return rows;
 }
 
-function issueRows(providerErrors: AnalyticsResult, productFailures: AnalyticsResult) {
-  return [...providerErrors.metrics, ...productFailures.metrics].map((metric): IssueRow => {
-    const provider = metric.dimensions?.provider
-    const product = metric.dimensions?.product_id
-    const safeCode = metric.dimensions?.diagnostic_code ?? metric.dimensions?.reason ?? metric.id
-    return {
-      id: `${provider ?? product ?? "issue"}:${safeCode}:${metric.dimensions?.platform ?? "all"}`,
-      kind: provider ? "provider" : "product",
-      label: provider ?? product ?? metric.id.replaceAll("_", " "),
-      safeCode,
-      count: metric.numerator,
-      rate: metric.denominator ? metric.numerator / metric.denominator : undefined,
-      recoveryId: product ?? provider,
+function issueRows(
+  providerErrors: AnalyticsResult,
+  productFailures: AnalyticsResult
+) {
+  return [...providerErrors.metrics, ...productFailures.metrics].map(
+    (metric): IssueRow => {
+      const provider = metric.dimensions?.provider;
+      const product = metric.dimensions?.product_id;
+      const safeCode =
+        metric.dimensions?.diagnostic_code ??
+        metric.dimensions?.reason ??
+        metric.id;
+      return {
+        id: `${provider ?? product ?? "issue"}:${safeCode}:${metric.dimensions?.platform ?? "all"}`,
+        kind: provider ? "provider" : "product",
+        label: provider ?? product ?? metric.id.replaceAll("_", " "),
+        safeCode,
+        count: metric.numerator,
+        rate: metric.denominator
+          ? metric.numerator / metric.denominator
+          : undefined,
+        recoveryId: product ?? provider,
+      };
     }
-  })
+  );
 }
 
 export function createGeneratedAnalyticsAdapter(
   generatedDashboardClient: ReturnType<
     typeof createGeneratedDashboardClient
-  > = defaultGeneratedDashboardClient,
+  > = defaultGeneratedDashboardClient
 ): AnalyticsAdapter {
   return {
     getOverview: async (scope, filters, signal) => {
@@ -229,17 +264,17 @@ export function createGeneratedAnalyticsAdapter(
         query: query(filters),
         signal,
         throwOnError: true,
-      })
-      const response = result.data.data
+      });
+      const response = result.data.data;
       return {
         metrics: response.metrics.map(normalizeMetric),
         freshness: normalizeFreshness(response.freshness),
         warnings: response.metrics.flatMap((metric) => metric.warnings ?? []),
-      }
+      };
     },
     getBreakdowns: async (scope, filters, signal) => {
-      const breakdownQuery = query(filters)
-      const dimensions = ["platforms", "locales"] as const
+      const breakdownQuery = query(filters);
+      const dimensions = ["platforms", "locales"] as const;
       const results = await Promise.all(
         dimensions.map((dimension) =>
           getAnalyticsBreakdown({
@@ -248,19 +283,20 @@ export function createGeneratedAnalyticsAdapter(
             query: breakdownQuery,
             signal,
             throwOnError: true,
-          }),
-        ),
-      )
+          })
+        )
+      );
       return results.map((result, index) => {
-        const dimension = dimensions[index] === "platforms" ? "platform" : "locale"
+        const dimension =
+          dimensions[index] === "platforms" ? "platform" : "locale";
         return {
           dimension,
           rows: result.data.data.metrics.map((metric) => ({
             label: metric.dimensions?.[dimension] ?? "Unavailable",
             count: metric.numerator,
           })),
-        }
-      })
+        };
+      });
     },
     getFunnel: async (scope, funnel, filters, signal) => {
       const result = await getAnalyticsFunnel({
@@ -269,8 +305,8 @@ export function createGeneratedAnalyticsAdapter(
         query: query(filters),
         signal,
         throwOnError: true,
-      })
-      return funnelReport(funnel, result.data.data)
+      });
+      return funnelReport(funnel, result.data.data);
     },
     getPaywallComparison: async (scope, filters, signal) => {
       const result = await compareAnalyticsPaywallVersions({
@@ -279,8 +315,8 @@ export function createGeneratedAnalyticsAdapter(
         query: query(filters),
         signal,
         throwOnError: true,
-      })
-      return comparisonRows(result.data.data)
+      });
+      return comparisonRows(result.data.data);
     },
     getIssues: async (scope, filters, signal) => {
       const options = {
@@ -289,12 +325,12 @@ export function createGeneratedAnalyticsAdapter(
         query: query(filters),
         signal,
         throwOnError: true as const,
-      }
+      };
       const [providerErrors, productFailures] = await Promise.all([
         getAnalyticsProviderErrors(options),
         getAnalyticsProductAvailabilityFailures(options),
-      ])
-      return issueRows(providerErrors.data.data, productFailures.data.data)
+      ]);
+      return issueRows(providerErrors.data.data, productFailures.data.data);
     },
     getCollectionSettings: async (scope, signal) => {
       const result = await getAnalyticsSettings({
@@ -302,8 +338,8 @@ export function createGeneratedAnalyticsAdapter(
         path: scope,
         signal,
         throwOnError: true,
-      })
-      return normalizeSettings(result.data.data)
+      });
+      return normalizeSettings(result.data.data);
     },
     updateCollectionSettings: async (scope, settings) => {
       const result = await updateAnalyticsSettings({
@@ -314,8 +350,8 @@ export function createGeneratedAnalyticsAdapter(
         client: generatedDashboardClient,
         path: scope,
         throwOnError: true,
-      })
-      return normalizeSettings(result.data.data)
+      });
+      return normalizeSettings(result.data.data);
     },
     createEventExport: async (scope, filters) => {
       const result = await createAnalyticsEventExport({
@@ -327,8 +363,8 @@ export function createGeneratedAnalyticsAdapter(
         client: generatedDashboardClient,
         path: scope,
         throwOnError: true,
-      })
-      return normalizeJob(result.data.data)
+      });
+      return normalizeJob(result.data.data);
     },
     getJob: async (scope, jobId, signal) => {
       const result = await getAnalyticsJob({
@@ -336,8 +372,8 @@ export function createGeneratedAnalyticsAdapter(
         path: { jobId, projectId: scope.projectId },
         signal,
         throwOnError: true,
-      })
-      return normalizeJob(result.data.data)
+      });
+      return normalizeJob(result.data.data);
     },
     previewIdentity: async (scope, identity) => {
       const result = await previewAnalyticsPrivacyRequest({
@@ -345,17 +381,21 @@ export function createGeneratedAnalyticsAdapter(
         client: generatedDashboardClient,
         path: { projectId: scope.projectId },
         throwOnError: true,
-      })
-      return normalizePreview(result.data.data)
+      });
+      return normalizePreview(result.data.data);
     },
     createIdentityExport: async (scope, identity) => {
       const result = await createAnalyticsPrivacyExport({
-        body: { format: "ndjson", identity: identity.value, kind: identity.scope },
+        body: {
+          format: "ndjson",
+          identity: identity.value,
+          kind: identity.scope,
+        },
         client: generatedDashboardClient,
         path: { projectId: scope.projectId },
         throwOnError: true,
-      })
-      return normalizeJob(result.data.data)
+      });
+      return normalizeJob(result.data.data);
     },
     previewDeletion: async (scope, identity) => {
       const result = await previewAnalyticsPrivacyRequest({
@@ -363,8 +403,8 @@ export function createGeneratedAnalyticsAdapter(
         client: generatedDashboardClient,
         path: { projectId: scope.projectId },
         throwOnError: true,
-      })
-      return normalizePreview(result.data.data)
+      });
+      return normalizePreview(result.data.data);
     },
     confirmDeletion: async (scope, identity, requestDigest) => {
       const result = await createAnalyticsPrivacyDeletion({
@@ -377,18 +417,18 @@ export function createGeneratedAnalyticsAdapter(
         client: generatedDashboardClient,
         path: { projectId: scope.projectId },
         throwOnError: true,
-      })
-      return normalizeJob(result.data.data)
+      });
+      return normalizeJob(result.data.data);
     },
     downloadJob: async (scope, jobId) => {
       const result = await downloadAnalyticsJob({
         client: generatedDashboardClient,
         path: { jobId, projectId: scope.projectId },
         throwOnError: true,
-      })
-      return result.data
+      });
+      return result.data;
     },
-  }
+  };
 }
 
-export const restAnalyticsAdapter = createGeneratedAnalyticsAdapter()
+export const restAnalyticsAdapter = createGeneratedAnalyticsAdapter();

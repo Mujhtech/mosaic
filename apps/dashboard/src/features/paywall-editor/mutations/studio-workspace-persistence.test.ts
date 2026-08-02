@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest"
+// biome-ignore-all lint/suspicious/noMisplacedAssertion: every assertion here sits in a named expect* helper that the tests call; the rule cannot see through the call to the it() that owns it
+import { describe, expect, it, vi } from "vitest";
 
 import {
   DEFAULT_STUDIO_WORKSPACE_PREFERENCES,
@@ -17,62 +18,72 @@ import {
   STUDIO_WORKSPACE_MAX_CHARACTERS,
   STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS,
   STUDIO_WORKSPACE_STORAGE_KEY,
-} from "@/features/paywall-editor/constants/studio-workspace"
+} from "@/features/paywall-editor/constants/studio-workspace";
 import {
   diagnosticsViewportMaximum,
   parseStudioWorkspacePreferences,
   readStudioWorkspacePreferences,
   resetStudioWorkspacePreferences,
-  writeStudioWorkspacePreferences,
   type StudioWorkspaceStorage,
-} from "@/features/paywall-editor/mutations/studio-workspace-persistence"
-import type { StudioWorkspacePanel } from "@/features/paywall-editor/types/studio-workspace"
+  writeStudioWorkspacePreferences,
+} from "@/features/paywall-editor/mutations/studio-workspace-persistence";
+import type { StudioWorkspacePanel } from "@/features/paywall-editor/types/studio-workspace";
 
 interface MutableStudioWorkspacePreferences {
-  schemaVersion: number
-  panels: Record<StudioWorkspacePanel, { size: number; collapsed: boolean }>
-  selectedTool: string
   canvas: {
-    device: string
-    orientation: string
-    zoom: number
-    fitMode: string
-    locale: string
-    forceRTL: boolean
-    appearance: string
-    textScale: number
-    safeArea: boolean
-    countdownPreviewAt: string
-  }
-  framePositions: Record<string, { x: number; y: number }>
+    device: string;
+    orientation: string;
+    zoom: number;
+    fitMode: string;
+    locale: string;
+    forceRTL: boolean;
+    appearance: string;
+    textScale: number;
+    safeArea: boolean;
+    countdownPreviewAt: string;
+  };
+  framePositions: Record<string, { x: number; y: number }>;
   layerMetadata: {
-    labels: Record<string, string>
-    lockedIds: string[]
-    canvasHiddenIds: string[]
-  }
-  recentInsertions: string[]
+    labels: Record<string, string>;
+    lockedIds: string[];
+    canvasHiddenIds: string[];
+  };
+  panels: Record<StudioWorkspacePanel, { size: number; collapsed: boolean }>;
+  recentInsertions: string[];
+  schemaVersion: number;
+  selectedTool: string;
 }
 
 function mutableDefaults(): MutableStudioWorkspacePreferences {
-  return structuredClone(DEFAULT_STUDIO_WORKSPACE_PREFERENCES) as MutableStudioWorkspacePreferences
+  return structuredClone(
+    DEFAULT_STUDIO_WORKSPACE_PREFERENCES
+  ) as MutableStudioWorkspacePreferences;
 }
 
 function createMemoryStorage(initial: string | null = null) {
-  let value = initial
+  let value = initial;
   const storage: StudioWorkspaceStorage = {
-    getItem: vi.fn((key) => (key === STUDIO_WORKSPACE_STORAGE_KEY ? value : null)),
+    getItem: vi.fn((key) =>
+      key === STUDIO_WORKSPACE_STORAGE_KEY ? value : null
+    ),
     setItem: vi.fn((key, nextValue) => {
-      if (key === STUDIO_WORKSPACE_STORAGE_KEY) value = nextValue
+      if (key === STUDIO_WORKSPACE_STORAGE_KEY) {
+        value = nextValue;
+      }
     }),
     removeItem: vi.fn((key) => {
-      if (key === STUDIO_WORKSPACE_STORAGE_KEY) value = null
+      if (key === STUDIO_WORKSPACE_STORAGE_KEY) {
+        value = null;
+      }
     }),
-  }
-  return { storage, read: () => value }
+  };
+  return { storage, read: () => value };
 }
 
 function readValue(value: MutableStudioWorkspacePreferences) {
-  return readStudioWorkspacePreferences(createMemoryStorage(JSON.stringify(value)).storage)
+  return readStudioWorkspacePreferences(
+    createMemoryStorage(JSON.stringify(value)).storage
+  );
 }
 
 function expectInvalid(value: MutableStudioWorkspacePreferences) {
@@ -80,7 +91,7 @@ function expectInvalid(value: MutableStudioWorkspacePreferences) {
     status: "invalid",
     source: "default",
     preferences: DEFAULT_STUDIO_WORKSPACE_PREFERENCES,
-  })
+  });
 }
 
 describe("Studio workspace preference persistence", () => {
@@ -108,27 +119,39 @@ describe("Studio workspace preference persistence", () => {
       framePositions: {},
       layerMetadata: { labels: {}, lockedIds: [], canvasHiddenIds: [] },
       recentInsertions: [],
-    }
+    };
 
-    expect(readStudioWorkspacePreferences(createMemoryStorage().storage)).toEqual({
+    expect(
+      readStudioWorkspacePreferences(createMemoryStorage().storage)
+    ).toEqual({
       status: "missing",
       source: "default",
       preferences: expectedDefaults,
-    })
+    });
     expect(readStudioWorkspacePreferences(null)).toEqual({
       status: "missing",
       source: "default",
       preferences: expectedDefaults,
-    })
-    expect(DEFAULT_STUDIO_WORKSPACE_PREFERENCES).toEqual(expectedDefaults)
-    expect(Object.isFrozen(DEFAULT_STUDIO_WORKSPACE_PREFERENCES)).toBe(true)
-    expect(Object.isFrozen(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.panels)).toBe(true)
-    expect(Object.isFrozen(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.canvas)).toBe(true)
-    expect(Object.isFrozen(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.framePositions)).toBe(true)
-    expect(Object.isFrozen(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.layerMetadata.labels)).toBe(true)
-    expect(Object.isFrozen(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.recentInsertions)).toBe(true)
-    expect(STUDIO_WORKSPACE_STORAGE_KEY).toBe("mosaic:studio:workspace:v1")
-    expect(STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS.diagnostics.max).toBe(1200)
+    });
+    expect(DEFAULT_STUDIO_WORKSPACE_PREFERENCES).toEqual(expectedDefaults);
+    expect(Object.isFrozen(DEFAULT_STUDIO_WORKSPACE_PREFERENCES)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.panels)).toBe(
+      true
+    );
+    expect(Object.isFrozen(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.canvas)).toBe(
+      true
+    );
+    expect(
+      Object.isFrozen(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.framePositions)
+    ).toBe(true);
+    expect(
+      Object.isFrozen(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.layerMetadata.labels)
+    ).toBe(true);
+    expect(
+      Object.isFrozen(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.recentInsertions)
+    ).toBe(true);
+    expect(STUDIO_WORKSPACE_STORAGE_KEY).toBe("mosaic:studio:workspace:v1");
+    expect(STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS.diagnostics.max).toBe(1200);
     expect(STUDIO_TOOLS).toEqual([
       "layers",
       "components",
@@ -138,7 +161,7 @@ describe("Studio workspace preference persistence", () => {
       "localization",
       "assets",
       "settings",
-    ])
+    ]);
     expect(STUDIO_CANVAS_DEVICES).toEqual([
       "iphone-17-pro",
       "iphone-17-pro-max",
@@ -151,10 +174,10 @@ describe("Studio workspace preference persistence", () => {
       "galaxy-s26",
       "galaxy-s26-plus",
       "galaxy-s26-ultra",
-    ])
-    expect(STUDIO_CANVAS_ORIENTATIONS).toEqual(["portrait", "landscape"])
-    expect(STUDIO_CANVAS_FIT_MODES).toEqual(["fit", "manual"])
-    expect(STUDIO_CANVAS_APPEARANCES).toEqual(["light", "dark"])
+    ]);
+    expect(STUDIO_CANVAS_ORIENTATIONS).toEqual(["portrait", "landscape"]);
+    expect(STUDIO_CANVAS_FIT_MODES).toEqual(["fit", "manual"]);
+    expect(STUDIO_CANVAS_APPEARANCES).toEqual(["light", "dark"]);
     expect(STUDIO_RECENT_INSERTABLE_TYPES).toEqual([
       "stack",
       "carousel",
@@ -166,15 +189,15 @@ describe("Studio workspace preference persistence", () => {
       "featureList",
       "productSelector",
       "button",
-    ])
-  })
+    ]);
+  });
 
   it("round-trips a complete valid value with persisted-source metadata", () => {
-    const value = mutableDefaults()
-    value.panels.left = { size: 420, collapsed: true }
-    value.panels.properties = { size: 520, collapsed: true }
-    value.panels.diagnostics = { size: 900, collapsed: true }
-    value.selectedTool = "assets"
+    const value = mutableDefaults();
+    value.panels.left = { size: 420, collapsed: true };
+    value.panels.properties = { size: 520, collapsed: true };
+    value.panels.diagnostics = { size: 900, collapsed: true };
+    value.selectedTool = "assets";
     value.canvas = {
       device: "pixel-10-pro",
       orientation: "landscape",
@@ -186,60 +209,67 @@ describe("Studio workspace preference persistence", () => {
       textScale: 1.25,
       safeArea: false,
       countdownPreviewAt: "2028-06-01T10:30:00Z",
-    }
+    };
     value.framePositions = {
       main: { x: -120.25, y: 48.5 },
       "upgrade-sheet": { x: 680, y: 48.5 },
-    }
+    };
     value.layerMetadata = {
       labels: { headline: "Primary headline", "hero-image": "Hero image" },
       lockedIds: ["headline"],
       canvasHiddenIds: ["hero-image"],
-    }
-    value.recentInsertions = ["stack", "text", "image", "button"]
+    };
+    value.recentInsertions = ["stack", "text", "image", "button"];
 
-    const memory = createMemoryStorage()
-    expect(writeStudioWorkspacePreferences(value, memory.storage)).toEqual({ status: "written" })
+    const memory = createMemoryStorage();
+    expect(writeStudioWorkspacePreferences(value, memory.storage)).toEqual({
+      status: "written",
+    });
     expect(memory.storage.setItem).toHaveBeenCalledWith(
       STUDIO_WORKSPACE_STORAGE_KEY,
-      expect.any(String),
-    )
+      expect.any(String)
+    );
 
-    const result = readStudioWorkspacePreferences(memory.storage, null)
-    expect(result.status).toBe("valid")
-    expect(result.source).toBe("persisted")
-    expect(result.preferences).toEqual(value)
-    expect(Object.isFrozen(result.preferences.framePositions.main)).toBe(true)
-    expect(Object.isFrozen(result.preferences.layerMetadata.lockedIds)).toBe(true)
-  })
+    const result = readStudioWorkspacePreferences(memory.storage, null);
+    expect(result.status).toBe("valid");
+    expect(result.source).toBe("persisted");
+    expect(result.preferences).toEqual(value);
+    expect(Object.isFrozen(result.preferences.framePositions.main)).toBe(true);
+    expect(Object.isFrozen(result.preferences.layerMetadata.lockedIds)).toBe(
+      true
+    );
+  });
 
   it.each([
     ["iphone", "iphone-17-pro"],
     ["android", "pixel-10-pro"],
     ["tablet", "ipad-pro-11"],
-  ])("migrates the legacy %s device without discarding workspace state", (legacy, current) => {
-    const value = mutableDefaults()
-    value.canvas.device = legacy
-    value.panels.left = { size: 420, collapsed: true }
-    value.selectedTool = "assets"
+  ])(
+    "migrates the legacy %s device without discarding workspace state",
+    (legacy, current) => {
+      const value = mutableDefaults();
+      value.canvas.device = legacy;
+      value.panels.left = { size: 420, collapsed: true };
+      value.selectedTool = "assets";
 
-    const result = readValue(value)
+      const result = readValue(value);
 
-    expect(result).toMatchObject({
-      status: "valid",
-      source: "persisted",
-      preferences: {
-        canvas: { device: current },
-        panels: { left: { size: 420, collapsed: true } },
-        selectedTool: "assets",
-      },
-    })
-  })
+      expect(result).toMatchObject({
+        status: "valid",
+        source: "persisted",
+        preferences: {
+          canvas: { device: current },
+          panels: { left: { size: 420, collapsed: true } },
+          selectedTool: "assets",
+        },
+      });
+    }
+  );
 
   it("adds the frozen Countdown preview instant to legacy workspace canvas preferences", () => {
-    const value = mutableDefaults()
-    Reflect.deleteProperty(value.canvas, "countdownPreviewAt")
-    value.selectedTool = "components"
+    const value = mutableDefaults();
+    Reflect.deleteProperty(value.canvas, "countdownPreviewAt");
+    value.selectedTool = "components";
 
     expect(readValue(value)).toMatchObject({
       status: "valid",
@@ -248,13 +278,13 @@ describe("Studio workspace preference persistence", () => {
         selectedTool: "components",
         canvas: { countdownPreviewAt: "2026-01-01T12:00:00Z" },
       },
-    })
-  })
+    });
+  });
 
   it("migrates legacy workspace preferences without frame positions to safe empty positions", () => {
-    const value = mutableDefaults()
-    Reflect.deleteProperty(value, "framePositions")
-    value.selectedTool = "components"
+    const value = mutableDefaults();
+    Reflect.deleteProperty(value, "framePositions");
+    value.selectedTool = "components";
 
     expect(readValue(value)).toMatchObject({
       status: "valid",
@@ -263,164 +293,240 @@ describe("Studio workspace preference persistence", () => {
         selectedTool: "components",
         framePositions: {},
       },
-    })
-  })
+    });
+  });
 
   it("restores every default when diagnostics exceeds the current 45vh maximum", () => {
-    const value = mutableDefaults()
-    value.panels.left = { size: 420, collapsed: true }
-    value.panels.properties = { size: 520, collapsed: true }
-    value.panels.diagnostics = { size: 361, collapsed: true }
-    value.selectedTool = "settings"
-    value.canvas.device = "galaxy-s26-ultra"
+    const value = mutableDefaults();
+    value.panels.left = { size: 420, collapsed: true };
+    value.panels.properties = { size: 520, collapsed: true };
+    value.panels.diagnostics = { size: 361, collapsed: true };
+    value.selectedTool = "settings";
+    value.canvas.device = "galaxy-s26-ultra";
 
-    expect(diagnosticsViewportMaximum(800)).toBe(360)
+    expect(diagnosticsViewportMaximum(800)).toBe(360);
     expect(
-      readStudioWorkspacePreferences(createMemoryStorage(JSON.stringify(value)).storage, 800),
+      readStudioWorkspacePreferences(
+        createMemoryStorage(JSON.stringify(value)).storage,
+        800
+      )
     ).toEqual({
       status: "invalid",
       source: "default",
       preferences: DEFAULT_STUDIO_WORKSPACE_PREFERENCES,
-    })
+    });
 
-    value.panels.diagnostics.size = 360
+    value.panels.diagnostics.size = 360;
     expect(
-      readStudioWorkspacePreferences(createMemoryStorage(JSON.stringify(value)).storage, 800),
-    ).toMatchObject({ status: "valid", source: "persisted", preferences: value })
-  })
+      readStudioWorkspacePreferences(
+        createMemoryStorage(JSON.stringify(value)).storage,
+        800
+      )
+    ).toMatchObject({
+      status: "valid",
+      source: "persisted",
+      preferences: value,
+    });
+  });
 
   it("restores complete defaults for malformed, incomplete, unknown, and incompatible data", () => {
-    expect(readStudioWorkspacePreferences(createMemoryStorage("{").storage).status).toBe("invalid")
+    expect(
+      readStudioWorkspacePreferences(createMemoryStorage("{").storage).status
+    ).toBe("invalid");
 
-    const incomplete = mutableDefaults()
-    Reflect.deleteProperty(incomplete.canvas, "locale")
-    expectInvalid(incomplete)
+    const incomplete = mutableDefaults();
+    Reflect.deleteProperty(incomplete.canvas, "locale");
+    expectInvalid(incomplete);
 
-    const unknownRoot = mutableDefaults()
-    Object.assign(unknownRoot, { futureField: true })
-    expectInvalid(unknownRoot)
+    const unknownRoot = mutableDefaults();
+    Object.assign(unknownRoot, { futureField: true });
+    expectInvalid(unknownRoot);
 
-    const unknownNested = mutableDefaults()
-    Object.assign(unknownNested.canvas, { futureField: true })
-    expectInvalid(unknownNested)
+    const unknownNested = mutableDefaults();
+    Object.assign(unknownNested.canvas, { futureField: true });
+    expectInvalid(unknownNested);
 
-    const wrongVersion = mutableDefaults()
-    wrongVersion.schemaVersion = 2
-    expectInvalid(wrongVersion)
+    const wrongVersion = mutableDefaults();
+    wrongVersion.schemaVersion = 2;
+    expectInvalid(wrongVersion);
 
-    const wrongShape = mutableDefaults()
-    Object.assign(wrongShape, { panels: [] })
-    expectInvalid(wrongShape)
-  })
+    const wrongShape = mutableDefaults();
+    Object.assign(wrongShape, { panels: [] });
+    expectInvalid(wrongShape);
+  });
 
   it.each([
-    ["left minimum", (value: MutableStudioWorkspacePreferences) => (value.panels.left.size = 239)],
-    ["left maximum", (value: MutableStudioWorkspacePreferences) => (value.panels.left.size = 441)],
+    [
+      "left minimum",
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.left.size = 239;
+      },
+    ],
+    [
+      "left maximum",
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.left.size = 441;
+      },
+    ],
     [
       "properties minimum",
-      (value: MutableStudioWorkspacePreferences) => (value.panels.properties.size = 299),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.properties.size = 299;
+      },
     ],
     [
       "properties maximum",
-      (value: MutableStudioWorkspacePreferences) => (value.panels.properties.size = 561),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.properties.size = 561;
+      },
     ],
     [
       "diagnostics minimum",
-      (value: MutableStudioWorkspacePreferences) => (value.panels.diagnostics.size = 139),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.diagnostics.size = 139;
+      },
     ],
     [
       "diagnostics absolute maximum",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.panels.diagnostics.size = STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS.diagnostics.max + 1),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.diagnostics.size =
+          STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS.diagnostics.max + 1;
+      },
     ],
-    ["zoom minimum", (value: MutableStudioWorkspacePreferences) => (value.canvas.zoom = 0.19)],
-    ["zoom maximum", (value: MutableStudioWorkspacePreferences) => (value.canvas.zoom = 2.01)],
+    [
+      "zoom minimum",
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.zoom = 0.19;
+      },
+    ],
+    [
+      "zoom maximum",
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.zoom = 2.01;
+      },
+    ],
     [
       "text-scale minimum",
-      (value: MutableStudioWorkspacePreferences) => (value.canvas.textScale = 0.74),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.textScale = 0.74;
+      },
     ],
     [
       "text-scale maximum",
-      (value: MutableStudioWorkspacePreferences) => (value.canvas.textScale = 1.51),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.textScale = 1.51;
+      },
     ],
     [
       "non-finite panel size",
-      (value: MutableStudioWorkspacePreferences) => (value.panels.left.size = Number.NaN),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.left.size = Number.NaN;
+      },
     ],
     [
       "non-finite zoom",
-      (value: MutableStudioWorkspacePreferences) => (value.canvas.zoom = Infinity),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.zoom = Number.POSITIVE_INFINITY;
+      },
     ],
     [
       "frame x minimum",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.framePositions.main = {
+      (value: MutableStudioWorkspacePreferences) => {
+        value.framePositions.main = {
           x: STUDIO_CANVAS_FRAME_POSITION_BOUNDS.min - 1,
           y: 0,
-        }),
+        };
+      },
     ],
     [
       "non-finite frame y",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.framePositions.main = { x: 0, y: Number.NaN }),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.framePositions.main = { x: 0, y: Number.NaN };
+      },
     ],
   ])("rejects an out-of-range %s without clamping", (_name, invalidate) => {
-    const value = mutableDefaults()
-    invalidate(value)
+    const value = mutableDefaults();
+    invalidate(value);
     expect(parseStudioWorkspacePreferences(value)).toEqual({
       status: "invalid",
       preferences: DEFAULT_STUDIO_WORKSPACE_PREFERENCES,
-    })
-  })
+    });
+  });
 
   it("rejects a non-finite JSON number and accepts every numeric boundary", () => {
-    const raw = JSON.stringify(mutableDefaults()).replace('"zoom":1', '"zoom":1e309')
-    expect(readStudioWorkspacePreferences(createMemoryStorage(raw).storage).status).toBe("invalid")
+    const raw = JSON.stringify(mutableDefaults()).replace(
+      '"zoom":1',
+      '"zoom":1e309'
+    );
+    expect(
+      readStudioWorkspacePreferences(createMemoryStorage(raw).storage).status
+    ).toBe("invalid");
 
-    const boundaries = mutableDefaults()
-    boundaries.panels.left.size = STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS.left.min
-    boundaries.panels.properties.size = STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS.properties.max
-    boundaries.panels.diagnostics.size = STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS.diagnostics.max
-    boundaries.canvas.zoom = 0.2
-    boundaries.canvas.textScale = 1.5
-    expect(parseStudioWorkspacePreferences(boundaries).status).toBe("valid")
-  })
+    const boundaries = mutableDefaults();
+    boundaries.panels.left.size = STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS.left.min;
+    boundaries.panels.properties.size =
+      STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS.properties.max;
+    boundaries.panels.diagnostics.size =
+      STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS.diagnostics.max;
+    boundaries.canvas.zoom = 0.2;
+    boundaries.canvas.textScale = 1.5;
+    expect(parseStudioWorkspacePreferences(boundaries).status).toBe("valid");
+  });
 
   it.each([
-    ["tool", (value: MutableStudioWorkspacePreferences) => (value.selectedTool = "future-tool")],
-    ["device", (value: MutableStudioWorkspacePreferences) => (value.canvas.device = "desktop")],
+    [
+      "tool",
+      (value: MutableStudioWorkspacePreferences) => {
+        value.selectedTool = "future-tool";
+      },
+    ],
+    [
+      "device",
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.device = "desktop";
+      },
+    ],
     [
       "orientation",
-      (value: MutableStudioWorkspacePreferences) => (value.canvas.orientation = "square"),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.orientation = "square";
+      },
     ],
-    ["fit mode", (value: MutableStudioWorkspacePreferences) => (value.canvas.fitMode = "fill")],
+    [
+      "fit mode",
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.fitMode = "fill";
+      },
+    ],
     [
       "appearance",
-      (value: MutableStudioWorkspacePreferences) => (value.canvas.appearance = "system"),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.appearance = "system";
+      },
     ],
   ])("rejects an unknown %s enum", (_name, invalidate) => {
-    const value = mutableDefaults()
-    invalidate(value)
-    expectInvalid(value)
-  })
+    const value = mutableDefaults();
+    invalidate(value);
+    expectInvalid(value);
+  });
 
   it("rejects wrong scalar types and invalid locale identifiers", () => {
-    const collapsed = mutableDefaults()
-    Object.assign(collapsed.panels.left, { collapsed: "false" })
-    expectInvalid(collapsed)
+    const collapsed = mutableDefaults();
+    Object.assign(collapsed.panels.left, { collapsed: "false" });
+    expectInvalid(collapsed);
 
-    const forceRTL = mutableDefaults()
-    Object.assign(forceRTL.canvas, { forceRTL: 1 })
-    expectInvalid(forceRTL)
+    const forceRTL = mutableDefaults();
+    Object.assign(forceRTL.canvas, { forceRTL: 1 });
+    expectInvalid(forceRTL);
 
-    const safeArea = mutableDefaults()
-    Object.assign(safeArea.canvas, { safeArea: null })
-    expectInvalid(safeArea)
+    const safeArea = mutableDefaults();
+    Object.assign(safeArea.canvas, { safeArea: null });
+    expectInvalid(safeArea);
 
     for (const locale of ["", "EN-us", "english-US", "en_US"]) {
-      const value = mutableDefaults()
-      value.canvas.locale = locale
-      expectInvalid(value)
+      const value = mutableDefaults();
+      value.canvas.locale = locale;
+      expectInvalid(value);
     }
 
     for (const countdownPreviewAt of [
@@ -429,161 +535,194 @@ describe("Studio workspace preference persistence", () => {
       "2028-06-01T10:30:00.000Z",
       "2028-06-01T10:30:00+00:00",
     ]) {
-      const value = mutableDefaults()
-      value.canvas.countdownPreviewAt = countdownPreviewAt
-      expectInvalid(value)
+      const value = mutableDefaults();
+      value.canvas.countdownPreviewAt = countdownPreviewAt;
+      expectInvalid(value);
     }
-  })
+  });
 
   it("rejects invalid, duplicate, and overlong layer metadata", () => {
-    const overlongLabel = mutableDefaults()
-    overlongLabel.layerMetadata.labels.hero = "x".repeat(STUDIO_LAYER_LABEL_MAX_LENGTH + 1)
-    expectInvalid(overlongLabel)
+    const overlongLabel = mutableDefaults();
+    overlongLabel.layerMetadata.labels.hero = "x".repeat(
+      STUDIO_LAYER_LABEL_MAX_LENGTH + 1
+    );
+    expectInvalid(overlongLabel);
 
-    const blankLabel = mutableDefaults()
-    blankLabel.layerMetadata.labels.hero = "   "
-    expectInvalid(blankLabel)
+    const blankLabel = mutableDefaults();
+    blankLabel.layerMetadata.labels.hero = "   ";
+    expectInvalid(blankLabel);
 
-    const overlongId = mutableDefaults()
-    overlongId.layerMetadata.labels["a".repeat(STUDIO_COMPONENT_ID_MAX_LENGTH + 1)] = "Label"
-    expectInvalid(overlongId)
+    const overlongId = mutableDefaults();
+    overlongId.layerMetadata.labels[
+      "a".repeat(STUDIO_COMPONENT_ID_MAX_LENGTH + 1)
+    ] = "Label";
+    expectInvalid(overlongId);
 
-    const duplicateLocked = mutableDefaults()
-    duplicateLocked.layerMetadata.lockedIds = ["hero", "hero"]
-    expectInvalid(duplicateLocked)
+    const duplicateLocked = mutableDefaults();
+    duplicateLocked.layerMetadata.lockedIds = ["hero", "hero"];
+    expectInvalid(duplicateLocked);
 
-    const duplicateHidden = mutableDefaults()
-    duplicateHidden.layerMetadata.canvasHiddenIds = ["hero", "hero"]
-    expectInvalid(duplicateHidden)
+    const duplicateHidden = mutableDefaults();
+    duplicateHidden.layerMetadata.canvasHiddenIds = ["hero", "hero"];
+    expectInvalid(duplicateHidden);
 
-    const tooManyLabels = mutableDefaults()
+    const tooManyLabels = mutableDefaults();
     tooManyLabels.layerMetadata.labels = Object.fromEntries(
-      Array.from({ length: STUDIO_LAYER_METADATA_MAX_ENTRIES + 1 }, (_, index) => [
-        "component-" + index,
-        "Label " + index,
-      ]),
-    )
-    expectInvalid(tooManyLabels)
+      Array.from(
+        { length: STUDIO_LAYER_METADATA_MAX_ENTRIES + 1 },
+        (_, index) => [`component-${index}`, `Label ${index}`]
+      )
+    );
+    expectInvalid(tooManyLabels);
 
-    const tooManyIds = mutableDefaults()
+    const tooManyIds = mutableDefaults();
     tooManyIds.layerMetadata.lockedIds = Array.from(
       { length: STUDIO_LAYER_METADATA_MAX_ENTRIES + 1 },
-      (_, index) => "component-" + index,
-    )
-    expectInvalid(tooManyIds)
-  })
+      (_, index) => `component-${index}`
+    );
+    expectInvalid(tooManyIds);
+  });
 
   it("rejects malformed, unknown, and unbounded frame positions", () => {
-    const malformed = mutableDefaults()
-    malformed.framePositions.main = { x: 20, y: 40 }
-    Object.assign(malformed.framePositions.main, { z: 60 })
-    expectInvalid(malformed)
+    const malformed = mutableDefaults();
+    malformed.framePositions.main = { x: 20, y: 40 };
+    Object.assign(malformed.framePositions.main, { z: 60 });
+    expectInvalid(malformed);
 
-    const badId = mutableDefaults()
-    badId.framePositions["Bad screen ID"] = { x: 0, y: 0 }
-    expectInvalid(badId)
+    const badId = mutableDefaults();
+    badId.framePositions["Bad screen ID"] = { x: 0, y: 0 };
+    expectInvalid(badId);
 
-    const tooMany = mutableDefaults()
+    const tooMany = mutableDefaults();
     tooMany.framePositions = Object.fromEntries(
-      Array.from({ length: STUDIO_CANVAS_FRAME_POSITION_MAX_ENTRIES + 1 }, (_, index) => [
-        `screen-${index}`,
-        { x: index, y: 0 },
-      ]),
-    )
-    expectInvalid(tooMany)
-  })
+      Array.from(
+        { length: STUDIO_CANVAS_FRAME_POSITION_MAX_ENTRIES + 1 },
+        (_, index) => [`screen-${index}`, { x: index, y: 0 }]
+      )
+    );
+    expectInvalid(tooMany);
+  });
 
   it("rejects duplicate, overlong, or unsupported recent insertion values", () => {
-    const duplicate = mutableDefaults()
-    duplicate.recentInsertions = ["text", "text"]
-    expectInvalid(duplicate)
+    const duplicate = mutableDefaults();
+    duplicate.recentInsertions = ["text", "text"];
+    expectInvalid(duplicate);
 
-    const overlong = mutableDefaults()
+    const overlong = mutableDefaults();
     overlong.recentInsertions = STUDIO_RECENT_INSERTABLE_TYPES.slice(
       0,
-      STUDIO_RECENT_INSERTIONS_MAX + 1,
-    )
-    expectInvalid(overlong)
+      STUDIO_RECENT_INSERTIONS_MAX + 1
+    );
+    expectInvalid(overlong);
 
-    const unsupported = mutableDefaults()
-    unsupported.recentInsertions = ["scrollContainer"]
-    expectInvalid(unsupported)
-  })
+    const unsupported = mutableDefaults();
+    unsupported.recentInsertions = ["scrollContainer"];
+    expectInvalid(unsupported);
+  });
 
   it("rejects an oversized serialized value before parsing", () => {
-    const storage = createMemoryStorage(" ".repeat(STUDIO_WORKSPACE_MAX_CHARACTERS + 1)).storage
-    expect(readStudioWorkspacePreferences(storage).status).toBe("invalid")
-  })
+    const { storage } = createMemoryStorage(
+      " ".repeat(STUDIO_WORKSPACE_MAX_CHARACTERS + 1)
+    );
+    expect(readStudioWorkspacePreferences(storage).status).toBe("invalid");
+  });
 
   it("returns nonthrowing metadata when get, set, or remove operations fail", () => {
     const getFailure: StudioWorkspaceStorage = {
       getItem: vi.fn(() => {
-        throw new DOMException("Storage disabled", "SecurityError")
+        throw new DOMException("Storage disabled", "SecurityError");
       }),
       setItem: vi.fn(),
       removeItem: vi.fn(),
-    }
+    };
     expect(readStudioWorkspacePreferences(getFailure)).toEqual({
       status: "invalid",
       source: "default",
       preferences: DEFAULT_STUDIO_WORKSPACE_PREFERENCES,
-    })
+    });
 
     const setFailure: StudioWorkspaceStorage = {
       getItem: vi.fn(() => null),
       setItem: vi.fn(() => {
-        throw new DOMException("Quota exceeded", "QuotaExceededError")
+        throw new DOMException("Quota exceeded", "QuotaExceededError");
       }),
       removeItem: vi.fn(),
-    }
+    };
     expect(
-      writeStudioWorkspacePreferences(DEFAULT_STUDIO_WORKSPACE_PREFERENCES, setFailure),
-    ).toEqual({ status: "failed" })
+      writeStudioWorkspacePreferences(
+        DEFAULT_STUDIO_WORKSPACE_PREFERENCES,
+        setFailure
+      )
+    ).toEqual({ status: "failed" });
 
     const removeFailure: StudioWorkspaceStorage = {
       getItem: vi.fn(() => null),
       setItem: vi.fn(),
       removeItem: vi.fn(() => {
-        throw new DOMException("Storage disabled", "SecurityError")
+        throw new DOMException("Storage disabled", "SecurityError");
       }),
-    }
-    expect(resetStudioWorkspacePreferences(removeFailure)).toEqual({ status: "failed" })
-    expect(writeStudioWorkspacePreferences(DEFAULT_STUDIO_WORKSPACE_PREFERENCES, null)).toEqual({
+    };
+    expect(resetStudioWorkspacePreferences(removeFailure)).toEqual({
+      status: "failed",
+    });
+    expect(
+      writeStudioWorkspacePreferences(
+        DEFAULT_STUDIO_WORKSPACE_PREFERENCES,
+        null
+      )
+    ).toEqual({
       status: "unavailable",
-    })
-    expect(resetStudioWorkspacePreferences(null)).toEqual({ status: "unavailable" })
-  })
+    });
+    expect(resetStudioWorkspacePreferences(null)).toEqual({
+      status: "unavailable",
+    });
+  });
 
   it("rejects invalid writes and resets a persisted workspace to missing defaults", () => {
-    const memory = createMemoryStorage()
-    expect(writeStudioWorkspacePreferences({ schemaVersion: 1 }, memory.storage)).toEqual({
+    const memory = createMemoryStorage();
+    expect(
+      writeStudioWorkspacePreferences({ schemaVersion: 1 }, memory.storage)
+    ).toEqual({
       status: "invalid",
-    })
-    expect(memory.storage.setItem).not.toHaveBeenCalled()
+    });
+    expect(memory.storage.setItem).not.toHaveBeenCalled();
 
     expect(
-      writeStudioWorkspacePreferences(DEFAULT_STUDIO_WORKSPACE_PREFERENCES, memory.storage),
-    ).toEqual({ status: "written" })
-    expect(resetStudioWorkspacePreferences(memory.storage)).toEqual({ status: "reset" })
-    expect(memory.storage.removeItem).toHaveBeenCalledWith(STUDIO_WORKSPACE_STORAGE_KEY)
-    expect(memory.read()).toBeNull()
-    expect(readStudioWorkspacePreferences(memory.storage).status).toBe("missing")
-  })
+      writeStudioWorkspacePreferences(
+        DEFAULT_STUDIO_WORKSPACE_PREFERENCES,
+        memory.storage
+      )
+    ).toEqual({ status: "written" });
+    expect(resetStudioWorkspacePreferences(memory.storage)).toEqual({
+      status: "reset",
+    });
+    expect(memory.storage.removeItem).toHaveBeenCalledWith(
+      STUDIO_WORKSPACE_STORAGE_KEY
+    );
+    expect(memory.read()).toBeNull();
+    expect(readStudioWorkspacePreferences(memory.storage).status).toBe(
+      "missing"
+    );
+  });
 
   it("deep-copies valid input and prevents callers from mutating canonical defaults", () => {
-    const input = mutableDefaults()
-    const result = parseStudioWorkspacePreferences(input)
-    if (result.status !== "valid") throw new Error("Expected valid Studio workspace preferences")
-    const parsed = result.preferences
+    const input = mutableDefaults();
+    const result = parseStudioWorkspacePreferences(input);
+    if (result.status !== "valid") {
+      throw new Error("Expected valid Studio workspace preferences");
+    }
+    const parsed = result.preferences;
 
-    input.panels.left.size = 400
-    input.framePositions.main = { x: 20, y: 30 }
-    input.layerMetadata.labels.hero = "Changed later"
-    expect(parsed.panels.left.size).toBe(300)
-    expect(parsed.framePositions).toEqual({})
-    expect(parsed.layerMetadata.labels).toEqual({})
-    expect(Reflect.set(parsed.canvas, "zoom", 2)).toBe(false)
-    expect(Reflect.set(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.panels.left, "size", 400)).toBe(false)
-    expect(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.panels.left.size).toBe(300)
-  })
-})
+    input.panels.left.size = 400;
+    input.framePositions.main = { x: 20, y: 30 };
+    input.layerMetadata.labels.hero = "Changed later";
+    expect(parsed.panels.left.size).toBe(300);
+    expect(parsed.framePositions).toEqual({});
+    expect(parsed.layerMetadata.labels).toEqual({});
+    expect(Reflect.set(parsed.canvas, "zoom", 2)).toBe(false);
+    expect(
+      Reflect.set(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.panels.left, "size", 400)
+    ).toBe(false);
+    expect(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.panels.left.size).toBe(300);
+  });
+});
