@@ -21,11 +21,21 @@ final class MosaicResolvedLocalization {
     required Iterable<String> candidates,
   })  : _localization = localization,
         candidates = List.unmodifiable(candidates),
-        direction = _direction(localization, candidates);
+        _resolvedDirection = _direction(localization, candidates);
 
   final MosaicLocalization _localization;
   final List<String> candidates;
-  final MosaicLocaleDirection direction;
+  final MosaicLocaleDirection? _resolvedDirection;
+
+  /// Whether any locale in the fallback chain declared a writing direction.
+  ///
+  /// When this is `false` the paywall lays out left to right because something
+  /// must be chosen, not because a catalog said so. An RTL paywall rendered LTR
+  /// is a visible defect, so callers report it rather than accept it.
+  bool get directionIsDeclared => _resolvedDirection != null;
+
+  MosaicLocaleDirection get direction =>
+      _resolvedDirection ?? MosaicLocaleDirection.ltr;
 
   TextDirection get textDirection => direction == MosaicLocaleDirection.rtl
       ? TextDirection.rtl
@@ -52,18 +62,21 @@ final class MosaicResolvedLocalization {
 
   String text(MosaicLocalizedText value) => resolve(value).value;
 
-  static MosaicLocaleDirection _direction(
+  /// The first declared direction in the full fallback chain, or `null` when no
+  /// locale in it is declared.
+  static MosaicLocaleDirection? _direction(
     MosaicLocalization localization,
     Iterable<String> candidates,
   ) {
-    for (final locale in candidates) {
+    for (final locale in <String>[
+      ...candidates,
+      localization.defaultLocale,
+      localization.fallbackLocale,
+    ]) {
       final catalog = localization.locales[locale];
-      if (catalog != null) {
-        return catalog.direction;
-      }
+      if (catalog != null) return catalog.direction;
     }
-    return localization.locales[localization.defaultLocale]?.direction ??
-        MosaicLocaleDirection.ltr;
+    return null;
   }
 }
 

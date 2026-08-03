@@ -244,6 +244,8 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   final Set<String> _notifiedHiddenPurchaseTargets = <String>{};
   final Set<String> _notifiedMediaFailures = <String>{};
   final Set<String> _notifiedUnboundedFill = <String>{};
+  final Set<String> _notifiedUnknownColorTokens = <String>{};
+  final Set<String> _notifiedUnrenderableNodes = <String>{};
   final Set<String> _reportedRenderingFailures = <String>{};
   final Map<String, bool> _switchValues = <String, bool>{};
   final Map<String, int> _carouselPages = <String, int>{};
@@ -256,6 +258,7 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   final Set<String> _programmaticSheetDismissals = <String>{};
 
   late MosaicResolvedLocalization _localization;
+  bool _notifiedUndeclaredDirection = false;
   bool _productsResolved = false;
   String? _busyActionId;
   int _loadGeneration = 0;
@@ -376,6 +379,27 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
       widget.document,
       requestedLocale: widget.requestedLocale,
     );
+    if (!_localization.directionIsDeclared) {
+      // Laying an RTL paywall out left to right mirrors nothing and reads
+      // wrongly end to end, so an undeclared direction is never silent.
+      _notifyUndeclaredDirection();
+    }
+  }
+
+  void _notifyUndeclaredDirection() {
+    if (_notifiedUndeclaredDirection) return;
+    _notifiedUndeclaredDirection = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onDiagnostic?.call(
+        const MosaicDiagnostic(
+          code: 'localization.directionUndeclared',
+          message: 'No locale in the fallback chain declares a writing '
+              'direction; left to right is used.',
+          severity: MosaicDiagnosticSeverity.error,
+        ),
+      );
+    });
   }
 
   void _resetRuntimeState() {

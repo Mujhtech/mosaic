@@ -345,7 +345,10 @@ extension on _MosaicPaywallState {
       MosaicTextStyle.caption => theme.bodySmall,
     };
     if (typography == null) return base;
-    return base?.copyWith(
+    // Authored typography is never dropped because the Material theme happens
+    // to leave the mapped style null: fall back to an empty base so every
+    // authored value below still reaches the Text widget.
+    return (base ?? const TextStyle()).copyWith(
       fontSize: typography.fontSize,
       height: typography.lineHeightMultiplier,
       fontWeight: switch (typography.weight) {
@@ -375,8 +378,32 @@ extension on _MosaicPaywallState {
       'action.onPrimary' => colors.onPrimary,
       'border.default' => colors.outlineVariant,
       'transparent' => Colors.transparent,
-      _ => Colors.transparent,
+      // Unreachable while the decoder rejects unknown semantic colours, so a
+      // value arriving here means the semantic palette grew without this map.
+      // Transparent stays as the last resort, but it is never silent: an
+      // invisible surface must be attributable to a named token.
+      _ => _unknownSemanticColor(value.value),
     };
+  }
+
+  Color _unknownSemanticColor(String token) {
+    _notifyUnknownColorToken(token);
+    return Colors.transparent;
+  }
+
+  void _notifyUnknownColorToken(String token) {
+    if (!_notifiedUnknownColorTokens.add(token)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onDiagnostic?.call(
+        MosaicDiagnostic(
+          code: 'style.unknownColorToken',
+          message: 'Colour "$token" is not supported by this renderer; a '
+              'transparent last resort is used.',
+          severity: MosaicDiagnosticSeverity.error,
+        ),
+      );
+    });
   }
 
   EdgeInsetsDirectional _edgeInsets(MosaicEdgeInsets value) =>

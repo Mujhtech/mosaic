@@ -233,12 +233,7 @@ void _validateProductCardStructure(MosaicProductCardComponent card) {
     descendantCount += 1;
     final nextDepth = node is MosaicStackNode ? stackDepth + 1 : stackDepth;
     if (nextDepth > maximumStackDepth) maximumStackDepth = nextDepth;
-    final children = switch (node) {
-      MosaicStackNode() => node.children,
-      MosaicProductBadgeComponent() => node.children,
-      _ => const <MosaicNode>[],
-    };
-    for (final child in children) {
+    for (final child in _productCardChildren(node)) {
       visit(child, nextDepth);
     }
   }

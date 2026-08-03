@@ -61,7 +61,9 @@ extension on MosaicProtocolDecoder {
               '$path.overflow',
             )) {
               'clip' => MosaicTextOverflow.clip,
-              _ => MosaicTextOverflow.ellipsis,
+              'ellipsis' => MosaicTextOverflow.ellipsis,
+              final unreachable =>
+                throw StateError('Unhandled overflow "$unreachable".'),
             }
           : null,
     );
@@ -255,7 +257,12 @@ extension on MosaicProtocolDecoder {
       'start' => MosaicMainAxisDistribution.start,
       'center' => MosaicMainAxisDistribution.center,
       'end' => MosaicMainAxisDistribution.end,
-      _ => MosaicMainAxisDistribution.spaceBetween,
+      'spaceBetween' => MosaicMainAxisDistribution.spaceBetween,
+      // `_enumValue` already rejected every other string, so a value here means
+      // the accepted set and this mapping disagree. That is an SDK bug, and it
+      // must not be absorbed as a plausible-looking distribution.
+      final unreachable =>
+        throw StateError('Unhandled distribution "$unreachable".'),
     };
   }
 

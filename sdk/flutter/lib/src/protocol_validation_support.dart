@@ -71,12 +71,7 @@ void _validateV02ProductTemplates(MosaicPaywallDocument document) {
     if (node case final MosaicTextComponent text) {
       allowed.add(text.value);
     }
-    final children = switch (node) {
-      MosaicStackNode() => node.children,
-      MosaicProductBadgeComponent() => node.children,
-      _ => const <MosaicNode>[],
-    };
-    for (final child in children) {
+    for (final child in _productCardChildren(node)) {
       visitCardNode(child);
     }
   }
@@ -564,15 +559,31 @@ bool _documentUsesProductTemplates(MosaicPaywallDocument document) {
   return false;
 }
 
+/// Children of one Product Card descendant.
+///
+/// Product Card content is restricted to passive nodes at decode time, so every
+/// shape that can legitimately appear here is enumerated. An unenumerated node
+/// means the decoder accepted something this traversal would silently skip —
+/// letting a whole subtree escape validation — so it fails loudly instead.
+List<MosaicNode> _productCardChildren(MosaicNode node) => switch (node) {
+      MosaicStackNode() => node.children,
+      MosaicProductBadgeComponent() => node.children,
+      MosaicTextComponent() ||
+      MosaicImageComponent() ||
+      MosaicIconComponent() ||
+      MosaicFeatureListComponent() ||
+      MosaicCountdownComponent() =>
+        const <MosaicNode>[],
+      _ => throw MosaicProtocolException(
+          'Product Card content contains an unsupported ${node.type} node '
+          '${node.id}.',
+        ),
+    };
+
 Iterable<MosaicNode> _cardDescendants(MosaicProductCardComponent card) sync* {
   Iterable<MosaicNode> visit(MosaicNode node) sync* {
     yield node;
-    final children = switch (node) {
-      MosaicStackNode() => node.children,
-      MosaicProductBadgeComponent() => node.children,
-      _ => const <MosaicNode>[],
-    };
-    for (final child in children) {
+    for (final child in _productCardChildren(node)) {
       yield* visit(child);
     }
   }
@@ -805,7 +816,9 @@ MosaicStackHorizontalAlignment _stackAlignment(
     'start' => MosaicStackHorizontalAlignment.start,
     'center' => MosaicStackHorizontalAlignment.center,
     'end' => MosaicStackHorizontalAlignment.end,
-    _ => MosaicStackHorizontalAlignment.stretch,
+    'stretch' => MosaicStackHorizontalAlignment.stretch,
+    final unreachable =>
+      throw StateError('Unhandled stack alignment "$unreachable".'),
   };
 }
 
@@ -818,7 +831,9 @@ MosaicTextAlignment _textAlignment(Object? value, String path) {
   return switch (alignment) {
     'start' => MosaicTextAlignment.start,
     'center' => MosaicTextAlignment.center,
-    _ => MosaicTextAlignment.end,
+    'end' => MosaicTextAlignment.end,
+    final unreachable =>
+      throw StateError('Unhandled text alignment "$unreachable".'),
   };
 }
 

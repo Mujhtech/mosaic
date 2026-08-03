@@ -106,10 +106,14 @@ extension on _MosaicPaywallState {
       MosaicCountdownComponent() => _buildCountdown(context, node),
       MosaicButtonComponent() => _buildButton(context, node),
       MosaicIconComponent() => _buildIcon(context, node),
+      // A Product Card or Product Badge only renders through its owning Product
+      // Selector, and a Scroll Container only exists as a Screen root. Reaching
+      // any of them here means the node is authored in a position this renderer
+      // cannot draw, so it collapses — but never silently.
       MosaicProductCardComponent() ||
-      MosaicProductBadgeComponent() =>
-        const SizedBox.shrink(),
-      MosaicScrollContainer() => const SizedBox.shrink(),
+      MosaicProductBadgeComponent() ||
+      MosaicScrollContainer() =>
+        _unrenderableNode(node),
     };
     if (node is MosaicStackNode || node is MosaicScrollContainer) {
       return content;
@@ -242,8 +246,36 @@ extension on _MosaicPaywallState {
           outerInsets: node.outerInsets,
           visibility: node.visibility,
         ),
-      _ => content,
+      // Product Cards and Product Badges carry authored sizing but style
+      // themselves through their state-aware styles, which the Product Selector
+      // path applies. Both already collapsed above, so there is nothing left to
+      // decorate. Enumerated rather than matched by a wildcard so a new node
+      // type cannot silently lose its authored appearance, sizing, outer
+      // insets, or visibility.
+      MosaicProductCardComponent() || MosaicProductBadgeComponent() => content,
+      // Handled by the early return above.
+      MosaicVerticalStack() ||
+      MosaicStackComponent() ||
+      MosaicScrollContainer() =>
+        content,
     };
+  }
+
+  Widget _unrenderableNode(MosaicNode node) {
+    if (_notifiedUnrenderableNodes.add(node.id)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.onDiagnostic?.call(
+          MosaicDiagnostic(
+            code: 'rendering.unsupportedNodePlacement',
+            message: '${node.type} ${node.id} cannot be rendered in this '
+                'position and is omitted.',
+            severity: MosaicDiagnosticSeverity.error,
+          ),
+        );
+      });
+    }
+    return const SizedBox.shrink();
   }
 
   Widget _buildText(

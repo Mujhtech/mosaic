@@ -291,9 +291,15 @@ final class MosaicCommerceFreshness {
 
   final MosaicCommerceFreshnessSource source;
   final MosaicCommerceFreshnessStatus status;
-  final DateTime providerObservedAt;
+
+  /// When the Provider last observed this state, or `null` when the source
+  /// reported none. Absence means unknown; it is never the configuration time.
+  final DateTime? providerObservedAt;
   final DateTime synchronizedAt;
-  final DateTime staleAt;
+
+  /// When this state stops being current, or `null` when no source in the
+  /// payload can establish it. Absence means unknown freshness.
+  final DateTime? staleAt;
   final DateTime? expiresAt;
   final DateTime? configuredAt;
   final String? observationEnvironment;

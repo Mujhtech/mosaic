@@ -4,6 +4,31 @@ void _defineRendererV02VisualTests(
     Directory root,
     MosaicPaywallDocument Function(String) fixture,
     List<MosaicProduct> products) {
+  testWidgets('authored typography survives a theme with no mapped style',
+      (tester) async {
+    // Authored typography used to be applied through `base?.copyWith`, so a
+    // host theme whose mapped Material style was null dropped every authored
+    // size, weight, and colour and rendered default body text instead.
+    final document = fixture('complete-paywall.json');
+    await _pump(
+      tester,
+      document,
+      clock: () => DateTime.utc(2030, 12, 30, 23, 59, 59),
+      products: products,
+      theme: ThemeData(textTheme: const TextTheme()),
+    );
+
+    final headline = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('mosaic-headline')),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(headline.style?.fontSize, 32);
+    expect(headline.style?.fontWeight, FontWeight.w700);
+    expect(headline.style?.color, const Color(0xFF17324D));
+  });
+
   testWidgets('renders the complete 0.2 fixture with native runtime controls',
       (tester) async {
     final document = fixture('complete-paywall.json');

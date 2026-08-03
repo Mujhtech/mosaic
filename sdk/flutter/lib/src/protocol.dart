@@ -732,7 +732,7 @@ final class MosaicProtocolDecoder {
     final root = _object(value, r'$');
     final schemaVersion = _string(root['schemaVersion'], r'$.schemaVersion');
     if (schemaVersion != mosaicProtocolVersion) {
-      throw MosaicProtocolException(
+      throw MosaicProtocolException.unsupportedSchemaVersion(
         'Unsupported schemaVersion "$schemaVersion" at \$.schemaVersion.',
       );
     }
@@ -740,10 +740,35 @@ final class MosaicProtocolDecoder {
   }
 }
 
+/// Why a document was rejected, independent of the message wording.
+///
+/// Callers classify on this rather than on message text: a reworded exception
+/// must not silently change a diagnostic code or a recovery action.
+enum MosaicProtocolRejection {
+  /// The document declares a schema version this SDK does not implement.
+  unsupportedSchemaVersion,
+
+  /// The document requires a capability or component this SDK cannot render.
+  unsupportedCapability,
+
+  /// The document does not conform to the implemented schema version.
+  invalidDocument,
+}
+
 final class MosaicProtocolException implements Exception {
-  const MosaicProtocolException(this.message);
+  const MosaicProtocolException(
+    this.message, {
+    this.rejection = MosaicProtocolRejection.invalidDocument,
+  });
+
+  const MosaicProtocolException.unsupportedSchemaVersion(this.message)
+      : rejection = MosaicProtocolRejection.unsupportedSchemaVersion;
+
+  const MosaicProtocolException.unsupportedCapability(this.message)
+      : rejection = MosaicProtocolRejection.unsupportedCapability;
 
   final String message;
+  final MosaicProtocolRejection rejection;
 
   @override
   String toString() => 'MosaicProtocolException: $message';

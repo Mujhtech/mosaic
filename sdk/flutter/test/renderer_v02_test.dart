@@ -103,6 +103,7 @@ Future<void> _pump(
   MosaicPurchaseProvider? purchaseProvider,
   MosaicPresentationResultCallback? onResult,
   String? requestedLocale,
+  ThemeData? theme,
 }) async {
   tester.view.physicalSize = const Size(900, 1600);
   tester.view.devicePixelRatio = 1;
@@ -110,6 +111,7 @@ Future<void> _pump(
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
     MaterialApp(
+      theme: theme,
       home: Scaffold(
         body: MosaicPaywall(
           document: document,

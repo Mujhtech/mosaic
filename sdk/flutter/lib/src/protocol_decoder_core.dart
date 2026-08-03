@@ -131,7 +131,7 @@ extension on MosaicProtocolDecoder {
       final capabilityVersion =
           _string(capability['version'], '$capabilityPath.version');
       if (!supported.contains(name) || capabilityVersion != version) {
-        throw MosaicProtocolException(
+        throw MosaicProtocolException.unsupportedCapability(
           'Unsupported capability "$name@$capabilityVersion" at '
           '$capabilityPath.',
         );
@@ -205,14 +205,7 @@ extension on MosaicProtocolDecoder {
     final children = _list(object['children'], '$path.children');
     return MosaicStackComponent(
       id: _identifier(object['id'], '$path.id'),
-      direction: switch (_enumValue(
-        object['direction'],
-        const <String>{'vertical', 'horizontal'},
-        '$path.direction',
-      )) {
-        'vertical' => MosaicStackDirection.vertical,
-        _ => MosaicStackDirection.horizontal,
-      },
+      direction: _v02StackDirection(object['direction'], '$path.direction'),
       gap: _logicalSize(object['gap'], '$path.gap'),
       padding: _edgeInsets(object['padding'], '$path.padding'),
       mainAxisDistribution: _v02Distribution(
@@ -252,7 +245,7 @@ extension on MosaicProtocolDecoder {
       'carousel' => _v02Carousel(object, path),
       'switch' => _v02Switch(object, path),
       'countdown' => _v02Countdown(object, path),
-      _ => throw MosaicProtocolException(
+      _ => throw MosaicProtocolException.unsupportedCapability(
           'Unsupported component type "$type" at $path.type.',
         ),
     };
@@ -701,8 +694,14 @@ extension on MosaicProtocolDecoder {
   }
 
   MosaicStackDirection _v02StackDirection(Object? value, String path) =>
-      _enumValue(value, const <String>{'vertical', 'horizontal'}, path) ==
-              'vertical'
-          ? MosaicStackDirection.vertical
-          : MosaicStackDirection.horizontal;
+      switch (_enumValue(
+        value,
+        const <String>{'vertical', 'horizontal'},
+        path,
+      )) {
+        'vertical' => MosaicStackDirection.vertical,
+        'horizontal' => MosaicStackDirection.horizontal,
+        final unreachable =>
+          throw StateError('Unhandled stack direction "$unreachable".'),
+      };
 }

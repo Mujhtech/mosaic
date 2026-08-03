@@ -149,7 +149,9 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     MosaicExperimentAssignmentStore? experimentAssignmentStore,
     MosaicTransactionObservationRuntime? transactionObservationRuntime,
     MosaicCustomerEntitlementRuntime? customerEntitlementRuntime,
-  })  : _configurationClient = configurationClient,
+    MosaicDiagnosticCallback? onDiagnostic,
+  })  : _onDiagnostic = onDiagnostic,
+        _configurationClient = configurationClient,
         _customerEntitlements = customerEntitlementRuntime,
         _identityController = identityController,
         _analyticsRuntime = analyticsRuntime,
@@ -284,6 +286,7 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
         resolvedBaseUrl ?? Uri.parse('mosaic://local'),
         configuration.publicSdkKey,
       ),
+      onDiagnostic: onDiagnostic,
     );
     final resolvedAnalyticsTransport = analyticsTransport ??
         (resolvedBaseUrl == null
@@ -312,6 +315,7 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
             storage: analyticsStorage,
             environmentEnabled: analyticsEnvironmentSettings.collectionEnabled,
             hostEnabled: analyticsHostEnabled,
+            onDiagnostic: onDiagnostic,
           );
     // Authoritative entitlements require an application backend to mint a
     // Customer Access Token. Without a token provider the subsystem is never
@@ -387,8 +391,64 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
             ),
             settings: transactionObservation,
             storage: transactionObservationStorage,
+            onDiagnostic: onDiagnostic,
           );
+    // A subsystem that quietly resolves to null looks identical to a subsystem
+    // that is working: no analytics arrive, no commerce configuration loads, no
+    // observation is submitted, and nothing says why. Each one that could not be
+    // auto-wired is named once here, at configuration time.
+    void reportDisabled(String subsystem, String code, String requirement) {
+      onDiagnostic?.call(
+        MosaicDiagnostic(
+          code: code,
+          message: '$subsystem is disabled because $requirement.',
+          severity: MosaicDiagnosticSeverity.warning,
+        ),
+      );
+    }
+
+    if (resolvedBaseUrl == null) {
+      reportDisabled(
+        'Hosted configuration',
+        'configuration.subsystem.disabled',
+        'no base URL was resolved',
+      );
+    }
+    if (runtime == null) {
+      reportDisabled(
+        'Analytics',
+        'analytics.subsystem.disabled',
+        analyticsTransport == null && resolvedBaseUrl == null
+            ? 'no base URL and no analytics transport were provided'
+            : 'no analytics transport could be constructed',
+      );
+    }
+    if (resolvedCommerceTransport == null &&
+        commerceConfigurationLoader == null) {
+      reportDisabled(
+        'Commerce configuration delivery',
+        'commerce.configuration.subsystem.disabled',
+        'a base URL, an Application, and a Store Platform are all required',
+      );
+    }
+    if (transactionObservation != null && observationRuntime == null) {
+      reportDisabled(
+        'Transaction observation',
+        'transactions.subsystem.disabled',
+        resolvedStorePlatform == null
+            ? 'no Store Platform was configured'
+            : 'no observation transport could be constructed',
+      );
+    }
+    if (customerTokenProvider != null && customerEntitlements == null) {
+      reportDisabled(
+        'Authoritative entitlements',
+        'entitlements.subsystem.disabled',
+        'no base URL was resolved',
+      );
+    }
     return Mosaic._(
+      onDiagnostic: onDiagnostic,
       configuration: configuration,
       purchaseProvider: resolvedPurchaseProvider,
       customerEntitlementRuntime: customerEntitlements,
@@ -450,9 +510,29 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
   final MosaicCommerceProviderRouter? _commerceProviderRouter;
   final MosaicTransactionObservationRuntime? _transactionObservationRuntime;
   final MosaicCustomerEntitlementRuntime? _customerEntitlements;
+  final MosaicDiagnosticCallback? _onDiagnostic;
+  final Set<String> _reportedDiagnosticCodes = <String>{};
   MosaicTransactionObservationSink? _purchaseSink;
   StreamSubscription<MosaicCommerceUpdate>? _commerceUpdateSubscription;
   bool _observingLifecycle = false;
+
+  /// Reports one SDK diagnostic to the host at most once per code.
+  ///
+  /// Extensions on [Mosaic] outside this file use it to surface assumptions and
+  /// degraded subsystems that would otherwise be invisible.
+  void diagnoseOnce(String code, String message) =>
+      _diagnoseOnce(code, message);
+
+  void _diagnoseOnce(String code, String message) {
+    if (!_reportedDiagnosticCodes.add(code)) return;
+    _onDiagnostic?.call(
+      MosaicDiagnostic(
+        code: code,
+        message: message,
+        severity: MosaicDiagnosticSeverity.warning,
+      ),
+    );
+  }
 
   void _observeLifecycleIfAvailable() {
     if (_observingLifecycle) return;
@@ -513,6 +593,17 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
         in acceptedConfiguration?.envelope.release.placementDecisions.values ??
             const Iterable<MosaicPlacementRuleSet>.empty()) {
       definitions.addAll(decision.attributeDefinitions);
+    }
+    if (definitions.isEmpty && attributes.isNotEmpty) {
+      // No accepted release means no allow-list to check against. The
+      // attributes are still stored so targeting works once a release lands,
+      // but the host is told that nothing validated them, rather than being
+      // left to assume they passed.
+      _diagnoseOnce(
+        'identity.attributes.unvalidated',
+        'No accepted release declares attribute definitions, so user '
+            'attributes were stored without allow-list validation.',
+      );
     }
     for (final entry in attributes.entries) {
       final definition = definitions[entry.key];

@@ -290,6 +290,18 @@ extension MosaicPlacementClient on Mosaic {
       'restore': MosaicProviderCapabilityState.available,
       'entitlement_lookup': MosaicProviderCapabilityState.available,
     };
+    if (purchaseProvider is! MosaicCommerceProvider) {
+      // A provider that declares no capabilities is assumed able to do
+      // everything, because refusing to decide would break hosts using the
+      // simple purchase-provider surface. That assumption drives
+      // provider_capability conditions, so it is named rather than implied.
+      diagnoseOnce(
+        'commerce.capabilities.assumed',
+        'The purchase Provider declares no capabilities; Placement decisions '
+            'assume product loading, purchase, restore, and entitlement lookup '
+            'are all available.',
+      );
+    }
     if (purchaseProvider case final MosaicCommerceProvider provider) {
       bool supported(MosaicProviderCapabilityName name) =>
           provider.capabilities.any((value) =>
@@ -534,6 +546,7 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
   String _placementRequestId = mosaicAnalyticsId('placement_request');
   String _paywallPresentationId = mosaicAnalyticsId('presentation');
   final Set<String> _analyticsEvents = <String>{};
+  final Set<String> _reportedUnattributedFallback = <String>{};
 
   @override
   void initState() {
@@ -1064,7 +1077,26 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
     final rule = ruleSet?.rules
         .where((candidate) => candidate.id == decision.matchedRuleId)
         .firstOrNull;
-    return _conditionFallbackTrigger(rule?.conditions) ?? 'unsafe_rendering';
+    final attributed = _conditionFallbackTrigger(rule?.conditions);
+    if (attributed != null) return attributed;
+    // Neither the decision trace nor the matched rule explains this fallback.
+    // The analytics contract's `trigger` enum is closed and has no honest
+    // "unknown" member, so `unsafe_rendering` still goes on the wire to keep
+    // the event schema-valid — but the host is told the attribution is a
+    // placeholder, so misattributed telemetry is detectable rather than
+    // indistinguishable from a real unsafe-rendering fallback.
+    if (_reportedUnattributedFallback.add(_placementRequestId)) {
+      widget.onDiagnostic?.call(
+        const MosaicDiagnostic(
+          code: 'analytics.fallbackTrigger.unattributable',
+          message: 'A Placement fallback could not be attributed to a trigger; '
+              'it is reported as unsafe_rendering because the analytics '
+              'contract declares no unknown trigger.',
+          severity: MosaicDiagnosticSeverity.warning,
+        ),
+      );
+    }
+    return 'unsafe_rendering';
   }
 
   String? _conditionFallbackTrigger(MosaicConditionNode? node) {
