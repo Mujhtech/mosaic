@@ -42,6 +42,7 @@ import {
   canRunMigrationCommand,
   dryRunAuthorityNotice,
   laterLifecycleNotice,
+  MigrationCommandBindingError,
   migrationCommandJourney,
 } from "@/features/billing-migrations/types/migration-operations";
 import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
@@ -721,7 +722,7 @@ export function MigrationProgramDetailPage({
               <div className="flex flex-wrap gap-3">
                 <MigrationImpactReviewAction
                   actionLabel="Queue dry run"
-                  binding={`dry:${current?.stateVersion ?? 0}:${latestManifest?.manifestDigest ?? "none"}:${latestMapping?.mappingDigest ?? "none"}`}
+                  binding={`dry:${current?.stateVersion ?? "unknown"}:${latestManifest?.manifestDigest ?? "none"}:${latestMapping?.mappingDigest ?? "none"}`}
                   disabledReason={dryRunDisabledReason}
                   facts={[
                     {
@@ -748,11 +749,14 @@ export function MigrationProgramDetailPage({
                   isPending={anyCommandPending}
                   onConfirm={() =>
                     command.run(async () => {
+                      if (!(current && latestManifest && latestMapping)) {
+                        throw new MigrationCommandBindingError();
+                      }
                       const job = await dryRun.mutateAsync({
                         body: {
-                          expectedStateVersion: current?.stateVersion ?? 0,
-                          manifestDigest: latestManifest?.manifestDigest ?? "",
-                          mappingDigest: latestMapping?.mappingDigest ?? "",
+                          expectedStateVersion: current.stateVersion,
+                          manifestDigest: latestManifest.manifestDigest,
+                          mappingDigest: latestMapping.mappingDigest,
                         },
                         idempotencyKey: createMigrationCommandKey(),
                       });
@@ -767,7 +771,7 @@ export function MigrationProgramDetailPage({
                 />
                 <MigrationImpactReviewAction
                   actionLabel="Queue shadow run"
-                  binding={`shadow:${current?.stateVersion ?? 0}:${latestManifest?.manifestDigest ?? "none"}:${latestMapping?.mappingDigest ?? "none"}`}
+                  binding={`shadow:${current?.stateVersion ?? "unknown"}:${latestManifest?.manifestDigest ?? "none"}:${latestMapping?.mappingDigest ?? "none"}`}
                   disabledReason={shadowDisabledReason}
                   facts={[
                     {
@@ -796,11 +800,14 @@ export function MigrationProgramDetailPage({
                   isPending={anyCommandPending}
                   onConfirm={() =>
                     command.run(async () => {
+                      if (!(current && latestManifest && latestMapping)) {
+                        throw new MigrationCommandBindingError();
+                      }
                       const job = await shadowRun.mutateAsync({
                         body: {
-                          expectedStateVersion: current?.stateVersion ?? 0,
-                          manifestDigest: latestManifest?.manifestDigest ?? "",
-                          mappingDigest: latestMapping?.mappingDigest ?? "",
+                          expectedStateVersion: current.stateVersion,
+                          manifestDigest: latestManifest.manifestDigest,
+                          mappingDigest: latestMapping.mappingDigest,
                         },
                         idempotencyKey: createMigrationCommandKey(),
                       });

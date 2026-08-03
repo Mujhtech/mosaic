@@ -1,4 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
+import type { MigrationCompletionInspection } from "@/features/billing-migrations/types/migration-operations";
 import {
   migrationRunPollingInterval,
   normalizeMigrationProgramDetail,
@@ -29,7 +30,30 @@ import {
   listBillingMigrationStabilizationObservations,
   listBillingMigrationWebhookRedeliveries,
 } from "@/generated/api";
+import { ApiError } from "@/lib/api/errors";
 import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
+
+/**
+ * Completion inspection is fetched beside the rest of the lifecycle evidence
+ * and must not fail the whole query: a program that has not reached completion
+ * has no report, and the rest of the page is still worth rendering.
+ *
+ * It classifies rather than discards. Only a 404 means "no report yet"; every
+ * other failure is carried out so the view can say so.
+ */
+async function inspectCompletion(
+  request: Parameters<typeof inspectBillingMigrationCompletion<true>>[0]
+): Promise<MigrationCompletionInspection> {
+  try {
+    const result = await inspectBillingMigrationCompletion<true>(request);
+    return { prerequisites: result.data.data.payload, status: "ok" };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return { status: "absent" };
+    }
+    return { error, status: "error" };
+  }
+}
 
 export const migrationKeys = {
   project: (projectId: string) => ["billing-migrations", projectId] as const,
@@ -105,13 +129,13 @@ export function migrationLifecycleQueryOptions(
         listBillingMigrationCompletionHistory(withSignal),
         listBillingMigrationStabilizationObservations(withSignal),
         listBillingMigrationRollbackReadinessAssessments(withSignal),
-        inspectBillingMigrationCompletion(withSignal).catch(() => undefined),
+        inspectCompletion(withSignal),
       ]);
       return {
         approvals: approvals.data.data.items,
         cases: cases.data.data.items,
         checkpoints: checkpoints.data.data.items,
-        completion: completion?.data.data.payload,
+        completion,
         executions: executions.data.data.items,
         holdProposals: holdProposals.data.data.items,
         holds: holds.data.data.items,

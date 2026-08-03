@@ -13,6 +13,8 @@ import {
 } from "@/features/billing-ledger/components/billing-chrome";
 import {
   formatBillingTimestamp,
+  formatReportedCount,
+  isReportedCount,
   reconciliationStrategyLabel,
   runStatusLabel,
   runTriggerLabel,
@@ -164,11 +166,15 @@ export function ReconciliationRunDetailPage({
                 {terminal ? "Run finished" : "Run in progress"}
               </h2>
               <p className="mt-1 text-muted-foreground text-sm leading-6">
+                {/* Phrased as labelled counts rather than "Examined N records"
+                    so an unreported field reads as unreported. The old prose
+                    stated "Examined 0 records" for a field the server never
+                    sent, which is a false account of what the run did. */}
                 {terminal
-                  ? `Examined ${data.examinedCount ?? 0} store record(s): ${data.discoveredCount ?? 0} newly ingested, ${data.duplicateCount ?? 0} already recorded, ${data.conflictCount ?? 0} conflicting with a recorded fact, ${data.failureCount ?? 0} failed.`
-                  : `Mosaic is walking store history for this window. Examined ${data.examinedCount ?? 0} record(s) so far. This status refreshes automatically.`}
+                  ? `Store records examined: ${formatReportedCount(data.examinedCount)}. Newly ingested: ${formatReportedCount(data.discoveredCount)}. Already recorded: ${formatReportedCount(data.duplicateCount)}. Conflicting with a recorded fact: ${formatReportedCount(data.conflictCount)}. Failed: ${formatReportedCount(data.failureCount)}.`
+                  : `Mosaic is walking store history for this window. Store records examined so far: ${formatReportedCount(data.examinedCount)}. This status refreshes automatically.`}
               </p>
-              {(data.conflictCount ?? 0) > 0 ? (
+              {isReportedCount(data.conflictCount) && data.conflictCount > 0 ? (
                 <div className="mt-3 rounded border border-destructive/30 bg-destructive/5 p-3">
                   <p className="font-semibold text-destructive text-sm">
                     {data.conflictCount} discovery contradicted a fact already
@@ -252,7 +258,7 @@ export function ReconciliationRunDetailPage({
                 />
                 <DefinitionRow
                   label="Examined"
-                  value={String(data.examinedCount ?? 0)}
+                  value={formatReportedCount(data.examinedCount)}
                 />
                 <DefinitionRow
                   label="Discovered and ingested"
@@ -261,13 +267,14 @@ export function ReconciliationRunDetailPage({
                       className="font-medium text-primary"
                       href={`${base}/transactions`}
                     >
-                      {data.discoveredCount ?? 0} · open the ledger
+                      {formatReportedCount(data.discoveredCount)} · open the
+                      ledger
                     </a>
                   }
                 />
                 <DefinitionRow
                   label="Already recorded (deduplicated)"
-                  value={String(data.duplicateCount ?? 0)}
+                  value={formatReportedCount(data.duplicateCount)}
                 />
                 {/* Distinct from "discovered": a conflict contradicts a fact
                     already on record, which is what Gate 9A asks reconciliation
@@ -275,7 +282,8 @@ export function ReconciliationRunDetailPage({
                 <DefinitionRow
                   label="Conflicting with a recorded fact"
                   value={
-                    (data.conflictCount ?? 0) > 0 ? (
+                    isReportedCount(data.conflictCount) &&
+                    data.conflictCount > 0 ? (
                       <a
                         className="font-medium text-primary"
                         href={`${base}/quarantine?status=open`}
@@ -283,7 +291,7 @@ export function ReconciliationRunDetailPage({
                         {data.conflictCount} · open quarantine
                       </a>
                     ) : (
-                      "0"
+                      formatReportedCount(data.conflictCount)
                     )
                   }
                 />
@@ -294,7 +302,7 @@ export function ReconciliationRunDetailPage({
                       className="font-medium text-primary"
                       href={`${base}/quarantine?status=open`}
                     >
-                      {data.failureCount ?? 0} · open quarantine
+                      {formatReportedCount(data.failureCount)} · open quarantine
                     </a>
                   }
                 />

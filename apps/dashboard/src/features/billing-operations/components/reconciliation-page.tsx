@@ -20,6 +20,8 @@ import {
 } from "@/features/billing-ledger/components/billing-chrome";
 import {
   formatBillingTimestamp,
+  formatReportedCount,
+  isReportedCount,
   providerLabel,
   runStatusLabel,
   runTriggerLabel,
@@ -261,19 +263,28 @@ export function ReconciliationPage({
                         })()}
                       />
                     </TableCell>
-                    <TableCell>{run.examinedCount ?? 0}</TableCell>
-                    <TableCell>{run.discoveredCount ?? 0}</TableCell>
-                    <TableCell>{run.duplicateCount ?? 0}</TableCell>
                     <TableCell>
-                      {(run.conflictCount ?? 0) > 0 ? (
+                      {formatReportedCount(run.examinedCount)}
+                    </TableCell>
+                    <TableCell>
+                      {formatReportedCount(run.discoveredCount)}
+                    </TableCell>
+                    <TableCell>
+                      {formatReportedCount(run.duplicateCount)}
+                    </TableCell>
+                    <TableCell>
+                      {isReportedCount(run.conflictCount) &&
+                      run.conflictCount > 0 ? (
                         <span className="font-medium text-destructive">
                           {run.conflictCount}
                         </span>
                       ) : (
-                        0
+                        formatReportedCount(run.conflictCount)
                       )}
                     </TableCell>
-                    <TableCell>{run.failureCount ?? 0}</TableCell>
+                    <TableCell>
+                      {formatReportedCount(run.failureCount)}
+                    </TableCell>
                     <TableCell title={run.completedAt}>
                       {reconciliationRunIsTerminal(run)
                         ? formatBillingTimestamp(run.completedAt)

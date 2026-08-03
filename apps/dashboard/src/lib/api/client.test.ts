@@ -138,6 +138,38 @@ describe("createApiClient", () => {
     );
   });
 
+  /**
+   * Protects: a failure whose body is not valid JSON stays diagnosable.
+   *
+   * The failure this catches is an incident with no evidence. A 500 whose body
+   * is a proxy's HTML page or a truncated panic used to produce exactly
+   * "Request failed with status 500." and nothing else — the same string for
+   * every possible cause, with the one clue the response carried thrown away.
+   * The excerpt is bounded and rides under a key no user-facing error
+   * descriptor reads, so it never becomes raw server prose on screen.
+   */
+  it("keeps a bounded excerpt of an unparseable error body", async () => {
+    const fetchImplementation = vi.fn<typeof fetch>();
+    fetchImplementation.mockResolvedValueOnce(
+      new Response("<html><body>502 Bad Gateway</body></html>", {
+        headers: { "Content-Type": "application/json" },
+        status: 502,
+      })
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/",
+      fetchImplementation,
+    });
+
+    const error = await client.request("health").catch((cause) => cause);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(502);
+    expect((error as ApiError).details).toEqual({
+      unparsedResponseBody: "<html><body>502 Bad Gateway</body></html>",
+    });
+  });
+
   it.each([
     "../outside",
     "%2e%2e%2foutside",

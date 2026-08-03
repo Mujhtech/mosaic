@@ -12,7 +12,11 @@ import {
   BILLING_OPTIONAL_NOTE,
   formatBillingTimestamp,
   formatDurationSeconds,
+  formatReportedCount,
+  isReportedCount,
+  NOT_REPORTED_LABEL,
   providerLabel,
+  reportedCountTone,
   storeEnvironmentLabel,
 } from "@/features/billing-ledger/types/billing-vocabulary";
 import { billingHealthQueryOptions } from "@/features/billing-operations/queries/billing-health-queries";
@@ -117,8 +121,8 @@ export function BillingHealthPage({
   const backlogSeconds = data?.oldestQueuedAgeSeconds;
   const backlogUnhealthy =
     typeof backlogSeconds === "number" && backlogSeconds > 900;
-  const quarantineOpen = data?.openQuarantineCount ?? 0;
-  const unhealthyCredentials = data?.unhealthyCredentials ?? 0;
+  const quarantineOpen = data?.openQuarantineCount;
+  const unhealthyCredentials = data?.unhealthyCredentials;
 
   return (
     <WorkspacePage
@@ -158,7 +162,11 @@ export function BillingHealthPage({
               ) : undefined
             }
             tone={backlogUnhealthy ? "attention" : "neutral"}
-            value={`${data?.queueDepth ?? 0} queued`}
+            value={
+              isReportedCount(data?.queueDepth)
+                ? `${data.queueDepth} queued`
+                : NOT_REPORTED_LABEL
+            }
           />
           <Metric
             label="Oldest queued input"
@@ -169,15 +177,24 @@ export function BillingHealthPage({
             href={`${base}/quarantine?status=open`}
             hrefLabel="Open quarantine"
             label="Open quarantine records"
-            tone={quarantineOpen > 0 ? "attention" : "positive"}
-            value={String(quarantineOpen)}
+            tone={reportedCountTone(quarantineOpen, "attention", "positive")}
+            value={formatReportedCount(quarantineOpen)}
           />
           <Metric
             href={connectionsHref}
             hrefLabel="Review credentials"
             label="Unhealthy credentials"
-            tone={unhealthyCredentials > 0 ? "negative" : "positive"}
-            value={`${unhealthyCredentials} of ${data?.credentialCount ?? 0}`}
+            tone={reportedCountTone(
+              unhealthyCredentials,
+              "negative",
+              "positive"
+            )}
+            value={
+              isReportedCount(unhealthyCredentials) &&
+              isReportedCount(data?.credentialCount)
+                ? `${unhealthyCredentials} of ${data.credentialCount}`
+                : NOT_REPORTED_LABEL
+            }
           />
         </div>
 
@@ -185,7 +202,7 @@ export function BillingHealthPage({
           <Metric
             label="Recorded facts"
             tone="neutral"
-            value={String(data?.factCount ?? 0)}
+            value={formatReportedCount(data?.factCount)}
           />
           <Metric
             label="Last fact recorded"

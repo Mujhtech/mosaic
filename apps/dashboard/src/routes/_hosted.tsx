@@ -10,12 +10,13 @@ import {
   RouteErrorState,
   RoutePendingState,
 } from "@/components/feedback/route-feedback";
+import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner";
 import { sessionQueryOptions } from "@/features/auth/queries/session-query";
 import { safeInternalReturnTo } from "@/features/auth/types/hosted-access";
 import { CloudWorkspaceShell } from "@/features/orgs/components/cloud-workspace-shell";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, describeApiError } from "@/lib/api/errors";
 
 export const Route = createFileRoute("/_hosted")({
   beforeLoad: async ({ context, location }) => {
@@ -52,6 +53,12 @@ function HostedLayout() {
   });
   const sessionExpired =
     session.error instanceof ApiError && session.error.status === 401;
+  // The route guard deliberately lets a non-401 session failure through rather
+  // than locking an operator out of the shell during an outage. That degrade is
+  // right, but it was silent: the shell rendered exactly as it does for a
+  // verified session, so nothing distinguished "you are signed in" from "Mosaic
+  // could not check". Deliberate degrade, stated.
+  const sessionUnverified = Boolean(session.error) && !sessionExpired;
 
   return (
     <SidebarProvider
@@ -76,6 +83,37 @@ function HostedLayout() {
               compact
               returnTo={safeInternalReturnTo(pathname, "")}
             />
+          </div>
+        ) : null}
+        {sessionUnverified ? (
+          <div className="px-5 pt-5 sm:px-8">
+            <section
+              aria-live="polite"
+              className="rounded border border-border bg-muted/40 p-4"
+              role="status"
+            >
+              <h2 className="font-semibold text-sm">
+                Your session could not be verified
+              </h2>
+              <p className="mt-1 text-muted-foreground text-sm leading-6">
+                {describeApiError(session.error).description} Mosaic kept the
+                workspace open rather than signing you out, so what you see may
+                be from before the failure and some actions may be refused.
+                Reload once the connection recovers.
+              </p>
+              <Button
+                className="mt-3"
+                disabled={session.isFetching}
+                onClick={() => {
+                  session.refetch();
+                }}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {session.isFetching ? "Checking…" : "Check again"}
+              </Button>
+            </section>
           </div>
         ) : null}
         <Outlet />

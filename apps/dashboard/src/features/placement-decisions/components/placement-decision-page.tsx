@@ -375,12 +375,23 @@ function DecisionWorkspace({
           <div>
             <p className="font-mono text-sm">{detail.key}</p>
             <p className="mt-1 text-muted-foreground text-xs">
-              Stable Placement key · {detail.status} · saved revision{" "}
-              {detail.draft.revision}
+              Stable Placement key · {detail.status} ·{" "}
+              {detail.draftOrigin === "not_configured"
+                ? "no decision rules configured yet"
+                : `saved revision ${detail.draft.revision}`}
               {detail.publishedVersion
                 ? ` · published v${detail.publishedVersion.version}`
                 : " · not published"}
             </p>
+            {detail.draftOrigin === "not_configured" ? (
+              // Distinguishes "nobody has written rules here" from "a saved
+              // rule set happens to be empty". The starting point below exists
+              // only in this browser until it is saved.
+              <p className="mt-1 text-muted-foreground text-xs leading-5">
+                This Placement has no rule set on the server. What you see below
+                is an unsaved starting point; nothing is created until you save.
+              </p>
+            ) : null}
           </div>
           <Button
             disabled={

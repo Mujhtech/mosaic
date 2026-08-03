@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { resolveRuntimeConfig } from "@/config/environment";
+import {
+  apiBaseUrlIsMisconfigured,
+  resolveRuntimeConfig,
+} from "@/config/environment";
 
 /**
  * The dashboard reads its API origin from SSR-injected runtime configuration.
@@ -45,6 +48,47 @@ describe("runtime configuration", () => {
     expect(resolveRuntimeConfig().previewUrl).toBe(
       "ws://127.0.0.1:4317/preview"
     );
+  });
+
+  /**
+   * Protects: a deployed dashboard with no API address says so, instead of
+   * pointing itself at localhost and presenting the resulting failures as an
+   * outage.
+   *
+   * The failure this catches is a real one that costs hours: an operator
+   * debugs networking, DNS, and the API's health while the actual cause is a
+   * missing environment variable on the dashboard container. The decision is
+   * pure, so this is the cheapest layer that can exercise the production
+   * branch — the jsdom page host cannot be moved.
+   */
+  it("treats a missing API origin as a configuration error only outside local development", () => {
+    const deployed = {
+      configured: undefined,
+      hostname: "mosaic.example.com",
+      isDevBuild: false,
+    };
+    expect(apiBaseUrlIsMisconfigured(deployed)).toBe(true);
+
+    // A configured origin is never a misconfiguration, wherever it is served.
+    expect(
+      apiBaseUrlIsMisconfigured({
+        ...deployed,
+        configured: "https://api.mosaic.example",
+      })
+    ).toBe(false);
+    // Genuine local development keeps the documented localhost default.
+    expect(apiBaseUrlIsMisconfigured({ ...deployed, isDevBuild: true })).toBe(
+      false
+    );
+    for (const hostname of ["localhost", "127.0.0.1", "[::1]"]) {
+      expect(apiBaseUrlIsMisconfigured({ ...deployed, hostname })).toBe(false);
+    }
+  });
+
+  it("reports sound configuration in local development", () => {
+    window.__MOSAIC_CONFIG__ = { apiBaseUrl: "https://api.mosaic.example" };
+
+    expect(resolveRuntimeConfig().apiBaseUrlMisconfigured).toBe(false);
   });
 
   it("ignores a non-object configuration payload instead of throwing", () => {

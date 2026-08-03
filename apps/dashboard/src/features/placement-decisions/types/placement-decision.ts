@@ -102,6 +102,18 @@ export interface PlacementDecisionDetail {
   aliases: readonly { key: string; status: "active" | "archived" }[];
   description?: string;
   draft: PlacementRuleSetDraft;
+  /**
+   * Where `draft` came from.
+   *
+   * `server` — a stored rule-set draft was read.
+   * `not_configured` — this Placement has no rule set at all (the read answered
+   *   404), and `draft` is a locally synthesized starting point that has never
+   *   been persisted. Loading the page created nothing on the server.
+   *
+   * The two used to be indistinguishable, so a Placement whose rules could not
+   * be read looked exactly like one deliberately left empty.
+   */
+  draftOrigin: "not_configured" | "server";
   id: string;
   key: string;
   name: string;

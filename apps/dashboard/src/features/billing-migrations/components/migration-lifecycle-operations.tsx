@@ -18,6 +18,7 @@ import {
 import {
   canRunMigrationCommand,
   type MigrationCommandCapability,
+  type MigrationCompletionInspection,
   type MigrationProgramView,
   migrationCompletionBlockers,
 } from "@/features/billing-migrations/types/migration-operations";
@@ -26,7 +27,6 @@ import type {
   BillingMigrationAuthorityExecution,
   BillingMigrationCase,
   BillingMigrationCheckpoint,
-  BillingMigrationCompletionPrerequisites,
   BillingMigrationCompletionReport,
   BillingMigrationCredentialRemoval,
   BillingMigrationDigestSet,
@@ -40,6 +40,7 @@ import type {
   BillingMigrationStabilizationObservation,
   BillingMigrationWebhookRedelivery,
 } from "@/generated/api";
+import { describeApiError } from "@/lib/api/errors";
 
 type LifecycleRecord =
   | BillingMigrationApproval
@@ -62,7 +63,7 @@ interface LifecycleData {
   approvals: BillingMigrationApproval[];
   cases: BillingMigrationCase[];
   checkpoints: BillingMigrationCheckpoint[];
-  completion: BillingMigrationCompletionPrerequisites | undefined;
+  completion: MigrationCompletionInspection;
   executions: BillingMigrationAuthorityExecution[];
   holdProposals: BillingMigrationLegalHoldProposal[];
   holds: BillingMigrationLegalHold[];
@@ -370,7 +371,16 @@ export function MigrationLifecycleOperations({
     value: item,
   }));
   const capability = commandCapability[name];
-  const completionBlockers = migrationCompletionBlockers(data?.completion);
+  const completion = data?.completion;
+  // A failed inspection blocks completion exactly as an unsatisfied
+  // prerequisite does. Completing a migration is irreversible, so "Mosaic could
+  // not read the prerequisites" must never be the state it is done from.
+  const completionBlockers =
+    completion?.status === "error"
+      ? ["completion prerequisites could not be read"]
+      : migrationCompletionBlockers(
+          completion?.status === "ok" ? completion.prerequisites : undefined
+        );
   const granted = canRunMigrationCommand(detail, capability);
   const allDigestsPresent = digestNames.every((digestName) =>
     digests[digestName].trim()
@@ -972,7 +982,20 @@ export function MigrationLifecycleOperations({
           <h2 className="font-semibold">
             Completion reports and audit history
           </h2>
-          {data?.completion ? (
+          {completion?.status === "error" ? (
+            <div className="mt-3 text-sm" role="alert">
+              <p className="font-medium text-destructive">
+                Completion prerequisites could not be read
+              </p>
+              <p className="mt-1 text-muted-foreground leading-6">
+                {describeApiError(completion.error).description} This is a
+                failed read, not a report that completion is unavailable —
+                nothing here says whether the migration is eligible to be
+                completed. Retry once the cause is resolved.
+              </p>
+            </div>
+          ) : null}
+          {completion?.status === "ok" ? (
             <div className="mt-3 text-sm">
               {completionBlockers.length ? (
                 <>
@@ -989,11 +1012,13 @@ export function MigrationLifecycleOperations({
                 </p>
               )}
             </div>
-          ) : (
+          ) : null}
+          {completion === undefined || completion.status === "absent" ? (
             <p className="mt-2 text-muted-foreground text-sm">
-              Completion inspection is unavailable or has not produced a report.
+              Completion inspection has not produced a report for this program
+              yet.
             </p>
-          )}
+          ) : null}
           <Timeline records={data?.reports ?? []} />
         </div>
       </section>

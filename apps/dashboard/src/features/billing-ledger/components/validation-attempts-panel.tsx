@@ -5,6 +5,7 @@ import {
   storeEnvironmentLabel,
   validationOutcomeLabel,
 } from "@/features/billing-ledger/types/billing-vocabulary";
+import { compareAttemptNumberDescending } from "@/features/billing-ledger/types/replay-comparison";
 import { WorkflowPanel } from "@/features/orgs/components/workspace-page";
 import type { ValidationAttempt } from "@/generated/api";
 
@@ -24,10 +25,14 @@ export function ValidationAttemptsPanel({
 }: {
   attempts: readonly ValidationAttempt[];
 }) {
-  const ordered = [...attempts].sort(
-    (a, b) => (b.attemptNumber ?? 0) - (a.attemptNumber ?? 0)
-  );
-  const latest = ordered[0]?.attemptNumber;
+  // Newest first, with unnumbered attempts last rather than first: a missing
+  // attempt number treated as 0 put those records at the top of a
+  // newest-first list, where `latest` is read from — which then marked every
+  // real attempt as "superseded" by an attempt that has no position at all.
+  const ordered = [...attempts].sort(compareAttemptNumberDescending);
+  const latest = ordered.find(
+    (attempt) => typeof attempt.attemptNumber === "number"
+  )?.attemptNumber;
 
   return (
     <WorkflowPanel

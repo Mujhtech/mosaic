@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { AppErrorBoundary } from "@/components/feedback/app-error-boundary";
+import { ConfigurationErrorBanner } from "@/components/feedback/configuration-error-banner";
 import { ConnectivityBanner } from "@/components/feedback/connectivity-banner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "@/providers/query-provider";
@@ -16,6 +17,7 @@ export function AppProviders({ children, queryClient }: AppProvidersProps) {
     <AppErrorBoundary>
       <QueryProvider client={queryClient}>
         <TooltipProvider>
+          <ConfigurationErrorBanner />
           <ConnectivityBanner />
           {children}
         </TooltipProvider>

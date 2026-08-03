@@ -10,6 +10,10 @@ import {
   BILLING_OPTIONAL_NOTE,
   formatBillingTimestamp,
   formatDurationSeconds,
+  formatReportedCount,
+  isReportedCount,
+  NOT_REPORTED_LABEL,
+  reportedCountTone,
 } from "@/features/billing-ledger/types/billing-vocabulary";
 import { ProjectionReplayPanel } from "@/features/billing-projection/components/projection-replay-panel";
 import { createProjectionReplayMutationOptions } from "@/features/billing-projection/mutations/projection-replay-mutations";
@@ -108,8 +112,8 @@ export function ProjectionHealthPage({
   const oldestQueued = data?.projectionOldestQueuedAgeSeconds;
   // Depth alone cannot distinguish a busy queue from a stuck one; age can.
   const queueStuck = typeof oldestQueued === "number" && oldestQueued > 900;
-  const conflicts = data?.openIdentityConflicts ?? 0;
-  const unknownEntries = data?.unknownEntitlementEntries ?? 0;
+  const conflicts = data?.openIdentityConflicts;
+  const unknownEntries = data?.unknownEntitlementEntries;
 
   return (
     <WorkspacePage
@@ -149,7 +153,11 @@ export function ProjectionHealthPage({
                 : undefined
             }
             tone={queueStuck ? "attention" : "neutral"}
-            value={`${data?.projectionQueueDepth ?? 0} queued`}
+            value={
+              isReportedCount(data?.projectionQueueDepth)
+                ? `${data.projectionQueueDepth} queued`
+                : NOT_REPORTED_LABEL
+            }
           />
           <Metric
             label="Oldest queued projection"
@@ -158,42 +166,50 @@ export function ProjectionHealthPage({
           />
           <Metric
             label="Failed projection jobs"
-            tone={
-              (data?.projectionFailedJobs ?? 0) > 0 ? "negative" : "positive"
-            }
-            value={String(data?.projectionFailedJobs ?? 0)}
+            tone={reportedCountTone(
+              data?.projectionFailedJobs,
+              "negative",
+              "positive"
+            )}
+            value={formatReportedCount(data?.projectionFailedJobs)}
           />
           <Metric
             label="Projection failures in the last hour"
             recovery="A rate signal the queue depth cannot give: a queue that drains while failing is still wrong."
-            tone={
-              (data?.projectionFailuresLastHour ?? 0) > 0
-                ? "attention"
-                : "neutral"
-            }
-            value={String(data?.projectionFailuresLastHour ?? 0)}
+            tone={reportedCountTone(
+              data?.projectionFailuresLastHour,
+              "attention",
+              "neutral"
+            )}
+            value={formatReportedCount(data?.projectionFailuresLastHour)}
           />
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Metric
             label="Customers with stale committed state"
-            tone={(data?.staleCustomers ?? 0) > 0 ? "attention" : "positive"}
-            value={String(data?.staleCustomers ?? 0)}
+            tone={reportedCountTone(
+              data?.staleCustomers,
+              "attention",
+              "positive"
+            )}
+            value={formatReportedCount(data?.staleCustomers)}
           />
           <Metric
             label="Never-projected customers"
             recovery="A customer with no committed projection is answered with a valid snapshot carrying no entries and a pending projection status. That is undetermined, not inactive."
-            tone={
-              (data?.neverProjectedCustomers ?? 0) > 0 ? "attention" : "neutral"
-            }
-            value={String(data?.neverProjectedCustomers ?? 0)}
+            tone={reportedCountTone(
+              data?.neverProjectedCustomers,
+              "attention",
+              "neutral"
+            )}
+            value={formatReportedCount(data?.neverProjectedCustomers)}
           />
           <Metric
             label="Entries stating undetermined access"
             recovery="How often Mosaic is declining to answer. Rising here means evidence is missing or stale, not that customers are churning."
-            tone={unknownEntries > 0 ? "attention" : "positive"}
-            value={String(unknownEntries)}
+            tone={reportedCountTone(unknownEntries, "attention", "positive")}
+            value={formatReportedCount(unknownEntries)}
           />
           <Metric
             label="Last projection committed"
@@ -209,20 +225,26 @@ export function ProjectionHealthPage({
           <div className="grid gap-3 sm:grid-cols-3">
             <Metric
               label="Open identity conflicts"
-              tone={conflicts > 0 ? "negative" : "positive"}
-              value={String(conflicts)}
+              tone={reportedCountTone(conflicts, "negative", "positive")}
+              value={formatReportedCount(conflicts)}
             />
             <Metric
               label="Frozen Purchase Lineages"
-              tone={(data?.frozenLineages ?? 0) > 0 ? "attention" : "neutral"}
-              value={String(data?.frozenLineages ?? 0)}
+              tone={reportedCountTone(
+                data?.frozenLineages,
+                "attention",
+                "neutral"
+              )}
+              value={formatReportedCount(data?.frozenLineages)}
             />
             <Metric
               label="Unresolved Purchase Lineages"
-              tone={
-                (data?.unresolvedLineages ?? 0) > 0 ? "attention" : "neutral"
-              }
-              value={String(data?.unresolvedLineages ?? 0)}
+              tone={reportedCountTone(
+                data?.unresolvedLineages,
+                "attention",
+                "neutral"
+              )}
+              value={formatReportedCount(data?.unresolvedLineages)}
             />
           </div>
         </WorkflowPanel>
@@ -234,39 +256,46 @@ export function ProjectionHealthPage({
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric
               label="Restore backlog"
-              tone={(data?.restoreBacklog ?? 0) > 0 ? "attention" : "neutral"}
-              value={String(data?.restoreBacklog ?? 0)}
+              tone={reportedCountTone(
+                data?.restoreBacklog,
+                "attention",
+                "neutral"
+              )}
+              value={formatReportedCount(data?.restoreBacklog)}
             />
             <Metric
               label="Failed restore jobs"
-              tone={
-                (data?.restoreFailedJobs ?? 0) > 0 ? "negative" : "positive"
-              }
-              value={String(data?.restoreFailedJobs ?? 0)}
+              tone={reportedCountTone(
+                data?.restoreFailedJobs,
+                "negative",
+                "positive"
+              )}
+              value={formatReportedCount(data?.restoreFailedJobs)}
             />
             <Metric
               label="Webhook delivery backlog"
-              tone={
-                (data?.webhookDeliveryBacklog ?? 0) > 0
-                  ? "attention"
-                  : "neutral"
-              }
-              value={String(data?.webhookDeliveryBacklog ?? 0)}
+              tone={reportedCountTone(
+                data?.webhookDeliveryBacklog,
+                "attention",
+                "neutral"
+              )}
+              value={formatReportedCount(data?.webhookDeliveryBacklog)}
             />
             <Metric
               label="Exhausted webhook deliveries"
               recovery="An exhausted delivery means an application backend was never told about a change it may act on. The events themselves are retained."
-              tone={
-                (data?.webhookDeliveriesExhausted ?? 0) > 0
-                  ? "negative"
-                  : "positive"
-              }
-              value={String(data?.webhookDeliveriesExhausted ?? 0)}
+              tone={reportedCountTone(
+                data?.webhookDeliveriesExhausted,
+                "negative",
+                "positive"
+              )}
+              value={formatReportedCount(data?.webhookDeliveriesExhausted)}
             />
           </div>
           <p className="mt-3 text-muted-foreground text-xs leading-5">
-            {data?.activeWebhookDestinations ?? 0} active webhook destination(s)
-            in this Mosaic Environment.
+            {isReportedCount(data?.activeWebhookDestinations)
+              ? `${data.activeWebhookDestinations} active webhook destination(s) in this Mosaic Environment.`
+              : "The number of active webhook destinations in this Mosaic Environment was not reported."}
           </p>
         </WorkflowPanel>
 
@@ -283,11 +312,12 @@ export function ProjectionHealthPage({
             <Metric
               label="Recorded rule versions"
               tone={
-                (data?.projectionRuleVersionCount ?? 1) > 1
+                isReportedCount(data?.projectionRuleVersionCount) &&
+                data.projectionRuleVersionCount > 1
                   ? "attention"
                   : "neutral"
               }
-              value={String(data?.projectionRuleVersionCount ?? 1)}
+              value={formatReportedCount(data?.projectionRuleVersionCount)}
             />
           </div>
           <p className="mt-3 text-muted-foreground text-xs leading-5">

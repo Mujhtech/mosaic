@@ -410,6 +410,53 @@ export function formatBillingTimestamp(value: string | undefined) {
   return `${parsed.toISOString().slice(0, 19).replace("T", " ")} UTC`;
 }
 
+/**
+ * The word every billing surface uses for a counter the API did not send.
+ *
+ * "Not reported" is deliberately not "0" and not "—". An operator reading a
+ * health page is deciding whether to page someone, and the two answers "the
+ * store produced no failures" and "Mosaic was never told how many failures
+ * there were" lead to opposite decisions.
+ */
+export const NOT_REPORTED_LABEL = "Not reported";
+
+export type BillingMetricTone =
+  | "attention"
+  | "negative"
+  | "neutral"
+  | "positive";
+
+/** Whether the API actually reported this counter. */
+export function isReportedCount(
+  value: number | null | undefined
+): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/** Renders a counter, or the shared not-reported wording when it is absent. */
+export function formatReportedCount(value: number | null | undefined) {
+  return isReportedCount(value) ? String(value) : NOT_REPORTED_LABEL;
+}
+
+/**
+ * Tone for a counter where a non-zero value is the interesting case.
+ *
+ * An absent counter resolves to `neutral`, never to `zeroTone`. This is the one
+ * rule the whole helper exists for: a page must not paint a green "positive"
+ * pill from a field the server never sent, because that is a claim of health
+ * made from no evidence at all.
+ */
+export function reportedCountTone(
+  value: number | null | undefined,
+  nonZeroTone: "attention" | "negative",
+  zeroTone: "neutral" | "positive"
+): BillingMetricTone {
+  if (!isReportedCount(value)) {
+    return "neutral";
+  }
+  return value > 0 ? nonZeroTone : zeroTone;
+}
+
 export function formatDurationSeconds(seconds: number | undefined) {
   if (seconds === undefined || !Number.isFinite(seconds)) {
     return "—";

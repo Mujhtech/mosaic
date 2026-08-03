@@ -29,17 +29,30 @@ export function useHostedDraftRecovery({
   status,
 }: {
   document: MosaicDocument | null;
-  expectedRevision: number;
+  /**
+   * The Draft revision this local copy diverged from. `null` means there is no
+   * hosted session, so nothing can be persisted: a record has to name the
+   * revision it will be restored against, and `0` is a real revision number
+   * rather than a stand-in for "unknown".
+   */
+  expectedRevision: number | null;
   scope: HostedDraftRecoveryScope | null;
   status: DraftAutosaveController["status"];
 }) {
   const [record, setRecord] = useState<HostedDraftRecoveryRecord | null>(() =>
     scope ? readHostedDraftRecovery(scope) : null
   );
+  /**
+   * Set when a write was attempted and the browser refused it — a full or
+   * disabled localStorage, private-browsing quota, or a document too large.
+   * The editor renders this: an operator who believes their work is backed up
+   * locally, and is not, loses it on the next reload with no warning at all.
+   */
+  const [persistenceFailed, setPersistenceFailed] = useState(false);
   const wroteThisSessionRef = useRef(false);
   const persist = useCallback(
     (reason = recoveryReason(status)) => {
-      if (!(scope && document)) {
+      if (!(scope && document) || expectedRevision === null) {
         return true;
       }
       const didPersist = writeHostedDraftRecovery(scope, {
@@ -47,6 +60,7 @@ export function useHostedDraftRecovery({
         expectedRevision,
         reason,
       });
+      setPersistenceFailed(!didPersist);
       if (didPersist) {
         wroteThisSessionRef.current = true;
         setRecord(readHostedDraftRecovery(scope));
@@ -61,6 +75,7 @@ export function useHostedDraftRecovery({
     }
     clearHostedDraftRecovery(scope);
     setRecord(null);
+    setPersistenceFailed(false);
   }, [scope]);
 
   useEffect(() => {
@@ -105,6 +120,7 @@ export function useHostedDraftRecovery({
   return {
     clear,
     persist,
+    persistenceFailed,
     prepareNavigation: () =>
       status === "idle" || status === "saved" || persist(),
     record,

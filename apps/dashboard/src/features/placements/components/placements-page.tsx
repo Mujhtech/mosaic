@@ -1,4 +1,4 @@
-import { useForm } from "@tanstack/react-form";
+import { useForm, useStore } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 
@@ -71,7 +71,11 @@ function BindPlacementAction({
   }));
   const form = useForm({
     defaultValues: {
-      paywallId: placement.binding?.paywallId ?? paywalls[0]?.id ?? "",
+      // An unbound Placement starts empty. Pre-selecting the first Paywall in
+      // the list made "Bind" a one-click action that silently chose whichever
+      // Paywall happened to sort first — a choice the operator never made, on
+      // the control that decides what real users see.
+      paywallId: placement.binding?.paywallId ?? "",
     },
     onSubmit: async ({ value }) => {
       const paywall = paywalls.find((item) => item.id === value.paywallId);
@@ -80,6 +84,10 @@ function BindPlacementAction({
       }
     },
   });
+  const selectedPaywallId = useStore(
+    form.store,
+    (state) => state.values.paywallId
+  );
 
   return (
     <form
@@ -104,7 +112,7 @@ function BindPlacementAction({
                 className="min-w-48"
                 size="sm"
               >
-                <SelectValue />
+                <SelectValue placeholder="Select a Paywall" />
               </SelectTrigger>
               <SelectContent>
                 {paywallOptions.map((option) => (
@@ -118,7 +126,9 @@ function BindPlacementAction({
         )}
       </form.Field>
       <Button
-        disabled={mutation.isPending || paywalls.length === 0}
+        disabled={
+          mutation.isPending || paywalls.length === 0 || !selectedPaywallId
+        }
         size="sm"
         type="submit"
       >
@@ -418,25 +428,49 @@ export function PlacementsPage({
                       <p className="mt-1 font-mono text-muted-foreground text-xs">
                         {placement.key}
                       </p>
-                      <p className="mt-2 text-muted-foreground text-xs">
-                        {placement.binding
-                          ? `Bound to ${placement.binding.paywallName}`
-                          : "Binding is not confirmed in this browser session."}
+                      <p
+                        className={
+                          placement.bindingState === "unknown"
+                            ? "mt-2 text-destructive text-xs"
+                            : "mt-2 text-muted-foreground text-xs"
+                        }
+                      >
+                        {(() => {
+                          // "Could not be read" is not "not bound". Binding on
+                          // top of a binding nobody could see is exactly the
+                          // mistake this branch exists to prevent.
+                          if (placement.bindingState === "unknown") {
+                            return "The current binding could not be read. Reload before changing it — this Placement may already be bound.";
+                          }
+                          return placement.binding
+                            ? `Bound to ${placement.binding.paywallName}`
+                            : "Binding is not confirmed in this browser session.";
+                        })()}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-end gap-2">
-                      {availablePaywalls.length > 0 ? (
-                        <BindPlacementAction
-                          environmentId={environmentId}
-                          paywalls={availablePaywalls}
-                          placement={placement}
-                          projectId={projectId}
-                        />
-                      ) : (
-                        <span className="text-muted-foreground text-xs">
-                          Create a Paywall to select a compatible default.
-                        </span>
-                      )}
+                      {(() => {
+                        if (placement.bindingState === "unknown") {
+                          return (
+                            <span className="text-muted-foreground text-xs">
+                              Binding is unavailable until the current one can
+                              be read.
+                            </span>
+                          );
+                        }
+                        return availablePaywalls.length > 0 ? (
+                          <BindPlacementAction
+                            environmentId={environmentId}
+                            paywalls={availablePaywalls}
+                            placement={placement}
+                            projectId={projectId}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground text-xs">
+                            Create a Paywall to select a compatible default.
+                          </span>
+                        );
+                      })()}
                       <Link
                         className={buttonVariants({
                           size: "sm",
