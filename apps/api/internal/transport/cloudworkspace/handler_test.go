@@ -2,10 +2,12 @@ package cloudworkspacehttp_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
@@ -172,5 +174,65 @@ func assertErrorCode(t *testing.T, recorder *httptest.ResponseRecorder, status i
 	}
 	if envelope.Error.Code != code {
 		t.Fatalf("code = %q, want %q", envelope.Error.Code, code)
+	}
+}
+
+// TestAppStoreConnectAssignmentIsRefusedWithTheNativeRemedy pins the HTTP face
+// of the refusal. The service error is only useful to an operator if transport
+// turns it into a 4xx that names the remedy; without the table entry it would
+// surface as a 500 internal_error and the dashboard would show nothing
+// actionable.
+func TestAppStoreConnectAssignmentIsRefusedWithTheNativeRemedy(t *testing.T) {
+	service := cloudworkspace.NewService(cloudworkspacememory.New())
+	handler := cloudworkspacehttp.Routes(service, authn.ResolverFunc(func(*http.Request) (authn.Principal, error) {
+		return authn.Principal{ActorID: "actor-owner", Method: "test"}, nil
+	}))
+	ctx := context.Background()
+	actor := cloudworkspace.Actor{ID: "actor-owner"}
+	organization, err := service.CreateOrganization(ctx, actor, "Acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := service.CreateProject(ctx, actor, organization.ID, "mobile", "Mobile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	application, err := service.CreateApplication(ctx, actor, project.ID, "iOS", cloudworkspace.PlatformIOS, "com.example.app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	environments, err := service.ListEnvironments(ctx, actor, project.ID, cloudworkspace.ListOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	development := environments.Items[0]
+	for _, environment := range environments.Items {
+		if environment.Mode == cloudworkspace.EnvironmentDevelopment {
+			development = environment
+		}
+	}
+	connection, err := service.CreateProviderConnection(ctx, actor, project.ID, cloudworkspace.CreateProviderConnectionInput{
+		Name: "Apple", Provider: cloudworkspace.ProviderAppStoreConnect,
+		IntegrationMode: cloudworkspace.ProviderServerConnected, Mode: cloudworkspace.ProviderSandbox,
+		EnvironmentIDs: []string{development.ID}, ApplicationIDs: []string{application.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := request(t, handler, http.MethodPut,
+		"/environments/"+development.ID+"/applications/"+application.ID+"/active-provider",
+		`{"connectionId":"`+connection.ID+`"}`,
+	)
+	assertErrorCode(t, response, http.StatusUnprocessableEntity, "providerNativeActivationRequired")
+	var envelope struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(envelope.Error.Message, "native App Store activation") {
+		t.Fatalf("refusal message = %q", envelope.Error.Message)
 	}
 }

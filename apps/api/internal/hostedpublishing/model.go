@@ -97,8 +97,12 @@ type ProviderMetadataSnapshot struct {
 }
 
 type CommerceProductMapping struct {
-	ID                         string
-	ProductID                  string
+	ID        string
+	ProductID string
+	// Provider is the mapping's provenance, not the active provider identity.
+	// A native App Store activation is served by app_store mappings the
+	// operator typed and by app_store_connect mappings imported from Apple.
+	Provider                   string
 	ProviderProductIdentifier  string
 	ProviderPackageIdentifier  string
 	ProviderOfferingIdentifier string

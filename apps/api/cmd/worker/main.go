@@ -31,6 +31,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreconnect"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingaccesspostgres"
@@ -207,7 +208,20 @@ func run() (runErr error) {
 		if err != nil {
 			return fmt.Errorf("configure RevenueCat adapter: %w", err)
 		}
-		providerService = cloudworkspace.NewService(cloudworkspacepostgres.New(pool), cloudworkspace.WithProviderOperations(cipher, client, cfg.Providers.SnapshotTTL))
+		appStoreConnectClient, err := appstoreconnect.New(appstoreconnect.Config{
+			BaseURL: cfg.Providers.AppStoreConnectBaseURL, RequestTimeout: cfg.Providers.RequestTimeout,
+			OperationTimeout: cfg.Providers.OperationTimeout,
+			ConnectTimeout:   cfg.Providers.ConnectTimeout, MaxResponseBytes: cfg.Providers.MaxResponseBytes,
+			MaxAttempts: cfg.Providers.MaxAttempts,
+		})
+		if err != nil {
+			return fmt.Errorf("configure App Store Connect adapter: %w", err)
+		}
+		providerService = cloudworkspace.NewService(cloudworkspacepostgres.New(pool),
+			cloudworkspace.WithProviderOperations(cipher, cloudworkspace.ProviderCatalogClients{
+				cloudworkspace.ProviderRevenueCat:      client,
+				cloudworkspace.ProviderAppStoreConnect: appStoreConnectClient,
+			}, cfg.Providers.SnapshotTTL))
 	}
 
 	var billingService *billing.Service

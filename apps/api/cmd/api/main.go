@@ -31,6 +31,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/placementdecision"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreconnect"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
@@ -279,8 +280,22 @@ func run() (runErr error) {
 		if err != nil {
 			return fmt.Errorf("configure RevenueCat adapter: %w", err)
 		}
+		appStoreConnectClient, err := appstoreconnect.New(appstoreconnect.Config{
+			BaseURL:          cfg.Providers.AppStoreConnectBaseURL,
+			RequestTimeout:   cfg.Providers.RequestTimeout,
+			OperationTimeout: cfg.Providers.OperationTimeout,
+			ConnectTimeout:   cfg.Providers.ConnectTimeout,
+			MaxResponseBytes: cfg.Providers.MaxResponseBytes,
+			MaxAttempts:      cfg.Providers.MaxAttempts,
+		})
+		if err != nil {
+			return fmt.Errorf("configure App Store Connect adapter: %w", err)
+		}
 		workspaceOptions = append(workspaceOptions,
-			cloudworkspace.WithProviderOperations(credentialCipher, revenueCatClient, cfg.Providers.SnapshotTTL),
+			cloudworkspace.WithProviderOperations(credentialCipher, cloudworkspace.ProviderCatalogClients{
+				cloudworkspace.ProviderRevenueCat:      revenueCatClient,
+				cloudworkspace.ProviderAppStoreConnect: appStoreConnectClient,
+			}, cfg.Providers.SnapshotTTL),
 		)
 	}
 	workspaceService := cloudworkspace.NewService(workspaceRepository, workspaceOptions...)

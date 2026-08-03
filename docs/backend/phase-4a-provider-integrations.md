@@ -5,6 +5,11 @@ Mosaic's platform-neutral Commerce Provider and Commerce Configuration
 contracts. RevenueCat OAuth is intentionally deferred. The supported
 authorization boundary is a least-privilege RevenueCat REST API v2 secret key.
 
+App Store Connect is Mosaic's second server-connected provider and reuses every
+seam described here — the credential envelope, connection lifecycle, catalog
+preview, import, and synchronization worker. Its provider-specific rules are
+documented in `app-store-connect-provider.md`.
+
 ## Security boundary
 
 RevenueCat credentials are accepted only by provider-connection create,
@@ -40,6 +45,7 @@ both API and worker require the same credential keyring.
 | `MOSAIC_PROVIDER_INTEGRATIONS_ENABLED` | `false` | Enables encrypted provider credentials and live provider operations. |
 | `MOSAIC_PROVIDER_CREDENTIAL_KEYRING` | none | Strict JSON keyring containing one active AES-256 key and any retained decrypt-only keys. |
 | `MOSAIC_REVENUECAT_BASE_URL` | `https://api.revenuecat.com/v2` | RevenueCat v2 origin. Production requires HTTPS. |
+| `MOSAIC_APP_STORE_CONNECT_BASE_URL` | `https://api.appstoreconnect.apple.com` | App Store Connect API origin. Production requires HTTPS. |
 | `MOSAIC_PROVIDER_REQUEST_TIMEOUT` | `8s` | Timeout for each provider HTTP attempt. |
 | `MOSAIC_PROVIDER_OPERATION_TIMEOUT` | `60s` | Deadline shared by the complete catalog operation, including pagination, package expansion, rate-limit waits, and retries. Must be at least the request timeout and no more than `5m`. |
 | `MOSAIC_PROVIDER_CONNECT_TIMEOUT` | `3s` | Provider connection/TLS timeout. |

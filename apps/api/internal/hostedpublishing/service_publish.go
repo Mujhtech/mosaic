@@ -460,6 +460,26 @@ func providerEntitlementCoverageIssue(reader Reader, connectionID, environmentID
 	return ""
 }
 
+// importedNativeMetadataIssue grades the provider-verified metadata behind an
+// App Store Connect mapping that is serving a native store activation. It
+// mirrors the server-connected grading so the same staleness means the same
+// thing whichever activation delivers the Product.
+func importedNativeMetadataIssue(reader Reader, mapping CommerceProductMapping, now time.Time) string {
+	if mapping.CurrentSnapshotID == "" {
+		return "metadataStale"
+	}
+	snapshot, ok := reader.ProviderMetadataSnapshot(mapping.CurrentSnapshotID)
+	switch {
+	case !ok:
+		return "metadataStale"
+	case snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(now):
+		return "productUnavailable"
+	case snapshot.StaleAt.IsZero() || !snapshot.StaleAt.After(now):
+		return "metadataStale"
+	}
+	return ""
+}
+
 func providerPublicationIssues(reader Reader, environment Environment, products map[string]Product, now time.Time) []ProviderPublicationIssue {
 	applications := reader.Applications(environment.ProjectID)
 	if len(applications) == 0 {
@@ -498,9 +518,9 @@ func providerPublicationIssues(reader Reader, environment Environment, products 
 					issues = append(issues, publicationIssue("scopeMismatch", product, application, "provider_assignment", environment.ID+":"+application.ID, "selectCompatibleProvider"))
 					continue
 				}
-				mappings := reader.ProviderMappingsForNativeCommerce(
+				mappings := nativeCommerceMappings(assignment.Provider, reader.ProviderMappingsForNativeCommerce(
 					assignment.Provider, environment.ID, application.ID, application.Platform, []string{product.ID},
-				)
+				))
 				switch len(mappings) {
 				case 0:
 					issues = append(issues, publicationIssue("mappingMissing", product, application, "product", product.ID, "createNativeProviderMapping"))
@@ -508,6 +528,19 @@ func providerPublicationIssues(reader Reader, environment Environment, products 
 					mapping := mappings[0]
 					if assignment.Provider == "google_play" && product.Type == "subscription" && mapping.ProviderBasePlanIdentifier == "" {
 						issues = append(issues, publicationIssue("basePlanMissing", product, application, "provider_mapping", mapping.ID, "addGoogleBasePlan"))
+					}
+					if mapping.Provider == importedNativeProvider {
+						// An imported mapping cannot carry an SDK observation:
+						// observations are refused for connection-backed
+						// mappings. Its provider-verified metadata snapshot is
+						// the equivalent evidence, so report staleness there
+						// instead of demanding a test that cannot be run.
+						if code := importedNativeMetadataIssue(reader, mapping, now); code != "" {
+							issues = append(issues, publicationIssue(
+								code, product, application, "provider_mapping", mapping.ID, "syncProviderMetadata",
+							))
+						}
+						continue
 					}
 					observation, observed := reader.LatestProviderMappingObservation(mapping.ID)
 					if !observed {

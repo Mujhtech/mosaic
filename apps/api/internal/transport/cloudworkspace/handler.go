@@ -210,12 +210,15 @@ func writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusConflict, string(cloudworkspace.ProviderErrorConnectionRevoked), "The provider connection has been revoked."
 	case errors.Is(err, cloudworkspace.ErrProductionConnectionAcknowledgementRequired):
 		status, code, message = http.StatusConflict, "productionConnectionAcknowledgementRequired", "Production provider use outside a production Environment requires explicit acknowledgement."
+	case errors.Is(err, cloudworkspace.ErrProviderNativeActivationRequired):
+		status, code, message = http.StatusUnprocessableEntity, "providerNativeActivationRequired",
+			"App Store Connect connections import the catalog; purchases run through the native App Store activation. Activate the native store instead."
 	case errors.Is(err, cloudworkspace.ErrProviderUnsupported):
 		status, code, message = http.StatusUnprocessableEntity, "providerIntegrationUnsupported", "The provider and integration mode combination is not supported."
 	case errors.Is(err, cloudworkspace.ErrProviderFeatureDisabled):
 		status, code, message = http.StatusServiceUnavailable, "providerFeatureDisabled", "Server-connected commerce providers are not enabled."
 	case errors.Is(err, cloudworkspace.ErrProviderProjectInvalid):
-		status, code, message = http.StatusUnprocessableEntity, "providerProjectInvalid", "The RevenueCat project identifier is required and must be valid."
+		status, code, message = http.StatusUnprocessableEntity, "providerProjectInvalid", "The external project identifier is not valid for the selected provider."
 	case errors.Is(err, cloudworkspace.ErrProviderCredentialInvalid):
 		status, code, message = http.StatusUnprocessableEntity, string(cloudworkspace.ProviderErrorCredentialInvalid), "The provider credential is invalid or unavailable."
 	case errors.Is(err, cloudworkspace.ErrProviderPermissionDenied):

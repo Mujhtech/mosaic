@@ -99,7 +99,12 @@ func (s *Service) ProcessNextProviderSync(ctx context.Context, workerID string) 
 	if err != nil {
 		return true, s.finishFailedProviderSync(ctx, job, run, err)
 	}
-	catalog, providerErr := s.providerCatalog.FetchCatalog(ctx, providercatalog.Credential{
+	client, clientErr := s.catalogClient(connection.Provider)
+	if clientErr != nil {
+		zero(secret)
+		return true, s.finishFailedProviderSync(ctx, job, run, clientErr)
+	}
+	catalog, providerErr := client.FetchCatalog(ctx, providercatalog.Credential{
 		Secret: secret, ExternalProjectID: connection.ExternalProjectID,
 	})
 	zero(secret)

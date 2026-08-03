@@ -484,7 +484,7 @@ func TestProviderImportNormalizesSDKLookupKeysAndReusesEntitlementMapping(t *tes
 			}},
 		}},
 	}}
-	service, repository := newService(cloudworkspace.WithProviderOperations(cipher, catalog, 6*time.Hour))
+	service, repository := newService(cloudworkspace.WithProviderOperations(cipher, cloudworkspace.ProviderCatalogClients{cloudworkspace.ProviderRevenueCat: catalog}, 6*time.Hour))
 	actor := cloudworkspace.Actor{ID: "actor-owner"}
 	ctx := context.Background()
 	organization, _ := service.CreateOrganization(ctx, actor, "Acme")

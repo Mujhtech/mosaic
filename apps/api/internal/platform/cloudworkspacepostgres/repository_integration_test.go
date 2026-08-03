@@ -620,7 +620,7 @@ func TestPhase4AProviderPersistenceRisks(t *testing.T) {
 	repository := cloudworkspacepostgres.New(pool)
 	service := cloudworkspace.NewService(
 		repository,
-		cloudworkspace.WithProviderOperations(cipher, catalog, time.Hour),
+		cloudworkspace.WithProviderOperations(cipher, cloudworkspace.ProviderCatalogClients{cloudworkspace.ProviderRevenueCat: catalog}, time.Hour),
 	)
 	actor := cloudworkspace.Actor{ID: "phase4a-owner"}
 	organization, err := service.CreateOrganization(ctx, actor, "Phase 4A")

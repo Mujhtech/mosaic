@@ -6680,9 +6680,9 @@ components:
     ProductType: { type: string, enum: [subscription, one_time_non_consumable] }
     ProductStatus: { type: string, enum: [draft, connected, attention_required, archived] }
     MetadataSource: { type: string, enum: [mock, provider] }
-    ProviderKind: { type: string, enum: [revenuecat, app_store, google_play, custom] }
+    ProviderKind: { type: string, enum: [revenuecat, app_store, app_store_connect, google_play, custom] }
     ProviderActivationKind: { type: string, enum: [provider_connection, native_store] }
-    ProviderConnectionKind: { type: string, enum: [revenuecat, custom] }
+    ProviderConnectionKind: { type: string, enum: [revenuecat, app_store_connect, custom] }
     ProviderIntegrationMode: { type: string, enum: [server_connected, sdk_only] }
     ProviderConnectionMode: { type: string, enum: [sandbox, production] }
     ProviderConnectionStatus: { type: string, enum: [pending, active, revoked] }
@@ -6877,21 +6877,50 @@ components:
         - if:
             properties:
               provider: { const: revenuecat }
+            required: [provider]
           then:
             required: [externalProjectId, credential]
+            properties:
+              credential: { pattern: "^sk_[^\\s]+$" }
+        - if:
+            properties:
+              provider: { const: app_store_connect }
+            required: [provider]
+          then:
+            required: [credential]
+            properties:
+              externalProjectId: { maxLength: 0 }
+              credential: { pattern: "^\\s*\\{[\\s\\S]*\\}\\s*$" }
       properties:
         name: { type: string, minLength: 1, maxLength: 120 }
         provider: { $ref: "#/components/schemas/ProviderConnectionKind" }
         integrationMode: { $ref: "#/components/schemas/ProviderIntegrationMode" }
         mode: { $ref: "#/components/schemas/ProviderConnectionMode" }
-        externalProjectId: { type: string, minLength: 1, maxLength: 255, description: Required RevenueCat v2 Project resource ID. }
+        externalProjectId:
+          type: string
+          maxLength: 255
+          description: >-
+            Required RevenueCat v2 Project resource ID. Must be omitted for
+            app_store_connect: an App Store Connect API key is issued per Apple
+            team and names no second project resource.
         credential:
           type: string
           minLength: 6
           maxLength: 4096
-          pattern: "^sk_[^\\s]+$"
           writeOnly: true
-          description: One-time RevenueCat v2 least-privilege secret key. Never returned or logged.
+          description: >-
+            One-time provider credential. Never returned or logged. Its shape is
+            provider-specific and is validated server side.
+
+
+            revenuecat: the RevenueCat v2 least-privilege secret key
+            (`sk_...`).
+
+
+            app_store_connect: a JSON document
+            `{"privateKey":"<.p8 PEM>","keyId":"<10 chars>","issuerId":"<uuid>","vendorNumber":"<digits, optional>"}`.
+            The vendor number travels inside this document; it is not used for
+            catalog import and is stored for future sales and finance reporting.
         environmentIds: { type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: { type: string } }
         applicationIds: { type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: { type: string } }
     ProviderCredentialRequest:
@@ -6903,8 +6932,13 @@ components:
           type: string
           minLength: 6
           maxLength: 4096
-          pattern: "^sk_[^\\s]+$"
+          pattern: "^(sk_[^\\s]+|\\s*\\{[\\s\\S]*\\}\\s*)$"
           writeOnly: true
+          description: >-
+            Replacement credential in the shape the connection's provider
+            requires. The connection determines the provider, so the accepted
+            shape is not derivable from this payload; the server validates it
+            against the connection's actual provider.
     ReplaceProviderMappingRequest:
       type: object
       additionalProperties: false
@@ -7452,6 +7486,11 @@ components:
         connectionId: { type: string }
         provider: { $ref: "#/components/schemas/ProviderKind" }
         mappingId: { type: string }
+        # Provenance of the mapping that will ship. Under a native App Store
+        # activation this is app_store for an operator-typed mapping and
+        # app_store_connect for one imported from Apple, which is why an
+        # imported mapping carries no observation.
+        mappingProvider: { $ref: "#/components/schemas/ProviderKind" }
         observation: { $ref: "#/components/schemas/ProviderMappingObservation" }
         blockers: { type: array, items: { $ref: "#/components/schemas/ProviderReadinessIssue" } }
         warnings: { type: array, items: { $ref: "#/components/schemas/ProviderReadinessIssue" } }
