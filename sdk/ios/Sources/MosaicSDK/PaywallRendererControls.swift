@@ -11,10 +11,15 @@ struct MosaicLegacyProductCardView: View {
   let option: MosaicResolvedProductOption
   let selected: Bool
   let style: MosaicProductCardStyle
+  /// The owning document. Without it no authored design token resolves, which
+  /// is why this is threaded in rather than read from the environment default.
+  let document: MosaicPaywallDocument
   let localization: MosaicLocalizationResolver
   let onSelect: () -> Void
 
   var body: some View {
+    let background = style.background.rendered(in: document, role: .decoration)
+    let border = style.border.color.rendered(in: document, role: .decoration)
     Button(action: onSelect) {
       cardContent
         .padding(.top, style.padding.top)
@@ -27,12 +32,13 @@ struct MosaicLegacyProductCardView: View {
     .buttonStyle(.plain)
     .background(
       RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
-        .fill(style.background.swiftUI)
+        .fill(background.color)
     )
     .overlay {
       RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
-        .stroke(style.border.color.swiftUI, lineWidth: style.border.width)
+        .stroke(border.color, lineWidth: style.border.width)
     }
+    .mosaicStyleDiagnostics(background.failure, border.failure)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(Text(localization.resolve(option.reference.label)))
     .accessibilityValue(Text(accessibilityValue))
@@ -56,39 +62,49 @@ struct MosaicLegacyProductCardView: View {
   }
 
   private var labelContent: some View {
-    VStack(alignment: stackAlignment, spacing: 4) {
+    let label = style.productLabelColor.rendered(in: document, role: .content)
+    let price = style.runtimePriceColor.rendered(in: document, role: .content)
+    let badgeText = style.badge.textColor.rendered(in: document, role: .content)
+    let badgeBackground = style.badge.background.rendered(in: document, role: .decoration)
+    let badgeBorder = style.badge.border.color.rendered(in: document, role: .decoration)
+    return VStack(alignment: stackAlignment, spacing: 4) {
       Text(localization.resolve(option.reference.label))
         .font(.headline)
-        .foregroundColor(style.productLabelColor.swiftUI)
+        .foregroundColor(label.color)
       if let badge = option.reference.badge {
         Text(localization.resolve(badge))
           .font(.caption.bold())
-          .foregroundColor(style.badge.textColor.swiftUI)
+          .foregroundColor(badgeText.color)
           .padding(.top, style.badge.padding.top)
           .padding(.leading, style.badge.padding.start)
           .padding(.bottom, style.badge.padding.bottom)
           .padding(.trailing, style.badge.padding.end)
           .background(
             RoundedRectangle(cornerRadius: style.badge.cornerRadius, style: .continuous)
-              .fill(style.badge.background.swiftUI)
+              .fill(badgeBackground.color)
           )
           .overlay {
             RoundedRectangle(cornerRadius: style.badge.cornerRadius, style: .continuous)
-              .stroke(style.badge.border.color.swiftUI, lineWidth: style.badge.border.width)
+              .stroke(badgeBorder.color, lineWidth: style.badge.border.width)
           }
+          .mosaicStyleDiagnostics(
+            badgeText.failure, badgeBackground.failure, badgeBorder.failure)
       }
       if let period = option.product.localizedSubscriptionPeriod {
         Text(period)
           .font(.caption)
-          .foregroundColor(style.runtimePriceColor.swiftUI.opacity(0.82))
+          .foregroundColor(price.color.opacity(0.82))
       }
     }
+    .mosaicStyleDiagnostics(label.failure, price.failure)
   }
 
   private var price: some View {
-    Text(option.product.localizedPrice)
+    let rendered = style.runtimePriceColor.rendered(in: document, role: .content)
+    return Text(option.product.localizedPrice)
       .font(.headline.monospacedDigit())
-      .foregroundColor(style.runtimePriceColor.swiftUI)
+      .foregroundColor(rendered.color)
+      .mosaicStyleDiagnostics(rendered.failure)
   }
 
   private var stackAlignment: HorizontalAlignment {
@@ -388,7 +404,8 @@ struct MosaicSwitchView: View {
   @ObservedObject var model: MosaicPaywallModel
 
   var body: some View {
-    Toggle(
+    let track = component.onTrackColor.rendered(in: document, role: .decoration)
+    return Toggle(
       isOn: Binding(
         get: { model.switchValue(for: component.id) },
         set: { model.setSwitchValue($0, for: component.id) }
@@ -398,7 +415,8 @@ struct MosaicSwitchView: View {
         value: localization.resolve(component.label), typography: component.typography)
     }
     .toggleStyle(.switch)
-    .tint(component.onTrackColor.swiftUI(in: document))
+    .tint(track.color)
+    .mosaicStyleDiagnostics(track.failure)
     .accessibilityLabel(Text(localization.resolve(component.accessibility.label)))
     .mosaicAccessibilityHint(component.accessibility.hint.map(localization.resolve))
     .mosaicPresentation(
@@ -461,7 +479,12 @@ struct MosaicCarouselView: View {
       }
     #else
       VStack(spacing: 8) {
-        pageView(component.pages[selection.wrappedValue])
+        // The stored index is checked rather than subscripted directly: an
+        // authored `initialPageIndex` past the last page must degrade, not trap
+        // inside the host application.
+        if let page = visiblePage {
+          pageView(page)
+        }
         if component.showsIndicators {
           Picker("Page", selection: selection) {
             ForEach(Array(component.pages.enumerated()), id: \.element.id) { index, page in
@@ -472,6 +495,14 @@ struct MosaicCarouselView: View {
         }
       }
     #endif
+  }
+
+  /// The page the non-paged platforms show, or the first page when the stored
+  /// index is out of range, or nothing when the carousel declares no pages.
+  private var visiblePage: MosaicCarouselPage? {
+    let index = selection.wrappedValue
+    guard component.pages.indices.contains(index) else { return component.pages.first }
+    return component.pages[index]
   }
 
   private func pageView(_ page: MosaicCarouselPage) -> some View {
@@ -494,16 +525,15 @@ struct MosaicCountdownView: View {
 
   var body: some View {
     TimelineView(.periodic(from: .now, by: 1)) { _ in
-      MosaicStyledText(
-        value: MosaicCountdownText.resolve(
-          component: component,
-          now: model.currentDate(),
-          completedText: localization.resolve(component.completedText)
-        ),
-        typography: component.typography
+      let resolution = MosaicCountdownText.resolution(
+        component: component,
+        now: model.currentDate(),
+        completedText: localization.resolve(component.completedText)
       )
-      .mosaicHeading(component.accessibility)
-      .mosaicTextAccessibilityLabel(component.accessibility, localization: localization)
+      MosaicStyledText(value: resolution.text, typography: component.typography)
+        .mosaicHeading(component.accessibility)
+        .mosaicTextAccessibilityLabel(component.accessibility, localization: localization)
+        .mosaicCountdownDiagnostic(resolution, componentID: component.id)
     }
     .mosaicPresentation(
       appearance: component.appearance,
@@ -513,17 +543,45 @@ struct MosaicCountdownView: View {
   }
 }
 
+/// What a countdown resolved to at a point in time.
+///
+/// `invalidEndsAt` exists because the 0.2 reader policy maps
+/// `completedCountdown` to `showLocalizedCompletedText`, and an `endsAt` that
+/// cannot be parsed is a validation failure, not a completion. Presenting a
+/// malformed date as "offer expired" states a commercial fact the document
+/// never authored.
+public enum MosaicCountdownResolution: Sendable, Equatable {
+  case remaining(String)
+  case completed(String)
+  case invalidEndsAt
+
+  public var text: String {
+    switch self {
+    case .remaining(let value), .completed(let value): value
+    case .invalidEndsAt: ""
+    }
+  }
+}
+
 public enum MosaicCountdownText {
+  /// Backwards-compatible text-only resolution. An unparseable `endsAt` renders
+  /// nothing rather than claiming the offer completed.
   public static func resolve(
     component: MosaicCountdownComponent,
     now: Date,
     completedText: String
   ) -> String {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime]
-    guard let end = formatter.date(from: component.endsAt) else { return completedText }
+    resolution(component: component, now: now, completedText: completedText).text
+  }
+
+  public static func resolution(
+    component: MosaicCountdownComponent,
+    now: Date,
+    completedText: String
+  ) -> MosaicCountdownResolution {
+    guard let end = endDate(component.endsAt) else { return .invalidEndsAt }
     let remaining = max(0, Int(end.timeIntervalSince(now).rounded(.down)))
-    guard remaining > 0 else { return completedText }
+    guard remaining > 0 else { return .completed(completedText) }
 
     let units: [(MosaicCountdownUnit, Int, String)] = [
       (.day, 86_400, "d"), (.hour, 3_600, "h"), (.minute, 60, "m"), (.second, 1, "s"),
@@ -536,7 +594,31 @@ public enum MosaicCountdownText {
       rest %= divisor
       values.append("\(value)\(suffix)")
     }
-    return values.joined(separator: " ")
+    return .remaining(values.joined(separator: " "))
+  }
+
+  /// The one definition of a parseable `endsAt`, shared with the semantic
+  /// validator that rejects the document outright. Keeping a second, more
+  /// lenient parser here would let the renderer disagree with the contract
+  /// about what a valid countdown is.
+  private static func endDate(_ value: String) -> Date? {
+    MosaicProtocolV02Semantics.canonicalDate(value)
+  }
+}
+
+extension View {
+  @ViewBuilder
+  func mosaicCountdownDiagnostic(
+    _ resolution: MosaicCountdownResolution,
+    componentID: String
+  ) -> some View {
+    if case .invalidEndsAt = resolution {
+      mosaicStyleDiagnostics(
+        MosaicStyleResolutionFailure(
+          code: "countdown_ends_at_invalid", subjectID: componentID))
+    } else {
+      self
+    }
   }
 }
 
@@ -627,11 +709,25 @@ struct MosaicBackgroundView: View {
 
   @ViewBuilder
   var body: some View {
-    if let document, let resolved = document.resolvedBackground(background) {
-      content(resolved, document: document)
-        .accessibilityHidden(true)
+    if let document {
+      let resolution = document.renderableBackground(background)
+      Group {
+        if let resolved = resolution.background {
+          content(resolved, document: document)
+        } else {
+          Color.clear
+        }
+      }
+      .accessibilityHidden(true)
+      .mosaicStyleDiagnostics(resolution.failures)
     } else {
-      Color.clear.accessibilityHidden(true)
+      // Only reachable outside a rendered document, where no design token can
+      // resolve. Diagnose rather than paint an unexplained empty surface.
+      Color.clear
+        .accessibilityHidden(true)
+        .mosaicStyleDiagnostics(
+          MosaicStyleResolutionFailure(
+            code: "style_background_document_unavailable", subjectID: "background"))
     }
   }
 
@@ -640,41 +736,51 @@ struct MosaicBackgroundView: View {
   {
     switch background {
     case .color(let color):
-      color.swiftUI(in: document)
+      let rendered = color.rendered(in: document, role: .decoration)
+      rendered.color.mosaicStyleDiagnostics(rendered.failure)
     case .linearGradient(let angle, let stops):
       let points = MosaicGradientGeometry.endpoints(angle: angle)
+      let rendered = stops.map { $0.color.rendered(in: document, role: .decoration) }
       LinearGradient(
-        stops: stops.map {
-          .init(color: $0.color.swiftUI(in: document), location: $0.position)
-        },
+        stops: zip(stops, rendered).map { .init(color: $1.color, location: $0.position) },
         startPoint: UnitPoint(x: points.start.x, y: points.start.y),
         endPoint: UnitPoint(x: points.end.x, y: points.end.y)
       )
+      .mosaicStyleDiagnostics(rendered.compactMap(\.failure))
     case .radialGradient(let center, let radius, let stops):
+      let rendered = stops.map { $0.color.rendered(in: document, role: .decoration) }
       GeometryReader { geometry in
         RadialGradient(
-          stops: stops.map {
-            .init(color: $0.color.swiftUI(in: document), location: $0.position)
-          },
+          stops: zip(stops, rendered).map { .init(color: $1.color, location: $0.position) },
           center: UnitPoint(x: center.x, y: center.y),
           startRadius: 0,
           endRadius: max(geometry.size.width, geometry.size.height) * radius
         )
       }
+      .mosaicStyleDiagnostics(rendered.compactMap(\.failure))
     case .image(let assetID, let mode, let fallback):
+      let rendered = fallback.rendered(in: document, role: .decoration)
       mediaImage(
         assetID: assetID,
         mode: mode,
-        fallback: fallback.swiftUI(in: document),
-        diagnostic: "media_image_background_unavailable")
+        fallback: rendered.color,
+        diagnostic: "media_image_background_unavailable"
+      )
+      .mosaicStyleDiagnostics(rendered.failure)
     case .video(let assetID, let posterID, let mode, let fallback):
+      let rendered = fallback.rendered(in: document, role: .decoration)
       video(
         assetID: assetID,
         posterID: posterID,
         mode: mode,
-        fallback: fallback.swiftUI(in: document))
-    case .token:
-      Color.clear
+        fallback: rendered.color
+      )
+      .mosaicStyleDiagnostics(rendered.failure)
+    case .token(let id):
+      // Unreachable after `renderableBackground`, which reports unresolved
+      // background tokens itself. Diagnosing here keeps the arm honest rather
+      // than painting nothing silently.
+      Color.clear.mosaicStyleDiagnostics(.unresolvedBackgroundToken(id))
     }
   }
 

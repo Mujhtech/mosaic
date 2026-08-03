@@ -215,6 +215,17 @@ public actor MosaicStoreKitProvider:
         return unavailable(mapping, reason: .mappingInvalid)
       }
       loaded[mapping.mosaicProductID] = snapshot
+      if snapshot.unknownPeriodUnit {
+        // The product stays purchasable. Only the period text is omitted, so
+        // the paywall cannot state a renewal cadence Mosaic could not read.
+        record(
+          code: "commerce.unsupportedSubscriptionPeriod",
+          message: "StoreKit reported a subscription period unit Mosaic does not support.",
+          providerCode: "unknown_period_unit",
+          retryable: false,
+          mosaicProductID: mapping.mosaicProductID
+        )
+      }
       return MosaicCommerceResolvedProduct(
         mosaicProductID: mapping.mosaicProductID,
         product: MosaicProduct(
@@ -275,15 +286,36 @@ public actor MosaicStoreKitProvider:
       case .cancelled:
         return .cancelled(productID: mosaicProductID)
       }
-    } catch is CancellationError {
-      return .cancelled(productID: mosaicProductID)
     } catch {
-      return failed(
-        productID: mosaicProductID,
-        code: "commerce.purchaseFailed",
-        providerCode: "storekit_error",
-        retryable: false
-      )
+      let failure = StoreKitFailure(error)
+      switch failure.kind {
+      case .cancelled:
+        return .cancelled(productID: mosaicProductID)
+      case .pending:
+        return .pending(productID: mosaicProductID, transactionID: nil)
+      case .productUnavailable:
+        return .productUnavailable(productID: mosaicProductID)
+      case .providerUnavailable:
+        let diagnostic = record(
+          code: "commerce.providerUnavailable",
+          message: "StoreKit is temporarily unreachable.",
+          providerCode: failure.providerCode,
+          retryable: true,
+          mosaicProductID: mosaicProductID
+        )
+        return .providerUnavailable(
+          productID: mosaicProductID,
+          diagnosticCode: diagnostic.code,
+          diagnostic: diagnostic
+        )
+      case .failed:
+        return failed(
+          productID: mosaicProductID,
+          code: "commerce.purchaseFailed",
+          providerCode: failure.providerCode,
+          retryable: failure.retryable
+        )
+      }
     }
   }
 
@@ -319,15 +351,11 @@ public actor MosaicStoreKitProvider:
           resolved.keys.isEmpty
           ? (.nothingToRestore, [], [])
           : (.restored, Set(resolved.keys.map(MosaicEntitlement.init(id:))), [])
-      case .failure:
-        let diagnostic = restoreFailureDiagnostic()
-        completed = (.failed, [], [diagnostic])
+      case .failure(let error):
+        completed = recoveryFailure(error)
       }
-    } catch is CancellationError {
-      completed = (.cancelled, [], [])
     } catch {
-      let diagnostic = restoreFailureDiagnostic()
-      completed = (.failed, [], [diagnostic])
+      completed = recoveryFailure(error)
     }
     return MosaicCommerceRecoveryResult(
       operationID: operationID,
@@ -603,16 +631,40 @@ public actor MosaicStoreKitProvider:
   }
 
   private func restoreFailure() -> MosaicRestoreResult {
-    let diagnostic = restoreFailureDiagnostic()
+    let diagnostic = restoreFailureDiagnostic(StoreKitFailure(StoreKitProviderFailure.unspecified))
     return .failed(diagnosticCode: diagnostic.code, diagnostic: diagnostic)
   }
 
-  private func restoreFailureDiagnostic() -> MosaicCommerceDiagnostic {
+  /// Classifies a recovery error the same way the purchase path classifies a
+  /// purchase error, so a network outage during restore is reported as a
+  /// retryable provider outage rather than a permanent restore failure.
+  private func recoveryFailure(
+    _ error: any Error
+  ) -> (
+    outcome: MosaicCommerceRecoveryOutcome,
+    entitlements: Set<MosaicEntitlement>,
+    diagnostics: [MosaicCommerceDiagnostic]
+  ) {
+    let failure = StoreKitFailure(error)
+    switch failure.kind {
+    case .cancelled:
+      return (.cancelled, [], [])
+    case .providerUnavailable:
+      return (.providerUnavailable, [], [restoreFailureDiagnostic(failure)])
+    case .pending, .productUnavailable, .failed:
+      return (.failed, [], [restoreFailureDiagnostic(failure)])
+    }
+  }
+
+  private func restoreFailureDiagnostic(
+    _ failure: StoreKitFailure
+  ) -> MosaicCommerceDiagnostic {
     record(
-      code: "commerce.restoreFailed",
+      code: failure.kind == .providerUnavailable
+        ? "commerce.providerUnavailable" : "commerce.restoreFailed",
       message: "StoreKit could not synchronize purchases.",
-      providerCode: "storekit_error",
-      retryable: true
+      providerCode: failure.providerCode,
+      retryable: failure.retryable
     )
   }
 
@@ -672,6 +724,8 @@ public enum MosaicStoreKitInstallationError: Error, Sendable, Equatable {
   case invalidOrDuplicateMapping
 }
 
-private enum StoreKitProviderFailure: Error {
+enum StoreKitProviderFailure: Error {
   case unverifiedEntitlement
+  /// A restore failure with no underlying error to classify.
+  case unspecified
 }

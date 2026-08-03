@@ -291,6 +291,45 @@ absolute HTTPS URLs and delegates to SwiftUI's system `openURL` action. The
 paywall and navigation history stay mounted, and an unsuccessful handoff adds
 the safe `external_url_open_failed` rendering diagnostic.
 
+## Degradation diagnostics
+
+Every recovery the renderer performs is observable through
+`MosaicPaywallModel.diagnostics`. Each code is recorded once per subject, so a
+malformed value diagnoses once rather than once per frame.
+
+| Code | Recovery |
+| --- | --- |
+| `style_color_token_unresolved` | Content colours recover to the primary content colour so text stays legible; decoration stays transparent. |
+| `style_color_literal_malformed` | Same recovery as an unresolved token. |
+| `style_background_token_unresolved` | The background is omitted; the parent surface shows through. |
+| `style_gradient_stop_unresolved` | The gradient renders with the stops that resolved instead of the whole background being erased. |
+| `style_shadow_token_unresolved` | The shadow is omitted. |
+| `countdown_ends_at_invalid` | An `endsAt` that is not in the canonical protocol form renders nothing. It is never presented as the localized completed text, which would state an expiry the document never authored. The semantic validator rejects such a document outright; this is the renderer's defence for documents that reach it anyway. |
+| `media_image_unavailable`, `media_image_asset_missing`, `media_image_fallback_text_missing` | The declared asset fallback is shown, matching the media-background paths. |
+| `product_selection_default_substituted` | The authored default product was unavailable and the first available option was selected. The `product_selected` payload still reports `source: "default"` because that field's protocol enum admits only `default` and `user`. |
+| `placement_analytics_metadata_unavailable` | The paywall renders, but no presentation, purchase, or conversion event carries attribution. |
+| `localization_direction_unresolved` | No locale in the requested, fallback, or default chain declares a direction, so layout defaults to left to right. |
+
+Hosts rendering `MosaicPaywall` directly can seed presentation-level codes with
+the `presentationDiagnostics:` initializer parameter.
+
+`MosaicPlacementPaywall` shows a placeholder when a Placement resolves to no
+safe configuration. The SDK has no access to host localization catalogs, so the
+copy defaults to English and is overridable:
+
+```swift
+MosaicPlacementPaywall(
+  mosaic: mosaic,
+  placement: "export_pdf",
+  unavailableCopy: MosaicPlacementUnavailableCopy(
+    title: NSLocalizedString("paywall.unavailable.title", comment: ""),
+    message: NSLocalizedString("paywall.unavailable.message", comment: ""),
+    diagnosticHintPrefix: NSLocalizedString("paywall.unavailable.hint", comment: "")
+  ),
+  onResult: { _ in }
+)
+```
+
 ## Connect a native preview
 
 Create one stable identity for the running application process, configure a
@@ -459,6 +498,33 @@ Restore normalizes an existing entitlement to `.restored`; it does not expose
 a separate already-entitled restore result. Active Entitlement lookup returns
 exactly `.available`, `.unknown`, `.providerUnavailable`, or `.failed`.
 Provider failures never imply an empty or inactive Entitlement set.
+
+The StoreKit and RevenueCat adapters classify provider errors the same way.
+Cancellation, pending payment, an unavailable product, and a transport or
+system outage each map to their own normalized result, and only transport and
+system outages are marked retryable. An error neither adapter can classify
+stays a non-retryable failure rather than being optimistically retried.
+
+Both adapters omit a subscription period whose unit they cannot name, and
+record `commerce.unsupportedSubscriptionPeriod`. The product stays purchasable
+and only the period text is dropped, because presenting an unknown renewal
+cadence as daily would misstate the commercial terms. RevenueCat additionally
+records `commerce.unsupportedIntroductoryOffer` when it reports an offer type
+Mosaic cannot classify, instead of silently stripping the trial.
+
+`MosaicStoreKitFileAcceptanceStore.defaultStore()` stores its duplicate-delivery
+set in Application Support, excluded from backup. It throws
+`MosaicStoreKitAcceptanceStoreError.durableStorageUnavailable` when that
+directory is unavailable rather than falling back to the temporary directory,
+which the system may purge and which would cause accepted transactions to be
+delivered to the host a second time. `MosaicStoreKitProvider.init` propagates
+that error.
+
+The Placement decision context reports provider capabilities from
+`mosaicExperimentCapabilities` on the installed provider. The default protocol
+extension declares the full set, so adapters that do not override it are
+unchanged; an adapter that declares a subset is no longer reported as capable
+of what it does not implement.
 
 ## Transaction observations (optional)
 

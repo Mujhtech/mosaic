@@ -180,6 +180,22 @@ public actor MosaicRevenueCatProvider: MosaicCommerceProvider {
       }
 
       loaded[mapping.mosaicProductID] = snapshot
+      if snapshot.unknownPeriodUnit {
+        recordFailure(
+          code: "commerce.unsupportedSubscriptionPeriod",
+          message: "RevenueCat reported a subscription period unit Mosaic does not support.",
+          providerCode: "unknown_period_unit",
+          mosaicProductID: mapping.mosaicProductID
+        )
+      }
+      if snapshot.unknownOfferType {
+        recordFailure(
+          code: "commerce.unsupportedIntroductoryOffer",
+          message: "RevenueCat reported an introductory offer type Mosaic does not support.",
+          providerCode: "unknown_offer_type",
+          mosaicProductID: mapping.mosaicProductID
+        )
+      }
       return MosaicCommerceResolvedProduct(
         mosaicProductID: mapping.mosaicProductID,
         product: MosaicProduct(
@@ -370,6 +386,7 @@ public actor MosaicRevenueCatProvider: MosaicCommerceProvider {
     )
   }
 
+  @discardableResult
   private func recordFailure(
     code: String,
     message: String,
@@ -443,6 +460,36 @@ struct RevenueCatProductSnapshot: @unchecked Sendable {
   let trial: MosaicCommerceTrial?
   let introductoryOffer: MosaicCommerceIntroductoryOffer?
   let handle: RevenueCatProductHandle
+  /// RevenueCat reported a subscription period unit this SDK version does not
+  /// know. The affected period is omitted rather than guessed.
+  let unknownPeriodUnit: Bool
+  /// RevenueCat reported an introductory payment mode this SDK version does not
+  /// know, so the offer is neither a trial nor an introductory offer here.
+  let unknownOfferType: Bool
+
+  init(
+    providerProductIdentifier: String,
+    localizedTitle: String,
+    localizedPrice: String,
+    currencyCode: String?,
+    billingPeriod: MosaicCommercePeriod?,
+    trial: MosaicCommerceTrial?,
+    introductoryOffer: MosaicCommerceIntroductoryOffer?,
+    handle: RevenueCatProductHandle,
+    unknownPeriodUnit: Bool = false,
+    unknownOfferType: Bool = false
+  ) {
+    self.providerProductIdentifier = providerProductIdentifier
+    self.localizedTitle = localizedTitle
+    self.localizedPrice = localizedPrice
+    self.currencyCode = currencyCode
+    self.billingPeriod = billingPeriod
+    self.trial = trial
+    self.introductoryOffer = introductoryOffer
+    self.handle = handle
+    self.unknownPeriodUnit = unknownPeriodUnit
+    self.unknownOfferType = unknownOfferType
+  }
 }
 
 enum RevenueCatClientPurchaseResult: Sendable {
@@ -531,24 +578,26 @@ private final class LiveRevenueCatClient: RevenueCatClient, @unchecked Sendable 
     product: StoreProduct,
     handle: RevenueCatProductHandle
   ) -> RevenueCatProductSnapshot {
-    let billingPeriod = product.subscriptionPeriod.map(period)
+    let billingPeriod = product.subscriptionPeriod.flatMap(period)
     let discount = product.introductoryDiscount
     let trial: MosaicCommerceTrial?
     let introductoryOffer: MosaicCommerceIntroductoryOffer?
+    var unknownOfferType = false
     switch discount?.paymentMode {
     case .freeTrial:
-      trial = discount.map {
-        MosaicCommerceTrial(period: period($0.subscriptionPeriod))
+      trial = discount.flatMap { discount in
+        period(discount.subscriptionPeriod).map { MosaicCommerceTrial(period: $0) }
       }
       introductoryOffer = nil
     case .payAsYouGo, .payUpFront:
       trial = nil
-      introductoryOffer = discount.flatMap { discount in
+      introductoryOffer = discount.flatMap { discount -> MosaicCommerceIntroductoryOffer? in
         let paymentMode: MosaicCommerceIntroductoryPaymentMode =
           discount.paymentMode == .payAsYouGo ? .payAsYouGo : .payUpFront
+        guard let period = period(discount.subscriptionPeriod) else { return nil }
         return MosaicCommerceIntroductoryOffer(
           localizedPrice: discount.localizedPriceString,
-          period: period(discount.subscriptionPeriod),
+          period: period,
           cycles: discount.numberOfPeriods,
           paymentMode: paymentMode
         )
@@ -557,9 +606,16 @@ private final class LiveRevenueCatClient: RevenueCatClient, @unchecked Sendable 
       trial = nil
       introductoryOffer = nil
     @unknown default:
+      // An offer exists and Mosaic cannot classify it. Stripping it silently
+      // hides a trial the customer is entitled to see, so it is reported.
       trial = nil
       introductoryOffer = nil
+      unknownOfferType = true
     }
+    let declaredPeriods = [product.subscriptionPeriod, discount?.subscriptionPeriod]
+      .compactMap { $0 }
+    let readPeriods = [billingPeriod, trial?.period, introductoryOffer?.period]
+      .compactMap { $0 }
     return RevenueCatProductSnapshot(
       providerProductIdentifier: product.productIdentifier,
       localizedTitle: product.localizedTitle,
@@ -568,18 +624,23 @@ private final class LiveRevenueCatClient: RevenueCatClient, @unchecked Sendable 
       billingPeriod: billingPeriod,
       trial: trial,
       introductoryOffer: introductoryOffer,
-      handle: handle
+      handle: handle,
+      unknownPeriodUnit: !unknownOfferType && readPeriods.count < declaredPeriods.count,
+      unknownOfferType: unknownOfferType
     )
   }
 
-  private static func period(_ value: SubscriptionPeriod) -> MosaicCommercePeriod {
+  /// `nil` for a unit this SDK version does not know. Callers omit the period
+  /// rather than substituting one: reporting an unknown renewal cadence as
+  /// daily misstates the commercial terms of the purchase.
+  private static func period(_ value: SubscriptionPeriod) -> MosaicCommercePeriod? {
     let unit: MosaicCommercePeriodUnit
     switch value.unit {
     case .day: unit = .day
     case .week: unit = .week
     case .month: unit = .month
     case .year: unit = .year
-    @unknown default: unit = .day
+    @unknown default: return nil
     }
     return MosaicCommercePeriod(unit: unit, value: value.value)
   }

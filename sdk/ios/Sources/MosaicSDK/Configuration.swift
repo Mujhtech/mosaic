@@ -421,10 +421,13 @@ public struct Mosaic: Sendable {
         context.entitlements = await entitlementDecisionStates(
           for: requirements.entitlementKeys)
       }
-      context.providerCapabilities = [
-        "product_loading": .available, "purchase": .available, "restore": .available,
-        "entitlement_lookup": .available,
-      ]
+      // The adapter is the only thing that knows what it implements. The
+      // default protocol extension still reports the full set, so an adapter
+      // that does not override this keeps the previous optimistic answer;
+      // adapters that do override it can no longer be reported as capable of
+      // something they cannot do.
+      context.providerCapabilities = Self.decisionCapabilities(
+        await purchaseProvider.mosaicExperimentCapabilities)
     }
     let evaluation = await configurationClient.decideForPresentation(
       placement: placement, context: context, identity: identity)
@@ -444,6 +447,24 @@ public struct Mosaic: Sendable {
     return await configurationClient.finalizeExperiment(
       evaluation, productsReady: productsReady,
       providerCapabilities: await purchaseProvider.mosaicExperimentCapabilities)
+  }
+
+  /// Maps the adapter's declared Experiment capabilities onto the Placement
+  /// decision-context keys. A capability the adapter does not declare is
+  /// reported `unavailable`, never assumed available.
+  static func decisionCapabilities(
+    _ capabilities: Set<MosaicExperimentProviderCapability>
+  ) -> [String: MosaicProviderCapabilityState] {
+    let keys: [(String, MosaicExperimentProviderCapability)] = [
+      ("product_loading", .productLoad),
+      ("purchase", .purchase),
+      ("restore", .restore),
+      ("entitlement_lookup", .entitlementLookup),
+    ]
+    return Dictionary(
+      uniqueKeysWithValues: keys.map {
+        ($0.0, capabilities.contains($0.1) ? .available : .unavailable)
+      })
   }
 
   /// One authority-aware decision-context seam. Keeping this outside the

@@ -109,6 +109,33 @@ final class LocalizationTests: XCTestCase {
       "Inline value"
     )
   }
+
+  /// Direction used to hard-default to LTR whenever the effective locale had no
+  /// catalog, so an RTL document whose default locale is undeclared laid itself
+  /// out mirrored, silently. Direction now follows the same fallback chain the
+  /// strings do, and says so when the chain is exhausted.
+  func testDirectionFollowsTheLocaleChainAndDiagnosesWhenItIsExhausted() throws {
+    let declaredFallback = try JSONDecoder().decode(
+      MosaicLocalization.self,
+      from: Data(
+        #"{"defaultLocale":"fa","fallbackLocale":"ar","locales":{"ar":{"direction":"rtl","strings":{}}}}"#
+          .utf8)
+    )
+    let resolved = MosaicLocalizationResolver(localization: declaredFallback).resolvedLocale
+    XCTAssertEqual(resolved.effectiveLocale, "ar")
+    XCTAssertEqual(resolved.direction, .rightToLeft)
+    XCTAssertEqual(resolved.diagnostics, [])
+
+    let undeclared = try JSONDecoder().decode(
+      MosaicLocalization.self,
+      from: Data(
+        #"{"defaultLocale":"fa","fallbackLocale":"fa","locales":{"en":{"direction":"ltr","strings":{}}}}"#
+          .utf8)
+    )
+    let exhausted = MosaicLocalizationResolver(localization: undeclared).resolvedLocale
+    XCTAssertEqual(exhausted.direction, .leftToRight)
+    XCTAssertEqual(exhausted.diagnostics, ["localization_direction_unresolved"])
+  }
 }
 
 private func textComponent(

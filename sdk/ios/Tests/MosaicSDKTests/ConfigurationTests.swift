@@ -82,4 +82,23 @@ final class ConfigurationTests: XCTestCase {
     }
     XCTAssertEqual(resolvedSource, .bundled)
   }
+
+  /// The decision context used to hardcode every provider capability as
+  /// available, so a Placement rule gated on a capability the adapter does not
+  /// implement matched anyway. The adapter is now asked.
+  func testProviderCapabilitiesComeFromTheAdapterInsteadOfBeingAssumed() {
+    XCTAssertEqual(
+      Mosaic.decisionCapabilities([.productLoad, .purchase, .restore, .entitlementLookup]),
+      [
+        "product_loading": .available, "purchase": .available, "restore": .available,
+        "entitlement_lookup": .available,
+      ])
+
+    XCTAssertEqual(
+      Mosaic.decisionCapabilities([.productLoad, .purchase]),
+      [
+        "product_loading": .available, "purchase": .available, "restore": .unavailable,
+        "entitlement_lookup": .unavailable,
+      ])
+  }
 }

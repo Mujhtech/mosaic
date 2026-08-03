@@ -133,16 +133,29 @@ public struct MosaicPaywallDocument: Decodable, Sendable, Equatable {
     if schemaVersion == mosaicProtocolVersion {
       let decodedScreens = try container.decode([MosaicScreen].self, forKey: .screens)
       let decodedInitialScreenID = try container.decode(String.self, forKey: .initialScreenId)
-      guard let fallbackLayout = decodedScreens.first?.layout else {
+      guard !decodedScreens.isEmpty else {
         throw DecodingError.dataCorruptedError(
           forKey: .screens,
           in: container,
           debugDescription: "Protocol 0.2 requires at least one screen."
         )
       }
+      // `invalidReference` is `rejectDocument` in the 0.2 reader policy. A
+      // declared initial screen that no screen defines is a non-conforming
+      // document, so it is rejected here rather than silently rendering the
+      // first screen, which would present a paywall nobody authored.
+      guard
+        let initialLayout = decodedScreens.first(where: { $0.id == decodedInitialScreenID })?.layout
+      else {
+        throw DecodingError.dataCorruptedError(
+          forKey: .initialScreenId,
+          in: container,
+          debugDescription: "initialScreenId does not reference a declared screen."
+        )
+      }
       screens = decodedScreens
       initialScreenId = decodedInitialScreenID
-      layout = decodedScreens.first { $0.id == decodedInitialScreenID }?.layout ?? fallbackLayout
+      layout = initialLayout
     } else {
       layout = try container.decode(MosaicScrollContainer.self, forKey: .layout)
       initialScreenId = nil
@@ -631,6 +644,56 @@ public struct MosaicDesignSystem: Decodable, Sendable, Equatable {
   public let shadows: [MosaicShadowToken]
 }
 
+/// A style reference the renderer could not resolve to an authored value.
+///
+/// Every value carries the diagnostic code the renderer records and the subject
+/// it is recorded against, so one malformed token diagnoses once rather than
+/// once per frame.
+public struct MosaicStyleResolutionFailure: Sendable, Equatable, Hashable {
+  public let code: String
+  public let subjectID: String
+
+  public init(code: String, subjectID: String) {
+    self.code = code
+    self.subjectID = subjectID
+  }
+
+  public static func unresolvedColorToken(_ id: String) -> Self {
+    .init(code: "style_color_token_unresolved", subjectID: id)
+  }
+
+  public static func malformedColorLiteral(_ raw: String) -> Self {
+    .init(code: "style_color_literal_malformed", subjectID: raw)
+  }
+
+  public static func unresolvedBackgroundToken(_ id: String) -> Self {
+    .init(code: "style_background_token_unresolved", subjectID: id)
+  }
+
+  public static func unresolvedGradientStop(_ id: String) -> Self {
+    .init(code: "style_gradient_stop_unresolved", subjectID: id)
+  }
+
+  public static func unresolvedShadowToken(_ id: String) -> Self {
+    .init(code: "style_shadow_token_unresolved", subjectID: id)
+  }
+}
+
+/// A background prepared for rendering together with everything about it that
+/// could not be resolved.
+public struct MosaicResolvedBackground: Sendable, Equatable {
+  public let background: MosaicBackground?
+  public let failures: [MosaicStyleResolutionFailure]
+}
+
+extension MosaicColor {
+  /// The design-token identifier this color references, if any.
+  public var tokenID: String? {
+    guard case .token(let id) = self else { return nil }
+    return id
+  }
+}
+
 extension MosaicPaywallDocument {
   public func resolvedColor(_ color: MosaicColor) -> MosaicColor? {
     resolveColor(color, visiting: [])
@@ -642,6 +705,67 @@ extension MosaicPaywallDocument {
 
   public func resolvedShadow(_ shadow: MosaicShadow) -> MosaicShadow? {
     resolveShadow(shadow, visiting: [])
+  }
+
+  /// Background resolution for the renderer.
+  ///
+  /// `resolvedBackground(_:)` is all-or-nothing because the semantic validator
+  /// uses it to reject non-conforming documents. The renderer must not erase an
+  /// authored background because one part of it failed, so this variant
+  /// degrades: unresolvable gradient stops are dropped, unresolvable colors are
+  /// handed back unresolved for the renderer to recover per role, and
+  /// everything that failed is reported so it can be diagnosed once.
+  public func renderableBackground(_ background: MosaicBackground) -> MosaicResolvedBackground {
+    var failures: [MosaicStyleResolutionFailure] = []
+    let resolved = renderBackground(background, visiting: [], failures: &failures)
+    return MosaicResolvedBackground(background: resolved, failures: failures)
+  }
+
+  private func renderBackground(
+    _ background: MosaicBackground,
+    visiting: Set<String>,
+    failures: inout [MosaicStyleResolutionFailure]
+  ) -> MosaicBackground? {
+    switch background {
+    case .token(let id):
+      guard !visiting.contains(id),
+        let token = designSystem?.backgrounds.first(where: { $0.id == id })
+      else {
+        failures.append(.unresolvedBackgroundToken(id))
+        return nil
+      }
+      return renderBackground(token.value, visiting: visiting.union([id]), failures: &failures)
+    case .color(let color):
+      return .color(resolvedColor(color) ?? color)
+    case .linearGradient(let angle, let stops):
+      let resolved = renderStops(stops, failures: &failures)
+      guard !resolved.isEmpty else { return nil }
+      return .linearGradient(angle: angle, stops: resolved)
+    case .radialGradient(let center, let radius, let stops):
+      let resolved = renderStops(stops, failures: &failures)
+      guard !resolved.isEmpty else { return nil }
+      return .radialGradient(center: center, radius: radius, stops: resolved)
+    case .image(let assetID, let mode, let fallback):
+      return .image(
+        assetId: assetID, contentMode: mode, fallbackColor: resolvedColor(fallback) ?? fallback)
+    case .video(let assetID, let posterID, let mode, let fallback):
+      return .video(
+        assetId: assetID, posterAssetId: posterID, contentMode: mode,
+        fallbackColor: resolvedColor(fallback) ?? fallback)
+    }
+  }
+
+  private func renderStops(
+    _ stops: [MosaicGradientStop],
+    failures: inout [MosaicStyleResolutionFailure]
+  ) -> [MosaicGradientStop] {
+    stops.compactMap { stop in
+      guard let color = resolvedColor(stop.color) else {
+        failures.append(.unresolvedGradientStop(stop.color.tokenID ?? stop.color.rawValue))
+        return nil
+      }
+      return MosaicGradientStop(position: stop.position, color: color)
+    }
   }
 
   private func resolveColor(_ color: MosaicColor, visiting: Set<String>) -> MosaicColor? {

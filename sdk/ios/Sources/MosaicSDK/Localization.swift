@@ -5,6 +5,23 @@ public struct MosaicResolvedLocale: Sendable, Equatable {
   public let candidateLocales: [String]
   public let effectiveLocale: String
   public let direction: MosaicLayoutDirection
+  /// Diagnostic codes the presentation records for this resolution. Empty when
+  /// the direction came from a declared catalog.
+  public let diagnostics: [String]
+
+  public init(
+    requestedLocale: String?,
+    candidateLocales: [String],
+    effectiveLocale: String,
+    direction: MosaicLayoutDirection,
+    diagnostics: [String] = []
+  ) {
+    self.requestedLocale = requestedLocale
+    self.candidateLocales = candidateLocales
+    self.effectiveLocale = effectiveLocale
+    self.direction = direction
+    self.diagnostics = diagnostics
+  }
 }
 
 /// Resolves protocol strings and layout direction using the exact RC1 chain:
@@ -39,12 +56,21 @@ public struct MosaicLocalizationResolver: Sendable, Equatable {
     }
 
     let effectiveLocale = candidates.first ?? localization.defaultLocale
-    let direction = localization.locales[effectiveLocale]?.direction ?? .leftToRight
+    // Direction follows the same chain as strings do. Defaulting an RTL
+    // document to LTR because its effective locale has no catalog mirrors the
+    // layout, so the chain is exhausted first and the shortfall is diagnosed
+    // rather than silently assumed.
+    let directionChain =
+      candidates + [effectiveLocale, localization.fallbackLocale, localization.defaultLocale]
+    let declaredDirection = directionChain.lazy
+      .compactMap { localization.locales[$0]?.direction }
+      .first
     resolvedLocale = MosaicResolvedLocale(
       requestedLocale: requestedLocale,
       candidateLocales: candidates,
       effectiveLocale: effectiveLocale,
-      direction: direction
+      direction: declaredDirection ?? .leftToRight,
+      diagnostics: declaredDirection == nil ? ["localization_direction_unresolved"] : []
     )
   }
 

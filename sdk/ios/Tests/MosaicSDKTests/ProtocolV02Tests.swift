@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import XCTest
 
 @testable import MosaicSDK
@@ -141,6 +142,62 @@ final class ProtocolV02Tests: XCTestCase {
         )
       )
     }
+  }
+
+  /// `invalidReference` is `rejectDocument`. The decoder previously fell back
+  /// to `screens[0]`, so a document whose declared initial screen does not
+  /// exist presented a screen nobody authored on any path that decodes without
+  /// the semantic validator.
+  func testDanglingInitialScreenIdIsRejectedByTheDecoderItself() throws {
+    var object = try v02FixtureObject()
+    object["initialScreenId"] = "no-such-screen"
+    XCTAssertThrowsError(
+      try JSONDecoder().decode(MosaicPaywallDocument.self, from: encoded(object))
+    )
+    XCTAssertThrowsError(try MosaicProtocolDecoder.decode(encoded(object)))
+  }
+
+  /// One unresolvable stop used to nil the whole background, erasing an
+  /// authored gradient with no signal. Rendering degrades to the stops that did
+  /// resolve and reports the one that did not.
+  func testUnresolvableGradientStopDegradesInsteadOfErasingTheBackground() throws {
+    var object = try v02FixtureObject()
+    var designSystem = try XCTUnwrap(object["designSystem"] as? [String: Any])
+    let colors = try XCTUnwrap(designSystem["colors"] as? [[String: Any]])
+    designSystem["colors"] = colors.filter { $0["id"] as? String != "brand-accent" }
+    object["designSystem"] = designSystem
+    // Decoded without the semantic validator on purpose: the validator rejects
+    // this document, and the renderer path under test is what protects hosts
+    // when a document reaches rendering anyway.
+    let document = try JSONDecoder().decode(
+      MosaicPaywallDocument.self, from: encoded(object))
+
+    XCTAssertNil(document.resolvedBackground(.token("offer-gradient")))
+
+    let resolution = document.renderableBackground(.token("offer-gradient"))
+    guard case .linearGradient(_, let stops)? = resolution.background else {
+      return XCTFail("Expected the gradient to survive with its resolvable stops.")
+    }
+    XCTAssertEqual(stops.map(\.position), [0])
+    XCTAssertEqual(
+      resolution.failures, [.unresolvedGradientStop("brand-accent")])
+  }
+
+  /// An unresolved token or malformed literal used to render transparent with
+  /// no diagnostic, which makes authored content invisible.
+  func testUnresolvableColorsRecoverByRoleAndReportTheFailure() throws {
+    let document = try v02Document()
+
+    let content = MosaicColor.token("no-such-token").rendered(in: document, role: .content)
+    XCTAssertEqual(content.color, Color.primary)
+    XCTAssertEqual(content.failure, .unresolvedColorToken("no-such-token"))
+
+    let decoration = MosaicColor.literal("#12345").rendered(in: document, role: .decoration)
+    XCTAssertEqual(decoration.color, Color.clear)
+    XCTAssertEqual(decoration.failure, .malformedColorLiteral("#12345"))
+
+    let resolvable = MosaicColor.token("brand-accent").rendered(in: document, role: .content)
+    XCTAssertNil(resolvable.failure)
   }
 
   func testRC4DesignTokensRejectMissingCrossCategoryAndCyclicReferencesAtomically() throws {
@@ -358,6 +415,56 @@ final class ProtocolV02Tests: XCTestCase {
       ),
       "Ended"
     )
+  }
+
+  /// `completedCountdown` is `showLocalizedCompletedText`, and a date that
+  /// cannot be parsed is a validation failure rather than a completion.
+  /// Rendering it as the completed text told customers an offer had expired
+  /// when the document said no such thing.
+  func testUnparseableCountdownEndIsDistinguishedFromCompletion() throws {
+    let document = try v02Document()
+    let countdown = try XCTUnwrap(
+      document.allNodes.compactMap { node -> MosaicCountdownComponent? in
+        guard case .countdown(let value) = node else { return nil }
+        return value
+      }.single)
+
+    let end = try XCTUnwrap(ISO8601DateFormatter().date(from: countdown.endsAt))
+    XCTAssertEqual(
+      MosaicCountdownText.resolution(
+        component: countdown, now: end.addingTimeInterval(1), completedText: "Ended"),
+      .completed("Ended"))
+
+    XCTAssertEqual(
+      MosaicCountdownText.resolution(
+        component: try v02Countdown(endsAt: "not-a-date"),
+        now: end,
+        completedText: "Ended"),
+      .invalidEndsAt)
+
+    // The renderer and the semantic validator must agree on what a parseable
+    // `endsAt` is. The canonical form carries no fractional seconds, and the
+    // validator rejects the document, so the renderer must not quietly accept
+    // a form the contract does not define.
+    XCTAssertEqual(
+      MosaicCountdownText.resolution(
+        component: try v02Countdown(endsAt: "2999-01-01T00:00:01.500Z"),
+        now: end,
+        completedText: "Ended"),
+      .invalidEndsAt)
+
+    var object = try v02FixtureObject()
+    let text = try XCTUnwrap(String(data: try encoded(object), encoding: .utf8))
+    object = try XCTUnwrap(
+      try JSONSerialization.jsonObject(
+        with: Data(
+          text.replacingOccurrences(of: countdown.endsAt, with: "not-a-date").utf8))
+        as? [String: Any])
+    XCTAssertThrowsError(try MosaicProtocolDecoder.decode(encoded(object))) { error in
+      XCTAssertEqual(
+        error as? MosaicProtocolError,
+        .semanticViolation(code: "protocol_invalid_countdown_timestamp"))
+    }
   }
 
   func testV02RejectsUnknownPropertiesAndMissingUsedCapabilities() throws {
@@ -819,6 +926,26 @@ private func button(in document: MosaicPaywallDocument, id: String) throws -> Mo
     if case .button(let button) = node, button.id == id { return button }
   }
   throw CanonicalFixtureLookupError.invalidShape
+}
+
+/// The canonical countdown with a substituted `endsAt`, decoded without the
+/// semantic validator so malformed values can reach the resolver under test.
+private func v02Countdown(endsAt: String) throws -> MosaicCountdownComponent {
+  let original = try XCTUnwrap(
+    try v02Document().allNodes.compactMap { node -> MosaicCountdownComponent? in
+      guard case .countdown(let value) = node else { return nil }
+      return value
+    }.single)
+  let text = try XCTUnwrap(String(data: try v02FixtureData(), encoding: .utf8))
+  let document = try JSONDecoder().decode(
+    MosaicPaywallDocument.self,
+    from: Data(text.replacingOccurrences(of: original.endsAt, with: endsAt).utf8)
+  )
+  return try XCTUnwrap(
+    document.allNodes.compactMap { node -> MosaicCountdownComponent? in
+      guard case .countdown(let value) = node else { return nil }
+      return value
+    }.single)
 }
 
 private func v02FixtureObject() throws -> [String: Any] {

@@ -134,7 +134,10 @@ struct MosaicAppearanceModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     let radius = appearance?.cornerRadius ?? 0
-    content
+    let border = appearance?.border
+    let borderColor = border?.color.rendered(in: document, role: .decoration)
+    return
+      content
       .padding(.top, appearance?.padding?.top ?? 0)
       .padding(.leading, appearance?.padding?.start ?? 0)
       .padding(.bottom, appearance?.padding?.bottom ?? 0)
@@ -146,11 +149,12 @@ struct MosaicAppearanceModifier: ViewModifier {
         }
       }
       .overlay {
-        if let border = appearance?.border {
+        if let border, let borderColor {
           RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .stroke(border.color.swiftUI(in: document), lineWidth: border.width)
+            .stroke(borderColor.color, lineWidth: border.width)
         }
       }
+      .mosaicStyleDiagnostics(borderColor?.failure)
       .opacity(appearance?.opacity ?? 1)
       .mosaicClipShape(appearance?.clipContent == true, radius: radius)
       .mosaicShadow(appearance?.shadow)
@@ -213,8 +217,14 @@ struct MosaicShadowModifier: ViewModifier {
     if let document, let shadow, let resolved = document.resolvedShadow(shadow),
       case .value(let color, let x, let y, let blur) = resolved
     {
-      content.shadow(
-        color: color.swiftUI(in: document), radius: blur, x: x, y: y)
+      let rendered = color.rendered(in: document, role: .decoration)
+      content
+        .shadow(color: rendered.color, radius: blur, x: x, y: y)
+        .mosaicStyleDiagnostics(rendered.failure)
+    } else if let shadow, case .token(let id) = shadow {
+      // An authored shadow that no token defines is dropped, not silently
+      // treated as "no shadow was authored".
+      content.mosaicStyleDiagnostics(.unresolvedShadowToken(id))
     } else {
       content
     }
@@ -426,47 +436,115 @@ extension MosaicFontWeight {
   }
 }
 
+/// How an unresolvable color recovers.
+///
+/// The recovery differs by role on purpose. Invisible content is content loss,
+/// so unresolvable content colors fall back to the primary content color, which
+/// is legible on every system surface. Decoration recovers to transparent
+/// instead: the parent surface still shows through, and painting an unauthored
+/// opaque color over the layout is a worse failure than omitting it. Both roles
+/// diagnose.
+enum MosaicColorRole {
+  case content
+  case decoration
+
+  var recoveryColor: Color {
+    switch self {
+    case .content: .primary
+    case .decoration: .clear
+    }
+  }
+}
+
+struct MosaicRenderedColor {
+  let color: Color
+  let failure: MosaicStyleResolutionFailure?
+}
+
 extension MosaicColor {
-  var swiftUI: Color {
-    swiftUI(in: nil)
+  func swiftUI(in document: MosaicPaywallDocument?) -> Color {
+    rendered(in: document, role: .decoration).color
   }
 
-  func swiftUI(in document: MosaicPaywallDocument?) -> Color {
+  /// Resolves this color for rendering and reports why, if it could not be
+  /// resolved to the authored value.
+  func rendered(in document: MosaicPaywallDocument?, role: MosaicColorRole) -> MosaicRenderedColor {
     let resolved = document?.resolvedColor(self) ?? self
     switch resolved {
-    case .semantic(let semantic):
-      switch semantic {
-      case .textPrimary: return Color.primary
-      case .textSecondary: return Color.secondary
-      case .surfaceDefault:
-        #if os(iOS)
-          return Color(uiColor: .systemBackground)
-        #else
-          return Color(nsColor: .windowBackgroundColor)
-        #endif
-      case .surfaceElevated:
-        #if os(iOS)
-          return Color(uiColor: .secondarySystemBackground)
-        #else
-          return Color(nsColor: .controlBackgroundColor)
-        #endif
-      case .actionPrimary: return Color.accentColor
-      case .actionOnPrimary: return Color.white
-      case .borderDefault: return Color.secondary.opacity(0.3)
-      case .transparent: return Color.clear
-      }
     case .literal(let raw):
-      guard raw.count == 9 else { return .clear }
-      let value = String(raw.dropFirst())
-      guard let rgba = UInt64(value, radix: 16) else { return .clear }
-      return Color(
-        red: Double((rgba >> 24) & 0xFF) / 255,
-        green: Double((rgba >> 16) & 0xFF) / 255,
-        blue: Double((rgba >> 8) & 0xFF) / 255,
-        opacity: Double(rgba & 0xFF) / 255
-      )
-    case .token:
-      return .clear
+      guard let color = Self.literal(raw) else {
+        return MosaicRenderedColor(
+          color: role.recoveryColor, failure: .malformedColorLiteral(raw))
+      }
+      return MosaicRenderedColor(color: color, failure: nil)
+    case .token(let id):
+      return MosaicRenderedColor(color: role.recoveryColor, failure: .unresolvedColorToken(id))
+    case .semantic(let semantic):
+      return MosaicRenderedColor(color: Self.semantic(semantic), failure: nil)
     }
+  }
+
+  private static func literal(_ raw: String) -> Color? {
+    guard raw.count == 9, raw.hasPrefix("#") else { return nil }
+    guard let rgba = UInt64(raw.dropFirst(), radix: 16) else { return nil }
+    return Color(
+      red: Double((rgba >> 24) & 0xFF) / 255,
+      green: Double((rgba >> 16) & 0xFF) / 255,
+      blue: Double((rgba >> 8) & 0xFF) / 255,
+      opacity: Double(rgba & 0xFF) / 255
+    )
+  }
+
+  private static func semantic(_ semantic: MosaicSemanticColor) -> Color {
+    switch semantic {
+    case .textPrimary: return Color.primary
+    case .textSecondary: return Color.secondary
+    case .surfaceDefault:
+      #if os(iOS)
+        return Color(uiColor: .systemBackground)
+      #else
+        return Color(nsColor: .windowBackgroundColor)
+      #endif
+    case .surfaceElevated:
+      #if os(iOS)
+        return Color(uiColor: .secondarySystemBackground)
+      #else
+        return Color(nsColor: .controlBackgroundColor)
+      #endif
+    case .actionPrimary: return Color.accentColor
+    case .actionOnPrimary: return Color.white
+    case .borderDefault: return Color.secondary.opacity(0.3)
+    case .transparent: return Color.clear
+    }
+  }
+}
+
+/// Records style-resolution failures against the presentation model exactly
+/// once per code and subject, mirroring the media-background diagnostic path.
+struct MosaicStyleDiagnosticsModifier: ViewModifier {
+  @EnvironmentObject private var model: MosaicPaywallModel
+  let failures: [MosaicStyleResolutionFailure]
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if failures.isEmpty {
+      content
+    } else {
+      content.task {
+        for failure in failures {
+          model.recordRenderingDiagnosticOnce(failure.code, subjectID: failure.subjectID)
+        }
+      }
+    }
+  }
+}
+
+extension View {
+  func mosaicStyleDiagnostics(_ failures: [MosaicStyleResolutionFailure]) -> some View {
+    modifier(MosaicStyleDiagnosticsModifier(failures: failures))
+  }
+
+  func mosaicStyleDiagnostics(_ failures: MosaicStyleResolutionFailure?...) -> some View {
+    modifier(MosaicStyleDiagnosticsModifier(failures: failures.compactMap { $0 }))
   }
 }

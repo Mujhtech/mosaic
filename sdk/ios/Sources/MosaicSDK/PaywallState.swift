@@ -45,6 +45,9 @@ public final class MosaicPaywallModel: ObservableObject {
     purchaseProvider: any MosaicPurchaseProvider,
     clock: @escaping @Sendable () -> Date = { Date() },
     analytics: MosaicAnalyticsPresentationInstrumentation? = nil,
+    /// Diagnostic codes raised before rendering started, such as a presentation
+    /// that resolved without analytics metadata.
+    presentationDiagnostics: [String] = [],
     onInteraction: @escaping @MainActor (MosaicInteractionOutcome) -> Void = { _ in },
     onResult: @escaping @MainActor (MosaicPresentationResult) -> Void
   ) {
@@ -71,6 +74,12 @@ public final class MosaicPaywallModel: ObservableObject {
       navigationHistory = [initialScreenID]
     }
     refreshHiddenPurchaseDiagnostics()
+    for code in presentationDiagnostics {
+      recordRenderingDiagnosticOnce(code, subjectID: document.id)
+    }
+    for code in localization.resolvedLocale.diagnostics {
+      recordRenderingDiagnosticOnce(code, subjectID: localization.resolvedLocale.effectiveLocale)
+    }
   }
 
   public var currentScreenID: String? { navigationHistory.last }
@@ -179,6 +188,16 @@ public final class MosaicPaywallModel: ObservableObject {
       if let selected = initial ?? available.first {
         selectedProductCardIDs[selector.id] = selected.card?.id
         selectedProductReferenceIDs[selector.id] = selected.reference.id
+        // `unavailableProduct` is `useSelectorFallback`, so substituting the
+        // first available option is correct. It is not the authored default
+        // though, and the `product_selected` payload's `source` enum is
+        // protocol-owned and admits only `default` and `user`, so the
+        // substitution is reported as a diagnostic rather than misreported as a
+        // third source value.
+        if initial == nil {
+          recordRenderingDiagnosticOnce(
+            "product_selection_default_substituted", subjectID: selector.id)
+        }
         analytics?.emit(
           .productSelected,
           attribution: analytics?.productAttribution(selected.reference.id),

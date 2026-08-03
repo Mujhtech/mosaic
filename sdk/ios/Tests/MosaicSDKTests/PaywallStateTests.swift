@@ -19,12 +19,28 @@ final class PaywallStateTests: XCTestCase {
     XCTAssertEqual(model.availableOptions(for: selector).map(\.id), ["plans-monthly-plan-card"])
     XCTAssertEqual(model.selectedProductReferenceID(for: selector.id), "monthly-plan")
     XCTAssertTrue(model.unavailableSelectorIDs.isEmpty)
+    // `useSelectorFallback` permits the substitution, but the authored default
+    // was yearly. `product_selected` can only report `default` or `user`, so
+    // the substitution is only distinguishable from an authored default here.
+    XCTAssertTrue(
+      model.diagnostics.map(\.code).contains("product_selection_default_substituted"))
 
     model.selectProduct(referenceID: "monthly-plan", in: selector.id)
     XCTAssertEqual(
       recorder.interactions.last,
       .productSelected(productReferenceID: "monthly-plan")
     )
+
+    let authored = MosaicPaywallModel(
+      document: document,
+      purchaseProvider: MockMosaicPurchaseProvider(products: [.phase1Yearly, .phase1Monthly]),
+      onInteraction: { _ in },
+      onResult: { _ in }
+    )
+    await authored.prepare()
+    XCTAssertEqual(authored.selectedProductReferenceID(for: selector.id), "yearly-plan")
+    XCTAssertFalse(
+      authored.diagnostics.map(\.code).contains("product_selection_default_substituted"))
   }
 
   func testNoProductsShowsFallbackDisablesPurchaseAndEmitsUnavailable() async throws {

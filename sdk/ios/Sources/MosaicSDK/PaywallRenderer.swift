@@ -46,6 +46,7 @@ public struct MosaicPaywall: View {
     videoResolver: MosaicVideoResolver = .missing,
     clock: @escaping @Sendable () -> Date = { Date() },
     analytics: MosaicAnalyticsPresentationInstrumentation? = nil,
+    presentationDiagnostics: [String] = [],
     onInteraction: @escaping @MainActor (MosaicInteractionOutcome) -> Void = { _ in },
     onResult: @escaping @MainActor (MosaicPresentationResult) -> Void
   ) {
@@ -56,6 +57,7 @@ public struct MosaicPaywall: View {
         purchaseProvider: purchaseProvider,
         clock: clock,
         analytics: analytics,
+        presentationDiagnostics: presentationDiagnostics,
         onInteraction: onInteraction,
         onResult: onResult
       )
@@ -340,9 +342,10 @@ struct MosaicStyledText: View {
   let typography: MosaicTypography
 
   var body: some View {
-    Text(value)
+    let rendered = typography.color.rendered(in: document, role: .content)
+    return Text(value)
       .font(.system(size: typography.fontSize, weight: typography.weight.swiftUI))
-      .foregroundStyle(typography.color.swiftUI(in: document))
+      .foregroundStyle(rendered.color)
       .lineSpacing(max(0, typography.fontSize * (typography.lineHeightMultiplier - 1)))
       .multilineTextAlignment(typography.alignment.swiftUI)
       .lineLimit(typography.maxLines)
@@ -350,6 +353,7 @@ struct MosaicStyledText: View {
       .frame(maxWidth: .infinity, alignment: typography.alignment.frameAlignment)
       .fixedSize(horizontal: false, vertical: typography.maxLines == nil)
       .mosaicClipText(typography.overflow == .clip)
+      .mosaicStyleDiagnostics(rendered.failure)
   }
 }
 
@@ -376,6 +380,7 @@ struct MosaicTextView: View {
 
 @MainActor
 struct MosaicImageView: View {
+  @EnvironmentObject private var model: MosaicPaywallModel
   let component: MosaicImageComponent
   let asset: MosaicImageAsset?
   let localization: MosaicLocalizationResolver
@@ -401,31 +406,45 @@ struct MosaicImageView: View {
         if let image = resolver.image(for: key) {
           image.resizable().mosaicMediaContentMode(component.contentMode)
         } else {
-          imageFallback(asset)
+          imageFallback(asset, diagnostic: "media_image_unavailable")
         }
       case .remote(let url):
         AsyncImage(url: url) { phase in
           switch phase {
           case .success(let image): image.resizable().mosaicMediaContentMode(component.contentMode)
-          case .empty: imageFallback(asset)
-          case .failure: imageFallback(asset)
-          @unknown default: imageFallback(asset)
+          // `.empty` is "still loading", not a failure, so it must not diagnose.
+          case .empty: imageFallback(asset, diagnostic: nil)
+          case .failure: imageFallback(asset, diagnostic: "media_image_unavailable")
+          @unknown default: imageFallback(asset, diagnostic: "media_image_unavailable")
           }
         }
       }
     } else {
-      imageFallback(nil)
+      imageFallback(nil, diagnostic: "media_image_asset_missing")
     }
   }
 
-  private func imageFallback(_ asset: MosaicAsset?) -> some View {
-    ZStack {
+  /// The declared asset fallback, matching the background media path: the same
+  /// recovery, and the same once-per-subject diagnostics, so a component image
+  /// that never appears is as visible in diagnostics as a background that does
+  /// not.
+  private func imageFallback(_ asset: MosaicAsset?, diagnostic: String?) -> some View {
+    let text = asset?.fallback.map { localization.resolve($0.value) } ?? ""
+    return ZStack {
       Color.secondary.opacity(0.12)
-      Text(asset?.fallback.map { localization.resolve($0.value) } ?? "")
+      Text(text)
         .font(.body)
         .foregroundStyle(.secondary)
         .multilineTextAlignment(.center)
         .padding()
+    }
+    .task {
+      guard let diagnostic else { return }
+      model.recordRenderingDiagnosticOnce(diagnostic, subjectID: component.assetId)
+      if text.isEmpty {
+        model.recordRenderingDiagnosticOnce(
+          "media_image_fallback_text_missing", subjectID: component.assetId)
+      }
     }
   }
 }
@@ -436,9 +455,11 @@ struct MosaicIconView: View {
   let localization: MosaicLocalizationResolver
 
   var body: some View {
-    Image(systemName: component.name.systemName)
+    let rendered = component.color.rendered(in: document, role: .content)
+    return Image(systemName: component.name.systemName)
       .font(.system(size: component.size, weight: .regular))
-      .foregroundStyle(component.color.swiftUI(in: document))
+      .foregroundStyle(rendered.color)
+      .mosaicStyleDiagnostics(rendered.failure)
       .mosaicImageAccessibility(component.accessibility, localization: localization)
       .mosaicPresentation(
         appearance: component.appearance,
@@ -454,11 +475,12 @@ struct MosaicFeatureListView: View {
   let localization: MosaicLocalizationResolver
 
   var body: some View {
-    VStack(alignment: .leading, spacing: component.gap) {
+    let marker = component.markerColor.rendered(in: document, role: .content)
+    return VStack(alignment: .leading, spacing: component.gap) {
       ForEach(component.items) { item in
         HStack(alignment: .firstTextBaseline, spacing: 10) {
           Image(systemName: "checkmark")
-            .foregroundStyle(component.markerColor.swiftUI(in: document))
+            .foregroundStyle(marker.color)
             .accessibilityHidden(true)
           MosaicStyledText(
             value: localization.resolve(item.text), typography: component.typography
@@ -471,6 +493,7 @@ struct MosaicFeatureListView: View {
     .accessibilityElement(children: .contain)
     .accessibilityLabel(Text(localization.resolve(component.accessibility.label)))
     .mosaicAccessibilityHint(component.accessibility.hint.map(localization.resolve))
+    .mosaicStyleDiagnostics(marker.failure)
     .mosaicPresentation(
       appearance: component.appearance,
       sizing: component.sizing,
@@ -550,6 +573,7 @@ struct MosaicProductSelectorView: View {
           style: selected
             ? component.cardStyles.selected.resolving(component.cardStyles.defaultStyle)
             : component.cardStyles.defaultStyle,
+          document: document,
           localization: localization,
           onSelect: { model.selectProduct(referenceID: option.reference.id, in: component.id) }
         )
@@ -634,6 +658,10 @@ struct MosaicAuthoredProductCardView: View {
     card.styles.resolving(selected: selected)
   }
 
+  private var borderColor: MosaicRenderedColor {
+    style.border.color.rendered(in: document, role: .decoration)
+  }
+
   private var overlayBadge: MosaicProductBadgeComponent? {
     card.children.compactMap { child -> MosaicProductBadgeComponent? in
       guard case .badge(let badge) = child,
@@ -690,10 +718,9 @@ struct MosaicAuthoredProductCardView: View {
     }
     .overlay {
       RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
-        .strokeBorder(
-          style.border.color.swiftUI(in: environmentDocument),
-          lineWidth: style.border.width)
+        .strokeBorder(borderColor.color, lineWidth: style.border.width)
     }
+    .mosaicStyleDiagnostics(borderColor.failure)
     .opacity(style.opacity)
     .mosaicShadow(style.shadow)
     .mosaicSizing(card.sizing)
@@ -901,6 +928,10 @@ struct MosaicProductBadgeView: View {
     badge.styles.resolving(selected: selected)
   }
 
+  private var borderColor: MosaicRenderedColor {
+    style.border.color.rendered(in: document, role: .decoration)
+  }
+
   var body: some View {
     badgeContent
       .environment(\.mosaicAxisBounds, childBounds)
@@ -918,10 +949,9 @@ struct MosaicProductBadgeView: View {
       }
       .overlay {
         RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
-          .strokeBorder(
-            style.border.color.swiftUI(in: environmentDocument),
-            lineWidth: style.border.width)
+          .strokeBorder(borderColor.color, lineWidth: style.border.width)
       }
+      .mosaicStyleDiagnostics(borderColor.failure)
       .opacity(style.opacity)
       .mosaicShadow(style.shadow)
       .mosaicSizing(badge.sizing)

@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+- Diagnose every style-resolution failure instead of rendering transparently.
+  Unresolved colour tokens and malformed colour literals now recover by role:
+  content colours fall back to the primary content colour so authored text stays
+  legible, decoration stays transparent, and both record a rendering diagnostic
+  once per subject. One unresolvable gradient stop no longer erases the whole
+  background; the gradient renders with its resolvable stops.
+- Resolve design tokens in legacy Product Cards. They previously rendered
+  through a document-less resolution path, so no authored token could resolve.
+- Distinguish a malformed countdown `endsAt` from a completed countdown. A date
+  outside the canonical protocol form renders nothing and records
+  `countdown_ends_at_invalid` rather than presenting the localized completed
+  text. The renderer now shares the semantic validator's single definition of a
+  parseable `endsAt`, so the two cannot disagree about what a valid countdown
+  is.
+- Reject a document whose `initialScreenId` references no declared screen at
+  decode time, matching the `invalidReference` reader policy, instead of falling
+  back to the first screen.
+- Guard the macOS Carousel page index instead of subscripting it directly.
+- Record `product_selection_default_substituted` when an unavailable authored
+  default product is replaced by the first available option.
+- Record `placement_analytics_metadata_unavailable` when a Placement resolves
+  without analytics metadata and therefore renders untracked, and make the
+  Placement-unavailable placeholder copy host-overridable through
+  `MosaicPlacementUnavailableCopy`.
+- Resolve layout direction through the requested, fallback, and default locale
+  chain and record `localization_direction_unresolved` when it is exhausted,
+  instead of defaulting an RTL document to left to right.
+- Record diagnostics on component-image fallback paths, matching the existing
+  media-background behaviour.
+- Report Placement decision-context provider capabilities from the installed
+  provider's declared Experiment capabilities instead of assuming availability.
+- Classify StoreKit purchase and restore errors into cancelled, pending,
+  product-unavailable, retryable provider-unavailable, and failed, matching the
+  RevenueCat adapter, instead of flattening everything to one non-retryable
+  code.
+- Omit a subscription period whose unit the SDK cannot name in both native-store
+  adapters and record `commerce.unsupportedSubscriptionPeriod`, instead of
+  presenting it as daily. RevenueCat records
+  `commerce.unsupportedIntroductoryOffer` for an unclassifiable offer type.
+- Throw `MosaicStoreKitAcceptanceStoreError.durableStorageUnavailable` rather
+  than storing StoreKit purchase-acceptance state in the purgeable temporary
+  directory.
+
 - Add Authoritative Entitlement v2 support with automatic Application,
   platform, app-version, SDK-version, and capability reporting. The SDK accepts
   server-directed authority epochs before snapshot versions, atomically binds

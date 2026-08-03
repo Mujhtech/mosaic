@@ -1,5 +1,6 @@
 import Foundation
 import MosaicSDK
+import StoreKit
 import XCTest
 
 @testable import MosaicStoreKit
@@ -326,6 +327,63 @@ final class MosaicStoreKitProviderTests: XCTestCase {
     // The restore result itself is unchanged; only the observation is suppressed.
     XCTAssertEqual(result, .restored([MosaicEntitlement(id: "pro")]))
     XCTAssertTrue(sink.captured().isEmpty)
+  }
+
+  /// Every purchase error except cancellation used to flatten to one
+  /// non-retryable `storekit_error`, so a transient network outage was reported
+  /// to the host as a permanent purchase failure and never retried, and an
+  /// unavailable product was reported as a failure rather than as unavailable.
+  func testPurchaseErrorsAreClassifiedRatherThanFlattened() async throws {
+    let cases: [(any Error, MosaicPurchaseResult)] = [
+      (
+        StoreKitError.networkError(URLError(.notConnectedToInternet)),
+        .providerUnavailable(
+          productID: mapping.mosaicProductID,
+          diagnosticCode: "commerce.providerUnavailable",
+          diagnostic: .init(
+            code: "commerce.providerUnavailable",
+            safeMessage: "StoreKit is temporarily unreachable.",
+            severity: .error, retryable: true, correlationID: "ios_storekit_1",
+            providerCode: "network_error", mosaicProductID: mapping.mosaicProductID,
+            recoveryAction: .retry))
+      ),
+      (StoreKitError.userCancelled, .cancelled(productID: mapping.mosaicProductID)),
+      (
+        StoreKitError.notAvailableInStorefront,
+        .productUnavailable(productID: mapping.mosaicProductID)
+      ),
+    ]
+
+    for (error, expected) in cases {
+      let order = OrderRecorder()
+      let provider = MosaicStoreKitProvider(
+        client: StoreKitClientStub(
+          order: order, purchase: .cancelled, purchaseError: error),
+        acceptor: AcceptorStub(order: order),
+        acceptanceStore: AcceptanceStoreStub(order: order))
+      try await provider.install(configuration: configuration, mappings: [mapping])
+      _ = await provider.loadProducts(mappings: [mapping])
+
+      let result = await provider.purchase(mosaicProductID: mapping.mosaicProductID)
+      XCTAssertEqual(result, expected)
+    }
+
+    // A failure Mosaic cannot classify stays non-retryable rather than being
+    // optimistically retried.
+    let order = OrderRecorder()
+    let provider = MosaicStoreKitProvider(
+      client: StoreKitClientStub(
+        order: order, purchase: .cancelled, purchaseError: StoreKitTestError.failed),
+      acceptor: AcceptorStub(order: order),
+      acceptanceStore: AcceptanceStoreStub(order: order))
+    try await provider.install(configuration: configuration, mappings: [mapping])
+    _ = await provider.loadProducts(mappings: [mapping])
+    guard
+      case .failed(_, _, let diagnostic) = await provider.purchase(
+        mosaicProductID: mapping.mosaicProductID)
+    else { return XCTFail("An unclassifiable StoreKit error must remain a failure.") }
+    XCTAssertEqual(diagnostic.providerCode, "storekit_error")
+    XCTAssertFalse(diagnostic.retryable)
   }
 
   private var configuration: MosaicCommerceConfigurationReference {
