@@ -36,6 +36,12 @@ const STATUS_BEHAVIOR = {
   danger: { live: "assertive", role: "alert" },
 } as const;
 
+/** Indexed view of the table above, so an out-of-union tone reads as undefined. */
+const statusBehavior: Record<
+  string,
+  (typeof STATUS_BEHAVIOR)[StatusTone] | undefined
+> = STATUS_BEHAVIOR;
+
 function classNames(base: string, className: string | undefined) {
   return className ? `${base} ${className}` : base;
 }
@@ -65,7 +71,11 @@ export function StatusMessage({
   tone = "neutral",
   ...props
 }: StatusMessageProps) {
-  const behavior = STATUS_BEHAVIOR[tone];
+  // The union is a compile-time guarantee only. A JavaScript caller, or a tone
+  // that arrives from data rather than a literal, can be outside it, and an
+  // undefined lookup would throw inside render and take the message with it --
+  // the status message being, often, the explanation of what just went wrong.
+  const behavior = statusBehavior[tone] ?? STATUS_BEHAVIOR.neutral;
 
   return (
     <div
