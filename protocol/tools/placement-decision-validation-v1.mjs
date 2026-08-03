@@ -325,15 +325,49 @@ function evaluateNode(node, context) {
   return values.includes("true") ? "true" : values.includes("unknown") ? "unknown" : "false";
 }
 
+/**
+ * A refusal to evaluate, rather than a wrong decision quietly returned.
+ *
+ * The evaluator is a reference implementation every SDK is checked against, so
+ * the cases it cannot answer must be distinguishable from the cases it answers
+ * `no_paywall`. `code` is the machine-readable kind.
+ */
+export class DecisionEvaluationError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = "DecisionEvaluationError";
+    this.code = code;
+  }
+}
+
 function resolveOutcome(outcome, fallbackByKey, path = []) {
   if (outcome.type !== "fallback") return { ...(path.length === 0 ? {} : { fallbackPath: path }), outcome };
-  return resolveOutcome(fallbackByKey.get(outcome.key).outcome, fallbackByKey, [...path, outcome.key]);
+  // Reachable only on a document that never passed validateDecisionV1, which is
+  // exactly when a bare TypeError would be least informative.
+  const fallback = fallbackByKey.get(outcome.key);
+  if (fallback === undefined) {
+    throw new DecisionEvaluationError(
+      "unknown_fallback_key",
+      `Rule set declares no fallback for key "${outcome.key}"${path.length === 0 ? "" : ` (reached via ${path.join(" -> ")})`}; the document is not valid against the placement decision schema`,
+    );
+  }
+  return resolveOutcome(fallback.outcome, fallbackByKey, [...path, outcome.key]);
 }
 
 export function evaluateDecisionV1(document, context, assignment) {
   const ruleSet = document.ruleSet;
   const fallbackByKey = new Map(ruleSet.fallbacks.map((fallback) => [fallback.key, fallback]));
-  const now = Date.parse(context.now ?? new Date(0).toISOString());
+  // A QA override is a time window. Evaluating one against an assumed clock
+  // silently closes every window, so when overrides exist the caller must say
+  // what time it is. With no overrides declared, `now` is genuinely unused and
+  // demanding it would be gratuitous.
+  const now = Date.parse(context.now ?? "");
+  if (ruleSet.qaOverrides.length > 0 && Number.isNaN(now)) {
+    throw new DecisionEvaluationError(
+      "now_required",
+      `Rule set declares ${ruleSet.qaOverrides.length} QA override window(s), so context.now is required and must be an RFC 3339 timestamp; received ${JSON.stringify(context.now)}`,
+    );
+  }
   const override = ruleSet.qaOverrides.find((candidate) => candidate.selectorDigest === context.qaOverrideSelectorDigest && now >= Date.parse(candidate.startsAt) && now < Date.parse(candidate.expiresAt));
   if (override) return { matchedRuleId: null, overrideId: override.id, ...resolveOutcome(override.outcome, fallbackByKey) };
   if (!ruleSet.enabled) return { matchedRuleId: null, ...resolveOutcome(ruleSet.defaultOutcome, fallbackByKey) };

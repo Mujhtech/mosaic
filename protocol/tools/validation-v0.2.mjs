@@ -1305,10 +1305,14 @@ export function resolveV02CountdownState(countdown, now) {
   if (!Number.isFinite(nowMilliseconds)) {
     throw new TypeError("Countdown resolution requires a valid controlled clock.");
   }
-  const remainingMilliseconds = Math.max(
-    Date.parse(countdown.endsAt) - nowMilliseconds,
-    0,
-  );
+  // An unparsable deadline is exactly as unresolvable as an invalid clock, and
+  // must fail the same way. Left to arithmetic it yields NaN, which reads back
+  // as `completed: false` -- an offer that never expires and never counts down.
+  const endsAtMilliseconds = Date.parse(countdown.endsAt);
+  if (!Number.isFinite(endsAtMilliseconds)) {
+    throw new TypeError("Countdown resolution requires a valid endsAt deadline.");
+  }
+  const remainingMilliseconds = Math.max(endsAtMilliseconds - nowMilliseconds, 0);
   return {
     completed: remainingMilliseconds === 0,
     remainingMilliseconds,
@@ -1408,6 +1412,24 @@ function opaqueLiteralLuminance(color) {
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 
+/**
+ * Why a literal colour pair could not be contrast-checked, or null if it could.
+ *
+ * Semantic tokens are a legitimate skip: their value is a renderer's theme, not
+ * the document's. A literal is not. An opaque literal that fails to parse means
+ * the checker was handed something it did not understand and silently passed the
+ * pair, so say so instead. Schema validation should already have rejected such a
+ * value; this is the cheap defence for when it has not run or has drifted.
+ */
+function unparsableLiteralColor(color) {
+  if (typeof color !== "string" || !color.startsWith("#")) return null;
+  if (opaqueLiteralLuminance(color) !== null) return null;
+  // A valid but translucent literal is unevaluable rather than malformed: the
+  // composited result depends on what is behind it.
+  if (/^#[0-9A-F]{6}(?!FF$)[0-9A-F]{2}$/.test(color)) return null;
+  return color;
+}
+
 function hasKnownLowContrast(foreground, background) {
   if (foreground === background) return true;
   const foregroundLuminance = opaqueLiteralLuminance(foreground);
@@ -1453,6 +1475,18 @@ export function protocolV02AuthoringWarnings(document) {
             : null;
         if (!foreground) continue;
         if (!background) continue;
+        const unparsable =
+          unparsableLiteralColor(foreground) ?? unparsableLiteralColor(background);
+        if (unparsable !== null) {
+          warnings.push({
+            code: "productCard.contrastNotEvaluated",
+            componentId: node.id,
+            state,
+            field,
+            message: `${node.type} ${state} child ${field} could not be contrast-checked: ${unparsable} is not a readable colour literal.`,
+          });
+          continue;
+        }
         if (hasKnownLowContrast(foreground, background)) {
           warnings.push({
             code: "productCard.lowContrast",

@@ -9,8 +9,6 @@ import {
   localPreviewContractVersions,
   localPreviewVersionPreference,
   localPreviewWebSocketProtocols,
-  migrateV02RC2CandidateToRC3 as migrateBrowserV02RC2CandidateToRC3,
-  migrateV02RC3CandidateToRC4 as migrateBrowserV02RC3CandidateToRC4,
   negotiateLocalPreviewVersion as negotiateBrowserPreview,
   paywallRuntimeDiagnostics,
   interpolateProductText as interpolateBrowserProductText,
@@ -26,8 +24,6 @@ import {
   validatePaywallDocument,
   validatePreviewMessage,
 } from "../browser/index.js";
-import { migrateV02RC2CandidateToRC3 } from "./migrate-v0.2-rc2-to-rc3.mjs";
-import { migrateV02RC3CandidateToRC4 } from "./migrate-v0.2-rc3-to-rc4.mjs";
 import {
   decideLocalPreviewDraftDelivery,
   loadPreviewV02Artifacts,
@@ -782,6 +778,39 @@ test("Product Card and Product Badge Selected are recursively partial box-style 
     ),
     true,
   );
+
+  // A literal the checker cannot read is reported, not silently passed. Only
+  // literals: semantic tokens resolve in the renderer's theme and are a
+  // legitimate skip, and a translucent literal composites over unknown pixels.
+  const unreadable = artifacts();
+  const unreadableCard = node(unreadable.document, "plans-yearly-plan-card");
+  unreadableCard.children[0].typography.color = "#12345";
+  const unreadableWarnings = protocolV02AuthoringWarnings(unreadable.document);
+  assert.equal(
+    unreadableWarnings.some(
+      ({ code, field }) =>
+        code === "productCard.contrastNotEvaluated" &&
+        field === "plans-yearly-plan-card-name",
+    ),
+    true,
+  );
+  assert.equal(
+    unreadableWarnings.some(({ code }) => code === "productCard.lowContrast"),
+    false,
+  );
+
+  for (const readable of ["surface.elevated", "#11223380"]) {
+    const skipped = artifacts();
+    node(skipped.document, "plans-yearly-plan-card").children[0].typography.color =
+      readable;
+    assert.equal(
+      protocolV02AuthoringWarnings(skipped.document).some(
+        ({ code }) => code === "productCard.contrastNotEvaluated",
+      ),
+      false,
+      readable,
+    );
+  }
 });
 
 test("Product Selector owns ordered real cards with closed Product Card and Badge structure", () => {
@@ -1008,6 +1037,31 @@ test("Countdown unit ordering and controlled-clock completion are deterministic"
     resolveBrowserCountdownState(expired, "2026-07-17T00:00:00Z"),
   );
 
+  // An unparsable deadline must refuse to resolve on both copies, exactly as an
+  // unparsable clock does. Left to arithmetic it returned NaN remaining with
+  // completed:false -- an offer that neither counts down nor ever expires.
+  // (A calendar-impossible date such as 2030-02-31 is caught by the schema's
+  // canonical-UTC rule below; Date.parse silently rolls it over.)
+  for (const endsAt of ["not a timestamp", "", undefined]) {
+    const unresolvable = { ...expired, endsAt };
+    for (const resolve of [resolveV02CountdownState, resolveBrowserCountdownState]) {
+      assert.throws(
+        () => resolve(unresolvable, "2026-07-17T00:00:00Z"),
+        (error) =>
+          error instanceof TypeError && /valid endsAt deadline/u.test(error.message),
+        `expected ${String(endsAt)} to be refused by ${resolve.name}`,
+      );
+    }
+    // The invalid-clock branch it is now consistent with.
+    for (const resolve of [resolveV02CountdownState, resolveBrowserCountdownState]) {
+      assert.throws(
+        () => resolve(expired, "not a clock"),
+        (error) =>
+          error instanceof TypeError && /controlled clock/u.test(error.message),
+      );
+    }
+  }
+
   const reversed = artifacts();
   const countdown = node(reversed.document, "offer-countdown");
   countdown.largestUnit = "second";
@@ -1078,130 +1132,6 @@ test("navigation history is runtime-only and root Navigate Back is a safe no-op"
   assert.deepEqual(
     rootBack,
     applyBrowserNavigationAction(initial, { type: "navigateBack" }),
-  );
-});
-
-test("RC3 candidate recovery upgrades backgrounds, sizing, presentation, and capabilities to RC4", () => {
-  const input = artifacts();
-  const candidate = structuredClone(input.hiddenPurchaseTargetDocument);
-  delete candidate.designSystem;
-  function downgrade(value) {
-    if (Array.isArray(value)) {
-      value.forEach(downgrade);
-      return;
-    }
-    if (!value || typeof value !== "object") return;
-    for (const [key, entry] of Object.entries(value)) {
-      if (key === "background" && entry?.type === "color") {
-        value[key] = structuredClone(entry.value);
-      } else {
-        downgrade(entry);
-      }
-    }
-    if (value.sizing) {
-      value.sizing.width =
-        value.sizing.width === "fit" ? "content" : value.sizing.width;
-      delete value.sizing.height;
-    }
-    if (value.type === "image") {
-      value.width = value.sizing?.width ?? "fill";
-      delete value.sizing;
-    }
-  }
-  for (const candidateScreen of candidate.screens) {
-    delete candidateScreen.presentation;
-    downgrade(candidateScreen.layout);
-  }
-  const first = migrateV02RC3CandidateToRC4(candidate, input.paywallSchema);
-  const second = migrateV02RC3CandidateToRC4(candidate, input.paywallSchema);
-  assert.deepEqual(first, second);
-  assert.deepEqual(migrateBrowserV02RC3CandidateToRC4(candidate), first);
-  assert.deepEqual(errors({ ...input, document: first.document }), []);
-  assert.deepEqual(first.document.designSystem, {
-    colors: [],
-    backgrounds: [],
-    shadows: [],
-  });
-  assert.equal(
-    first.document.screens.every(({ presentation }) => presentation.type === "screen"),
-    true,
-  );
-  assert.equal(node(first.document, "hero").sizing.height, "fit");
-  assert.equal(Object.hasOwn(candidate, "designSystem"), false);
-});
-
-test("RC2 candidate recovery preserves representable card state and emits review diagnostics", () => {
-  const input = artifacts();
-  const candidate = structuredClone(input.hiddenPurchaseTargetDocument);
-  const selector = node(candidate, "plans");
-  const sourceCards = structuredClone(selector.cards);
-  candidate.products[1].badge = {
-    default: "Best value",
-    localizationKey: "paywall.products.best_value",
-  };
-  for (const locale of Object.values(candidate.localization.locales)) {
-    for (const key of Object.keys(locale.strings)) {
-      if (key.startsWith("mosaic.migration.product_card_")) {
-        delete locale.strings[key];
-      }
-    }
-  }
-  selector.productReferenceIds = sourceCards.map(
-    (card) => card.productReferenceId,
-  );
-  selector.initiallySelectedProductReferenceId = "yearly-plan";
-  selector.cardStyles = {
-    default: {
-      background: "surface.elevated",
-      border: { color: "border.default", width: 1 },
-      cornerRadius: 12,
-      padding: { top: 12, start: 12, bottom: 12, end: 12 },
-      contentGap: 8,
-      contentAlignment: "spaceBetween",
-      productLabelColor: "text.primary",
-      runtimePriceColor: "text.secondary",
-      badge: {
-        background: "surface.default",
-        textColor: "text.primary",
-        border: { color: "border.default", width: 1 },
-        cornerRadius: 999,
-        padding: { top: 4, start: 8, bottom: 4, end: 8 },
-      },
-    },
-    selected: {
-      background: "surface.default",
-      border: { color: "action.primary", width: 2 },
-      contentGap: 12,
-      productLabelColor: "action.primary",
-      badge: { textColor: "action.onPrimary" },
-    },
-  };
-  delete selector.cards;
-  delete selector.initialProductCardId;
-  delete selector.crossAxisAlignment;
-  const first = migrateV02RC2CandidateToRC3(candidate, input.paywallSchema);
-  const second = migrateV02RC2CandidateToRC3(candidate, input.paywallSchema);
-  const browserRecovery = migrateBrowserV02RC2CandidateToRC3(candidate);
-  assert.deepEqual(first, second);
-  assert.deepEqual(browserRecovery, first);
-  assert.deepEqual(errors({ ...input, document: first.document }), []);
-  assert.equal(Object.hasOwn(candidate.products[1], "badge"), true);
-  assert.equal(Object.hasOwn(first.document.products[1], "badge"), false);
-  const recoveredSelector = node(first.document, "plans");
-  assert.equal(recoveredSelector.cards.length, 2);
-  assert.equal(
-    node(first.document, recoveredSelector.cards[1].id).children.some(
-      (child) => child.type === "productBadge",
-    ),
-    true,
-  );
-  assert.deepEqual(
-    first.diagnostics.map(({ field }) => field),
-    [
-      "cardStyles.selected.contentGap",
-      "cardStyles.selected.productLabelColor",
-      "cardStyles.selected.badge.textColor",
-    ],
   );
 });
 

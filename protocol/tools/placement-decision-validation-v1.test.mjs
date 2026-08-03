@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DecisionEvaluationError,
   evaluateDecisionV1,
   loadDecisionV1Artifacts,
   rolloutV1,
@@ -23,6 +24,69 @@ test("priority, canonical locales, unknown inputs, fallback, typed values, and s
       testCase.name,
     );
   }
+});
+
+const QA_OVERRIDE = Object.freeze({
+  id: "override_qa",
+  selectorDigest: `sha256:${"a".repeat(64)}`,
+  safeLabel: "qa override",
+  startsAt: "2026-08-01T00:00:00Z",
+  expiresAt: "2026-08-01T12:00:00Z",
+  outcome: { type: "no_paywall" },
+});
+
+test("a QA override window is never evaluated against an assumed clock", () => {
+  // Regression: `context.now ?? epoch` made every override window silently
+  // inactive, so a QA override could look expired on a caller that forgot the
+  // clock rather than surfacing the omission.
+  const fixture = loadDecisionV1Artifacts().evaluatorFixture;
+  const withOverride = structuredClone(fixture.decision);
+  withOverride.ruleSet.qaOverrides = [structuredClone(QA_OVERRIDE)];
+  const context = {
+    ...fixture.cases[0].context,
+    qaOverrideSelectorDigest: QA_OVERRIDE.selectorDigest,
+  };
+
+  for (const now of [undefined, "not a timestamp"]) {
+    assert.throws(
+      () => evaluateDecisionV1(withOverride, { ...context, now }),
+      (error) =>
+        error instanceof DecisionEvaluationError && error.code === "now_required",
+      `expected now_required for ${JSON.stringify(now)}`,
+    );
+  }
+
+  // Inside the window the override wins; outside it, the rules run.
+  assert.deepEqual(
+    evaluateDecisionV1(withOverride, { ...context, now: "2026-08-01T06:00:00Z" }),
+    { matchedRuleId: null, overrideId: "override_qa", outcome: { type: "no_paywall" } },
+  );
+  assert.equal(
+    evaluateDecisionV1(withOverride, { ...context, now: "2026-08-02T06:00:00Z" })
+      .overrideId,
+    undefined,
+  );
+
+  // A rule set with no override windows never needed a clock in the first place.
+  assert.deepEqual(
+    evaluateDecisionV1(fixture.decision, fixture.cases[0].context),
+    fixture.cases[0].expected,
+  );
+});
+
+test("an unresolvable fallback key is named rather than crashing the evaluator", () => {
+  // The evaluator is reachable from callers that have not validated the
+  // document. A dangling fallback reference used to surface as a bare
+  // "cannot read properties of undefined".
+  const decision = structuredClone(loadDecisionV1Artifacts().evaluatorFixture.decision);
+  decision.ruleSet.defaultOutcome = { type: "fallback", key: "not_defined" };
+  assert.throws(
+    () => evaluateDecisionV1(decision, { entitlements: {}, products: {} }),
+    (error) =>
+      error instanceof DecisionEvaluationError &&
+      error.code === "unknown_fallback_key" &&
+      error.message.includes("not_defined"),
+  );
 });
 
 test("length-prefixed UTF-8 rollout is stable at exact threshold boundaries", () => {

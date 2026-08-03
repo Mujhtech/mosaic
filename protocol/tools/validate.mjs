@@ -213,6 +213,18 @@ try {
     );
   }
 } catch (error) {
-  console.error(error instanceof Error ? error.message : error);
+  // A typed refusal already says everything useful, and a missing artifact names
+  // its own path. Anything else is a bug in the tools, and a bug reported as one
+  // line of message is a bug that takes an afternoon to locate.
+  console.error(isExpectedValidationFailure(error) ? error.message : (error?.stack ?? error));
   process.exitCode = 1;
+}
+
+function isExpectedValidationFailure(error) {
+  if (!(error instanceof Error)) return false;
+  // Typed refusals raised deliberately by the validators themselves.
+  if (error.name === "DecisionEvaluationError") return true;
+  // A committed artifact that is missing or unreadable: the message carries the
+  // path, which is the whole diagnosis.
+  return typeof error.code === "string" && ["ENOENT", "EACCES", "EISDIR"].includes(error.code);
 }

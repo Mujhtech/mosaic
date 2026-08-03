@@ -4,6 +4,54 @@ All notable Mosaic protocol changes are recorded here. A contract's artifacts
 become immutable when its `status` reaches `approved`; before that, its review
 gate may still change them. Every Mosaic contract is `approved` as of v1 GA.
 
+## Fallback-audit remediation in validators and tools - 2026-08-03
+
+Status: housekeeping
+
+No schema, manifest, or fixture changed. Six silent-fallback defects found by
+the 2026-08-02 fallback audit were closed in the validation tools, where the
+guard belongs:
+
+- Authoritative Entitlement `1`: an absent, renamed, or empty `readerPolicy` now
+  fails validation instead of defaulting to `{}` and letting the "no reader
+  policy may resolve to inactive" invariant hold over nothing. The invariant's
+  string check is also camel-case aware, so a spelling such as
+  `resolveWheneverInactive` no longer passes on the `never` lookbehind.
+- Billing State Webhook `1` and `2`: the consumer's `ignore` arms are the only
+  tolerant reader policy in the protocol, and are safe solely because the
+  consumer re-reads the authoritative snapshot. The validators now pin
+  `consumerTolerance.authoritativeState` / `consumerPolicy.authoritativeState`
+  exactly, and both contract documents state the consumer conformance rules
+  normatively.
+- Placement Decision `1`: a rule set that declares QA override windows now
+  requires `context.now` (typed `DecisionEvaluationError`, code `now_required`)
+  rather than assuming the Unix epoch and silently closing every window. An
+  unresolvable fallback key raises `unknown_fallback_key` naming the key instead
+  of a bare `TypeError`.
+- Paywall Protocol `0.2`: an unparsable countdown `endsAt` now throws on both
+  the Node and browser copies, matching the invalid-clock branch, instead of
+  returning `completed: false` with `NaN` remaining. An opaque colour literal
+  that cannot be parsed raises `productCard.contrastNotEvaluated` rather than
+  skipping the contrast check silently; semantic tokens and translucent literals
+  remain legitimate skips.
+- Local Preview `0.2`: the `nativeApproximation` compatibility fallback is
+  documented. It is a declared schema value implemented by all three SDKs, not
+  dead vocabulary.
+
+## Removed retired RC candidate migrators - 2026-08-02
+
+Status: housekeeping
+
+The candidate-to-candidate recovery tools `migrate-v0.2-rc2-to-rc3` and
+`migrate-v0.2-rc3-to-rc4`, their browser-runtime twins
+(`migrateV02RC2CandidateToRC3` / `migrateV02RC3CandidateToRC4`), the generated
+RC candidate types, and the dashboard's legacy-import recovery path were
+removed. RC4 is the sole in-tree Paywall Protocol `0.2` candidate; documents
+that do not match the current contract are rejected rather than migrated. This
+also removes the migrator defect where an unmatched
+`initiallySelectedProductReferenceId` silently produced a schema-invalid
+document with an absent required `initialProductCardId` and empty diagnostics.
+
 ## Phase 9C: durable source pulls and operator affordances - 2026-07-29
 
 Status: draft

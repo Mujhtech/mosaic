@@ -73,6 +73,37 @@ test("consumer tolerance is the documented exception to fail-closed reading", ()
   );
 });
 
+test("the validator enforces the re-read counterweight, not just the manifest text", () => {
+  // The three `ignore` arms are the protocol's only tolerant reader policy. They
+  // are safe solely because the consumer re-reads the authoritative snapshot. If
+  // that requirement is dropped or reworded, validation must fail rather than
+  // leave the tolerance standing alone.
+  for (const mutate of [
+    (manifest) => delete manifest.consumerTolerance.authoritativeState,
+    (manifest) => {
+      manifest.consumerTolerance.authoritativeState = "projectFromEvent";
+    },
+    (manifest) => {
+      manifest.consumerTolerance.authoritativeState = "reReadSnapshotIfConvenient";
+    },
+    (manifest) => {
+      manifest.consumerTolerance.signatureVerification = "optional";
+    },
+    (manifest) => delete manifest.consumerTolerance,
+  ]) {
+    const broken = structuredClone(artifacts);
+    broken.compatibilityManifest = structuredClone(artifacts.compatibilityManifest);
+    mutate(broken.compatibilityManifest);
+    const errors = validateBillingStateWebhookV1Artifacts(broken);
+    assert.ok(
+      errors.some((error) =>
+        /consumerTolerance|may never project entitlement state/.test(error),
+      ),
+      `expected a consumer-tolerance error, got: ${errors.join("; ")}`,
+    );
+  }
+});
+
 test("delivery is at least once and ordered by snapshot version", () => {
   const manifest = artifacts.compatibilityManifest;
   assert.equal(manifest.delivery.guarantee, "atLeastOnce");

@@ -16,9 +16,9 @@ the later version adds — not because it is newer.
 | [Commerce Configuration 1 → 2](commerce-configuration-v1-to-v2.md) | Direct native-store activation and exact native selectors |
 
 No guide exists for Paywall Protocol `0.2`, Local Preview `0.2`, Placement
-Decision `1`, or Experiment Assignment `1`: each has exactly one approved version.
-See [v0.2.md](../v0.2.md#related-documents) for why the in-tree
-`migrate-v0.2-rc*` tools are not an upgrade path.
+Decision `1`, or Experiment Assignment `1`: each has exactly one approved
+version, and the retired RC-candidate migration tools were removed from the
+tree; there is no upgrade path from unapproved candidates.
 
 ## Coupled migrations
 

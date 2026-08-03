@@ -14,62 +14,13 @@ import type {
   MosaicDocument,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import type {
-  MosaicPaywallV02RC2Candidate,
-  MosaicPaywallV02RC3Candidate,
-} from "@/lib/mosaic-protocol";
 import {
   canonicalSchemasByVersion,
-  migrateV02RC2CandidateToRC3,
-  migrateV02RC3CandidateToRC4,
   parsePortablePaywallJson,
   serializePortablePaywallJson,
   validateLocalProject,
   validatePaywallDocument,
 } from "@/lib/mosaic-protocol";
-
-function containsRC2ProductSelector(value: unknown): boolean {
-  if (Array.isArray(value)) {
-    return value.some(containsRC2ProductSelector);
-  }
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  if (
-    record.type === "productSelector" &&
-    Array.isArray(record.productReferenceIds) &&
-    record.cardStyles !== undefined
-  ) {
-    return true;
-  }
-  return Object.values(record).some(containsRC2ProductSelector);
-}
-
-function migrateLegacyV02Document(value: unknown): MosaicDocument | null {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    (value as Record<string, unknown>).schemaVersion !== "0.2"
-  ) {
-    return null;
-  }
-  try {
-    const rc3 = containsRC2ProductSelector(value)
-      ? migrateV02RC2CandidateToRC3(value as MosaicPaywallV02RC2Candidate)
-          .document
-      : value;
-    const migrated = migrateV02RC3CandidateToRC4(
-      rc3 as MosaicPaywallV02RC3Candidate
-    ).document;
-    const validation = validatePaywallDocument(migrated);
-    return validation.ok
-      ? (cloneValue(validation.value) as MosaicDocument)
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 let validateRecoverableProject: ReturnType<Ajv2020["compile"]> | null = null;
 
@@ -274,10 +225,6 @@ export function parseImportedJson(json: string): {
       "Import a raw Mosaic paywall JSON file. Local autosaves can only be resumed from this browser."
     );
   }
-  const migratedV02 = migrateLegacyV02Document(parsed);
-  if (migratedV02) {
-    return { document: migratedV02, project: null };
-  }
   throw new Error(importFailure(documentResult.diagnostics));
 }
 
@@ -360,20 +307,6 @@ export function readLocalProjectResult(): LocalProjectReadResult {
     const parsed: unknown = JSON.parse(stored);
     if (isLocalProjectFile(parsed)) {
       return { status: "valid", project: parsed };
-    }
-    if (parsed && typeof parsed === "object") {
-      const record = parsed as Record<string, unknown>;
-      const migratedDocument = migrateLegacyV02Document(record.document);
-      if (record.fileFormatVersion === "0.2" && migratedDocument) {
-        const migratedProject = { ...record, document: migratedDocument };
-        const validation = validateLocalProject(migratedProject);
-        if (validation.ok) {
-          return {
-            status: "valid",
-            project: cloneValue(validation.value) as LocalProjectFile,
-          };
-        }
-      }
     }
     if (isRecoverableLocalProject(parsed)) {
       return {

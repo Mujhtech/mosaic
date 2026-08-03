@@ -194,8 +194,36 @@ function semanticErrors(name, document) {
   return errors;
 }
 
+/**
+ * v2 keeps v1's tolerant `ignore` arms for unknown fields, event types, and
+ * enumeration members. They are only safe because the consumer re-reads the
+ * authoritative snapshot instead of projecting state from the payload, and that
+ * rule lives nowhere but the manifest. Pin it exactly, or the tolerance stands
+ * alone. Documented in docs/protocol/billing-state-webhook-v2.md.
+ */
+const BILLING_STATE_WEBHOOK_V2_CONSUMER_POLICY = Object.freeze({
+  authoritativeState: "reReadAuthoritativeEntitlementV2",
+  v1Destination: "receivesV1EventsOnly",
+});
+
+function consumerPolicyErrors(artifacts) {
+  if (artifacts.name !== "billingStateWebhookV2") return [];
+  const policy = artifacts.manifest.consumerPolicy;
+  if (policy === null || typeof policy !== "object" || Array.isArray(policy)) {
+    return [
+      "manifest must declare a consumerPolicy object; the ignore arms are only safe alongside the re-read requirement",
+    ];
+  }
+  return Object.entries(BILLING_STATE_WEBHOOK_V2_CONSUMER_POLICY)
+    .filter(([key, expected]) => policy[key] !== expected)
+    .map(
+      ([key, expected]) =>
+        `manifest consumerPolicy.${key} must be exactly "${expected}", not ${JSON.stringify(policy[key])}: a consumer may never project entitlement state from a webhook payload`,
+    );
+}
+
 export function validatePhase9CArtifacts(artifacts) {
-  const errors = [];
+  const errors = [...consumerPolicyErrors(artifacts)];
   const validate = validators(artifacts);
   if (!validate.manifest(artifacts.manifest)) errors.push(...validate.manifest.errors.map((e) => `manifest${e.instancePath} ${e.message}`));
   const manifestPaths = new Set(artifacts.manifest.canonicalFixtures.map((path) => resolve(root, path.replace(/^\.\.\/\.\.\//, ""))));

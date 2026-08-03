@@ -101,28 +101,6 @@ export type MosaicProductTemplateResolution =
       readonly value: null;
       readonly diagnostic: "invalidTemplate" | "missingName" | "missingPrice";
     };
-export type MosaicPaywallV02RC2Candidate = Readonly<Record<string, unknown>> & {
-  readonly schemaVersion: "0.2";
-};
-export type MosaicV02RC2MigrationDiagnostic = {
-  readonly code: "migration.reviewRequired";
-  readonly severity: "reviewRequired";
-  readonly selectorId: string;
-  readonly field: string;
-  readonly message: string;
-};
-export type MosaicV02RC2MigrationResult = {
-  readonly document: MosaicPaywallV02Document;
-  readonly diagnostics: readonly MosaicV02RC2MigrationDiagnostic[];
-};
-export type MosaicPaywallV02RC3Candidate = Readonly<Record<string, unknown>> & {
-  readonly schemaVersion: "0.2";
-};
-export type MosaicV02RC3MigrationResult = {
-  readonly document: MosaicPaywallV02Document;
-  readonly diagnostics: readonly [];
-};
-
 export type MosaicValidationResult<T> =
   | { readonly ok: true; readonly value: T; readonly diagnostics: readonly [] }
   | {
@@ -166,14 +144,6 @@ export declare function decideLocalPreviewDraftDelivery(options?: {
   readonly document?: MosaicAnyPaywallDocument;
   readonly negotiation?: MosaicLocalPreviewNegotiation;
 }): MosaicLocalPreviewDeliveryDecision;
-
-export declare function migrateV02RC2CandidateToRC3(
-  document: MosaicPaywallV02RC2Candidate,
-): MosaicV02RC2MigrationResult;
-
-export declare function migrateV02RC3CandidateToRC4(
-  document: MosaicPaywallV02RC3Candidate,
-): MosaicV02RC3MigrationResult;
 
 export declare function resolveColorToken(
   document: MosaicPaywallV02Document,

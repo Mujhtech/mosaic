@@ -40,5 +40,36 @@ The example applications show explicit connecting, waiting-for-design, and
 cannot-connect states before the first accepted revision. They do not render a
 bundled fallback during a Studio demo.
 
+## Compatibility diagnostics and the fallback vocabulary
+
+A preview client reports what it could not render exactly as authored through a
+compatibility diagnostic. `fallback` names *what the viewer is actually looking
+at* while the diagnostic stands, so Studio can describe the discrepancy instead
+of implying the preview is faithful. The vocabulary is closed and pinned by
+`preview-message.schema.json` (`$defs.compatibilityWarning.fallback`):
+
+| `fallback` | What the preview is showing |
+| --- | --- |
+| `keepLastAcceptedDraft` | The revision was rejected; the previous accepted draft is still on screen. Paired with `blocking`. |
+| `useDeclaredAssetFallback` | An asset could not be resolved, so the document's own declared asset fallback is rendered. |
+| `useSelectorFallback` | A Product Selector could not resolve its authored binding, so its declared fallback selection is shown. |
+| `nativeApproximation` | The client rendered the component with the closest native equivalent it has. Geometry, typography, or motion may differ from the authored intent. |
+
+`nativeApproximation` is the honest arm of the set, and the reason it exists:
+without it a client that partially supported a component would have to choose
+between claiming success and blocking the draft. It is a *declared* compatibility
+fallback, not a rendering failure — the preview is usable, but it is an
+approximation, and Studio must label it as one. All three SDKs implement the
+full vocabulary (`MosaicPreviewCompatibilityFallback` on iOS,
+`MosaicPreviewFallback` on Android, `MosaicPreviewCompatibilityFallback` on
+Flutter), and Flutter's renderer emits `nativeApproximation` for any non-product
+render warning it raises.
+
+`recovery` is required on every compatibility warning, so an approximation
+always tells the author what to change. The schema also makes
+`nativeApproximation` warning-severity by construction: `severity: "blocking"`
+constrains `fallback` to `keepLastAcceptedDraft`, so a client that cannot
+approximate at all must reject the revision rather than silently draw nothing.
+
 Portable import/export uses raw Protocol `0.2` JSON. Browser validation and all
 native clients accept only the current exact version.
