@@ -542,7 +542,6 @@ interface NodeValidationContext {
   readonly productIds: ReadonlySet<string>;
   readonly selectorIds: ReadonlySet<string>;
   readonly state: {
-    emittedCannotVerifyContrast: boolean;
     readonly seenIds: Set<string>;
   };
 }
@@ -647,7 +646,7 @@ function validateNodeColour(
   context: NodeValidationContext
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const { document, state } = context;
+  const { document } = context;
   for (const field of foregroundFields(node)) {
     const contrast = evaluateContrast(
       document,
@@ -661,21 +660,6 @@ function validateNodeColour(
           `Text or icon contrast is below ${field.threshold}:1 after literal colour alpha and composed opacity.`,
           `${path}/${field.property.replaceAll(".", "/")}`,
           "Choose literal foreground and background colours with sufficient contrast in every authored state.",
-          node.id,
-          field.property
-        )
-      );
-    } else if (
-      contrast === "cannotVerify" &&
-      !state.emittedCannotVerifyContrast
-    ) {
-      state.emittedCannotVerifyContrast = true;
-      issues.push(
-        warning(
-          "appearance.contrastCannotVerify",
-          "Contrast cannot be verified because semantic colours are mapped by the host app theme.",
-          `${path}/${field.property.replaceAll(".", "/")}`,
-          "Verify this semantic colour pair in every host theme, or use literal colours for a Studio contrast result.",
           node.id,
           field.property
         )
@@ -695,21 +679,6 @@ function validateNodeColour(
           "Control-boundary contrast is below 3:1 after literal colour alpha and composed opacity.",
           `${path}/${field.property.replaceAll(".", "/")}`,
           "Choose a border or track colour that contrasts with the adjacent background.",
-          node.id,
-          field.property
-        )
-      );
-    } else if (
-      contrast === "cannotVerify" &&
-      !state.emittedCannotVerifyContrast
-    ) {
-      state.emittedCannotVerifyContrast = true;
-      issues.push(
-        warning(
-          "appearance.contrastCannotVerify",
-          "Control-boundary contrast cannot be verified because semantic colours are mapped by the host app theme.",
-          `${path}/${field.property.replaceAll(".", "/")}`,
-          "Verify this semantic colour pair in every host theme, or use literal colours for a Studio contrast result.",
           node.id,
           field.property
         )
@@ -936,7 +905,6 @@ export function validateEditorDocument(
     )
   );
   const assetIds = new Set(document.assets.map((asset) => asset.id));
-  const emittedCannotVerifyContrast = false;
 
   document.screens.forEach((screen, index) => {
     if (screen.layout.content.children.length === 0) {
@@ -958,7 +926,7 @@ export function validateEditorDocument(
     document,
     productIds,
     selectorIds,
-    state: { emittedCannotVerifyContrast, seenIds },
+    state: { seenIds },
   };
   for (const { node, documentPath: path } of entries) {
     issues.push(...validateNodeIdentity(node, path, context));

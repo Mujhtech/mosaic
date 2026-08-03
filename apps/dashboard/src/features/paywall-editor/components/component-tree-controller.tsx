@@ -130,6 +130,9 @@ export function useComponentTreeModel({
     };
     const byComponent = new Map<string, LayerIssueSummary>();
     for (const issue of validation.issues) {
+      if (issue.severity === "info") {
+        continue;
+      }
       const key = issue.severity === "error" ? "errorCount" : "warningCount";
       documentSummary[key] += 1;
       if (!issue.componentId) {

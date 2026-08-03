@@ -182,7 +182,7 @@ export interface ValidationIssue {
   message: string;
   property?: string;
   recovery: string;
-  severity: "error" | "warning";
+  severity: "error" | "warning" | "info";
 }
 
 export interface PreviewDiagnostic {

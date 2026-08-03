@@ -7,6 +7,16 @@ import { findNode } from "@/features/paywall-editor/utils/document-tree-traversa
 import { required } from "@/test/required";
 
 describe("editor validation", () => {
+  it("accepts every editor template with nothing to fix", () => {
+    for (const template of EDITOR_TEMPLATES) {
+      const { issues, contractValid } = collectEditorValidation(
+        template.document
+      );
+      expect(contractValid).toBe(true);
+      expect(issues.filter((issue) => issue.severity !== "info")).toEqual([]);
+    }
+  });
+
   it("reports the exact recursive JSON pointer for a nested component", () => {
     const template = EDITOR_TEMPLATES.find((entry) => entry.id === "focused");
     if (!template) {
@@ -87,19 +97,20 @@ describe("editor validation", () => {
     purchase.direction = "horizontal";
     purchase.sizing = { width: { mode: "fixed", value: 100 }, height: "fit" };
 
-    const warnings = validateEditorDocument(document).filter(
-      (issue) => issue.severity === "warning"
-    );
+    const issues = validateEditorDocument(document);
+    const warnings = issues.filter((issue) => issue.severity === "warning");
     expect(warnings.map((issue) => issue.code)).toEqual(
       expect.arrayContaining([
         "appearance.indistinguishableProductStates",
         "appearance.lowContrast",
         "appearance.lowBoundaryContrast",
-        "appearance.contrastCannotVerify",
         "typography.truncationRisk",
         "layout.horizontalOverflow",
       ])
     );
+    expect(
+      issues.filter((issue) => issue.code === "appearance.contrastCannotVerify")
+    ).toEqual([]);
     expect(warnings).toContainEqual(
       expect.objectContaining({
         componentId: "monthly-card",
