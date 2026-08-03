@@ -10,6 +10,38 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **App Store Connect provider connections.** `app_store_connect` joins
+  `revenuecat` as a server-connected provider kind: an operator connects one App
+  Store Connect API key (`.p8` + key ID + issuer ID, plus an optional vendor
+  number kept for future finance reporting) and imports their existing App Store
+  apps, in-app purchases, subscription groups, and subscriptions into the Mosaic
+  catalog. The catalog client is now resolved per provider kind rather than
+  globally, so an unregistered provider is refused instead of being served by
+  another provider's adapter. `app_store_connect` is distinct from the native
+  SDK-side `app_store` mapping: imported mappings always carry the connection
+  they were verified through. Consumables and non-renewing subscriptions are
+  listed in the preview but refused by import. App Store Connect has no
+  entitlement resource, so entitlement mapping is reported as host-managed.
+
+- **App Store Connect imports are publishable.** An imported catalog is
+  delivered by the native App Store activation: import through App Store
+  Connect, activate the native store, publish. `app_store_connect` mappings now
+  satisfy the iOS native product-mapping requirement in both provider readiness
+  and Commerce Configuration generation, and the emitted configuration is
+  unchanged — identity `app_store`, activation `nativeStore`, adapter kind
+  `storeKitProduct`. Apple's opaque resource ID is never shipped as the purchase
+  identifier; the App Store product ID is. Where a Product has both an imported
+  and a hand-created native mapping, the imported one wins: it is
+  provider-verified and refreshed by synchronization. Because an imported
+  mapping cannot carry an SDK observation, its metadata snapshot supplies
+  freshness instead. Assigning an App Store Connect connection as a
+  server-connected active provider is now refused at assignment time with
+  `providerNativeActivationRequired` (422) and the remedy, rather than failing
+  later during publishing. Provider readiness gains `mappingProvider`, which
+  reports whether the mapping that will ship was imported or hand-created. No
+  protocol change: Commerce Configuration v2 already required exactly this
+  shape.
+
 - **iOS SDK: authoritative customer entitlements** (Authoritative Entitlement
   Contract v1, draft). `Mosaic.configure` gains an optional
   `customerTokenProvider`; a new `MosaicCustomer…` surface reports what Mosaic
