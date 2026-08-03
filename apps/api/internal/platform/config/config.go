@@ -175,16 +175,17 @@ type ProtocolConfig struct {
 }
 
 type ProviderConfig struct {
-	Enabled            bool          `envconfig:"MOSAIC_PROVIDER_INTEGRATIONS_ENABLED" default:"false"`
-	CredentialKeyring  string        `envconfig:"MOSAIC_PROVIDER_CREDENTIAL_KEYRING"`
-	RevenueCatBaseURL  string        `envconfig:"MOSAIC_REVENUECAT_BASE_URL" default:"https://api.revenuecat.com/v2"`
-	RequestTimeout     time.Duration `envconfig:"MOSAIC_PROVIDER_REQUEST_TIMEOUT" default:"8s"`
-	OperationTimeout   time.Duration `envconfig:"MOSAIC_PROVIDER_OPERATION_TIMEOUT" default:"60s"`
-	ConnectTimeout     time.Duration `envconfig:"MOSAIC_PROVIDER_CONNECT_TIMEOUT" default:"3s"`
-	MaxResponseBytes   int64         `envconfig:"MOSAIC_PROVIDER_MAX_RESPONSE_BYTES" default:"2097152"`
-	MaxAttempts        int           `envconfig:"MOSAIC_PROVIDER_MAX_ATTEMPTS" default:"3"`
-	SnapshotTTL        time.Duration `envconfig:"MOSAIC_PROVIDER_SNAPSHOT_TTL" default:"24h"`
-	WorkerPollInterval time.Duration `envconfig:"MOSAIC_PROVIDER_WORKER_POLL_INTERVAL" default:"1s"`
+	Enabled                bool          `envconfig:"MOSAIC_PROVIDER_INTEGRATIONS_ENABLED" default:"false"`
+	CredentialKeyring      string        `envconfig:"MOSAIC_PROVIDER_CREDENTIAL_KEYRING"`
+	RevenueCatBaseURL      string        `envconfig:"MOSAIC_REVENUECAT_BASE_URL" default:"https://api.revenuecat.com/v2"`
+	AppStoreConnectBaseURL string        `envconfig:"MOSAIC_APP_STORE_CONNECT_BASE_URL" default:"https://api.appstoreconnect.apple.com"`
+	RequestTimeout         time.Duration `envconfig:"MOSAIC_PROVIDER_REQUEST_TIMEOUT" default:"8s"`
+	OperationTimeout       time.Duration `envconfig:"MOSAIC_PROVIDER_OPERATION_TIMEOUT" default:"60s"`
+	ConnectTimeout         time.Duration `envconfig:"MOSAIC_PROVIDER_CONNECT_TIMEOUT" default:"3s"`
+	MaxResponseBytes       int64         `envconfig:"MOSAIC_PROVIDER_MAX_RESPONSE_BYTES" default:"2097152"`
+	MaxAttempts            int           `envconfig:"MOSAIC_PROVIDER_MAX_ATTEMPTS" default:"3"`
+	SnapshotTTL            time.Duration `envconfig:"MOSAIC_PROVIDER_SNAPSHOT_TTL" default:"24h"`
+	WorkerPollInterval     time.Duration `envconfig:"MOSAIC_PROVIDER_WORKER_POLL_INTERVAL" default:"1s"`
 }
 
 type ObjectStoreConfig struct {
@@ -353,6 +354,7 @@ func load() (Config, error) {
 	cfg.Billing.GooglePlayBaseURL = strings.TrimSpace(cfg.Billing.GooglePlayBaseURL)
 	cfg.Billing.GooglePubSubBaseURL = strings.TrimSpace(cfg.Billing.GooglePubSubBaseURL)
 	cfg.Providers.RevenueCatBaseURL = strings.TrimSpace(cfg.Providers.RevenueCatBaseURL)
+	cfg.Providers.AppStoreConnectBaseURL = strings.TrimSpace(cfg.Providers.AppStoreConnectBaseURL)
 	cfg.ObjectStore.Endpoint = strings.TrimSpace(cfg.ObjectStore.Endpoint)
 	cfg.ObjectStore.AccessKey = strings.TrimSpace(cfg.ObjectStore.AccessKey)
 	cfg.ObjectStore.SecretKey = strings.TrimSpace(cfg.ObjectStore.SecretKey)
@@ -487,7 +489,16 @@ func (cfg Config) validateBillingMigration(report *problems) {
 			report.add("MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING is not a valid version 1 AES-256 keyring")
 		}
 	}
-	if keyringMaterialOverlaps(cfg.Migration.SourceObjectKeyring, cfg.Providers.CredentialKeyring) {
+	switch overlaps, compared := keyringMaterialOverlaps(cfg.Migration.SourceObjectKeyring, cfg.Providers.CredentialKeyring); {
+	case !compared:
+		// A keyring that will not parse is not evidence that the two keyrings
+		// are disjoint. Reporting "no overlap" for it let a malformed keyring
+		// skip the one check that stops migration source objects and provider
+		// credentials sharing key material, so a single compromised key would
+		// open both. The unparseable keyring is a validation failure in its own
+		// right, and startup refuses rather than proceeding unchecked.
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING and MOSAIC_PROVIDER_CREDENTIAL_KEYRING must both be valid JSON keyrings so their key material can be compared")
+	case overlaps:
 		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING must not reuse key material from MOSAIC_PROVIDER_CREDENTIAL_KEYRING")
 	}
 	if cfg.Migration.SourceObjectBucket == "" {
@@ -507,16 +518,22 @@ func (cfg Config) validateBillingMigration(report *problems) {
 	}
 }
 
-func keyringMaterialOverlaps(left, right string) bool {
+// keyringMaterialOverlaps reports whether two keyrings share key material. The
+// second result is false when the comparison could not be made at all — either
+// keyring absent or unparseable — which is deliberately not the same answer as
+// "they do not overlap".
+func keyringMaterialOverlaps(left, right string) (bool, bool) {
 	if left == "" || right == "" {
-		return false
+		// Nothing to compare. Absence is handled by the required-keyring checks
+		// that surround this one, not here.
+		return false, true
 	}
 	type keyring struct {
 		Keys map[string]string `json:"keys"`
 	}
 	var first, second keyring
 	if json.Unmarshal([]byte(left), &first) != nil || json.Unmarshal([]byte(right), &second) != nil {
-		return false
+		return false, false
 	}
 	values := make(map[string]struct{}, len(first.Keys))
 	for _, value := range first.Keys {
@@ -524,10 +541,10 @@ func keyringMaterialOverlaps(left, right string) bool {
 	}
 	for _, value := range second.Keys {
 		if _, exists := values[value]; exists {
-			return true
+			return true, true
 		}
 	}
-	return false
+	return false, true
 }
 
 func (cfg Config) validateHTTP(report *problems, productionLike bool) {
@@ -752,6 +769,18 @@ func (cfg Config) validateProviders(report *problems, productionLike bool) {
 			report.add("MOSAIC_REVENUECAT_BASE_URL must be an absolute HTTP(S) URL without credentials")
 		case productionLike && providerBaseURL.Scheme != "https":
 			report.add("MOSAIC_REVENUECAT_BASE_URL must use HTTPS outside development and test")
+		}
+	}
+	if cfg.Providers.AppStoreConnectBaseURL == "" {
+		report.add("MOSAIC_APP_STORE_CONNECT_BASE_URL must not be empty")
+	} else {
+		appStoreConnectBaseURL, err := url.Parse(cfg.Providers.AppStoreConnectBaseURL)
+		switch {
+		case err != nil || appStoreConnectBaseURL.Host == "" || appStoreConnectBaseURL.User != nil ||
+			(appStoreConnectBaseURL.Scheme != "https" && appStoreConnectBaseURL.Scheme != "http"):
+			report.add("MOSAIC_APP_STORE_CONNECT_BASE_URL must be an absolute HTTP(S) URL without credentials")
+		case productionLike && appStoreConnectBaseURL.Scheme != "https":
+			report.add("MOSAIC_APP_STORE_CONNECT_BASE_URL must use HTTPS outside development and test")
 		}
 	}
 	report.requirePositive(map[string]time.Duration{

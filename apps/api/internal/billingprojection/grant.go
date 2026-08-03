@@ -89,9 +89,23 @@ func selectOne(candidates []GrantVersion, at time.Time) (GrantVersion, bool) {
 	return GrantVersion{}, false
 }
 
+// supportsPurchaseType reports whether a grant version covers a purchase type.
+//
+// Both under-specified shapes refuse rather than match. An empty
+// SupportedPurchaseTypes used to match every purchase type, which made an
+// under-specified grant row the widest possible grant: the one row shape most
+// likely to be produced by a bug or a partial write granted the most access.
+// The list is enumerative by contract — `billinggrant.ValidateShape` refuses an
+// empty one and migration 00063 enforces the same invariant in the schema — so
+// an empty list here can only mean a row that predates or evades that
+// invariant, and the honest reading of it is "this version states nothing about
+// what it covers", not "everything".
+//
+// An empty purchaseType is refused for the same reason: it means the purchase's
+// type is unknown, and an unknown purchase must not select a grant.
 func supportsPurchaseType(version GrantVersion, purchaseType string) bool {
-	if purchaseType == "" || len(version.SupportedPurchaseTypes) == 0 {
-		return true
+	if purchaseType == "" {
+		return false
 	}
 	for _, supported := range version.SupportedPurchaseTypes {
 		if supported == purchaseType {

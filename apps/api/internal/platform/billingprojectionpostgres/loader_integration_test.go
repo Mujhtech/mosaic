@@ -85,9 +85,16 @@ func newFixture(t *testing.T, suffix string) fixture {
 	               provider_product_identifier, platform, status, created_at, updated_at)
 	           VALUES ($1,$2,$3,$4,'app_store','com.mosaic.pro','ios','placeholder',$5,$5)
 	           ON CONFLICT (id) DO NOTHING`, f.mapping, f.project, f.product, f.application, f.now)
+	// Coverage and policy are stated explicitly: migration 00063 removed the
+	// granting defaults so that a grant row can never grant something no caller
+	// asked for.
 	f.exec(t, `INSERT INTO product_entitlement_grant_versions(
-	               id, project_id, product_id, entitlement_id, version, effective_start, created_at)
-	           VALUES ($1,$2,$3,$4,1,$5,$5) ON CONFLICT (id) DO NOTHING`,
+	               id, project_id, product_id, entitlement_id, version, effective_start, created_at,
+	               supported_purchase_types, grants_in_active, grants_in_trial, grants_in_grace,
+	               grants_in_one_time_ownership)
+	           VALUES ($1,$2,$3,$4,1,$5,$5,
+	               ARRAY['auto_renewable_subscription','non_consumable']::text[],
+	               true,true,true,true) ON CONFLICT (id) DO NOTHING`,
 		f.grantVersion, f.project, f.product, f.entitlement, f.now.Add(-365*24*time.Hour))
 	f.exec(t, `INSERT INTO billing_project_settings(project_id,billing_enabled,updated_by_actor_id,created_at,updated_at)
 	           VALUES ($1,true,'loader',$2,$2) ON CONFLICT (project_id) DO UPDATE SET billing_enabled=true`,

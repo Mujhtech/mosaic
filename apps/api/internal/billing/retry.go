@@ -26,6 +26,19 @@ const (
 	CategorySignature         = "signature"
 	CategoryResolution        = "resolution"
 	CategoryConfiguration     = "configuration"
+	// CategoryUnclassified is a provider response Mosaic's rules do not
+	// describe: a status outside every documented band, which is neither a
+	// statement that the request was wrong nor that the provider is unwell.
+	//
+	// It used to be folded into `invalid`, i.e. permanently failed, and a
+	// permanent failure is Mosaic asserting that the input can never validate —
+	// on no evidence. That assertion is expensive: the input quarantines as
+	// `provider_permanently_failed` and the purchase behind it stops being
+	// re-examined. Unclassified is retryable instead, under a low cap of its
+	// own, so a genuinely transient oddity recovers and a persistent one still
+	// reaches an operator quickly and under a diagnostic that says the response
+	// was not understood rather than that it was rejected.
+	CategoryUnclassified = "unclassified"
 )
 
 // Classification is the retry decision for one failure.
@@ -92,7 +105,7 @@ func classifyApple(err *appstoreserver.Error, now time.Time) Classification {
 	case err.HTTPStatus == 0:
 		return classifyTransport(err)
 	default:
-		result.Category, result.Retryable, result.Diagnostic = CategoryInvalid, false, "apple_unexpected_response"
+		result.Category, result.Retryable, result.Diagnostic = CategoryUnclassified, true, "apple_unclassified_response"
 	}
 	return result
 }
@@ -123,7 +136,7 @@ func classifyGoogle(err *googleplay.Error, now time.Time) Classification {
 	case err.HTTPStatus == 0:
 		return classifyTransport(err)
 	default:
-		result.Category, result.Retryable, result.Diagnostic = CategoryInvalid, false, "google_unexpected_response"
+		result.Category, result.Retryable, result.Diagnostic = CategoryUnclassified, true, "google_unclassified_response"
 	}
 	return result
 }
@@ -156,11 +169,23 @@ func classifyTransport(err error) Classification {
 // quarantine.
 const MaxAuthAttempts = 2
 
+// MaxUnclassifiedAttempts caps a response Mosaic could not classify.
+//
+// It is low for the opposite reason MaxAuthAttempts is: an unclassified
+// response gives no evidence that waiting helps, so the budget buys only enough
+// time for a transient oddity to pass before the input reaches an operator. It
+// is deliberately not zero — treating an ununderstood response as proof the
+// input can never validate is the assertion this category exists to avoid.
+const MaxUnclassifiedAttempts = 3
+
 // ExhaustedFor reports the attempt ceiling a classification is subject to.
 // Most categories use the queue's own budget; authentication is capped much
 // lower for the reason above.
 func (c Classification) ExhaustedFor(attemptNumber, maxAttempts int) bool {
 	if c.Category == CategoryAuth && attemptNumber >= MaxAuthAttempts {
+		return true
+	}
+	if c.Category == CategoryUnclassified && attemptNumber >= MaxUnclassifiedAttempts {
 		return true
 	}
 	return attemptNumber >= maxAttempts

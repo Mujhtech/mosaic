@@ -307,3 +307,54 @@ func TestMigrationUnresolvedOrAmbiguousResolutionQuarantinesWithoutFact(t *testi
 		}
 	}
 }
+
+// Fallback-audit backend #1 (theme T2). Both provider classifiers used to fall
+// back to KindInitialPurchase for a lifecycle state they had no rule for, and
+// initial_purchase is the one Fact Kind that grants an Entitlement. Every state
+// Apple or Google adds after this code was written would therefore have granted
+// access on the strength of a string nobody had read.
+//
+// This is a unit test because the classification is pure: it needs no provider,
+// no database, and no worker plumbing to state the rule, and the rule is the
+// thing that must not regress.
+func TestUnknownProviderLifecycleStatesDoNotClassifyAsAPurchase(t *testing.T) {
+	// Google: an unmapped state, and SUBSCRIPTION_STATE_PENDING, which is a
+	// signup *awaiting payment* and was granting access immediately.
+	for _, state := range []string{
+		"SUBSCRIPTION_STATE_PENDING",
+		"SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED",
+		"SUBSCRIPTION_STATE_UNSPECIFIED",
+		"",
+	} {
+		kind, unclassified := googleSubscriptionKind(state)
+		if unclassified == "" {
+			t.Fatalf("Google state %q classified as %q; an unmapped state must quarantine", state, kind)
+		}
+		if kind == KindInitialPurchase {
+			t.Fatalf("Google state %q was classified as an initial purchase, which grants access", state)
+		}
+	}
+	// A mapped state must still classify, or the quarantine swallows normal
+	// traffic.
+	if kind, unclassified := googleSubscriptionKind("SUBSCRIPTION_STATE_ACTIVE"); unclassified != "" || kind != KindRenewal {
+		t.Fatalf("active subscription classified as (%q,%q), want renewal", kind, unclassified)
+	}
+
+	// Apple: a transactionReason outside the two Apple documents, with no
+	// notification type to fall back on (the observation path).
+	for _, reason := range []string{"", "RESUBSCRIBE", "UPGRADE"} {
+		kind, ok := appleFactKind("", appstorejws.TransactionPayload{TransactionReason: reason}, nil)
+		if ok {
+			t.Fatalf("Apple transactionReason %q classified as %q; an unknown reason must quarantine", reason, kind)
+		}
+	}
+	if kind, ok := appleFactKind("", appstorejws.TransactionPayload{
+		TransactionReason: appstorejws.TransactionReasonPurchase,
+		Type:              appstorejws.ProductTypeNonConsumable,
+	}, nil); !ok || kind != KindOneTimePurchase {
+		t.Fatalf("a non-consumable PURCHASE classified as (%q,%v), want one_time_purchase", kind, ok)
+	}
+	if kind, ok := appleFactKind("DID_RENEW", appstorejws.TransactionPayload{}, nil); !ok || kind != KindRenewal {
+		t.Fatalf("DID_RENEW classified as (%q,%v), want renewal", kind, ok)
+	}
+}

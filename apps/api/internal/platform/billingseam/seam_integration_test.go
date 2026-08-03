@@ -272,9 +272,17 @@ func (f *fixture) seed(t *testing.T, ctx context.Context) {
 			provider_product_identifier,platform,status,created_at,updated_at)
 		  VALUES ($1,$2,$3,$4,'app_store','com.mosaic.pro','ios','placeholder',$5,$5)
 		  ON CONFLICT (id) DO NOTHING`, []any{mappingID, f.projectID, f.productID, f.applicationID, now}},
+		// Coverage and access policy are stated explicitly: migration 00063
+		// removed the granting column defaults, so a grant version can no
+		// longer grant something no caller asked for, and an empty
+		// supported_purchase_types now covers nothing rather than everything.
 		{`INSERT INTO product_entitlement_grant_versions(
-			id,project_id,product_id,entitlement_id,version,effective_start,created_at)
-		  VALUES ($1,$2,$3,$4,1,$5,$5) ON CONFLICT (id) DO NOTHING`,
+			id,project_id,product_id,entitlement_id,version,effective_start,created_at,
+			supported_purchase_types,grants_in_active,grants_in_trial,grants_in_grace,
+			grants_in_one_time_ownership)
+		  VALUES ($1,$2,$3,$4,1,$5,$5,
+			ARRAY['auto_renewable_subscription','non_consumable']::text[],
+			true,true,true,true) ON CONFLICT (id) DO NOTHING`,
 			[]any{grantID, f.projectID, f.productID, entitlementID, now.Add(-365 * 24 * time.Hour)}},
 		{`INSERT INTO billing_project_settings(project_id,billing_enabled,updated_by_actor_id,created_at,updated_at)
 		  VALUES ($1,true,'seam',$2,$2) ON CONFLICT (project_id) DO UPDATE SET billing_enabled=true`,

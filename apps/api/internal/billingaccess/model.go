@@ -99,10 +99,19 @@ type Token struct {
 // Status reports the token's contract status at an instant. Revocation wins
 // over expiry: a token revoked before it expired is revoked, and reporting it
 // as merely expired would hide an operator action.
+//
+// `active` is the one status that authorizes a request, so it is stated only
+// when the token positively says it is live. A token that does not describe
+// itself — no identity, or no stated lifetime, as a zero value or a partial
+// hydration would produce — cannot be shown to be live and is reported expired
+// rather than falling through to active. The last arm is therefore reachable
+// only for a fully described, unrevoked, unexpired token.
 func (t Token) Status(now time.Time) string {
 	switch {
 	case t.RevokedAt != nil:
 		return TokenRevoked
+	case t.ID == "" || t.CustomerID == "" || t.IssuedAt.IsZero() || t.ExpiresAt.IsZero():
+		return TokenExpired
 	case !now.Before(t.ExpiresAt):
 		return TokenExpired
 	default:

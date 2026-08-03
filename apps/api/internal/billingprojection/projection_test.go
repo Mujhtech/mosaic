@@ -528,12 +528,14 @@ func TestGoogleQuantityPartialRefundKeepsOneTimeOwnership(t *testing.T) {
 // predating the earliest recorded version selects that earliest version rather
 // than stranding with none — the 9B backfill boundary rule.
 func TestGrantSelectionUsesPeriodTimeAndBackfillBoundary(t *testing.T) {
+	subscriptionOnly := []string{"auto_renewable_subscription"}
 	versions := []GrantVersion{
 		{ID: "v1", ProductID: "prod_pro", EntitlementID: "ent_pro", Version: 1,
 			EffectiveStart: at("2026-01-01T00:00:00Z"), EffectiveEnd: ptr("2026-06-01T00:00:00Z"),
-			Policy: DefaultPolicy()},
+			Policy: DefaultPolicy(), SupportedPurchaseTypes: subscriptionOnly},
 		{ID: "v2", ProductID: "prod_pro", EntitlementID: "ent_pro", Version: 2,
-			EffectiveStart: at("2026-06-01T00:00:00Z"), Policy: DefaultPolicy()},
+			EffectiveStart: at("2026-06-01T00:00:00Z"), Policy: DefaultPolicy(),
+			SupportedPurchaseTypes: subscriptionOnly},
 	}
 
 	historical := SelectGrantVersions(versions, "prod_pro", at("2026-03-01T00:00:00Z"), "auto_renewable_subscription")
@@ -831,5 +833,45 @@ func TestNoChangeProjectionIsDetected(t *testing.T) {
 
 	if changes := Diff(&prior, candidate); !changes.NoChange || len(changes.Changed) != 0 {
 		t.Fatalf("identical state reported as changed: %+v", changes)
+	}
+}
+
+// Fallback-audit backend #2 (theme T3). An empty SupportedPurchaseTypes used to
+// match every purchase type, which made the least-specified grant version the
+// widest possible grant: a row written by a partial or buggy insert granted
+// more than a fully authored one. The write path (billinggrant.ValidateShape,
+// and the schema CHECK added by migration 00063) refuses to publish such a row,
+// so the projection reading one as "covers everything" could only ever be
+// wrong.
+//
+// Unit test: grant selection is a pure domain rule, and this is the rule that
+// decides whether a purchase grants an Entitlement at all.
+func TestUnderSpecifiedGrantVersionGrantsNothing(t *testing.T) {
+	stated := GrantVersion{ID: "v1", ProductID: "prod_pro", EntitlementID: "ent_pro", Version: 1,
+		EffectiveStart: at("2026-01-01T00:00:00Z"), Policy: DefaultPolicy(),
+		SupportedPurchaseTypes: []string{"auto_renewable_subscription"}}
+	silent := GrantVersion{ID: "v2", ProductID: "prod_silent", EntitlementID: "ent_pro", Version: 1,
+		EffectiveStart: at("2026-01-01T00:00:00Z"), Policy: DefaultPolicy()}
+
+	versions := []GrantVersion{stated, silent}
+	if selected := SelectGrantVersions(versions, "prod_silent", at("2026-03-01T00:00:00Z"),
+		"auto_renewable_subscription"); len(selected) != 0 {
+		t.Fatalf("a grant version listing no purchase types selected %+v, want nothing", selected)
+	}
+	// A purchase whose own type is unknown must not select a grant either.
+	if selected := SelectGrantVersions(versions, "prod_pro", at("2026-03-01T00:00:00Z"), ""); len(selected) != 0 {
+		t.Fatalf("a purchase of unknown type selected %+v, want nothing", selected)
+	}
+	// The stated version still selects for the type it names.
+	if selected := SelectGrantVersions(versions, "prod_pro", at("2026-03-01T00:00:00Z"),
+		"auto_renewable_subscription"); len(selected) != 1 || selected[0].ID != "v1" {
+		t.Fatalf("a stated grant version selected %+v, want v1", selected)
+	}
+	// Dropping coverage is a narrowing, and a retroactive narrowing is refused.
+	if code, ok := ValidateAdditiveSuperset(stated, GrantVersion{
+		ID: "v2", ProductID: "prod_pro", EntitlementID: "ent_pro", Version: 2,
+		EffectiveStart: at("2026-04-01T00:00:00Z"), Policy: DefaultPolicy(),
+	}); ok || code != "purchase_type_support_narrowed" {
+		t.Fatalf("dropping the purchase-type list compared as (%q,%v), want a narrowing", code, ok)
 	}
 }

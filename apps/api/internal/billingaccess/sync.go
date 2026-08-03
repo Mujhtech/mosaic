@@ -105,6 +105,8 @@ func (s *Service) Sync(ctx context.Context, authenticated AuthenticatedToken, re
 		status, statusErr := s.repository.ProjectionStatusFor(ctx, token.ProjectID, token.EnvironmentID, token.CustomerID)
 		if statusErr == nil {
 			view.Projection = status
+		} else {
+			view.Projection = ProjectionStatusUnavailable(view.ComputedAt)
 		}
 	}
 
@@ -259,6 +261,8 @@ func (s *Service) Check(ctx context.Context, rawKey string, environmentID string
 	}
 	if status, statusErr := s.repository.ProjectionStatusFor(ctx, scope.ProjectID, environmentID, request.CustomerID); statusErr == nil {
 		view.Projection = status
+	} else {
+		view.Projection = ProjectionStatusUnavailable(view.ComputedAt)
 	}
 
 	span.SetAttributes(attribute.Int64("mosaic.billing.check.version", view.SnapshotVersion))
@@ -292,9 +296,25 @@ func (s *Service) Snapshot(ctx context.Context, rawKey, environmentID, customerI
 	}
 	if status, statusErr := s.repository.ProjectionStatusFor(ctx, scope.ProjectID, environmentID, customerID); statusErr == nil {
 		view.Projection = status
+	} else {
+		view.Projection = ProjectionStatusUnavailable(view.ComputedAt)
 	}
-	_ = s.repository.RecordAudit(ctx, scope.ProjectID, environmentID, scope.APIKeyID,
-		"billing.entitlement.snapshot_read", "billing_customer", customerID, nil, s.now())
+	// The audit is written before the snapshot is returned, and a failure
+	// refuses the read. This is a server credential reading a named customer's
+	// entitlement state: the whole reason the audit exists is that a later
+	// investigation must be able to reconstruct who looked at whom, and a read
+	// that happened without leaving that record is precisely the one an
+	// investigation cannot see. Unlike a mutation, refusing costs nothing — the
+	// caller retries the same idempotent read.
+	if auditErr := s.repository.RecordAudit(ctx, scope.ProjectID, environmentID, scope.APIKeyID,
+		"billing.entitlement.snapshot_read", "billing_customer", customerID, nil, s.now()); auditErr != nil {
+		zerolog.Ctx(ctx).Error().Err(auditErr).
+			Str("project_id", scope.ProjectID).
+			Str("environment_id", environmentID).
+			Str("billing_customer_id", customerID).
+			Msg("entitlement snapshot read refused: the access audit could not be recorded")
+		return nil, ErrUnavailable
+	}
 
 	record, err := SnapshotRecord(view, s.now(), s.freshness, correlationID, nil)
 	if err != nil {

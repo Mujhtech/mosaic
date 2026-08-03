@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/rs/zerolog"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 )
@@ -461,10 +462,21 @@ func (r *Repository) CloseQuarantineSuperseded(ctx context.Context, actor billin
 	if tag.RowsAffected() == 0 {
 		return billing.QuarantineRecord{}, billing.ErrNotFound
 	}
-	_, _ = r.pool.Exec(ctx,
+	// The close above has already committed, so a failed action row cannot be
+	// undone by failing here: the caller would retry a close that has happened
+	// and get ErrNotFound. What is lost is the append-only record of *who*
+	// closed the quarantine, which is the question the action audit exists to
+	// answer, so the failure is raised at error level instead of discarded.
+	if _, err := r.pool.Exec(ctx,
 		`INSERT INTO billing_quarantine_actions(id, project_id, quarantine_record_id, action, outcome, actor_id, occurred_at)
 		 VALUES ($1,$2,$3,'close_superseded','succeeded',$4,$5)`,
-		"bqa_"+hashID(recordID, "superseded", now), projectID, recordID, actor.ID, now)
+		"bqa_"+hashID(recordID, "superseded", now), projectID, recordID, actor.ID, now); err != nil {
+		zerolog.Ctx(ctx).Error().Err(err).
+			Str("project_id", projectID).
+			Str("billing_quarantine_record_id", recordID).
+			Str("quarantine_action", "close_superseded").
+			Msg("quarantine action audit was not recorded")
+	}
 	return r.Quarantine(ctx, actor, projectID, recordID)
 }
 
@@ -808,11 +820,18 @@ func (r *Repository) ReplayInputs(ctx context.Context, job billing.ReplayJob, fi
 	if err := rows.Err(); err != nil {
 		return nil, billing.InputCursor{}, fmt.Errorf("read replay inputs: %w", err)
 	}
+	// Hydration failures fail the page rather than skipping the row. The cursor
+	// returned alongside these inputs advances past every id the keyset scan
+	// listed, so a skipped hydration silently removed an input from the replay:
+	// the job would report a complete window it had not fully examined, and a
+	// replay that quietly omits inputs is worse than one that stops, because
+	// its comparison result is trusted. The caller retries the page from the
+	// last committed cursor, which is idempotent by construction.
 	inputs := make([]billing.RawInput, 0, len(ids))
 	for _, id := range ids {
 		input, err := r.RawInput(ctx, job.ProjectID, id)
 		if err != nil {
-			continue
+			return nil, billing.InputCursor{}, fmt.Errorf("hydrate replay input %q: %w", id, err)
 		}
 		inputs = append(inputs, input)
 	}

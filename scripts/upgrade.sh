@@ -115,7 +115,13 @@ echo
 echo "=== 5. stop the API and worker before migrating ==="
 # Migrating while the previous release is serving lets a binary run against a
 # schema it does not understand.
-mosaic_compose stop api worker || true
+if ! mosaic_compose stop api worker; then
+  echo "failed to stop the api and worker services." >&2
+  echo "Migrations were NOT run and the previous release may still be serving." >&2
+  echo "Stop the services manually, then re-run this upgrade:" >&2
+  echo "  docker compose stop api worker (with the same -p/--env-file selection)" >&2
+  exit 1
+fi
 
 echo
 echo "=== 6. apply migrations ==="

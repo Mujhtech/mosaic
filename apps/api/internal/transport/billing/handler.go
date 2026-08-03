@@ -903,11 +903,26 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 // listOptions parses the closed set of filters the ledger surfaces accept.
 // Anything outside the enumerations is dropped rather than passed through, so
 // no caller-supplied string reaches a query predicate uninspected.
-func listOptions(r *http.Request, statuses ...string) billing.ListOptions {
+// A malformed `limit`, `from`, or `to` is refused rather than dropped. These
+// three narrow an operator's query, so ignoring one silently widens it: an
+// operator who mistypes a window believes they are looking at yesterday's
+// quarantines and is in fact looking at every quarantine the Environment has
+// ever recorded, and reads the absence of what they were hunting for as
+// evidence. A 400 tells them the filter did not apply.
+//
+// It writes its own response, matching the strict readLimit pattern on the
+// migration evidence surface, and reports false when the caller must return.
+func listOptions(w http.ResponseWriter, r *http.Request, statuses ...string) (billing.ListOptions, bool) {
 	query := r.URL.Query()
 	options := billing.ListOptions{Cursor: strings.TrimSpace(query.Get("cursor"))}
-	if limit, err := strconv.Atoi(query.Get("limit")); err == nil {
-		options.Limit = limit
+	fields := map[string][]string{}
+	if raw := strings.TrimSpace(query.Get("limit")); raw != "" {
+		limit, err := strconv.Atoi(raw)
+		if err != nil || limit < 1 || limit > 100 {
+			fields["limit"] = []string{"must be a whole number between 1 and 100"}
+		} else {
+			options.Limit = limit
+		}
 	}
 	options.Status = allowed(query.Get("status"), statuses)
 	options.ReasonCode = allowed(query.Get("reasonCode"), quarantineReasons)
@@ -917,15 +932,27 @@ func listOptions(r *http.Request, statuses ...string) billing.ListOptions {
 	if rawInputID, ok := billing.SafeProviderCode(query.Get("rawInputId")); ok && validIdentifier(rawInputID) {
 		options.RawInputID = rawInputID
 	}
-	if from, err := time.Parse(time.RFC3339, query.Get("from")); err == nil {
-		utc := from.UTC()
-		options.From = &utc
+	for _, bound := range []struct {
+		name   string
+		target **time.Time
+	}{{"from", &options.From}, {"to", &options.To}} {
+		raw := strings.TrimSpace(query.Get(bound.name))
+		if raw == "" {
+			continue
+		}
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			fields[bound.name] = []string{"must be an RFC 3339 timestamp"}
+			continue
+		}
+		utc := parsed.UTC()
+		*bound.target = &utc
 	}
-	if to, err := time.Parse(time.RFC3339, query.Get("to")); err == nil {
-		utc := to.UTC()
-		options.To = &utc
+	if len(fields) > 0 {
+		response.Error(w, r, response.ValidationFailed(fields))
+		return billing.ListOptions{}, false
 	}
-	return options
+	return options, true
 }
 
 func allowed(value string, permitted []string) string {
@@ -951,8 +978,12 @@ var quarantineReasons = []string{
 }
 
 func (h *Handler) listFacts(w http.ResponseWriter, r *http.Request) {
+	options, ok := listOptions(w, r)
+	if !ok {
+		return
+	}
 	page, err := h.service.ListFacts(r.Context(), actor(r), chi.URLParam(r, "projectId"),
-		chi.URLParam(r, "environmentId"), listOptions(r))
+		chi.URLParam(r, "environmentId"), options)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -961,10 +992,14 @@ func (h *Handler) listFacts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listAttempts(w http.ResponseWriter, r *http.Request) {
+	options, ok := listOptions(w, r,
+		billing.OutcomeValidated, billing.OutcomeRecordedNoFact, billing.OutcomeQuarantined,
+		billing.OutcomeRetryableFailure, billing.OutcomePermanentlyFailed)
+	if !ok {
+		return
+	}
 	page, err := h.service.ListAttempts(r.Context(), actor(r), chi.URLParam(r, "projectId"),
-		chi.URLParam(r, "environmentId"), listOptions(r,
-			billing.OutcomeValidated, billing.OutcomeRecordedNoFact, billing.OutcomeQuarantined,
-			billing.OutcomeRetryableFailure, billing.OutcomePermanentlyFailed))
+		chi.URLParam(r, "environmentId"), options)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -973,8 +1008,12 @@ func (h *Handler) listAttempts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listLedger(w http.ResponseWriter, r *http.Request) {
+	options, ok := listOptions(w, r)
+	if !ok {
+		return
+	}
 	page, err := h.service.ListLedger(r.Context(), actor(r), chi.URLParam(r, "projectId"),
-		chi.URLParam(r, "environmentId"), listOptions(r))
+		chi.URLParam(r, "environmentId"), options)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -983,10 +1022,14 @@ func (h *Handler) listLedger(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listQuarantine(w http.ResponseWriter, r *http.Request) {
+	options, ok := listOptions(w, r,
+		billing.QuarantineOpen, billing.QuarantineRetrying,
+		billing.QuarantineClosedAfterSuccess, billing.QuarantineClosedSuperseded)
+	if !ok {
+		return
+	}
 	page, err := h.service.ListQuarantine(r.Context(), actor(r), chi.URLParam(r, "projectId"),
-		chi.URLParam(r, "environmentId"), listOptions(r,
-			billing.QuarantineOpen, billing.QuarantineRetrying,
-			billing.QuarantineClosedAfterSuccess, billing.QuarantineClosedSuperseded))
+		chi.URLParam(r, "environmentId"), options)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -1098,8 +1141,12 @@ func (h *Handler) createReconciliation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listReconciliations(w http.ResponseWriter, r *http.Request) {
+	options, ok := listOptions(w, r, "queued", "leased", "completed", "partial", "failed")
+	if !ok {
+		return
+	}
 	page, err := h.service.ListReconciliationRuns(r.Context(), actor(r), chi.URLParam(r, "projectId"),
-		chi.URLParam(r, "environmentId"), listOptions(r, "queued", "leased", "completed", "partial", "failed"))
+		chi.URLParam(r, "environmentId"), options)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -1116,9 +1163,17 @@ type replayRequest struct {
 }
 
 func (v *replayRequest) Validate() error {
+	// The window bounds are validated rather than best-effort parsed. A replay
+	// is the operation an operator reaches for when they already believe
+	// something was recorded wrongly; dropping an unparseable bound turned a
+	// narrow re-examination into an unbounded one over the whole Environment,
+	// which is both expensive and reported back as if the requested window had
+	// been honoured.
 	return validation.ValidateStruct(v,
 		validation.Field(&v.Kind, validation.Required, validation.In("replay", "revalidation")),
 		validation.Field(&v.ValidatorVersion, validation.Min(0)),
+		validation.Field(&v.WindowStart, validation.Date(time.RFC3339)),
+		validation.Field(&v.WindowEnd, validation.Date(time.RFC3339)),
 	)
 }
 
@@ -1149,8 +1204,12 @@ func (h *Handler) createReplay(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listReplays(w http.ResponseWriter, r *http.Request) {
+	options, ok := listOptions(w, r, "queued", "leased", "completed", "failed")
+	if !ok {
+		return
+	}
 	page, err := h.service.ListReplayJobs(r.Context(), actor(r), chi.URLParam(r, "projectId"),
-		chi.URLParam(r, "environmentId"), listOptions(r, "queued", "leased", "completed", "failed"))
+		chi.URLParam(r, "environmentId"), options)
 	if err != nil {
 		writeError(w, r, err)
 		return

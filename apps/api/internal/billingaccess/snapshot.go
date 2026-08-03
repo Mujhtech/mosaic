@@ -32,6 +32,27 @@ type ProjectionStatus struct {
 	DiagnosticCode   string
 }
 
+// ProjectionStatusUnavailableCode marks a status Mosaic could not read.
+const ProjectionStatusUnavailableCode = "entitlement.projection.status_unavailable"
+
+// ProjectionStatusUnavailable is what to report when the projection's own
+// health could not be read.
+//
+// The read model initializes Projection to `current`, so a status read guarded
+// by `err == nil` served the snapshot as healthy whenever the health query
+// failed: the one state that asserts "this is up to date" was the state
+// reported when Mosaic knew nothing. `degraded` is the honest reading. The
+// snapshot is still served — a projection whose health cannot be described is
+// not a reason to tell a paying customer they have no access — but it is never
+// described as current, and the diagnostic says which of the two happened.
+func ProjectionStatusUnavailable(lastProjectedAt time.Time) ProjectionStatus {
+	return ProjectionStatus{
+		State:           ProjectionDegraded,
+		LastProjectedAt: lastProjectedAt,
+		DiagnosticCode:  ProjectionStatusUnavailableCode,
+	}
+}
+
 // SnapshotView is one committed Customer Entitlement Snapshot as read.
 type SnapshotView struct {
 	SnapshotID              string

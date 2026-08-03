@@ -199,7 +199,7 @@ func (s *Service) enqueueManualSync(ctx context.Context, actor Actor, projectID,
 	}
 
 	now := s.now()
-	_ = s.repository.RecordAudit(ctx, actor, projectID, "billing.customer.sync_requested",
+	s.recordAudit(ctx, actor, projectID, "billing.customer.sync_requested",
 		"billing_customer", customer.ID, map[string]string{
 			"environmentId": environmentID, "triggerKind": billingprojection.KindManualSync,
 		}, now)

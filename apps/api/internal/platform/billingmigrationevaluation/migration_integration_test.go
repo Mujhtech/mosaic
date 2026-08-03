@@ -21,6 +21,15 @@ import (
 
 // This test needs its own throwaway database because both the migration being
 // tested and the append-only evidence it creates intentionally refuse cleanup.
+// candidateEvaluationVersion is migration 00060, whose down guard refuses to
+// drop candidate-evaluation evidence. The rollback targets below are stated as
+// versions so that adding a migration above 00060 cannot quietly change which
+// migration this test exercises.
+const (
+	candidateEvaluationVersion = 60
+	belowCandidateEvaluation   = 59
+)
+
 func TestCandidateEvaluationMigrationDownRefusesImmutableEvidence(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_TEST_URL")
 	if databaseURL == "" {
@@ -43,14 +52,15 @@ func TestCandidateEvaluationMigrationDownRefusesImmutableEvidence(t *testing.T) 
 	if err = goose.UpContext(ctx, db, "."); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
-	if err = goose.DownContext(ctx, db, "."); err != nil {
-		t.Fatalf("empty migration 00061 down: %v", err)
-	}
-	if err = goose.DownContext(ctx, db, "."); err != nil {
-		t.Fatalf("empty migration 00060 down: %v", err)
+	// Stepped to explicit versions rather than "one down from the top". The
+	// test is about what 00060's down does with evidence present, and a bare
+	// Down peels whatever migration happens to be newest, so every migration
+	// added afterwards silently retargeted this test at unrelated schema.
+	if err = goose.DownToContext(ctx, db, ".", belowCandidateEvaluation); err != nil {
+		t.Fatalf("empty rollback below 00060: %v", err)
 	}
 	if err = goose.UpContext(ctx, db, "."); err != nil {
-		t.Fatalf("migrations 00060-00061 re-up: %v", err)
+		t.Fatalf("re-up after empty rollback: %v", err)
 	}
 	_, err = db.ExecContext(ctx, `INSERT INTO organizations(id,name,created_at,updated_at) VALUES('org_eval','Evaluation',now(),now());
 		INSERT INTO projects(id,organization_id,key,name,status,created_at,updated_at) VALUES('project_eval','org_eval','evaluation','Evaluation','active',now(),now());
@@ -61,10 +71,12 @@ func TestCandidateEvaluationMigrationDownRefusesImmutableEvidence(t *testing.T) 
 	if err != nil {
 		t.Fatalf("seed immutable evaluation: %v", err)
 	}
-	if err = goose.DownContext(ctx, db, "."); err != nil {
-		t.Fatalf("empty migration 00061 down before 00060 guard: %v", err)
+	// Everything above 00060 must still roll back with evidence present: the
+	// guard belongs to 00060 alone.
+	if err = goose.DownToContext(ctx, db, ".", candidateEvaluationVersion); err != nil {
+		t.Fatalf("rollback down to 00060 before the guard: %v", err)
 	}
-	err = goose.DownContext(ctx, db, ".")
+	err = goose.DownToContext(ctx, db, ".", belowCandidateEvaluation)
 	if err == nil || !strings.Contains(err.Error(), "immutable candidate evaluation evidence exists") {
 		t.Fatalf("populated migration down error=%v", err)
 	}
@@ -111,7 +123,7 @@ func TestBuilderPersistsCandidateWithoutLiveMutationAndReplaysDeterministically(
 		INSERT INTO products(id,project_id,key,internal_name,description,type,status,metadata_source,readiness_ready,created_at,updated_at) VALUES('product_eval','project_eval','pro','Pro','','subscription','connected','mock',true,$1,$1);
 		INSERT INTO entitlements(id,project_id,key,name,description,created_at,updated_at) VALUES('entitlement_eval','project_eval','pro','Pro','',$1,$1);
 		INSERT INTO provider_product_mappings(id,project_id,product_id,application_id,provider,provider_product_identifier,platform,status,created_at,updated_at) VALUES('ppm_eval','project_eval','product_eval','app_eval','app_store','store.product','ios','placeholder',$1,$1);
-		INSERT INTO product_entitlement_grant_versions(id,project_id,product_id,entitlement_id,version,effective_start,created_at) VALUES('grant_eval','project_eval','product_eval','entitlement_eval',1,$1::timestamptz-interval '1 day',$1);
+		INSERT INTO product_entitlement_grant_versions(id,project_id,product_id,entitlement_id,version,effective_start,created_at,supported_purchase_types,grants_in_active,grants_in_trial,grants_in_grace,grants_in_one_time_ownership) VALUES('grant_eval','project_eval','product_eval','entitlement_eval',1,$1::timestamptz-interval '1 day',$1,ARRAY['auto_renewable_subscription','non_consumable']::text[],true,true,true,true);
 		INSERT INTO billing_customers(id,project_id,status,diagnostics_status,created_at,updated_at) VALUES('customer_eval','project_eval','active','none',$1,$1);
 		INSERT INTO billing_migration_credentials(id,project_id,provider,external_project_id,status,envelope_version,algorithm,key_id,nonce,ciphertext,fingerprint,created_by_actor_id,created_at) VALUES('credential_eval','project_eval','revenuecat','rc_eval','active',1,'AES-256-GCM','key',decode(repeat('01',12),'hex'),decode(repeat('02',32),'hex'),decode(repeat('03',32),'hex'),'owner',$1);
 		INSERT INTO billing_migration_programs(id,project_id,environment_id,source_adapter,source_adapter_version,credential_id,state,state_version,authority_epoch_before,stabilization_days,rollback_window_days,scope_digest,policy_digest,idempotency_key,request_digest,created_by_actor_id,created_at,updated_at) VALUES('program_eval','project_eval','environment_eval','revenuecat','revenuecat-v2-readonly-v1','credential_eval','shadowing',3,0,7,7,decode(repeat('11',32),'hex'),$4,'eval',decode(repeat('13',32),'hex'),'owner',$1,$1);

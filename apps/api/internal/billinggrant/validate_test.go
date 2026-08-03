@@ -124,9 +124,16 @@ func TestPlanPublishRules(t *testing.T) {
 		narrowed := fullAccess()
 		narrowed.GrantsInGrace = false
 
+		// The purchase-type list is stated because the service normalizes it
+		// before PlanPublish ever sees an input, and an empty list is refused
+		// outright by ValidateShape. Leaving it empty here would compare a
+		// proposal no caller can actually make, and the comparison would read
+		// the empty list as "covers nothing" — a narrowing, for the wrong
+		// reason.
 		_, err := PlanPublish(existing, PublishInput{
 			ProductID: "prod_pro", EntitlementID: "ent_pro",
 			EffectiveStart: at("2026-06-01T00:00:00Z"), Retroactive: true, Policy: narrowed,
+			SupportedPurchaseTypes: DefaultPurchaseTypes(),
 		}, now)
 		if !errors.Is(err, ErrNotAdditiveSuperset) {
 			t.Fatalf("retroactive narrowing returned %v, want ErrNotAdditiveSuperset", err)
@@ -137,6 +144,7 @@ func TestPlanPublishRules(t *testing.T) {
 		if _, err := PlanPublish(existing, PublishInput{
 			ProductID: "prod_pro", EntitlementID: "ent_pro",
 			EffectiveStart: at("2026-06-01T00:00:00Z"), Retroactive: true, Policy: widened,
+			SupportedPurchaseTypes: DefaultPurchaseTypes(),
 		}, now); err != nil {
 			t.Fatalf("retroactive widening was refused: %v", err)
 		}

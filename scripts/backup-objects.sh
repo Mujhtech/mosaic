@@ -74,15 +74,45 @@ mc() {
 mosaic_compose_describe
 
 echo "==> listing bucket inventory"
-mc ls --recursive "mosaic/${bucket}" > "${inventory_path}"
+if ! mc ls --recursive "mosaic/${bucket}" > "${inventory_path}"; then
+  echo "failed to list bucket ${bucket}; no backup was recorded" >&2
+  exit 1
+fi
 object_count="$(wc -l < "${inventory_path}" | tr -d ' ')"
 echo "    ${object_count} object(s)"
 
 echo "==> mirroring bucket"
-mc mirror --overwrite --preserve "mosaic/${bucket}" /backup
+if ! mc mirror --overwrite --preserve "mosaic/${bucket}" /backup; then
+  echo "mc mirror failed; no manifest was written for ${mirror_directory}" >&2
+  exit 1
+fi
 
-mirrored_count="$(find "${mirror_directory}" -type f | wc -l | tr -d ' ')"
-mirror_bytes="$(find "${mirror_directory}" -type f -exec wc -c {} + 2>/dev/null | tail -1 | awk '{print $1}')"
+# The counts go into the manifest, so a failed find must abort rather than be
+# recorded as an empty backup. Statuses are captured explicitly and no default
+# is substituted for a missing value.
+if ! mirrored_count="$(find "${mirror_directory}" -type f | wc -l | tr -d ' ')"; then
+  echo "failed to count the mirrored files under ${mirror_directory}" >&2
+  exit 1
+fi
+if ! mirror_bytes="$(find "${mirror_directory}" -type f -exec wc -c {} + | tail -1 | awk '{print $1}')"; then
+  echo "failed to measure the mirrored files under ${mirror_directory}" >&2
+  exit 1
+fi
+if [[ "${mirrored_count}" -eq 0 ]]; then
+  mirror_bytes="0"
+fi
+if [[ ! "${mirrored_count}" =~ ^[0-9]+$ || ! "${mirror_bytes}" =~ ^[0-9]+$ ]]; then
+  echo "could not determine the mirrored object count or byte length; refusing" >&2
+  echo "to write a manifest for ${mirror_directory}." >&2
+  exit 1
+fi
+# A zero-object backup is only honest when the bucket itself is empty.
+if [[ "${mirrored_count}" -lt "${object_count}" ]]; then
+  echo "mirrored ${mirrored_count} file(s) but the bucket inventory lists" >&2
+  echo "${object_count} object(s); the mirror is incomplete and no manifest was" >&2
+  echo "written for ${mirror_directory}." >&2
+  exit 1
+fi
 mosaic_version="$(git -C "${repository_root}" describe --tags --always 2>/dev/null || echo "unknown")"
 
 cat > "${metadata_path}" <<JSON
@@ -92,8 +122,8 @@ cat > "${metadata_path}" <<JSON
   "format": "mc-mirror",
   "takenAt": "${timestamp}",
   "bucket": "${bucket}",
-  "objectCount": ${mirrored_count:-0},
-  "byteLength": ${mirror_bytes:-0},
+  "objectCount": ${mirrored_count},
+  "byteLength": ${mirror_bytes},
   "mosaicVersion": "${mosaic_version}",
   "note": "Assets are immutable and digest-addressed; this mirror may be a superset of the paired PostgreSQL snapshot."
 }

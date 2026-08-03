@@ -99,6 +99,15 @@ const (
 	ProductTypeNonRenewing   = "Non-Renewing Subscription"
 )
 
+// Apple transaction reasons as they appear in `transactionReason`. Apple
+// documents these two and no others; the set is treated as closed so that a
+// reason introduced later is recognised as unknown instead of being folded into
+// purchase semantics.
+const (
+	TransactionReasonPurchase = "PURCHASE"
+	TransactionReasonRenewal  = "RENEWAL"
+)
+
 // Store environments as they appear in `environment`.
 const (
 	EnvironmentSandbox    = "Sandbox"

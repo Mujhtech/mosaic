@@ -275,7 +275,7 @@ func (s *Service) anchorToNewCustomer(ctx context.Context, attachment FactAttach
 	}); err != nil {
 		return Resolution{}, ErrUnavailable
 	}
-	_ = s.repository.RecordAudit(ctx, Actor{}, attachment.ProjectID, "billing.customer.created",
+	s.recordAudit(ctx, Actor{}, attachment.ProjectID, "billing.customer.created",
 		"billing_customer", customer.ID, map[string]string{"creationPath": "purchase_anchor"}, now)
 	logSafely(ctx, "billing customer created", map[string]string{
 		"project_id": attachment.ProjectID, "billing_customer_id": customer.ID,

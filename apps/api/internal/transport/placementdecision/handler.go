@@ -97,7 +97,14 @@ type overrideRequest struct {
 type simulationRequest placementdecision.EvaluationContext
 
 func (request *simulationRequest) Validate() error {
-	attributeBytes, _ := json.Marshal(request.Attributes)
+	// A discarded encode error left attributeBytes nil, which measures as zero
+	// and passed the size check: an attribute set Mosaic cannot serialize was
+	// admitted as if it were empty, and every later stage read it as "no
+	// attributes" rather than refusing it.
+	attributeBytes, err := json.Marshal(request.Attributes)
+	if err != nil {
+		return validation.Errors{"attributes": validation.NewError("validation_invalid", "attributes must be JSON-serializable")}
+	}
 	if len(attributeBytes) > 8<<10 {
 		return validation.Errors{"attributes": validation.NewError("validation_length", "attributes must serialize to at most 8192 bytes")}
 	}

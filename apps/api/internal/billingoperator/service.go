@@ -218,10 +218,16 @@ func (s *Service) Customer(ctx context.Context, actor Actor, projectID, environm
 	default:
 		return CustomerDetail{}, s.classify(ctx, projectID, "customer snapshot failed", err)
 	}
-	if status, statusErr := s.entitlements.ProjectionStatusFor(ctx, projectID, environmentID, customerID); statusErr == nil {
-		view := projectionStatusView(status)
-		detail.Projection = &view
+	// A failed health read is reported as degraded, never omitted and never
+	// current. Leaving detail.Projection nil rendered the operator surface as if
+	// the projection were fine; `err == nil` alone is how "Mosaic could not ask"
+	// became "everything is up to date".
+	status, statusErr := s.entitlements.ProjectionStatusFor(ctx, projectID, environmentID, customerID)
+	if statusErr != nil {
+		status = billingaccess.ProjectionStatusUnavailable(lastProjectedFrom(detail.Snapshot))
 	}
+	projection := projectionStatusView(status)
+	detail.Projection = &projection
 
 	span.SetAttributes(
 		attribute.String("mosaic.billing.customer.id", customerID),
@@ -245,11 +251,14 @@ func (s *Service) Snapshot(ctx context.Context, actor Actor, projectID, environm
 	if err != nil {
 		return SnapshotView{}, ProjectionStatusView{}, s.classify(ctx, projectID, "snapshot read failed", err)
 	}
-	status := ProjectionStatusView{}
-	if read, statusErr := s.entitlements.ProjectionStatusFor(ctx, projectID, environmentID, customerID); statusErr == nil {
-		status = projectionStatusView(read)
+	read, statusErr := s.entitlements.ProjectionStatusFor(ctx, projectID, environmentID, customerID)
+	if statusErr != nil {
+		// The zero ProjectionStatusView carried an empty state, which the
+		// dashboard reads as "nothing to report". Degraded is what Mosaic
+		// actually knows.
+		read = billingaccess.ProjectionStatusUnavailable(snapshot.ComputedAt)
 	}
-	return snapshotView(snapshot), status, nil
+	return snapshotView(snapshot), projectionStatusView(read), nil
 }
 
 // Subscriptions pages one customer's projected subscriptions.
