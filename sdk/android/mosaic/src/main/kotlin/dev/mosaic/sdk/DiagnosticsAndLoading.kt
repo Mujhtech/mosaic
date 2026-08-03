@@ -16,6 +16,14 @@ enum class MosaicDiagnosticCode(val wireName: String) {
     MEDIA_BACKGROUND_UNAVAILABLE("media_background_unavailable"),
     LAYOUT_UNBOUNDED_FILL("layout_unbounded_fill"),
     RENDERING_FAILED("rendering_failed"),
+
+    // Renderer degradations. Each one names a node Mosaic could not honour exactly; the paywall
+    // still renders, so none of them is a presentation failure.
+    RENDERING_COMPONENT_SKIPPED("rendering_component_skipped"),
+    RENDERING_COLOR_UNRESOLVED("rendering_color_unresolved"),
+    RENDERING_SELECTOR_UNAVAILABLE("rendering_selector_unavailable"),
+
+    CONFIGURATION_APPLICATION_VERSION_UNAVAILABLE("configuration.applicationVersionUnavailable"),
     CONFIGURATION_CACHE_REJECTED("configuration.cache.rejected"),
     CONFIGURATION_BUNDLED_FALLBACK_MISSING("configuration.bundledFallback.missing"),
     CONFIGURATION_BUNDLED_FALLBACK_REJECTED("configuration.bundledFallback.rejected"),
@@ -29,8 +37,18 @@ enum class MosaicDiagnosticCode(val wireName: String) {
     COMMERCE_CONFIGURATION_CACHE_WRITE_FAILED("commerce.configurationCacheWriteFailed"),
     COMMERCE_MAPPING_INVALID("commerce.mappingInvalid"),
     COMMERCE_PROVIDER_UNAVAILABLE("commerce.providerUnavailable"),
+    /** The adapter declares no capability set, so Placement targeting assumed the baseline four. */
+    COMMERCE_PROVIDER_CAPABILITIES_ASSUMED("commerce.providerCapabilitiesAssumed"),
     EXPERIMENT_TIME_UNRELIABLE("experiment.time_unreliable"),
     EXPERIMENT_VARIANT_UNAVAILABLE("experiment.variant_unavailable"),
+    EXPERIMENT_ASSIGNMENT_PERSISTENCE_FAILED("experiment.assignment_persistence_failed"),
+    EXPERIMENT_EXPOSURE_PERSISTENCE_FAILED("experiment.exposure_persistence_failed"),
+    EXPERIMENT_ASSIGNMENTS_DISCARDED("experiment.assignments_discarded"),
+
+    // Local decision inputs Mosaic could not establish. Each one forces UNKNOWN rather than a
+    // fabricated value, because a fabricated identity or reference re-buckets or mis-targets.
+    DECISION_IDENTITY_UNAVAILABLE("decision.identityUnavailable"),
+    DECISION_ENTITLEMENT_REFERENCE_UNAVAILABLE("decision.entitlementReferenceUnavailable"),
 
     // Optional Transaction Observation handoff. Every code below is a local, secret-free operational
     // signal; none of them describes the outcome of a server-side validation, which this SDK never
@@ -40,6 +58,8 @@ enum class MosaicDiagnosticCode(val wireName: String) {
     TRANSACTION_OBSERVATION_REJECTED("transaction.observation.rejected"),
     TRANSACTION_OBSERVATION_DROPPED("transaction.observation.dropped"),
     TRANSACTION_OBSERVATION_REFERENCE_UNAVAILABLE("transaction.observation.referenceUnavailable"),
+    /** A persisted observation queue could not be read and was discarded; pending reports are lost. */
+    TRANSACTION_OBSERVATION_QUEUE_REJECTED("transaction.observation.queueRejected"),
 
     // Authoritative entitlements. Every code below describes Mosaic's ability to answer, never a
     // customer's access: none of them may ever be read as "this person is not entitled".

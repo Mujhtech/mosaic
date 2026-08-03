@@ -67,14 +67,28 @@ class Mosaic private constructor(
         bundledFallback: MosaicPaywallDocumentSource? = MosaicCanonicalBundleSource(context),
         diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
     ): MosaicHostedConfigurationClient {
+        // An unknowable application version stays absent. Substituting "0" would be a claim, not a
+        // default: `application.version` targeting Rules would compare against a real version and
+        // match every "less than" Rule, and the authority handshake would advertise v0 to the
+        // server. Absent instead makes version conditions evaluate UNKNOWN through the three-valued
+        // evaluator, and leaves the authority context unbuildable, which reports authority unknown.
         val detectedAppVersion = configuration.applicationVersion ?: runCatching {
             context.applicationContext.packageManager
                 .getPackageInfo(context.applicationContext.packageName, 0).versionName
-        }.getOrNull()?.takeIf { Regex("^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$").matches(it) } ?: "0"
+        }.getOrNull()?.takeIf { Regex("^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$").matches(it) }
+        if (detectedAppVersion == null) {
+            diagnostics.record(
+                MosaicDiagnostic(
+                    MosaicDiagnosticCode.CONFIGURATION_APPLICATION_VERSION_UNAVAILABLE,
+                    "The application version is unknown; version targeting and authority support are unknown.",
+                ),
+            )
+        }
         val runtimeConfiguration = configuration.copy(applicationVersion = detectedAppVersion)
         val namespace = mosaicConfigurationCacheNamespace(runtimeConfiguration)
         val identityStore = MosaicIdentityStore(context, namespace)
         val experimentStore = MosaicExperimentAssignmentStoreRegistry.store(context, namespace)
+            .also { it.diagnostics = diagnostics }
         val analytics = (context.applicationContext as? android.app.Application)?.let { application ->
             MosaicAnalyticsRuntimeRegistry.runtime(application, namespace, runtimeConfiguration, identityStore)
         }
@@ -115,7 +129,11 @@ class Mosaic private constructor(
                     val release = clientReference.get()?.acceptedConfiguration?.release
                     val projectId = release?.projectId
                     val applicationId = runtimeConfiguration.applicationId
-                    if (release == null || projectId == null || applicationId == null) {
+                    // Without a real application version the minimum-support handshake cannot be
+                    // answered honestly, so no context is built and authority stays unknown.
+                    if (release == null || projectId == null || applicationId == null ||
+                        detectedAppVersion == null
+                    ) {
                         null
                     } else {
                         MosaicCustomerAuthorityRequestContext(

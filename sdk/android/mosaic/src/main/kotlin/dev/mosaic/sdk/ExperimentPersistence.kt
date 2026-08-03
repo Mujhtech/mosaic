@@ -130,6 +130,10 @@ class MosaicExperimentAssignmentStore internal constructor(context: Context, nam
     private val lock = Mutex()
     private val file = File(context.applicationContext.noBackupFilesDir, "mosaic/experiment/$namespace/assignments.json")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+    private val discardedReadReported = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Set by the owning client so a lost record is visible to the host, not only to the file. */
+    @Volatile internal var diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None
 
     internal fun markExposedBestEffort(
         attribution: MosaicExperimentAttribution,
@@ -137,7 +141,19 @@ class MosaicExperimentAssignmentStore internal constructor(context: Context, nam
         assignmentSubjectDigest: String,
         nowEpochMillis: Long,
     ) {
-        scope.launch { runCatching { markExposed(attribution, assignmentKeyType, assignmentSubjectDigest, nowEpochMillis) } }
+        scope.launch {
+            // Marking exposure must never propagate: the exposure event itself has already been
+            // recorded. A silent failure under-counts de-duplication state, so it is diagnosed.
+            runCatching { markExposed(attribution, assignmentKeyType, assignmentSubjectDigest, nowEpochMillis) }
+                .onFailure {
+                    diagnostics.record(
+                        MosaicDiagnostic(
+                            MosaicDiagnosticCode.EXPERIMENT_EXPOSURE_PERSISTENCE_FAILED,
+                            "An Experiment exposure could not be marked as persisted.",
+                        ),
+                    )
+                }
+        }
     }
 
     suspend fun record(result: MosaicExperimentAssignmentResult.Assigned, identityValue: String, nowEpochMillis: Long) = lock.withLock {
@@ -186,7 +202,22 @@ class MosaicExperimentAssignmentStore internal constructor(context: Context, nam
 
     private suspend fun read(): List<MosaicExperimentAssignmentRecord> = withContext(Dispatchers.IO) {
         if (!file.isFile) return@withContext emptyList()
-        runCatching { MosaicExperimentAssignmentRecordCodec.decode(file.readText()) }.getOrNull().orEmpty()
+        // Resetting is the correct recovery — a record that cannot be decoded cannot be trusted to
+        // say whether an exposure was already counted — but the loss itself is reported once so it
+        // is not mistaken for a device that simply has no assignments.
+        runCatching { MosaicExperimentAssignmentRecordCodec.decode(file.readText()) }
+            .onFailure {
+                if (discardedReadReported.compareAndSet(false, true)) {
+                    diagnostics.record(
+                        MosaicDiagnostic(
+                            MosaicDiagnosticCode.EXPERIMENT_ASSIGNMENTS_DISCARDED,
+                            "Persisted Experiment assignments could not be read and were discarded.",
+                        ),
+                    )
+                }
+            }
+            .getOrNull()
+            .orEmpty()
     }
 
     private suspend fun write(records: List<MosaicExperimentAssignmentRecord>) = withContext(Dispatchers.IO) {

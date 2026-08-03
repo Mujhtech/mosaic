@@ -90,7 +90,10 @@ internal fun validateAssetReferences(
     nodes.filterIsInstance<MosaicImageComponent>().forEach { image ->
         val asset = assetsById[image.assetId]
         if (asset !is MosaicImageAsset) {
-            throw MosaicProtocolException("Image ${image.id} references an unknown asset.")
+            throw MosaicProtocolException(
+                "Image ${image.id} references an unknown asset.",
+                violation = MosaicProtocolViolation.INVALID_REFERENCE,
+            )
         }
         used += image.assetId
     }
@@ -161,6 +164,7 @@ internal fun validateProductReferences(
             if (referenceId !in productsById) {
                 throw MosaicProtocolException(
                     "Product selector ${selector.id} references an unknown product.",
+                    violation = MosaicProtocolViolation.INVALID_REFERENCE,
                 )
             }
             usedProductIds += referenceId

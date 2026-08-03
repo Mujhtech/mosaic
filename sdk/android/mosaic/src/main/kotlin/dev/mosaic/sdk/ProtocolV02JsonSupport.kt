@@ -384,7 +384,10 @@ internal fun JsonObject.expectKeys(
         throw MosaicProtocolException("Missing properties ${missing.sorted().joinToString()} at $path.")
     }
     if (unknown.isNotEmpty()) {
-        throw MosaicProtocolException("Unknown properties ${unknown.sorted().joinToString()} at $path.")
+        throw MosaicProtocolException(
+            "Unknown properties ${unknown.sorted().joinToString()} at $path.",
+            violation = MosaicProtocolViolation.UNKNOWN_PROPERTY,
+        )
     }
     actual.forEach { key ->
         if (get(key) is JsonNull) {

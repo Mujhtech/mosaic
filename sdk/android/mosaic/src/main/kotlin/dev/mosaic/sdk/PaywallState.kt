@@ -40,6 +40,7 @@ class MosaicPaywallState(
         .associateBy(MosaicCarouselComponent::id)
     private val productReferences = document.products.associateBy(MosaicProductReference::id)
     private val reportedRenderingFailures = mutableSetOf<String>()
+    private val reportedDegradations = mutableSetOf<String>()
     private val presentationAcknowledged = AtomicBoolean(false)
 
     var selectorStates: Map<String, MosaicProductSelectorState> by mutableStateOf(
@@ -76,8 +77,17 @@ class MosaicPaywallState(
     var navigationHistory: List<String> by mutableStateOf(emptyList())
         private set
 
+    /**
+     * The screen currently being presented.
+     *
+     * Prefer [currentScreenOrNull], which lets a caller distinguish "no such screen" from a
+     * substituted one. This property never throws: a dangling screen id degrades to the document's
+     * initial screen (or, failing that, its first screen, which the schema guarantees exists) and
+     * records a diagnostic once. The renderer itself uses [currentScreenOrNull] and reports
+     * `rendering.screen_unavailable` instead of silently showing a different screen.
+     */
     val currentScreen: MosaicPaywallScreen
-        get() = document.screens.first { it.id == currentScreenId }
+        get() = currentScreenOrNull ?: fallbackScreen("current_screen")
 
     internal val currentScreenOrNull: MosaicPaywallScreen?
         get() = document.screens.firstOrNull { it.id == currentScreenId }
@@ -86,7 +96,24 @@ class MosaicPaywallState(
         get() = navigationHistory.asReversed()
             .mapNotNull { id -> document.screens.firstOrNull { it.id == id } }
             .firstOrNull { it.presentation == MosaicScreenPresentation.SCREEN }
-            ?: document.screens.first { it.id == document.initialScreenId }
+            ?: document.screens.firstOrNull { it.id == document.initialScreenId }
+            ?: fallbackScreen("background_screen")
+
+    /** `screens` has `minItems: 1`, so a first screen always exists once decoding has accepted. */
+    private fun fallbackScreen(reason: String): MosaicPaywallScreen {
+        diagnoseOnce(
+            key = "screen_substituted.$reason",
+            code = MosaicDiagnosticCode.RENDERING_FAILED,
+            message = "A referenced Mosaic screen is absent; the first declared screen was used.",
+        )
+        return document.screens.firstOrNull { it.id == document.initialScreenId }
+            ?: document.screens.first()
+    }
+
+    private fun diagnoseOnce(key: String, code: MosaicDiagnosticCode, message: String) {
+        if (!reportedDegradations.add(key)) return
+        diagnostics.record(MosaicDiagnostic(code, message))
+    }
 
     fun switchValue(switchId: String): Boolean = switchValues[switchId] ?: false
 
@@ -260,7 +287,18 @@ class MosaicPaywallState(
                 }
             }
             val options = bindings.mapNotNull { (cardId, referenceId, card) ->
-                val reference = productReferences.getValue(referenceId)
+                // A card bound to an undeclared Product Reference is a non-conforming document. The
+                // option is skipped, exactly as an unavailable product would be, rather than
+                // throwing out of the whole selector — the remaining plans stay purchasable.
+                val reference = productReferences[referenceId]
+                if (reference == null) {
+                    diagnoseOnce(
+                        key = "product_reference_unavailable.$referenceId",
+                        code = MosaicDiagnosticCode.PRODUCT_LOAD_FAILED,
+                        message = "A Product Card references an undeclared Product; it was skipped.",
+                    )
+                    return@mapNotNull null
+                }
                 loadedProducts[reference.providerProductId]?.let { product ->
                     val requiresPrice = card == null || cardRequiresPrice(card, localization)
                     product.takeUnless { requiresPrice && it.localizedPrice.isBlank() }?.let {
@@ -722,6 +760,9 @@ internal fun MosaicNode.visibilityOrAlways(): MosaicVisibility = when (this) {
     is MosaicCountdownComponent -> visibility
     is MosaicButtonComponent -> visibility
     is MosaicIconComponent -> visibility
+    // Product Cards and Badges declare no `visibility` in `schema/v0.2/paywall.schema.json`: a card
+    // is shown when its Product Selector offers it, and a badge when its card is shown. Always is
+    // therefore their declared visibility, not a substituted default.
     is MosaicProductCardComponent,
     is MosaicProductBadgeComponent,
     -> MosaicVisibility.Always

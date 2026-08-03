@@ -38,6 +38,13 @@ internal data class MosaicAnalyticsPersistedState(
 internal interface MosaicAnalyticsStore {
     suspend fun read(): MosaicAnalyticsPersistedState
     suspend fun write(state: MosaicAnalyticsPersistedState)
+
+    /**
+     * True when the most recent [read] discarded an unreadable persisted queue. Resetting is the
+     * correct recovery, but the events it destroyed were real, so the loss is reported rather than
+     * being indistinguishable from a first launch.
+     */
+    val lastReadDiscarded: Boolean get() = false
 }
 
 internal class MosaicFileAnalyticsStore private constructor(private val file: File) : MosaicAnalyticsStore {
@@ -47,9 +54,15 @@ internal class MosaicFileAnalyticsStore private constructor(private val file: Fi
 
     internal constructor(directory: File, namespace: String) : this(File(directory, "$namespace.json"))
 
+    @Volatile private var discarded = false
+
+    override val lastReadDiscarded: Boolean get() = discarded
+
     override suspend fun read(): MosaicAnalyticsPersistedState = withContext(Dispatchers.IO) {
         if (!file.isFile) return@withContext MosaicAnalyticsPersistedState()
-        runCatching { decode(file.readText(Charsets.UTF_8)) }.getOrDefault(MosaicAnalyticsPersistedState())
+        runCatching { decode(file.readText(Charsets.UTF_8)) }
+            .onFailure { discarded = true }
+            .getOrDefault(MosaicAnalyticsPersistedState())
     }
 
     override suspend fun write(state: MosaicAnalyticsPersistedState) = withContext(Dispatchers.IO) {
@@ -226,7 +239,12 @@ internal class MosaicAnalyticsQueue(
         if (retained.size != state.events.size) lastCode = "analytics.event_expired"
         state = state.copy(events = retained)
     }
-    private suspend fun load() { if (!loaded) { state = store.read(); loaded = true } }
+    private suspend fun load() {
+        if (loaded) return
+        state = store.read()
+        loaded = true
+        if (store.lastReadDiscarded) lastCode = "analytics.queue_rejected"
+    }
     private suspend fun persist() = store.write(state)
 
     private fun priority(name: String): Int = when {

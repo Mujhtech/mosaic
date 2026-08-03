@@ -524,11 +524,21 @@ class MosaicLocalPreviewEngine(
         } catch (error: MosaicProtocolException) {
             val pointer = protocolPathToPointer(error.message.orEmpty())
             val location = locateComponent(root, pointer)
-            val code = when {
-                error.message.orEmpty().contains("Unknown properties") -> "validation.unknownProperty"
-                error.message.orEmpty().contains("references an unknown") -> "validation.invalidReference"
-                error.message.orEmpty().contains("Unsupported component") -> "compatibility.unsupportedComponent"
-                else -> "validation.invalidDocument"
+            // Classification is structural: the decoder states the category, so rewording a
+            // message cannot silently re-label a rejection. The message match survives only as a
+            // last resort for a throw site that has not yet declared its violation.
+            val code = when (error.violation) {
+                MosaicProtocolViolation.UNKNOWN_PROPERTY -> "validation.unknownProperty"
+                MosaicProtocolViolation.INVALID_REFERENCE -> "validation.invalidReference"
+                MosaicProtocolViolation.UNSUPPORTED_COMPONENT,
+                MosaicProtocolViolation.UNSUPPORTED_CAPABILITY,
+                -> "compatibility.unsupportedComponent"
+                MosaicProtocolViolation.INVALID_DOCUMENT -> when {
+                    error.message.orEmpty().contains("Unknown properties") -> "validation.unknownProperty"
+                    error.message.orEmpty().contains("references an unknown") -> "validation.invalidReference"
+                    error.message.orEmpty().contains("Unsupported component") -> "compatibility.unsupportedComponent"
+                    else -> "validation.invalidDocument"
+                }
             }
             DraftValidation.Rejected(
                 reason = MosaicPreviewDraftRejectionReason.VALIDATION_FAILED,

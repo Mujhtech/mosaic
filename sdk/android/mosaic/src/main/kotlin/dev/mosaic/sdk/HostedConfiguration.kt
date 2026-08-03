@@ -424,6 +424,7 @@ class MosaicHostedConfigurationClient(
     @Volatile private var accepted: MosaicAcceptedConfiguration? = null
     private val identityMutationLock = Mutex()
     @Volatile private var qaOverrideTokens: Set<String> = emptySet()
+    private val assumedProviderCapabilitiesReported = java.util.concurrent.atomic.AtomicBoolean(false)
 
     val acceptedConfiguration: MosaicAcceptedConfiguration?
         get() = accepted
@@ -854,12 +855,33 @@ class MosaicHostedConfigurationClient(
         analyticsContext: MosaicAnalyticsContext,
         baseAttribution: MosaicAnalyticsAttribution,
     ): MosaicPlacementDecisionResult {
-        val identity = identityStore?.current() ?: MosaicIdentityState("installation_unavailable", null, emptyMap(), 0)
-        val assignment = when (ruleSet.assignmentPolicy) {
-            MosaicAssignmentPolicy.INSTALLATION -> MosaicAssignmentKey(MosaicAssignmentKeyType.INSTALLATION, identity.installationId)
-            MosaicAssignmentPolicy.IDENTIFIED_USER -> identity.userId?.let { MosaicAssignmentKey(MosaicAssignmentKeyType.IDENTIFIED_USER, it) }
-            MosaicAssignmentPolicy.IDENTIFIED_USER_OR_INSTALLATION -> identity.userId?.let { MosaicAssignmentKey(MosaicAssignmentKeyType.IDENTIFIED_USER, it) }
-                ?: MosaicAssignmentKey(MosaicAssignmentKeyType.INSTALLATION, identity.installationId)
+        // No identity means no assignment key. A shared literal such as "installation_unavailable"
+        // would give every affected device the same bucket, so one rollout arm or Variant would
+        // receive all of them at once. Absent identity is ineligible instead: the evaluator already
+        // treats a null assignment key as UNKNOWN and skips the rollout rule, and Experiments take
+        // the same route the engine uses for `missing_identity`.
+        val identity = identityStore?.let { store ->
+            try {
+                store.current()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                null
+            }
+        }
+        if (identity == null) {
+            diagnose(
+                MosaicDiagnosticCode.DECISION_IDENTITY_UNAVAILABLE,
+                "No Mosaic installation identity is available; rollouts and Experiments were skipped.",
+            )
+        }
+        val assignment = identity?.let {
+            when (ruleSet.assignmentPolicy) {
+                MosaicAssignmentPolicy.INSTALLATION -> MosaicAssignmentKey(MosaicAssignmentKeyType.INSTALLATION, it.installationId)
+                MosaicAssignmentPolicy.IDENTIFIED_USER -> it.userId?.let { userId -> MosaicAssignmentKey(MosaicAssignmentKeyType.IDENTIFIED_USER, userId) }
+                MosaicAssignmentPolicy.IDENTIFIED_USER_OR_INSTALLATION -> it.userId?.let { userId -> MosaicAssignmentKey(MosaicAssignmentKeyType.IDENTIFIED_USER, userId) }
+                    ?: MosaicAssignmentKey(MosaicAssignmentKeyType.INSTALLATION, it.installationId)
+            }
         }
         val sources = ruleSet.rules.flatMap { it.conditions.sources() }
         val entitlementKeys = sources.filterIsInstance<MosaicDecisionSource.Entitlement>().map { it.key }.toSet()
@@ -892,8 +914,23 @@ class MosaicHostedConfigurationClient(
             entitlementKeys.associateWith { MosaicEntitlementState.UNKNOWN }
         } else when (val result = provider?.activeEntitlements()) {
             is MosaicActiveEntitlementsResult.Available -> entitlementKeys.associateWith { key ->
-                val referenceId = configuration.release.entitlementReferences.values.first { it.key == key }.id
-                if (result.entitlements.any { it.id == referenceId }) MosaicEntitlementState.ACTIVE else MosaicEntitlementState.INACTIVE
+                // A Rule may name an Entitlement key the release does not declare. Without a
+                // reference id there is nothing to match the provider's grants against, so the
+                // answer is genuinely unknown — reporting INACTIVE would deny access on a defect.
+                val referenceId = configuration.release.entitlementReferences.values
+                    .firstOrNull { it.key == key }
+                    ?.id
+                when {
+                    referenceId == null -> {
+                        diagnose(
+                            MosaicDiagnosticCode.DECISION_ENTITLEMENT_REFERENCE_UNAVAILABLE,
+                            "A Rule references an Entitlement the release does not declare; its state is unknown.",
+                        )
+                        MosaicEntitlementState.UNKNOWN
+                    }
+                    result.entitlements.any { it.id == referenceId } -> MosaicEntitlementState.ACTIVE
+                    else -> MosaicEntitlementState.INACTIVE
+                }
             }
             is MosaicActiveEntitlementsResult.ProviderUnavailable, null -> entitlementKeys.associateWith { MosaicEntitlementState.PROVIDER_UNAVAILABLE }
             is MosaicActiveEntitlementsResult.Failed -> entitlementKeys.associateWith { MosaicEntitlementState.FAILED }
@@ -910,17 +947,12 @@ class MosaicHostedConfigurationClient(
         val context = MosaicDecisionContext(
             applicationVersion = applicationVersion,
             country = country,
-            userPresent = identity.userId != null,
-            attributes = identity.attributes.filterKeys(ruleSet.attributeDefinitions::containsKey),
+            userPresent = identity?.userId != null,
+            attributes = identity?.attributes.orEmpty().filterKeys(ruleSet.attributeDefinitions::containsKey),
             entitlements = entitlementStates,
             products = productStates,
             productReadiness = configuration.release.productReferences.mapValues { it.value.readiness },
-            providerCapabilities = if (provider == null) {
-                emptyMap()
-            } else {
-                setOf("product_loading", "purchase", "restore", "entitlement_lookup")
-                    .associateWith { MosaicProviderCapabilityState.AVAILABLE }
-            },
+            providerCapabilities = providerCapabilityStates(provider),
         )
         return when (val result = MosaicPlacementEvaluator.evaluate(ruleSet, context, assignment, qaOverrideTokens)) {
             is MosaicEvaluationResult.NoPaywall -> {
@@ -995,6 +1027,43 @@ class MosaicHostedConfigurationClient(
         }
     }
 
+    /**
+     * Provider capability states for `provider_capability` conditions.
+     *
+     * The two capability vocabularies are deliberately distinct and are never aliased inside a
+     * document (see `docs/protocol/compatibility-policy.md`, "product_load vs product_loading"):
+     * `product_load` belongs to Experiment Assignment `1`, `product_loading` to Placement Decision
+     * `1`. This translates one adapter's truthful declaration into the vocabulary of the contract
+     * being evaluated; it does not accept either token in the other contract's documents.
+     *
+     * An adapter that declares nothing keeps the historical assumed-available answer, because
+     * reporting UNAVAILABLE would make every capability-guarded Rule fall back on adapters that
+     * simply predate the declaration. That assumption is diagnosed once per client.
+     */
+    private fun providerCapabilityStates(
+        provider: MosaicPurchaseProvider?,
+    ): Map<String, MosaicProviderCapabilityState> {
+        if (provider == null) return emptyMap()
+        val declared = (provider as? MosaicExperimentCommerceCapabilityProvider)?.mosaicExperimentCapabilities
+        if (declared == null) {
+            if (assumedProviderCapabilitiesReported.compareAndSet(false, true)) {
+                diagnose(
+                    MosaicDiagnosticCode.COMMERCE_PROVIDER_CAPABILITIES_ASSUMED,
+                    "The commerce provider declares no capabilities; targeting assumed the baseline set.",
+                )
+            }
+            return DECISION_PROVIDER_CAPABILITIES.associateWith { MosaicProviderCapabilityState.AVAILABLE }
+        }
+        return DECISION_PROVIDER_CAPABILITIES.associateWith { capability ->
+            val experimentToken = if (capability == "product_loading") "product_load" else capability
+            if (experimentToken in declared) {
+                MosaicProviderCapabilityState.AVAILABLE
+            } else {
+                MosaicProviderCapabilityState.UNAVAILABLE
+            }
+        }
+    }
+
     private suspend fun availableExperimentOrNormal(
         configuration: MosaicAcceptedConfiguration,
         ruleSet: MosaicPlacementRuleSet,
@@ -1005,7 +1074,7 @@ class MosaicHostedConfigurationClient(
         resolvedProducts: List<MosaicProduct>,
         normalRequiredProducts: List<String>,
         productStates: Map<String, MosaicProductAvailability>,
-        identity: MosaicIdentityState,
+        identity: MosaicIdentityState?,
         placementRequestId: String,
         context: MosaicAnalyticsContext,
         baseAttribution: MosaicAnalyticsAttribution,
@@ -1013,7 +1082,8 @@ class MosaicHostedConfigurationClient(
         val candidates = configuration.release.experimentAssignments.filter {
             it.placementId == ruleSet.placementId && it.controlPaywallVersionId == normalPaywall.id
         }
-        if (candidates.isEmpty()) {
+        // No identity, no assignment key: the same route the engine takes for `missing_identity`.
+        if (identity == null || candidates.isEmpty()) {
             return availableAnalyticsResult(
                 configuration, normalPaywall, trace, matchedRuleId, fallbackPath, resolvedProducts,
                 normalRequiredProducts, placementRequestId, context, baseAttribution,
@@ -1052,9 +1122,21 @@ class MosaicHostedConfigurationClient(
         val identityValue = if (evaluated.assignmentKeyType == MosaicAssignmentKeyType.IDENTIFIED_USER) {
             requireNotNull(identity.userId)
         } else identity.installationId
+        // Persistence is diagnostic and replay storage, never a gate on presenting the Variant, so a
+        // write failure must not throw here. It must not be invisible either: a lost assignment
+        // record means the next exposure cannot be de-duplicated against this one.
         runCatching { experimentStore?.record(evaluated, identityValue, System.currentTimeMillis()) }
+            .onFailure {
+                diagnose(
+                    MosaicDiagnosticCode.EXPERIMENT_ASSIGNMENT_PERSISTENCE_FAILED,
+                    "An Experiment assignment could not be persisted; replay diagnostics may be incomplete.",
+                )
+            }
 
-        val variantPaywall = configuration.release.paywallVersions.getValue(evaluated.variant.paywallVersionId)
+        // A Variant naming a Paywall Version the release does not carry is a dangling reference.
+        // Mirror the null-checked control path: fall back to the normal Placement rather than
+        // throwing, and report it as an unavailable Variant.
+        val variantPaywall = configuration.release.paywallVersions[evaluated.variant.paywallVersionId]
         val requiredProducts = evaluated.variant.compatibility.requiredProductIds
         val productsReady = requiredProducts.all {
             configuration.release.productReferences[it]?.readiness == MosaicProductReadiness.READY &&
@@ -1064,11 +1146,12 @@ class MosaicHostedConfigurationClient(
             ?.mosaicExperimentCapabilities.orEmpty()
         val providerReady = acceptedCapabilities.containsAll(evaluated.variant.compatibility.requiredProviderCapabilities)
         val failure = when {
+            variantPaywall == null -> "configuration_incompatible"
             !productsReady -> "product_unavailable"
             !providerReady -> "provider_unavailable"
             else -> null
         }
-        val selectedPaywall = if (failure == null) variantPaywall else normalPaywall
+        val selectedPaywall = if (failure == null) requireNotNull(variantPaywall) else normalPaywall
         val selectedProducts = if (failure == null) requiredProducts.toList() else normalRequiredProducts
         val presentation = MosaicExperimentPresentationContext(
             experimentAttribution, evaluated.assignmentKeyType.experimentWireName(), MOSAIC_EXPERIMENT_BUCKETING_ALGORITHM,
@@ -1489,6 +1572,14 @@ class MosaicHostedConfigurationClient(
         diagnostics.record(MosaicDiagnostic(code, message))
     }
 }
+
+/**
+ * The `provider_capability` vocabulary of Placement Decision `1`
+ * (`schema/placement-decision/v1/decision.schema.json`). Distinct from the Experiment Assignment
+ * `1` set, which spells the first one `product_load`.
+ */
+private val DECISION_PROVIDER_CAPABILITIES =
+    setOf("product_loading", "purchase", "restore", "entitlement_lookup")
 
 internal fun mosaicConfigurationCacheNamespace(configuration: MosaicConfiguration): String {
     val identity =

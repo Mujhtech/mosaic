@@ -31,6 +31,13 @@ internal data class MosaicQueuedTransactionObservation(
 internal interface MosaicTransactionObservationStore {
     suspend fun read(): List<MosaicQueuedTransactionObservation>
     suspend fun write(entries: List<MosaicQueuedTransactionObservation>)
+
+    /**
+     * True when the most recent [read] discarded an unreadable queue file. Discarding is correct —
+     * an undecodable observation must never be submitted — but the pending reports it destroyed
+     * were real, so the loss is counted rather than looking like an empty queue.
+     */
+    val lastReadDiscarded: Boolean get() = false
 }
 
 /**
@@ -50,9 +57,15 @@ internal class MosaicFileTransactionObservationStore private constructor(
 
     internal constructor(directory: File, namespace: String) : this(File(directory, "$namespace.json"))
 
+    @Volatile private var discarded = false
+
+    override val lastReadDiscarded: Boolean get() = discarded
+
     override suspend fun read(): List<MosaicQueuedTransactionObservation> = withContext(Dispatchers.IO) {
         if (!file.isFile) return@withContext emptyList()
-        runCatching { decode(file.readText(Charsets.UTF_8)) }.getOrDefault(emptyList())
+        runCatching { decode(file.readText(Charsets.UTF_8)) }
+            .onFailure { discarded = true }
+            .getOrDefault(emptyList())
     }
 
     override suspend fun write(entries: List<MosaicQueuedTransactionObservation>) = withContext(Dispatchers.IO) {
@@ -287,6 +300,13 @@ internal class MosaicTransactionObservationQueue(
         entries = retained
     }
 
-    private suspend fun load() { if (!loaded) { entries = store.read(); loaded = true } }
+    private suspend fun load() {
+        if (loaded) return
+        entries = store.read()
+        loaded = true
+        if (store.lastReadDiscarded) {
+            lastCode = MosaicDiagnosticCode.TRANSACTION_OBSERVATION_QUEUE_REJECTED.wireName
+        }
+    }
     private suspend fun persist() = store.write(entries)
 }

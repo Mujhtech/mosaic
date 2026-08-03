@@ -253,6 +253,17 @@ object MosaicCountdownText {
     }
 }
 
+/**
+ * The corner radius used when `appearance.cornerRadius` is absent.
+ *
+ * `cornerRadius` is an optional `logicalSize` in `schema/v0.2/paywall.schema.json` with no schema
+ * default, so an absent value is square. Both other renderers read it that way — SwiftUI
+ * `appearance?.cornerRadius ?? 0` and Flutter `appearance?.cornerRadius ?? 0` — and every Android
+ * surface must agree, so an unstyled Button, TextButton, and purchase Button look identical across
+ * platforms rather than picking three different Material-flavoured radii.
+ */
+internal const val MOSAIC_DEFAULT_CORNER_RADIUS: Double = 0.0
+
 @Composable
 internal fun Modifier.mosaicPresentation(
     appearance: MosaicBoxAppearance?,
@@ -261,7 +272,7 @@ internal fun Modifier.mosaicPresentation(
 ): Modifier {
     var result = mosaicOuterAndSizing(sizing, outerInsets)
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(
-        (appearance?.cornerRadius ?: 0.0).dp,
+        (appearance?.cornerRadius ?: MOSAIC_DEFAULT_CORNER_RADIUS).dp,
     )
     appearance?.shadow?.let { shadow ->
         result = result.dropShadow(
@@ -274,6 +285,8 @@ internal fun Modifier.mosaicPresentation(
             ),
         )
     }
+    // `clipContent` is an optional boolean with no schema default: absent means "do not clip",
+    // matching SwiftUI (`clipContent == true`) and Flutter (`clipContent ?? false`).
     if (appearance?.clipContent == true) result = result.clip(shape)
     result = result.mosaicBackground(appearance?.background, shape)
     appearance?.border?.let {
@@ -470,7 +483,21 @@ internal fun MosaicColor.toComposeColor(): Color {
             MosaicSemanticColor.TRANSPARENT -> Color.Transparent
         }
     }
-    val rgba = rawValue.removePrefix("#").toLongOrNull(16) ?: return Color.Transparent
+    val rgba = rawValue.removePrefix("#").toLongOrNull(16)
+    if (rgba == null) {
+        // Transparent stays the last-resort render, but an unparseable literal is a document defect
+        // that would otherwise erase a surface invisibly. Diagnose it once per distinct raw value.
+        val diagnostics = LocalMosaicDiagnostics.current
+        LaunchedEffect(rawValue) {
+            diagnostics.record(
+                MosaicDiagnostic(
+                    MosaicDiagnosticCode.RENDERING_COLOR_UNRESOLVED,
+                    "A paywall colour literal could not be parsed; transparent was used.",
+                ),
+            )
+        }
+        return Color.Transparent
+    }
     return Color(
         red = ((rgba shr 24) and 0xFF).toInt(),
         green = ((rgba shr 16) and 0xFF).toInt(),
@@ -675,9 +702,19 @@ internal fun MosaicProductCardComponent.accessibilityDescription(
         }
 }
 
+/**
+ * The busy state announced by TalkBack, always in the paywall's own language.
+ *
+ * Resolution order: the authored in-progress children, then the button's ordinary children, then
+ * the optional localization key [MOSAIC_IN_PROGRESS_LOCALIZATION_KEY] if the document's catalogue
+ * defines it. Returns null when the document says nothing — an untranslated English literal read
+ * aloud inside an Arabic or Japanese paywall is worse than no state description at all.
+ */
+internal const val MOSAIC_IN_PROGRESS_LOCALIZATION_KEY: String = "accessibility.inProgress"
+
 internal fun MosaicButtonComponent.busyStateDescription(
     localization: MosaicLocalizationResolver,
-): String {
+): String? {
     fun firstText(nodes: List<MosaicNode>): String? {
         nodes.forEach { node ->
             when (node) {
@@ -691,7 +728,11 @@ internal fun MosaicButtonComponent.busyStateDescription(
         return null
     }
 
-    return firstText(inProgressChildren ?: children) ?: "In progress"
+    firstText(inProgressChildren ?: children)?.let { return it }
+    if (inProgressChildren != null) firstText(children)?.let { return it }
+    return localization
+        .resolve(MosaicLocalizedText(defaultValue = "", localizationKey = MOSAIC_IN_PROGRESS_LOCALIZATION_KEY))
+        .takeIf(String::isNotBlank)
 }
 
 internal fun MosaicProductCardStyle.cardHorizontalAlignment(): Alignment.Horizontal =

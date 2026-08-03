@@ -32,6 +32,7 @@ internal fun compatibility(
         val name = capabilitiesByWireName[wireName]
             ?: throw MosaicProtocolException(
                 "Unsupported capability $wireName@$version at $capabilityPath.",
+                violation = MosaicProtocolViolation.UNSUPPORTED_CAPABILITY,
             )
         val required = MosaicRequiredCapability(name, version)
         if (name !in MosaicCapabilityCatalog.v02 ||
@@ -40,6 +41,7 @@ internal fun compatibility(
         ) {
             throw MosaicProtocolException(
                 "Unsupported capability $wireName@$version at $capabilityPath.",
+                violation = MosaicProtocolViolation.UNSUPPORTED_CAPABILITY,
             )
         }
         if (!seen.add(name)) {
@@ -266,7 +268,10 @@ internal fun node(value: JsonElement, path: String): MosaicNode {
         "carousel" -> carouselComponent(objectValue, path)
         "switch" -> switchComponent(objectValue, path)
         "countdown" -> countdownComponent(objectValue, path)
-        else -> throw MosaicProtocolException("Unsupported Protocol 0.2 component at $path.type.")
+        else -> throw MosaicProtocolException(
+            "Unsupported Protocol 0.2 component at $path.type.",
+            violation = MosaicProtocolViolation.UNSUPPORTED_COMPONENT,
+        )
     }
 }
 

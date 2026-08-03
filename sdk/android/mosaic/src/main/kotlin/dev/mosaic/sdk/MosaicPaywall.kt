@@ -710,7 +710,20 @@ internal fun RenderNodeCore(
         is MosaicIconComponent -> RenderIcon(node, localization, modifier)
         is MosaicProductCardComponent,
         is MosaicProductBadgeComponent,
-        -> Unit // Strict decoding only exposes these through Product Selector-owned rendering.
+        -> {
+            // Strict decoding only exposes these through Product Selector-owned rendering, so
+            // reaching one here means the tree was assembled outside that path. Skipping it is the
+            // safe render, but skipping it silently is not: the author sees an absent card with no
+            // explanation. Diagnose once per node id, like LAYOUT_UNBOUNDED_FILL.
+            LaunchedEffect(node.id) {
+                diagnostics.record(
+                    MosaicDiagnostic(
+                        MosaicDiagnosticCode.RENDERING_COMPONENT_SKIPPED,
+                        "A ${node.type} outside a Product Selector was skipped.",
+                    ),
+                )
+            }
+        }
     }
 }
 
@@ -729,6 +742,9 @@ internal fun MosaicNode.appearanceOrNull(): MosaicBoxAppearance? = when (this) {
     is MosaicRestoreButtonComponent -> appearance
     is MosaicCloseButtonComponent -> appearance
     is MosaicLegalTextComponent -> appearance
+    // Product Cards and Badges declare no `appearance` in `schema/v0.2/paywall.schema.json`; they
+    // carry `styles`, resolved per selection state by their Product Selector-owned renderer. Null
+    // here is the contract, not a dropped value.
     is MosaicProductCardComponent,
     is MosaicProductBadgeComponent,
     -> null
@@ -763,7 +779,7 @@ internal fun RenderButton(
     }
     val appearance = component.appearance
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(
-        (appearance?.cornerRadius ?: 0.0).dp,
+        (appearance?.cornerRadius ?: MOSAIC_DEFAULT_CORNER_RADIUS).dp,
     )
     Button(
         onClick = {
@@ -789,7 +805,9 @@ internal fun RenderButton(
             )
             .semantics {
                 contentDescription = component.accessibility.resolvedDescriptions(localization)
-                if (isBusy) stateDescription = component.busyStateDescription(localization)
+                if (isBusy) {
+                    component.busyStateDescription(localization)?.let { stateDescription = it }
+                }
             }
             .testTag("mosaic-node-${component.id}"),
         shape = shape,

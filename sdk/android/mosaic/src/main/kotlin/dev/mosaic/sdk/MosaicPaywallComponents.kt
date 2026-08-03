@@ -184,15 +184,20 @@ internal fun RenderImage(
     diagnostics: MosaicDiagnosticSink,
     modifier: Modifier,
 ) {
-    val asset = document.assets.filterIsInstance<MosaicImageAsset>().first { it.id == component.assetId }
-    val bundledKey = (asset.source as? MosaicAssetSource.Bundled)?.key
-    val remoteUrl = (asset.source as? MosaicAssetSource.Remote)?.url
+    // A dangling assetId is a non-conforming document, not a crash: the declared placeholder (or an
+    // empty frame when the asset itself is missing) is shown and the failure is diagnosed.
+    val asset = document.assets.filterIsInstance<MosaicImageAsset>().firstOrNull { it.id == component.assetId }
+    val bundledKey = (asset?.source as? MosaicAssetSource.Bundled)?.key
+    val remoteUrl = (asset?.source as? MosaicAssetSource.Remote)?.url
     val bitmap = remember(bundledKey, imageResolver) {
         bundledKey?.let { runCatching { imageResolver.resolve(it) }.getOrNull() }
     }
     var remoteFailed by remember(remoteUrl) { mutableStateOf(false) }
-    val unavailable = bundledKey != null && bitmap == null || remoteUrl == null && bundledKey == null || remoteFailed
-    LaunchedEffect(unavailable, asset.id) {
+    val unavailable = asset == null ||
+        bundledKey != null && bitmap == null ||
+        remoteUrl == null && bundledKey == null ||
+        remoteFailed
+    LaunchedEffect(unavailable, component.id) {
         if (unavailable) {
             diagnostics.record(
                 MosaicDiagnostic(
@@ -219,9 +224,16 @@ internal fun RenderImage(
             .mosaicPresentation(component.appearance, null, null)
         .then(semanticModifier)
         .testTag("mosaic-node-${component.id}")
-    if (component.appearance?.clipContent != false) frameModifier = frameModifier.clip(
+    // `appearance.clipContent` is an optional boolean in `schema/v0.2/paywall.schema.json` with no
+    // schema default, so an absent value means "do not clip" — the same reading as SwiftUI
+    // (`clipContent == true`) and Flutter (`clipContent ?? false`). Images additionally clip when a
+    // corner radius is authored, mirroring the Flutter renderer's image-only `forceClip`, so a
+    // rounded image frame cannot leak square pixels on one platform only.
+    val clipsContent = component.appearance?.clipContent == true ||
+        (component.appearance?.cornerRadius ?: 0.0) > 0.0
+    if (clipsContent) frameModifier = frameModifier.clip(
         androidx.compose.foundation.shape.RoundedCornerShape(
-            (component.appearance?.cornerRadius ?: 0.0).dp,
+            (component.appearance?.cornerRadius ?: MOSAIC_DEFAULT_CORNER_RADIUS).dp,
         ),
     )
 
@@ -248,13 +260,15 @@ internal fun RenderImage(
             modifier = frameModifier.background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = localization.resolve(asset.placeholder),
-                modifier = Modifier.padding(24.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-            )
+            asset?.let {
+                Text(
+                    text = localization.resolve(it.placeholder),
+                    modifier = Modifier.padding(24.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
     }
 }
@@ -306,7 +320,28 @@ internal fun RenderProductSelector(
     onEvent: (MosaicPaywallEvent) -> Unit,
     modifier: Modifier,
 ) {
-    val selectorState = state.selectorStates.getValue(component.id)
+    // A Product Selector the commerce state never saw (a state built from a different document)
+    // must degrade to its own authored unavailable message, never throw inside composition.
+    val selectorState = state.selectorStates[component.id]
+    if (selectorState == null) {
+        LaunchedEffect(component.id) {
+            diagnostics.record(
+                MosaicDiagnostic(
+                    MosaicDiagnosticCode.RENDERING_SELECTOR_UNAVAILABLE,
+                    "A Product Selector has no commerce state; its unavailable message is shown.",
+                ),
+            )
+        }
+        Text(
+            text = localization.resolve(component.unavailableFallback.message),
+            modifier = modifier
+                .mosaicPresentation(component.appearance, component.sizing, component.outerInsets)
+                .testTag("mosaic-products-unavailable"),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        return
+    }
     val containerModifier = modifier
         .mosaicPresentation(component.appearance, component.sizing, component.outerInsets)
         .selectableGroup()
@@ -751,12 +786,25 @@ internal fun RenderPurchaseButton(
     modifier: Modifier,
 ) {
     val scope = rememberCoroutineScope()
-    val selector = state.selectorStates.getValue(component.action.productSelectorId)
+    // A purchase button bound to a Product Selector the commerce state never saw renders disabled:
+    // there is no product to buy, and throwing here would take the whole paywall down.
+    val selector = state.selectorStates[component.action.productSelectorId]
+    val diagnostics = LocalMosaicDiagnostics.current
+    if (selector == null) {
+        LaunchedEffect(component.id) {
+            diagnostics.record(
+                MosaicDiagnostic(
+                    MosaicDiagnosticCode.RENDERING_SELECTOR_UNAVAILABLE,
+                    "A purchase button references a Product Selector without commerce state.",
+                ),
+            )
+        }
+    }
     val isBusy = component.action.productSelectorId in state.purchaseBusySelectorIds
     val appearance = component.appearance
     Button(
         onClick = { scope.launch { onEvent(state.purchase(component.action.productSelectorId, component.id)) } },
-        enabled = selector.selectedProductReferenceId != null &&
+        enabled = selector?.selectedProductReferenceId != null &&
             state.isNodeVisible(component.action.productSelectorId) &&
             !isBusy,
         modifier = modifier
@@ -768,7 +816,7 @@ internal fun RenderPurchaseButton(
             }
             .testTag("mosaic-node-${component.id}"),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(
-            (appearance?.cornerRadius ?: 10.0).dp,
+            (appearance?.cornerRadius ?: MOSAIC_DEFAULT_CORNER_RADIUS).dp,
         ),
         colors = ButtonDefaults.buttonColors(
             containerColor = (appearance?.background as? MosaicBackground.Solid)?.color?.toComposeColor()
@@ -877,7 +925,7 @@ internal fun StyledTextButton(
             .mosaicOuterAndSizing(sizing, outerInsets)
             .alpha((appearance?.opacity ?: 1.0).toFloat()),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(
-            (appearance?.cornerRadius ?: 9.0).dp,
+            (appearance?.cornerRadius ?: MOSAIC_DEFAULT_CORNER_RADIUS).dp,
         ),
         colors = ButtonDefaults.textButtonColors(
             containerColor = (appearance?.background as? MosaicBackground.Solid)?.color?.toComposeColor()

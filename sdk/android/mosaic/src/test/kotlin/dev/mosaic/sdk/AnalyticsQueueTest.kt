@@ -20,6 +20,26 @@ class AnalyticsQueueTest {
         assertTrue(session != MosaicAnalyticsQueue(store) { now }.session())
     }
 
+    /**
+     * A queue file that cannot be decoded is correctly reset — an undecodable event must never be
+     * submitted — but the events it destroyed were real. Resetting silently is indistinguishable
+     * from a first launch, so the loss is reported through the diagnostics counters.
+     */
+    @Test
+    fun unreadablePersistedQueueResetsAndReportsTheLoss() = runTest {
+        val directory = Files.createTempDirectory("mosaic-analytics-corrupt").toFile()
+        val store = MosaicFileAnalyticsStore(directory, "corrupt")
+        val now = Instant.parse("2026-07-26T12:05:00.000Z").toEpochMilli()
+        MosaicAnalyticsQueue(store) { now }.enqueue(event("purchase-started.json"))
+        directory.resolve("corrupt.json").writeText("{\"events\": [ truncated")
+
+        val restored = MosaicAnalyticsQueue(MosaicFileAnalyticsStore(directory, "corrupt")) { now }
+        val diagnostics = restored.diagnostics()
+
+        assertEquals(0, diagnostics.queuedEventCount)
+        assertEquals("analytics.queue_rejected", diagnostics.lastSafeCode)
+    }
+
     @Test
     fun queuedEventKeepsItsEventTimeIdentity() = runTest {
         val store = MemoryAnalyticsStore()

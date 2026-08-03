@@ -570,6 +570,111 @@ class PaywallStateTest {
         )
     }
 
+    /**
+     * A Product Card bound to a Product Reference the document never declares used to throw out of
+     * `loadProducts`, taking every other plan in the selector with it. Skipping the unresolvable
+     * card keeps the remaining plans purchasable, and the skip is diagnosed rather than silent.
+     */
+    @Test
+    fun cardBoundToAnUndeclaredProductIsSkippedInsteadOfFailingTheSelector() = runTest {
+        val diagnostics = mutableListOf<MosaicDiagnostic>()
+        val state = MosaicPaywallState(
+            canonicalDocument().withFirstCardBoundTo("no-such-product"),
+            MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
+            MosaicDiagnosticSink(diagnostics::add),
+        )
+
+        state.loadProducts()
+
+        val selector = state.selectorStates.getValue("plans")
+        assertEquals(
+            listOf("plans-yearly-plan-card", "plans-lifetime-plan-card"),
+            selector.options.map { it.productCardId },
+        )
+        assertEquals("yearly-plan", selector.selectedProductReferenceId)
+        assertEquals(
+            1,
+            diagnostics.count { it.code == MosaicDiagnosticCode.PRODUCT_LOAD_FAILED },
+        )
+    }
+
+    /**
+     * `currentScreen` and `backgroundScreen` are public and used to throw on a document whose
+     * screen reference does not resolve. They now degrade to a real screen and diagnose once per
+     * substitution, so a non-conforming document cannot crash a host that reads them.
+     */
+    @Test
+    fun danglingScreenReferencesDegradeToADeclaredScreenAndDiagnoseOnce() {
+        val diagnostics = mutableListOf<MosaicDiagnostic>()
+        val document = canonicalDocument().copy(initialScreenId = "no-such-screen")
+        val state = MosaicPaywallState(
+            document,
+            MockMosaicPurchaseProvider(),
+            MosaicDiagnosticSink(diagnostics::add),
+        )
+
+        assertNull(state.currentScreenOrNull)
+        repeat(2) {
+            assertEquals(document.screens.first().id, state.currentScreen.id)
+            assertEquals(document.screens.first().id, state.backgroundScreen.id)
+        }
+        assertEquals(
+            listOf(MosaicDiagnosticCode.RENDERING_FAILED, MosaicDiagnosticCode.RENDERING_FAILED),
+            diagnostics.map { it.code },
+        )
+    }
+
+    /**
+     * The busy state a screen reader announces must come from the document. A hardcoded English
+     * "In progress" was previously read aloud inside paywalls of every other language.
+     */
+    @Test
+    fun busyStateDescriptionNeverFallsBackToAHardcodedEnglishLiteral() {
+        val document = canonicalDocument()
+        val button = document.walkNodesDepthFirst()
+            .filterIsInstance<MosaicButtonComponent>()
+            .first { it.inProgressChildren != null }
+            .copy(children = emptyList(), inProgressChildren = emptyList())
+
+        assertNull(button.busyStateDescription(MosaicLocalizationResolver(document.localization, "ar")))
+
+        val catalogued = document.localization.withLocalizedValue(
+            locale = document.localization.defaultLocale,
+            key = MOSAIC_IN_PROGRESS_LOCALIZATION_KEY,
+            value = "En cours",
+        )
+        assertEquals(
+            "En cours",
+            button.busyStateDescription(
+                MosaicLocalizationResolver(catalogued, document.localization.defaultLocale),
+            ),
+        )
+    }
+
+    private fun MosaicPaywallDocument.withFirstCardBoundTo(
+        productReferenceId: String,
+    ): MosaicPaywallDocument {
+        fun replace(node: MosaicNode): MosaicNode = when (node) {
+            is MosaicStack -> node.copy(children = node.children.map(::replace))
+            is MosaicProductSelectorComponent -> node.copy(
+                cards = node.cards.mapIndexed { index, card ->
+                    if (index == 0) card.copy(productReferenceId = productReferenceId) else card
+                },
+            )
+            else -> node
+        }
+
+        val updatedScreens = screens.map { screen ->
+            screen.copy(
+                layout = screen.layout.copy(content = replace(screen.layout.content) as MosaicStack),
+            )
+        }
+        return copy(
+            screens = updatedScreens,
+            layout = updatedScreens.first { it.id == initialScreenId }.layout,
+        )
+    }
+
     private suspend fun loadedState(
         purchaseScenario: MosaicMockPurchaseScenario = MosaicMockPurchaseScenario.SUCCESS,
         restoreScenario: MosaicMockRestoreScenario = MosaicMockRestoreScenario.AUTOMATIC,
