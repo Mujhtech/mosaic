@@ -3653,11 +3653,11 @@ export type ProductStatus = 'draft' | 'connected' | 'attention_required' | 'arch
 
 export type MetadataSource = 'mock' | 'provider';
 
-export type ProviderKind = 'revenuecat' | 'app_store' | 'google_play' | 'custom';
+export type ProviderKind = 'revenuecat' | 'app_store' | 'app_store_connect' | 'google_play' | 'custom';
 
 export type ProviderActivationKind = 'provider_connection' | 'native_store';
 
-export type ProviderConnectionKind = 'revenuecat' | 'custom';
+export type ProviderConnectionKind = 'revenuecat' | 'app_store_connect' | 'custom';
 
 export type ProviderIntegrationMode = 'server_connected' | 'sdk_only';
 
@@ -3806,7 +3806,7 @@ export type CreateProviderConnectionRequest = unknown & {
     integrationMode: ProviderIntegrationMode;
     mode: ProviderConnectionMode;
     /**
-     * Required RevenueCat v2 Project resource ID.
+     * Required RevenueCat v2 Project resource ID. Must be omitted for app_store_connect: an App Store Connect API key is issued per Apple team and names no second project resource.
      */
     externalProjectId?: string;
     environmentIds: Array<string>;
@@ -3814,6 +3814,9 @@ export type CreateProviderConnectionRequest = unknown & {
 };
 
 export type ProviderCredentialRequest = {
+    /**
+     * Replacement credential in the shape the connection's provider requires. The connection determines the provider, so the accepted shape is not derivable from this payload; the server validates it against the connection's actual provider.
+     */
     credential: string;
 };
 
@@ -4312,6 +4315,7 @@ export type ProviderReadiness = {
     connectionId?: string;
     provider?: ProviderKind;
     mappingId?: string;
+    mappingProvider?: ProviderKind;
     observation?: ProviderMappingObservation;
     blockers: Array<ProviderReadinessIssue>;
     warnings: Array<ProviderReadinessIssue>;
@@ -4901,11 +4905,15 @@ export type CreateProviderConnectionRequestWritable = unknown & {
     integrationMode: ProviderIntegrationMode;
     mode: ProviderConnectionMode;
     /**
-     * Required RevenueCat v2 Project resource ID.
+     * Required RevenueCat v2 Project resource ID. Must be omitted for app_store_connect: an App Store Connect API key is issued per Apple team and names no second project resource.
      */
     externalProjectId?: string;
     /**
-     * One-time RevenueCat v2 least-privilege secret key. Never returned or logged.
+     * One-time provider credential. Never returned or logged. Its shape is provider-specific and is validated server side.
+     *
+     * revenuecat: the RevenueCat v2 least-privilege secret key (`sk_...`).
+     *
+     * app_store_connect: a JSON document `{"privateKey":"<.p8 PEM>","keyId":"<10 chars>","issuerId":"<uuid>","vendorNumber":"<digits, optional>"}`. The vendor number travels inside this document; it is not used for catalog import and is stored for future sales and finance reporting.
      */
     credential?: string;
     environmentIds: Array<string>;

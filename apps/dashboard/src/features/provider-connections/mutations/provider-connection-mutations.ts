@@ -7,10 +7,12 @@ import type {
   ProviderProductImportSelection,
 } from "@/features/provider-connections/types/provider-catalog-import";
 import type {
+  CreateAppStoreConnectConnectionInput,
   CreateRevenueCatConnectionInput,
   ReplaceProviderCredentialInput,
 } from "@/features/provider-connections/types/provider-operation-input";
 import {
+  type CreateProviderConnectionRequestWritable,
   clearActiveProviderAssignment,
   createProviderConnection,
   enqueueProviderSync,
@@ -63,14 +65,60 @@ async function invalidateConnection(
   ]);
 }
 
+/**
+ * A connection whose first test failed is still a created connection. Both
+ * server-connected providers share this create-then-test sequence so neither
+ * can silently drop the created row on a failed test — the caller is handed the
+ * connection to open, retest, or rotate.
+ */
+async function createAndTestProviderConnection(
+  body: CreateProviderConnectionRequestWritable,
+  projectId: string
+) {
+  const created = await createProviderConnection({
+    body,
+    client: generatedDashboardClient,
+    path: { projectId },
+    throwOnError: true,
+  });
+  const connection = created.data.data;
+  try {
+    const tested = await testProviderConnection({
+      client: generatedDashboardClient,
+      path: { connectionId: connection.id },
+      throwOnError: true,
+    });
+    return { connection, health: tested.data.data };
+  } catch (error) {
+    // biome-ignore lint/style/useErrorCause: ProviderConnectionCreatedButTestFailed chains the cause through its constructor
+    throw new ProviderConnectionCreatedButTestFailed(connection, error);
+  }
+}
+
+function settleCreatedConnection(projectId: string, queryClient: QueryClient) {
+  return async (
+    result: { connection: ProviderConnection } | undefined,
+    error: Error | null
+  ) => {
+    const connection =
+      result?.connection ??
+      (error instanceof ProviderConnectionCreatedButTestFailed
+        ? error.connection
+        : undefined);
+    if (connection) {
+      await invalidateConnection(queryClient, connection.id, projectId);
+    }
+  };
+}
+
 export function createAndTestRevenueCatMutationOptions(
   projectId: string,
   queryClient: QueryClient
 ) {
   return mutationOptions({
-    mutationFn: async (input: CreateRevenueCatConnectionInput) => {
-      const created = await createProviderConnection({
-        body: {
+    mutationFn: (input: CreateRevenueCatConnectionInput) =>
+      createAndTestProviderConnection(
+        {
           applicationIds: input.applicationIds,
           credential: input.credential,
           environmentIds: input.environmentIds,
@@ -80,33 +128,36 @@ export function createAndTestRevenueCatMutationOptions(
           name: input.name,
           provider: "revenuecat",
         },
-        client: generatedDashboardClient,
-        path: { projectId },
-        throwOnError: true,
-      });
-      const connection = created.data.data;
-      try {
-        const tested = await testProviderConnection({
-          client: generatedDashboardClient,
-          path: { connectionId: connection.id },
-          throwOnError: true,
-        });
-        return { connection, health: tested.data.data };
-      } catch (error) {
-        // biome-ignore lint/style/useErrorCause: ProviderConnectionCreatedButTestFailed chains the cause through its constructor
-        throw new ProviderConnectionCreatedButTestFailed(connection, error);
-      }
-    },
-    onSettled: async (result, error) => {
-      const connection =
-        result?.connection ??
-        (error instanceof ProviderConnectionCreatedButTestFailed
-          ? error.connection
-          : undefined);
-      if (connection) {
-        await invalidateConnection(queryClient, connection.id, projectId);
-      }
-    },
+        projectId
+      ),
+    onSettled: settleCreatedConnection(projectId, queryClient),
+  });
+}
+
+/**
+ * `externalProjectId` is deliberately absent from this body. An App Store
+ * Connect API key is issued per Apple team and already names every app it can
+ * read; the API rejects the field for this provider.
+ */
+export function createAndTestAppStoreConnectMutationOptions(
+  projectId: string,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: (input: CreateAppStoreConnectConnectionInput) =>
+      createAndTestProviderConnection(
+        {
+          applicationIds: input.applicationIds,
+          credential: input.credential,
+          environmentIds: input.environmentIds,
+          integrationMode: "server_connected",
+          mode: input.mode,
+          name: input.name,
+          provider: "app_store_connect",
+        },
+        projectId
+      ),
+    onSettled: settleCreatedConnection(projectId, queryClient),
   });
 }
 

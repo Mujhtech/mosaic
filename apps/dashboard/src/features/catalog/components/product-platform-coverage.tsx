@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { readinessStateLabel } from "@/features/catalog/types/connected-product-view";
 import { nativeProviderLabel } from "@/features/catalog/types/native-provider-mapping";
+import { providerConnectionLabel } from "@/features/provider-connections/types/provider-connection-view";
 import type {
   Application,
   Environment,
@@ -126,9 +127,7 @@ export function ProductPlatformCoverage({
                               }
                               return (
                                 connection?.name ??
-                                (activeProvider === "revenuecat"
-                                  ? "RevenueCat"
-                                  : "Custom provider")
+                                providerConnectionLabel(activeProvider)
                               );
                             })();
                           }

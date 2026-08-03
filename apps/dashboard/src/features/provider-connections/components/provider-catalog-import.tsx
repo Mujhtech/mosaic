@@ -27,12 +27,14 @@ import {
   providerEntitlementSelections,
   providerImportIdentifier,
 } from "@/features/provider-connections/types/provider-catalog-import";
+import { providerOfferingLabel } from "@/features/provider-connections/types/provider-connection-view";
 import { providerImportIdempotencyKey } from "@/features/provider-connections/types/provider-operation-input";
 import type {
   Application,
   Entitlement,
   Environment,
   Product,
+  ProviderConnection,
 } from "@/generated/api";
 
 interface ProductDraft {
@@ -56,6 +58,7 @@ export function ProviderCatalogImport({
   onImport,
   preview,
   products,
+  provider,
   providersHref,
 }: {
   applications: readonly Application[];
@@ -68,6 +71,7 @@ export function ProviderCatalogImport({
   ) => Promise<ProviderImportResultView>;
   preview: ProviderCatalogPreviewView;
   products: readonly Product[];
+  provider?: ProviderConnection["provider"];
   providersHref: string;
 }) {
   const fieldIds = useId();
@@ -536,7 +540,7 @@ export function ProviderCatalogImport({
                         {packageMappingOptions.length > 1 ? (
                           <Collapsible>
                             <CollapsibleTrigger className="flex items-center gap-1 rounded font-medium text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                              Advanced RevenueCat Package and Offering
+                              Advanced {providerOfferingLabel(provider)}
                               <CaretDownIcon aria-hidden />
                             </CollapsibleTrigger>
                             <CollapsibleContent className="mt-2">
@@ -544,7 +548,8 @@ export function ProviderCatalogImport({
                                 <label
                                   htmlFor={`catalog-package-${product.id}`}
                                 >
-                                  Exact Package mapping
+                                  Exact {providerOfferingLabel(provider)}{" "}
+                                  mapping
                                 </label>
                                 <Select
                                   items={packageMappingOptions}
@@ -581,9 +586,8 @@ export function ProviderCatalogImport({
                                 </Select>
                               </div>
                               <p className="mt-2 text-muted-foreground text-xs">
-                                Hidden by default because Packages and Offerings
-                                are adapter details, not Mosaic Catalog
-                                hierarchy.
+                                Hidden by default because provider grouping is
+                                an adapter detail, not Mosaic Catalog hierarchy.
                               </p>
                             </CollapsibleContent>
                           </Collapsible>

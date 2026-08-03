@@ -75,7 +75,7 @@ describe("ActiveProviderMatrix", () => {
         "revenuecat",
         connection.id
       ),
-      { paywalls: [], products: [] }
+      { paywalls: [], products: [], uncheckedPaywalls: [] }
     );
 
     render(
@@ -264,6 +264,21 @@ describe("ActiveProviderMatrix", () => {
             updatedAt: "2026-07-23T12:00:00Z",
           },
         ],
+        // A Paywall Mosaic could not inspect. It must be named, not dropped:
+        // the affected-Paywall count is otherwise reported as complete when it
+        // is only a floor.
+        uncheckedPaywalls: [
+          {
+            createdAt: "2026-07-23T12:00:00Z",
+            createdByActorId: "actor_01",
+            id: "paywall_02",
+            key: "winback",
+            name: "Winback",
+            projectId: environment.projectId,
+            status: "active",
+            updatedAt: "2026-07-23T12:00:00Z",
+          },
+        ],
       }
     );
 
@@ -288,6 +303,7 @@ describe("ActiveProviderMatrix", () => {
     ).toBeVisible();
     expect(screen.getByText("Products: Monthly Pro")).toBeVisible();
     expect(screen.getByText("Paywalls: Upgrade")).toBeVisible();
+    expect(screen.getByText(/1 Paywall could not be checked/)).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Review affected Products" })
     ).toHaveAttribute(

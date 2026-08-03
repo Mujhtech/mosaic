@@ -45,7 +45,10 @@ import {
   providerConnectionQueryOptions,
   providerSyncRunsQueryOptions,
 } from "@/features/provider-connections/queries/provider-connection-queries";
-import { providerCredentialActions } from "@/features/provider-connections/types/provider-connection-view";
+import {
+  providerConnectionLabel,
+  providerCredentialActions,
+} from "@/features/provider-connections/types/provider-connection-view";
 import { environmentMatchesConnectionMode } from "@/features/provider-connections/types/provider-operation-input";
 
 export function ProviderConnectionDetailPage({
@@ -291,20 +294,22 @@ export function ProviderConnectionDetailPage({
             >
               {testConnection.isPending ? "Testing…" : "Test connection"}
             </Button>
-            {credentialActions.rotate ? (
+            {credentialActions.rotate && connection.data ? (
               <ProviderCredentialSheet
                 action="rotate"
                 onSubmit={async (credential) => {
                   await rotate.mutateAsync({ credential });
                 }}
+                provider={connection.data.provider}
               />
             ) : null}
-            {credentialActions.reconnect ? (
+            {credentialActions.reconnect && connection.data ? (
               <ProviderCredentialSheet
                 action="reconnect"
                 onSubmit={async (credential) => {
                   await reconnect.mutateAsync({ credential });
                 }}
+                provider={connection.data.provider}
               />
             ) : null}
             <Button
@@ -516,7 +521,7 @@ export function ProviderConnectionDetailPage({
         </WorkflowPanel>
 
         <WorkflowPanel
-          description="Preview the live RevenueCat catalog, then map selected resources to stable Mosaic Products and Entitlements."
+          description={`Preview the live ${connection.data ? providerConnectionLabel(connection.data.provider) : "provider"} catalog, then map selected resources to stable Mosaic Products and Entitlements.`}
           title="Catalog import"
         >
           {catalogRequested ? (
@@ -563,6 +568,7 @@ export function ProviderConnectionDetailPage({
                     }
                     preview={catalog.data}
                     products={products.data?.items ?? []}
+                    provider={connection.data?.provider}
                     providersHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
                   />
                 );

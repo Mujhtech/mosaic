@@ -25,54 +25,82 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  AppStoreConnectPrivateKeyField,
+  AppStoreConnectTextField,
+} from "@/features/provider-connections/components/app-store-connect-credential-fields";
 import { ConnectionScopeField } from "@/features/provider-connections/components/connection-scope-field";
 import { ProviderConnectionCreatedButTestFailed } from "@/features/provider-connections/mutations/provider-connection-mutations";
 import {
-  type CreateRevenueCatConnectionInput,
+  buildAppStoreConnectCredential,
+  type CreateAppStoreConnectConnectionInput,
   environmentMatchesConnectionMode,
-  validateRevenueCatCredential,
+  validateAppStoreConnectPrivateKey,
+  validateAppStoreConnectVendorNumber,
 } from "@/features/provider-connections/types/provider-operation-input";
+import {
+  validateAppleIssuerId,
+  validateAppleKeyId,
+} from "@/features/store-connections/types/store-credential-input";
 import type { Application, Environment } from "@/generated/api";
 
 const PROVIDERS_SUFFIX = /\/catalog\/providers$/;
-
-interface ConnectRevenueCatSheetProps {
-  applications: readonly Application[];
-  environments: readonly Environment[];
-  onConnect: (input: CreateRevenueCatConnectionInput) => Promise<void>;
-  providerBaseHref: string;
-}
 
 const CONNECTION_MODE_OPTIONS = [
   { label: "Sandbox", value: "sandbox" },
   { label: "Production", value: "production" },
 ];
 
-export function ConnectRevenueCatSheet({
+interface ConnectAppStoreConnectSheetProps {
+  applications: readonly Application[];
+  environments: readonly Environment[];
+  onConnect: (input: CreateAppStoreConnectConnectionInput) => Promise<void>;
+  providerBaseHref: string;
+}
+
+/**
+ * Write-once App Store Connect API key entry.
+ *
+ * The four credential fields are assembled into one JSON document here and sent
+ * as the single opaque `credential` string the API seals. `externalProjectId` is
+ * never sent: an App Store Connect key is issued per Apple team and already
+ * names every app it can read, and the API rejects the field for this provider.
+ *
+ * The `.p8` is read in this browser, sent once over TLS, and cleared in the
+ * submit `finally` block on every path. It is never written to the Query cache,
+ * a route search parameter, browser storage, or a log.
+ */
+export function ConnectAppStoreConnectSheet({
   applications,
   environments,
   onConnect,
   providerBaseHref,
-}: ConnectRevenueCatSheetProps) {
+}: ConnectAppStoreConnectSheetProps) {
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<Error | null>(null);
   const form = useForm({
     defaultValues: {
       applicationIds: [] as string[],
-      credential: "",
       environmentIds: [] as string[],
-      externalProjectId: "",
+      issuerId: "",
+      keyId: "",
       mode: "sandbox" as "production" | "sandbox",
-      name: "RevenueCat sandbox",
+      name: "App Store Connect sandbox",
+      privateKey: "",
+      vendorNumber: "",
     },
     onSubmit: async ({ value }) => {
       setSubmitError(null);
       try {
         await onConnect({
           applicationIds: value.applicationIds,
-          credential: value.credential,
+          credential: buildAppStoreConnectCredential({
+            issuerId: value.issuerId,
+            keyId: value.keyId,
+            privateKey: value.privateKey,
+            vendorNumber: value.vendorNumber,
+          }),
           environmentIds: value.environmentIds,
-          externalProjectId: value.externalProjectId.trim(),
           mode: value.mode,
           name: value.name.trim(),
         });
@@ -82,10 +110,12 @@ export function ConnectRevenueCatSheet({
         setSubmitError(
           error instanceof Error
             ? error
-            : new Error("RevenueCat connection failed.")
+            : new Error("App Store Connect connection failed.")
         );
       } finally {
-        form.setFieldValue("credential", "");
+        // Cleared on every path: a failed attempt must not leave key material
+        // sitting in a form field behind a sheet the operator walked away from.
+        form.setFieldValue("privateKey", "");
       }
     },
   });
@@ -101,15 +131,16 @@ export function ConnectRevenueCatSheet({
       }}
       open={open}
     >
-      <SheetTrigger render={<Button type="button" />}>
-        Connect RevenueCat
+      <SheetTrigger render={<Button type="button" variant="outline" />}>
+        Connect App Store Connect
       </SheetTrigger>
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
         <SheetHeader className="border-b p-5">
-          <SheetTitle>Connect RevenueCat</SheetTitle>
+          <SheetTitle>Connect App Store Connect</SheetTitle>
           <SheetDescription>
-            Create one explicitly scoped sandbox or production connection, then
-            test its read-only catalog access.
+            Mosaic reads your existing App Store catalog so Products can be
+            imported instead of retyped. The adapter is read-only and never
+            changes anything in App Store Connect.
           </SheetDescription>
         </SheetHeader>
         <form
@@ -137,17 +168,17 @@ export function ConnectRevenueCatSheet({
             >
               {(field) => (
                 <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel htmlFor="revenuecat-connection-name">
+                  <FieldLabel htmlFor="app-store-connect-connection-name">
                     Connection name
                   </FieldLabel>
                   <Input
                     aria-invalid={field.state.meta.errors.length > 0}
-                    id="revenuecat-connection-name"
+                    id="app-store-connect-connection-name"
                     onBlur={field.handleBlur}
                     onChange={(event) =>
                       field.handleChange(event.currentTarget.value)
                     }
-                    placeholder="RevenueCat sandbox"
+                    placeholder="App Store Connect sandbox"
                     value={field.state.value}
                   />
                   <FieldError
@@ -162,7 +193,7 @@ export function ConnectRevenueCatSheet({
             <form.Field name="mode">
               {(field) => (
                 <Field>
-                  <FieldLabel htmlFor="revenuecat-connection-mode">
+                  <FieldLabel htmlFor="app-store-connect-connection-mode">
                     Connection mode
                   </FieldLabel>
                   <Select
@@ -188,7 +219,7 @@ export function ConnectRevenueCatSheet({
                     }}
                     value={field.state.value}
                   >
-                    <SelectTrigger id="revenuecat-connection-mode">
+                    <SelectTrigger id="app-store-connect-connection-mode">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -208,84 +239,76 @@ export function ConnectRevenueCatSheet({
             </form.Field>
 
             <form.Field
-              name="credential"
+              name="privateKey"
               validators={{
-                onSubmit: ({ value }) => validateRevenueCatCredential(value),
+                onSubmit: ({ value }) =>
+                  validateAppStoreConnectPrivateKey(value),
               }}
             >
               {(field) => (
-                <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel htmlFor="revenuecat-credential">
-                    RevenueCat secret API key
-                  </FieldLabel>
-                  <Input
-                    aria-describedby="revenuecat-credential-help"
-                    aria-invalid={field.state.meta.errors.length > 0}
-                    autoComplete="off"
-                    id="revenuecat-credential"
-                    onBlur={field.handleBlur}
-                    onChange={(event) =>
-                      field.handleChange(event.currentTarget.value)
-                    }
-                    spellCheck={false}
-                    type="password"
-                    value={field.state.value}
-                  />
-                  <FieldDescription id="revenuecat-credential-help">
-                    Entered once over TLS, encrypted by the API, cleared after
-                    this attempt, and never returned or shown again. In
-                    RevenueCat, create a secret v2 key limited to read access
-                    for Apps, Products, Offerings, Packages, and Entitlements.
-                  </FieldDescription>
-                  <FieldError
-                    errors={field.state.meta.errors.map((message) => ({
-                      message,
-                    }))}
-                  />
-                </Field>
+                <AppStoreConnectPrivateKeyField
+                  errors={field.state.meta.errors}
+                  idPrefix="connect"
+                  label="App Store Connect API key (.p8)"
+                  onBlur={field.handleBlur}
+                  onChange={field.handleChange}
+                  value={field.state.value}
+                />
               )}
             </form.Field>
 
             <form.Field
-              name="externalProjectId"
+              name="keyId"
               validators={{
-                onSubmit: ({ value }) =>
-                  (() => {
-                    if (value.trim().length === 0) {
-                      return "Enter the RevenueCat Project ID.";
-                    }
-                    if (value.length > 255) {
-                      return "Use 255 characters or fewer.";
-                    }
-                  })(),
+                onSubmit: ({ value }) => validateAppleKeyId(value),
               }}
             >
               {(field) => (
-                <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel htmlFor="revenuecat-project-id">
-                    RevenueCat project ID
-                  </FieldLabel>
-                  <Input
-                    aria-invalid={field.state.meta.errors.length > 0}
-                    id="revenuecat-project-id"
-                    onBlur={field.handleBlur}
-                    onChange={(event) =>
-                      field.handleChange(event.currentTarget.value)
-                    }
-                    placeholder="proj_…"
-                    value={field.state.value}
-                  />
-                  <FieldDescription>
-                    Copy the Project resource ID from RevenueCat Project
-                    settings. It starts with <code>proj_</code> and is not a
-                    secret.
-                  </FieldDescription>
-                  <FieldError
-                    errors={field.state.meta.errors.map((message) => ({
-                      message,
-                    }))}
-                  />
-                </Field>
+                <AppStoreConnectTextField
+                  errors={field.state.meta.errors}
+                  idPrefix="connect"
+                  kind="keyId"
+                  onBlur={field.handleBlur}
+                  onChange={field.handleChange}
+                  value={field.state.value}
+                />
+              )}
+            </form.Field>
+
+            <form.Field
+              name="issuerId"
+              validators={{
+                onSubmit: ({ value }) => validateAppleIssuerId(value),
+              }}
+            >
+              {(field) => (
+                <AppStoreConnectTextField
+                  errors={field.state.meta.errors}
+                  idPrefix="connect"
+                  kind="issuerId"
+                  onBlur={field.handleBlur}
+                  onChange={field.handleChange}
+                  value={field.state.value}
+                />
+              )}
+            </form.Field>
+
+            <form.Field
+              name="vendorNumber"
+              validators={{
+                onSubmit: ({ value }) =>
+                  validateAppStoreConnectVendorNumber(value),
+              }}
+            >
+              {(field) => (
+                <AppStoreConnectTextField
+                  errors={field.state.meta.errors}
+                  idPrefix="connect"
+                  kind="vendorNumber"
+                  onBlur={field.handleBlur}
+                  onChange={field.handleChange}
+                  value={field.state.value}
+                />
               )}
             </form.Field>
 
@@ -313,7 +336,7 @@ export function ConnectRevenueCatSheet({
             >
               {(field) => (
                 <ConnectionScopeField
-                  emptyDescription="Create this scope before connecting RevenueCat."
+                  emptyDescription="Create this scope before connecting App Store Connect."
                   emptyHref={providerBaseHref.replace(
                     PROVIDERS_SUFFIX,
                     "/settings/environments"
@@ -349,7 +372,7 @@ export function ConnectRevenueCatSheet({
             >
               {(field) => (
                 <ConnectionScopeField
-                  emptyDescription="Create this scope before connecting RevenueCat."
+                  emptyDescription="Create this scope before connecting App Store Connect."
                   emptyHref={providerBaseHref.replace(
                     PROVIDERS_SUFFIX,
                     "/apps"
@@ -376,7 +399,8 @@ export function ConnectRevenueCatSheet({
                   {submitError.message}
                 </p>
                 <p className="mt-1 text-muted-foreground text-xs">
-                  The credential field was cleared. Re-enter it to retry safely.
+                  The key was cleared. Upload the .p8 file again to retry
+                  safely.
                 </p>
                 {submitError instanceof
                 ProviderConnectionCreatedButTestFailed ? (
@@ -400,9 +424,10 @@ export function ConnectRevenueCatSheet({
                 </Button>
               )}
             </form.Subscribe>
-            <p className="text-muted-foreground text-xs">
-              Mosaic requests read-only catalog permissions. It does not
-              validate receipts or own customer subscription state.
+            <p className="text-muted-foreground text-xs leading-5">
+              Use a Developer or App Manager key. Mosaic needs read access to
+              Apps, In-App Purchases, Subscription Groups, and Subscriptions —
+              and nothing else.
             </p>
           </SheetFooter>
         </form>

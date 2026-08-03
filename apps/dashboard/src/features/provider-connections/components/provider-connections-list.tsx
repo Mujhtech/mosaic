@@ -1,9 +1,5 @@
+import { providerConnectionLabel } from "@/features/provider-connections/types/provider-connection-view";
 import type { ProviderConnection } from "@/generated/api";
-
-const PROVIDER_LABELS: Record<ProviderConnection["provider"], string> = {
-  custom: "Custom provider",
-  revenuecat: "RevenueCat",
-};
 
 const INTEGRATION_LABELS: Record<
   ProviderConnection["integrationMode"],
@@ -27,9 +23,9 @@ export function ProviderConnectionsList({
       <div className="rounded border border-dashed p-4">
         <p className="font-semibold text-sm">No provider connections</p>
         <p className="mt-1 text-muted-foreground text-sm leading-6">
-          Connect RevenueCat to synchronize its catalog into stable Mosaic
-          Products. Credentials are accepted once and are never returned by the
-          API.
+          Connect RevenueCat or App Store Connect to read an existing catalog
+          into stable Mosaic Products instead of retyping it. Credentials are
+          accepted once and are never returned by the API.
         </p>
       </div>
     );
@@ -43,7 +39,7 @@ export function ProviderConnectionsList({
             <div>
               <p className="font-medium">{connection.name}</p>
               <p className="mt-1 text-muted-foreground text-xs">
-                {PROVIDER_LABELS[connection.provider]} ·{" "}
+                {providerConnectionLabel(connection.provider)} ·{" "}
                 {INTEGRATION_LABELS[connection.integrationMode]} ·{" "}
                 {connection.mode}
               </p>

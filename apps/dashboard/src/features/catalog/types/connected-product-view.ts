@@ -65,6 +65,11 @@ function providerLabel(provider: ProviderProductMapping["provider"]) {
       return "RevenueCat";
     case "custom":
       return "Custom provider";
+    // Deliberately distinct from StoreKit: a mapping verified through an App
+    // Store Connect connection is not a native, SDK-side StoreKit mapping, and
+    // the database enforces that difference.
+    case "app_store_connect":
+      return "App Store Connect";
     case "app_store":
       return "StoreKit";
     case "google_play":
