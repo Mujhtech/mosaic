@@ -225,11 +225,11 @@ rule, not an error. Real SDKs send the full capability set for you.
 
 Two first-run behaviours worth knowing now:
 
-- **Analytics collection is off by default** for every new Environment
-  (privacy-first). The first SDK event batch returns
-  `409 analytics_collection_disabled` until you enable it:
-  `PUT .../environments/{environmentId}/analytics/settings`
-  `{"collectionEnabled":true,"rawRetentionDays":90}`.
+- **Analytics collection is on by default** for every new Environment, so the
+  first SDK event batch is accepted with no setup. Turn it off per Environment
+  with `PUT .../environments/{environmentId}/analytics/settings`
+  `{"collectionEnabled":false,"rawRetentionDays":90}`; ingestion for that
+  Environment then returns `409 analytics_collection_disabled`.
 - After rotating an SDK key, the old secret stops working immediately.
 
 Next steps: [Publishing](publishing.md), [Placements](placements.md),
