@@ -110,12 +110,16 @@ itself, so a passing R8 build alone is never treated as sufficient evidence.
 
 ## Analytics, identity, and privacy
 
-Analytics Event Contracts v1 and v2 are available only for hosted clients. Collection
-defaults to disabled and begins only when `analyticsCollectionEnabled = true`
-mirrors an owner-enabled Environment. A host consent override may disable
-collection with `setAnalyticsCollectionEnabled(false)`; disabling stops new
-collection and atomically clears the unsent queue. It cannot make a
-server-disabled Environment accept events.
+Analytics Event Contracts v1 and v2 are available only for hosted clients.
+Collection is **enabled by default**; hosts opt out by passing
+`analyticsCollectionEnabled = false`. A host consent override may also disable
+collection at runtime with `setAnalyticsCollectionEnabled(false)`; disabling
+stops new collection and atomically clears the unsent queue. Neither switch can
+make a server-disabled Environment accept events: the Environment-level
+analytics setting in Mosaic settings remains the authoritative kill switch and
+gates ingestion regardless of what a shipped build passes. Hosts remain
+responsible for the end-user consent requirements of the jurisdictions they ship
+in, and should pass `false` until any required consent is granted.
 
 Events snapshot installation identity, optional application user identity,
 session, correlations, and immutable release/Placement/Paywall/Product
@@ -140,7 +144,8 @@ val mosaic = Mosaic.configure(
     apiKey = publicSdkKey,
     purchaseProvider = purchaseProvider,
     applicationId = "application_android",
-    analyticsCollectionEnabled = environmentAnalyticsEnabled,
+    // Omit this argument to keep collection on. Pass false to opt out entirely.
+    analyticsCollectionEnabled = true,
 )
 val hosted = mosaic.hostedConfiguration(applicationContext)
 hosted.setAnalyticsCollectionEnabled(hostConsentGranted)

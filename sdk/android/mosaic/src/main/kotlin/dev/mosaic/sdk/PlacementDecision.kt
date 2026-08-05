@@ -117,7 +117,7 @@ data class MosaicDecisionContext(
     val platform: String = "android",
     val osVersion: String? = Build.VERSION.RELEASE,
     val applicationVersion: String? = null,
-    val applicationLocale: String? = Locale.getDefault().toLanguageTag(),
+    val applicationLocale: String? = MosaicDeviceLocale.current,
     /** Explicit host input. Mosaic never infers country from locale or device region. */
     val country: String? = null,
     val userPresent: Boolean = false,
@@ -405,7 +405,7 @@ object MosaicPlacementEvaluator {
         }
         is MosaicConditionNode.Condition -> {
             val actual = sourceValue(node.source, ruleSet, context)
-            compare(actual, node.operator, node.operand).also { result ->
+            compare(actual, node.operator, node.operand, node.source).also { result ->
                 trace.add(MosaicDecisionTraceStep("condition", ruleId, sourceName(node.source), result, provenance(node.source)))
             }
         }
@@ -416,10 +416,21 @@ object MosaicPlacementEvaluator {
             "device.platform" -> MosaicTypedValue.StringValue(context.platform)
             "device.os_version" -> context.osVersion?.let(MosaicTypedValue::SemanticVersionValue)
             "application.version" -> context.applicationVersion?.let(MosaicTypedValue::SemanticVersionValue)
+            // A host-supplied locale that cannot be normalized is **present**, not absent: the host
+            // did report a locale, so `exists` is true and `does_not_exist` is false. It is carried
+            // raw so that every comparison against it evaluates unknown rather than false — see
+            // compareLocale. Only a locale the host never supplied is absent.
             "application.locale" -> context.applicationLocale
-                ?.let(::normalizeLocale)
-                ?.let(MosaicTypedValue::StringValue)
-            "context.country" -> context.country?.uppercase(Locale.ROOT)?.takeIf { Regex("^[A-Z]{2}$").matches(it) }?.let(MosaicTypedValue::StringValue)
+                ?.let { MosaicTypedValue.StringValue(normalizeLocale(it) ?: it) }
+            // Same uniform presence rule as the locale above: an unrecognized country — an alpha-3
+            // code, a region name — is one the host *did* report, so it exists and compares
+            // unknown. Nulling it here would let a Rule targeting "no country reported" fire on a
+            // device that reported one.
+            "context.country" -> context.country?.let { country ->
+                MosaicTypedValue.StringValue(
+                    country.takeIf(ALPHA2_COUNTRY::matches)?.uppercase(Locale.ROOT) ?: country,
+                )
+            }
             "environment.id" -> MosaicTypedValue.StringValue(ruleSet.environmentId)
             "environment.key" -> MosaicTypedValue.StringValue(ruleSet.environmentKey)
             "identity.user_present" -> MosaicTypedValue.BooleanValue(context.userPresent)
@@ -438,10 +449,76 @@ object MosaicPlacementEvaluator {
             ?.let(MosaicTypedValue::StringValue)
     }
 
-    private fun compare(actual: MosaicTypedValue?, operator: String, operand: MosaicTypedValue?): MosaicTruthValue {
+    private fun isLocaleSource(source: MosaicDecisionSource?): Boolean =
+        source is MosaicDecisionSource.Scalar && source.kind == "application.locale"
+
+    /**
+     * A value the host reported but that this contract cannot interpret: an out-of-set closed
+     * vocabulary, or a country that is not an alpha-2 code. Such a value exists — presence reports
+     * what the host supplied, never whether it is usable — but every comparison on it is unknown.
+     * Returning false instead would make `not (platform equals "ios")` a positive match on a
+     * platform the Rule was never written for.
+     *
+     * Only these two are checked. The other closed vocabularies in the contract —
+     * `entitlement_state`, `product_availability`, `product_readiness`, `provider_capability` —
+     * reach this evaluator as Kotlin enums, so an out-of-set value is unrepresentable rather than
+     * merely unobserved. `device.platform` and `context.country` are the two the public
+     * [MosaicDecisionContext] takes as free-form strings.
+     */
+    private fun isUninterpretable(source: MosaicDecisionSource?, actual: MosaicTypedValue): Boolean {
+        if (source !is MosaicDecisionSource.Scalar) return false
+        val value = (actual as? MosaicTypedValue.StringValue)?.value
+        return when (source.kind) {
+            "device.platform" -> value !in PLATFORMS
+            // Canonical alpha-2 only; `sourceValue` has already uppercased a recognized code.
+            "context.country" -> value == null || !CANONICAL_COUNTRY.matches(value)
+            else -> false
+        }
+    }
+
+    /**
+     * Locale comparison is symmetric: the runtime value and the authored operand are both
+     * normalized, and either side failing makes the condition unknown rather than false. An
+     * unknown that collapsed to false would silently invert under a `not`, which is exactly how a
+     * malformed authored range would start matching every user it was meant to exclude.
+     */
+    private fun compareLocale(actual: MosaicTypedValue?, operator: String, operand: MosaicTypedValue?): MosaicTruthValue {
+        val candidate = (actual as? MosaicTypedValue.StringValue)?.value?.let(::normalizeLocale)
+            ?: return MosaicTruthValue.UNKNOWN
+        return when (operator) {
+            "locale_matches" -> {
+                val range = (operand as? MosaicTypedValue.StringValue)?.value?.let(::normalizeLocale)
+                    ?: return MosaicTruthValue.UNKNOWN
+                truth(candidate == range || candidate.startsWith("$range-"))
+            }
+            "in", "not_in" -> {
+                val authored = (operand as? MosaicTypedValue.StringListValue)?.value
+                    ?: return MosaicTruthValue.UNKNOWN
+                val values = authored.map { normalizeLocale(it) ?: return MosaicTruthValue.UNKNOWN }
+                truth((candidate in values) == (operator == "in"))
+            }
+            "equals", "not_equals" -> {
+                val other = (operand as? MosaicTypedValue.StringValue)?.value?.let(::normalizeLocale)
+                    ?: return MosaicTruthValue.UNKNOWN
+                truth((candidate == other) == (operator == "equals"))
+            }
+            else -> MosaicTruthValue.UNKNOWN
+        }
+    }
+
+    private fun compare(
+        actual: MosaicTypedValue?,
+        operator: String,
+        operand: MosaicTypedValue?,
+        source: MosaicDecisionSource? = null,
+    ): MosaicTruthValue {
+        // Presence answers "did the host supply a value", never "is the value usable"; the
+        // usability guards below run only once a comparison is actually being made.
         if (operator == "exists") return truth(actual != null)
         if (operator == "does_not_exist") return truth(actual == null)
         if (actual == null || operand == null) return MosaicTruthValue.UNKNOWN
+        if (isUninterpretable(source, actual)) return MosaicTruthValue.UNKNOWN
+        if (isLocaleSource(source)) return compareLocale(actual, operator, operand)
         return when (operator) {
             "equals", "not_equals" -> {
                 val equal = typedEquals(actual, operand) ?: return MosaicTruthValue.UNKNOWN
@@ -456,11 +533,6 @@ object MosaicPlacementEvaluator {
                 val left = (actual as? MosaicTypedValue.StringListValue)?.value?.toSet() ?: return MosaicTruthValue.UNKNOWN
                 val right = (operand as? MosaicTypedValue.StringListValue)?.value?.toSet() ?: return MosaicTruthValue.UNKNOWN
                 truth(if (operator == "contains_any") left.intersect(right).isNotEmpty() else left.containsAll(right))
-            }
-            "locale_matches" -> {
-                val locale = (actual as? MosaicTypedValue.StringValue)?.value?.let(::normalizeLocale) ?: return MosaicTruthValue.UNKNOWN
-                val range = (operand as? MosaicTypedValue.StringValue)?.value?.let(::normalizeLocale) ?: return MosaicTruthValue.UNKNOWN
-                truth(locale == range || locale.startsWith("$range-", ignoreCase = true))
             }
             "greater_than", "greater_than_or_equal", "less_than", "less_than_or_equal" -> {
                 val order = compareOrdered(actual, operand) ?: return MosaicTruthValue.UNKNOWN
@@ -488,6 +560,10 @@ object MosaicPlacementEvaluator {
         a is MosaicTypedValue.SemanticVersionValue && b is MosaicTypedValue.SemanticVersionValue -> compareSemver(a.value, b.value)
         else -> null
     }
+
+    private val PLATFORMS = setOf("ios", "android")
+    private val ALPHA2_COUNTRY = Regex("^[A-Za-z]{2}$")
+    private val CANONICAL_COUNTRY = Regex("^[A-Z]{2}$")
 }
 
 object MosaicRollout {
@@ -548,11 +624,14 @@ internal fun compareSemver(left: String, right: String): Int? {
     }
     return 0
 }
-private fun normalizeLocale(value: String): String? {
-    val canonicalSeparators = value.trim().replace('_', '-')
-    if (!Regex("^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$").matches(canonicalSeparators)) return null
-    return canonicalSeparators.split('-').mapIndexed { index, part -> when { index == 0 -> part.lowercase(); part.length == 4 -> part.lowercase().replaceFirstChar(Char::titlecase); part.length == 2 || part.length == 3 && part.all(Char::isDigit) -> part.uppercase(); else -> part.lowercase() } }.joinToString("-")
-}
+/**
+ * Applied symmetrically to the runtime value and the authored operand, so both sides of
+ * `equals`/`in`/`locale_matches` are compared in one canonical form. Only the language-script-region
+ * core carries identity: a host reporting `en-US-u-rg-gbzzzz` for a region override is reporting the
+ * same locale as one reporting `en-US`, and an empty subtag is not a subtag. The rule is shared with
+ * localization catalog lookup so the two subsystems cannot disagree about what one locale is.
+ */
+private fun normalizeLocale(value: String): String? = MosaicDeviceLocale.canonicalOrNull(value)
 
 internal fun parseTypedValue(value: JsonObject, path: String): MosaicTypedValue {
     value.requireExact(setOf("type", "value"), emptySet(), path)

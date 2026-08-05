@@ -8,8 +8,19 @@ data class MosaicConfiguration(
     val endpoint: URI? = null,
     val applicationVersion: String? = null,
     val applicationId: String? = null,
-    /** Must mirror the accepted Environment setting; false is the privacy-safe default. */
-    val analyticsCollectionEnabled: Boolean = false,
+    /**
+     * Hosted analytics collection. True is the default: a host that does nothing gets the
+     * Placement, Paywall, and commerce analytics Mosaic is built around. Hosts opt **out** with
+     * `analyticsCollectionEnabled = false`, which stops new collection and clears the unsent queue.
+     *
+     * This flag is a client-side switch, not an authorization. The Environment-level analytics
+     * setting in Mosaic settings still gates ingestion server-side, so an owner can disable
+     * collection for an Environment regardless of what any shipped build passes here.
+     *
+     * Hosts remain responsible for satisfying the end-user consent requirements of the
+     * jurisdictions they ship in, and should pass `false` until any required consent is granted.
+     */
+    val analyticsCollectionEnabled: Boolean = true,
     /**
      * Opt in to the Transaction Observation handoff: after a purchase is finalized locally, Mosaic
      * reports a bounded, irreversible provider reference so server-side validation can start sooner.
@@ -202,7 +213,8 @@ class Mosaic private constructor(
             endpoint: URI? = null,
             applicationVersion: String? = null,
             applicationId: String? = null,
-            analyticsCollectionEnabled: Boolean = false,
+            /** On by default; pass `false` to opt out. See [MosaicConfiguration.analyticsCollectionEnabled]. */
+            analyticsCollectionEnabled: Boolean = true,
             transactionObservationEnabled: Boolean = false,
             customerAccessTokenProvider: MosaicCustomerAccessTokenProvider? = null,
         ): Mosaic = Mosaic(

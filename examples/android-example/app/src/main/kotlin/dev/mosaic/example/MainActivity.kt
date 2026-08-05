@@ -140,7 +140,10 @@ class MainActivity : ComponentActivity() {
             purchaseProvider,
             endpoint,
             applicationId = applicationId,
-            analyticsCollectionEnabled = intent.getBooleanExtra(ANALYTICS_ENABLED_EXTRA, false),
+            // On by default, exactly as the SDK ships it; pass `--ez mosaic.analytics.enabled
+            // false` to demonstrate the opt-out path. The Environment setting still gates
+            // ingestion server-side whatever this build passes.
+            analyticsCollectionEnabled = intent.getBooleanExtra(ANALYTICS_ENABLED_EXTRA, true),
             // Off by default, exactly as the SDK ships it. The handoff only starts a server-side
             // validation sooner; the example never treats it as proof of anything.
             transactionObservationEnabled =
@@ -153,7 +156,7 @@ class MainActivity : ComponentActivity() {
             ?: "onboarding_complete"
         setContent {
             MaterialTheme {
-                var analyticsStatus by remember { mutableStateOf("Analytics disabled or waiting.") }
+                var analyticsStatus by remember { mutableStateOf("Analytics waiting.") }
                 var observationStatus by remember { mutableStateOf("Transaction observations disabled.") }
                 LaunchedEffect(hosted, placement) {
                     hosted.refresh()

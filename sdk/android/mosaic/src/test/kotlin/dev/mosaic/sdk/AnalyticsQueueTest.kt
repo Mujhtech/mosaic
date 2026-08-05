@@ -4,6 +4,7 @@ import java.nio.file.Files
 import java.time.Instant
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -152,6 +153,98 @@ class AnalyticsQueueTest {
         )
         assertTrue(!queue.enqueue(oversized))
         assertEquals("analytics.event_too_large", queue.diagnostics().lastSafeCode)
+    }
+
+    /**
+     * `Locale.getDefault().toLanguageTag()` is well-formed BCP-47 but unbounded: Android reports
+     * regional preferences as Unicode extensions, so a region-override device yields
+     * `en-US-u-rg-gbzzzz` and a device with several preferences exceeds the context's 35-byte
+     * locale bound — which makes the event unencodable and loses it, the Android shape of the iOS
+     * defect. Truncating at the first singleton keeps every device inside the contract, and the
+     * canonical form is the one Protocol 0.2 and Placement Decision 1 both define, so the tag the
+     * SDK reports is the tag targeting and catalog lookup compare.
+     */
+    @Test
+    fun `device locale canonicalization follows the protocol rule and the event contract`() {
+        // The protocol's canonical form, per `protocol/tools/locale-resolution-v0.2.mjs`.
+        assertEquals("en-US", MosaicDeviceLocale.canonical("en-US-u-rg-gbzzzz"))
+        assertEquals("en-US", MosaicDeviceLocale.canonical("en_US@rg=gbzzzz"))
+        assertEquals("zh-Hans-CN", MosaicDeviceLocale.canonical("zh-Hans-CN"))
+        assertEquals("zh-Hans-CN", MosaicDeviceLocale.canonical("zh_Hans_CN@calendar=chinese"))
+        // Case is canonicalized, not preserved: language lowercase, alpha-2 region uppercase,
+        // script title case, every other subtag lowercase.
+        assertEquals("pt-BR", MosaicDeviceLocale.canonical("PT_br"))
+        assertEquals("es-419", MosaicDeviceLocale.canonical("es_419"))
+        assertEquals("en-US-posix", MosaicDeviceLocale.canonical("en_US_POSIX"))
+        assertEquals("en", MosaicDeviceLocale.canonical(""))
+        assertEquals("en", MosaicDeviceLocale.canonical("@calendar=chinese"))
+        // Empty subtags are dropped rather than ending the tag.
+        assertEquals("en-US", MosaicDeviceLocale.canonical("en--US"))
+        // The ICU identifier shapes hosts actually report: a Java `Locale.toString()` extension
+        // marker, a POSIX charset suffix, and the multi-preference tag that is 37 bytes raw — past
+        // the 35-byte context bound.
+        assertEquals("en-US", MosaicDeviceLocale.canonical("en_US_#u-rg-gbzzzz"))
+        assertEquals("en-US", MosaicDeviceLocale.canonical("en_US.UTF-8"))
+        assertEquals("en-US", MosaicDeviceLocale.canonical("en-US-u-ca-japanese-fw-mon-mu-celsius"))
+        // Canonicalization is a fixed point, so the live device value survives a second pass.
+        assertEquals(MosaicDeviceLocale.current, MosaicDeviceLocale.canonical(MosaicDeviceLocale.current))
+
+        // The lookup/targeting asymmetry is deliberate and must not be "fixed" into symmetry:
+        // catalog lookup recovers the leading language subtag from a tag it cannot canonicalize,
+        // because the chain would otherwise fall through to the document's own fallback. Targeting
+        // does not, because recovering would retarget a malformed tag onto its broader language and
+        // change which users match a Rule.
+        assertEquals(null, MosaicDeviceLocale.canonicalOrNull("en-US-verylongsubtag"))
+        assertEquals("en", MosaicDeviceLocale.canonicalLookupOrNull("en-US-verylongsubtag"))
+        assertEquals(null, MosaicDeviceLocale.canonicalLookupOrNull("!!"))
+
+        // Every canonical value must survive the codec that rejected the un-normalized one.
+        val canonical = event("placement-request.json")
+        val canonicalContext = canonical.context ?: MosaicAnalyticsContext()
+        listOf("en-US-u-rg-gbzzzz", "en-US-u-ca-japanese-fw-mon-mu-celsius", MosaicDeviceLocale.currentForEventContext)
+            .forEach { raw ->
+                val locale = MosaicDeviceLocale.canonical(raw)
+                val event = canonical.copy(context = canonicalContext.copy(locale = locale))
+                assertEquals(locale, MosaicAnalyticsCodec.decodeEvent(MosaicAnalyticsCodec.encodeEvent(event)).context?.locale)
+            }
+
+        // The loss this prevents, made concrete: an event carrying the raw multi-preference tag
+        // encodes but no longer decodes, so reloading the persisted queue resets and drops it.
+        val unbounded = canonical.copy(
+            context = canonicalContext.copy(locale = "en-US-u-ca-japanese-fw-mon-mu-celsius"),
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            MosaicAnalyticsCodec.decodeEvent(MosaicAnalyticsCodec.encodeEvent(unbounded))
+        }
+
+        // The default context is the seam that ships: it must already be canonical.
+        val default = MosaicAnalyticsContext().locale
+        assertEquals(default, default?.let(MosaicDeviceLocale::canonical))
+    }
+
+    /**
+     * The opt-out default is only real if it reaches the seam that decides whether an event is
+     * kept. `Mosaic.configure` supplies `analyticsCollectionEnabled` as the runtime's
+     * `environmentEnabled`, so a host that never touches the flag must get a collecting runtime
+     * that retains queued events — not the disabled runtime that clears them.
+     */
+    @Test
+    fun defaultConfigurationProducesACollectingRuntime() = runTest {
+        val configured = Mosaic.configure(
+            apiKey = "public_test_key",
+            purchaseProvider = MockMosaicPurchaseProvider(),
+        )
+        assertTrue(configured.configuration.analyticsCollectionEnabled)
+
+        val queue = MosaicAnalyticsQueue(MemoryAnalyticsStore()) { NOW }
+        assertTrue(queue.enqueue(event("placement-request.json")))
+        val runtime = runtime(queue, environmentEnabled = configured.configuration.analyticsCollectionEnabled)
+        runtime.reconcileEnvironmentEnabled(configured.configuration.analyticsCollectionEnabled)
+        runtime.drainPendingRecords()
+
+        assertTrue(runtime.isCollectionEnabled)
+        assertEquals(1, queue.diagnostics().queuedEventCount)
+        runtime.close()
     }
 
     /**

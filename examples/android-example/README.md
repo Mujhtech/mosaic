@@ -108,9 +108,12 @@ adb shell am start -n dev.mosaic.example/.MainActivity \
 Omit `mosaic.sdk.endpoint` to use Mosaic's hosted API. A Delivery v3 release can
 assign and present an Experiment through the same `mosaic.placement` extra; no
 Experiment-specific application code or Paywall ID is required. Google Play remains optional.
-Hosted analytics is disabled by default; pass
-`--ez mosaic.analytics.enabled true` only after an owner enables analytics for
-the Environment. The on-screen status reports persistent queue depth. The
+Hosted analytics is enabled by default, matching the SDK default; pass
+`--ez mosaic.analytics.enabled false` to demonstrate the opt-out path. The
+Environment-level analytics setting in Mosaic settings still gates ingestion
+server-side whatever the build passes, and hosts remain responsible for the
+end-user consent requirements of the jurisdictions they ship in. The on-screen
+status reports persistent queue depth. The
 optional Transaction Observation handoff is likewise off unless
 `--ez mosaic.observations.enabled true` is passed.
 

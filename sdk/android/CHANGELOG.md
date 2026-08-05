@@ -2,6 +2,48 @@
 
 ## Unreleased (Phase 9C: migration authority awareness)
 
+- Normalize the device locale once, in `MosaicDeviceLocale`, for both the analytics event context
+  and the Placement decision context. Android reports regional preferences as Unicode extensions
+  (`en-US-u-rg-gbzzzz`), which fits the locale pattern but is neither the canonical tag nor always
+  inside the 35-byte analytics bound: `application.locale` `equals`/`in` rules missed on
+  region-override devices and multi-preference tags made events unencodable. The tag is truncated
+  at the first singleton subtag, matching the iOS SDK, so both report `en-US` for one device state
+  and both preserve `zh-Hans-CN`.
+- Adopt the presence and unusable-value rulings. `context.country` follows the uniform presence
+  rule: an unrecognized country is present with unknown comparisons rather than absent, so a Rule
+  targeting "no country reported" can no longer fire on a device that reported one. A value outside
+  a closed vocabulary — an out-of-set `device.platform` such as `windows` from a future or
+  misconfigured host — now compares unknown rather than false, which is what stops
+  `not (platform equals "ios")` from matching a platform the Rule was never written for.
+- Adopt the second-round locale rulings. The canonical form now cuts the value at the first `@`,
+  `.`, or `#`, so the ICU identifiers hosts actually report — `en_US@rg=gbzzzz`, `en_US.UTF-8`, and
+  Java `Locale.toString`'s `en_US_#u-rg-gbzzzz` — all denote `en-US`. A host-supplied locale that
+  cannot be normalized is now **present** rather than absent: `exists` is true and every comparison
+  against it is unknown, so it can never be silently read as a non-match. An authored
+  `locale_matches` range that cannot be normalized is unknown rather than false, which is what stops
+  a malformed range from matching every user once negated. `equals`/`in` normalize the authored
+  operand too, so both sides of a locale comparison are canonical.
+- Catalog lookup recovers the leading language subtag when a tag cannot be canonicalized
+  (`en-US-verylongsubtag` reaches `en`); Placement targeting deliberately does not, because
+  recovering there would change which users match a Rule. The analytics event context keeps its own
+  35-byte degradation (`currentForEventContext`), which no longer reaches targeting.
+- Adopt the first-round locale rulings. One canonical form — underscores to hyphens, empty subtags
+  dropped, truncation at the first singleton subtag, lowercase language, title-case script,
+  uppercase alpha-2 or numeric-3 region — is now shared by `application.locale` targeting, the
+  analytics and decision contexts, and localization catalog lookup, matching
+  `protocol/tools/locale-resolution-v0.2.mjs`. Catalog matching is therefore case-insensitive
+  (`PT_br` reaches the authored `pt-BR`), and a raw `en-US-u-rg-gbzzzz` or `en_US` no longer falls
+  past the catalog it always denoted to the document default, taking layout direction with it.
+- The localization candidate chain is the single Protocol 0.2 order in every case — canonical
+  requested tag, base language, `fallbackLocale`, `defaultLocale`. A request that canonicalizes to
+  nothing previously tried `defaultLocale` before `fallbackLocale`; it now follows the same order
+  as every other request. Documents whose two declared locales are equal are unaffected.
+- **Behaviour change:** `analyticsCollectionEnabled` now defaults to `true`. Hosts opt **out** with
+  `analyticsCollectionEnabled = false`; the runtime `setAnalyticsCollectionEnabled(false)` override
+  is unchanged, the Environment-level analytics setting still gates ingestion server-side, and
+  hosts remain responsible for end-user consent requirements in their jurisdictions.
+  `transactionObservationEnabled` and `customerAccessTokenProvider` remain opt-in.
+
 - Add strict Authoritative Entitlement v2 wrapper decoding, scoped monotonic authority epochs, a
   replaying `customerAuthority` flow, authority-bound backup-excluded cache records, and safe
   `authority_unknown` handling for legacy v1 cache entries.

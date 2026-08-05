@@ -20,7 +20,13 @@ class ConfigurationTest {
         assertEquals("public_test_key", mosaic.configuration.apiKey)
         assertEquals(endpoint, mosaic.configuration.endpoint)
         assertSame(provider, mosaic.purchaseProvider)
-        assertEquals(false, mosaic.configuration.analyticsCollectionEnabled)
+        // Analytics collection is opt-out: a host that never touches the flag collects. Flipping
+        // this default silently is a privacy-visible change, so it is pinned rather than inferred.
+        assertEquals(true, mosaic.configuration.analyticsCollectionEnabled)
+        // Deliberately unchanged: the observation handoff and authoritative entitlements stay
+        // opt-in, so a default flip on one must never drift onto the others.
+        assertEquals(false, mosaic.configuration.transactionObservationEnabled)
+        assertEquals(null, mosaic.configuration.customerAccessTokenProvider)
     }
 
     @Test

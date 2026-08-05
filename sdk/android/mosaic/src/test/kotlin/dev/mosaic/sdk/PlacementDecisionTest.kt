@@ -39,6 +39,9 @@ class PlacementDecisionTest {
         val release = MosaicConfigurationDeliveryDecoder.decode(fixture("configuration-delivery/v2/advanced-release.json"))
         val ruleSet = release.placementDecisions.getValue("export_pdf")
         val corpus = JsonParser.parseString(fixture("placement-decision/v1/evaluator-conformance.json")).asJsonObject
+        // The corpus has grown every round it was ruled on, and a `forEach` over an empty or
+        // unloaded array passes silently. Conformance must not be able to disappear quietly.
+        assertTrue("evaluator corpus is empty", corpus.getAsJsonArray("cases").size() >= 34)
 
         corpus.getAsJsonArray("cases").forEach { element ->
             val case = element.asJsonObject
@@ -74,6 +77,59 @@ class PlacementDecisionTest {
                 )
             }
         }
+    }
+
+    /**
+     * Android surfaces regional preferences as Unicode extensions, so `Locale.getDefault()
+     * .toLanguageTag()` reports `en-US-u-rg-gbzzzz` on a region-override device. That tag satisfies
+     * the locale pattern, so nothing rejects it — it simply is not `en-US`, and the canonical
+     * `rule_locale_equals` rule stopped matching on exactly those devices while `locale_matches`
+     * kept working, which is why the divergence was easy to miss.
+     *
+     * The evaluator now canonicalizes per Placement Decision 1, and the conformance corpus covers
+     * that directly. What this adds is the layer above: the shapes an Android *host* can hand the
+     * SDK for one device — including the underscore forms no evaluator case uses — must all reach
+     * the same decision, and the context default must keep going through the shared rule rather
+     * than the raw platform tag.
+     */
+    @Test
+    fun `every host locale shape for one device reaches the same canonical decision`() {
+        val release = MosaicConfigurationDeliveryDecoder.decode(fixture("configuration-delivery/v2/advanced-release.json"))
+        val ruleSet = release.placementDecisions.getValue("export_pdf")
+        val corpus = JsonParser.parseString(fixture("placement-decision/v1/evaluator-conformance.json")).asJsonObject
+        // The canonical case whose expected decision is the locale-equality rule.
+        val canonical = corpus.getAsJsonArray("cases").map { it.asJsonObject }
+            .first { it.getAsJsonObject("expected").optionalString("matchedRuleId") == "rule_locale_equals" }
+        val assignment = MosaicAssignmentKey(MosaicAssignmentKeyType.INSTALLATION, "install_01")
+        fun decide(locale: String) = MosaicPlacementEvaluator.evaluate(
+            ruleSet,
+            context(canonical.getAsJsonObject("context")).copy(applicationLocale = locale),
+            assignment,
+        )
+
+        val expected = decide(canonical.getAsJsonObject("context").string("applicationLocale"))
+        assertEquals("rule_locale_equals", (expected as MosaicEvaluationResult.Paywall).matchedRuleId)
+
+        // Raw from the host and canonicalized at the SDK boundary must be indistinguishable, so
+        // both are asserted for each shape: the evaluator and the boundary agree on every input.
+        listOf(
+            "en-US-u-rg-gbzzzz",
+            "en-US-u-ca-japanese-fw-mon-mu-celsius",
+            "en_US_#u-rg-gbzzzz",
+            "en_US",
+            "EN_us",
+            "en--US",
+        ).forEach { raw ->
+            listOf(raw, MosaicDeviceLocale.canonical(raw)).forEach { locale ->
+                val result = decide(locale)
+                assertEquals(locale, "rule_locale_equals", (result as MosaicEvaluationResult.Paywall).matchedRuleId)
+                assertEquals(locale, expected.paywallVersionId, result.paywallVersionId)
+            }
+        }
+
+        // The default context must keep going through the shared rule, not the raw platform tag.
+        val default = MosaicDecisionContext().applicationLocale
+        assertEquals(default, default?.let(MosaicDeviceLocale::canonical))
     }
 
     @Test
