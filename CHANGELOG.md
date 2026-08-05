@@ -117,6 +117,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **Analytics collection is now on by default for every Environment.** A new
+  Project reports its funnel without an operator step, and the first SDK batch
+  is accepted instead of returning `409 analytics_collection_disabled`.
+  Migration 00066 also enables collection for Environments that already exist:
+  **upgrading turns analytics collection on**. Turn it off per Environment with
+  `PUT /v1/projects/{projectId}/environments/{environmentId}/analytics/settings`
+  `{"collectionEnabled": false, ...}`, which records the actor in the analytics
+  privacy audit trail. Rolling 00066 back restores the old default for new
+  Environments but deliberately leaves existing rows enabled, because nothing
+  distinguishes a row the migration flipped from one an owner enabled
+  themselves. Retention, minimization, export, and deletion behaviour are
+  unchanged, and the SDK-side consent gate still applies on top.
 - **Compose**: `provider-worker` is now `worker` and runs by default; the
   `providers` profile gate is gone because analytics and Experiment jobs are part
   of every installation. `api`, `worker`, `postgres`, `minio`, and `dashboard`
