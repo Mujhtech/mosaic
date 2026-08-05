@@ -14,9 +14,13 @@ export const Route = createFileRoute(
 });
 
 function ProjectEnvironmentsRoute() {
-  const { organizationId, projectId } = Route.useParams();
+  const { environmentKey, organizationId, projectId } = Route.useParams();
 
   return (
-    <EnvironmentsPage organizationId={organizationId} projectId={projectId} />
+    <EnvironmentsPage
+      environmentKey={environmentKey}
+      organizationId={organizationId}
+      projectId={projectId}
+    />
   );
 }

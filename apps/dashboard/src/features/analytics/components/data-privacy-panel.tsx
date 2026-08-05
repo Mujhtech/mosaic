@@ -80,7 +80,7 @@ function CollectionSettingsPanel({
   });
   return (
     <WorkflowPanel
-      description="Collection starts disabled. Retention is Environment-scoped and enforced from received time."
+      description="Collection is on by default. Retention is Environment-scoped and enforced from received time."
       title="Collection and retention"
     >
       <AnalyticsQueryResult

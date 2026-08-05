@@ -70,6 +70,7 @@ describe("hosted query recovery state", () => {
   describe("coded failures", () => {
     const scope = {
       environmentId: "env_prod",
+      environmentKey: "prod",
       organizationId: "org_01",
       projectId: "project_01",
     };
@@ -137,7 +138,7 @@ describe("hosted query recovery state", () => {
       expect(state).toMatchObject({
         kind: "error",
         recovery: {
-          href: "/orgs/org_01/projects/project_01/settings/environments",
+          href: "/orgs/org_01/projects/project_01/env/prod/settings/environments#analytics-collection",
           label: "Open Environment settings",
         },
       });
