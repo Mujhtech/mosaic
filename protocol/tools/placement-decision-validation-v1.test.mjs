@@ -5,6 +5,7 @@ import {
   DecisionEvaluationError,
   evaluateDecisionV1,
   loadDecisionV1Artifacts,
+  normalizeLocale,
   rolloutV1,
   validateDecisionV1,
   validateDecisionV1Detailed,
@@ -24,6 +25,16 @@ test("priority, canonical locales, unknown inputs, fallback, typed values, and s
       testCase.name,
     );
   }
+});
+
+test("targeting reads an ICU identifier as the locale it denotes, and never recovers a language", () => {
+  // The three shapes hosts actually hand the SDKs. Targeting stops here: unlike
+  // catalog lookup, it must not retarget a malformed tag onto a broader
+  // language, because that changes which users match a Rule.
+  for (const identifier of ["en_US@rg=gbzzzz", "en_US.UTF-8", "en_US_#u-rg-gbzzzz", "en-US-u-rg-gbzzzz"]) {
+    assert.equal(normalizeLocale(identifier), "en-US", identifier);
+  }
+  assert.equal(normalizeLocale("en-US-verylongsubtag"), null);
 });
 
 const QA_OVERRIDE = Object.freeze({

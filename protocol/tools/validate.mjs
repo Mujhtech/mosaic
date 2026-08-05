@@ -87,6 +87,11 @@ import {
   validateBillingStateWebhookV1Artifacts,
   validateBillingStateWebhookV1JsonFormatting,
 } from "./billing-state-webhook-validation-v1.mjs";
+import {
+  loadLocaleResolutionV02Artifacts,
+  validateLocaleResolutionV02Artifacts,
+  validateLocaleResolutionV02JsonFormatting,
+} from "./locale-resolution-v0.2.mjs";
 import { validateAnalyticsMinimizationProjection } from "./generate-analytics-minimization.mjs";
 import { validateRejectionLayers } from "./generate-rejection-layers.mjs";
 import {
@@ -98,6 +103,7 @@ import {
 try {
   const artifactsV02 = loadProtocolV02Artifacts();
   const previewArtifactsV02 = loadPreviewV02Artifacts();
+  const localeResolutionArtifactsV02 = loadLocaleResolutionV02Artifacts();
   const deliveryArtifactsV1 = loadDeliveryV1Artifacts();
   const commerceProviderArtifactsV1 = loadCommerceProviderV1Artifacts();
   const commerceConfigurationArtifactsV1 =
@@ -146,6 +152,8 @@ try {
     }),
     ...validateCanonicalV02Coverage(artifactsV02.document),
     ...validateV02JsonFormatting(),
+    ...validateLocaleResolutionV02Artifacts(localeResolutionArtifactsV02),
+    ...validateLocaleResolutionV02JsonFormatting(),
     ...validatePreviewV02Artifacts(previewArtifactsV02),
     ...validatePreviewV02JsonFormatting(),
     ...validateDeliveryV1Artifacts(deliveryArtifactsV1),

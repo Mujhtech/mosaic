@@ -1,0 +1,151 @@
+{
+  "fixtureVersion": "1",
+  "normativeScope": "expectedCandidates is normative for lookup ORDER only: a conformant renderer must consult catalogs in this relative order and stop at the first declared candidate. It is not a required public API shape. A binding may expose the full ordered list including undeclared keys, or only the subset the document declares; both are conformant as long as expectedCatalog is what resolution selects.",
+  "localization": {
+    "defaultLocale": "en",
+    "fallbackLocale": "en-GB",
+    "locales": [
+      "en",
+      "en-GB",
+      "es-419",
+      "pt-BR",
+      "zh",
+      "zh-CN"
+    ]
+  },
+  "cases": [
+    {
+      "name": "canonical requested tag selects its own catalog",
+      "requested": "pt-BR",
+      "expectedCandidates": [
+        "pt-BR",
+        "pt",
+        "en-GB",
+        "en"
+      ],
+      "expectedCatalog": "pt-BR"
+    },
+    {
+      "name": "underscores and non-canonical case resolve to the authored catalog",
+      "requested": "PT_br",
+      "expectedCandidates": [
+        "pt-BR",
+        "pt",
+        "en-GB",
+        "en"
+      ],
+      "expectedCatalog": "pt-BR"
+    },
+    {
+      "name": "an ICU numeric region tag selects the numeric-region catalog",
+      "requested": "es_419",
+      "expectedCandidates": [
+        "es-419",
+        "es",
+        "en-GB",
+        "en"
+      ],
+      "expectedCatalog": "es-419"
+    },
+    {
+      "name": "Unicode extension subtags are not part of catalog identity",
+      "requested": "en-GB-u-rg-uszzzz",
+      "expectedCandidates": [
+        "en-GB",
+        "en"
+      ],
+      "expectedCatalog": "en-GB"
+    },
+    {
+      "name": "an en-US-POSIX identifier reduces to the base language",
+      "requested": "en_US_POSIX",
+      "expectedCandidates": [
+        "en-US-posix",
+        "en",
+        "en-GB"
+      ],
+      "expectedCatalog": "en"
+    },
+    {
+      "name": "a script subtag reduces to the base language, never to language plus region",
+      "requested": "zh-Hans-CN",
+      "expectedCandidates": [
+        "zh-Hans-CN",
+        "zh",
+        "en-GB",
+        "en"
+      ],
+      "expectedCatalog": "zh"
+    },
+    {
+      "name": "an undeclared region falls through to the fallback catalog",
+      "requested": "fr-CA",
+      "expectedCandidates": [
+        "fr-CA",
+        "fr",
+        "en-GB",
+        "en"
+      ],
+      "expectedCatalog": "en-GB"
+    },
+    {
+      "name": "an unusable requested locale falls through to the fallback catalog",
+      "requested": "!!",
+      "expectedCandidates": [
+        "en-GB",
+        "en"
+      ],
+      "expectedCatalog": "en-GB"
+    },
+    {
+      "name": "an ICU keyword identifier denotes the locale before the keyword",
+      "requested": "pt_BR@collation=phonebook",
+      "expectedCandidates": [
+        "pt-BR",
+        "pt",
+        "en-GB",
+        "en"
+      ],
+      "expectedCatalog": "pt-BR"
+    },
+    {
+      "name": "a POSIX charset suffix denotes the locale before the suffix",
+      "requested": "en_US.UTF-8",
+      "expectedCandidates": [
+        "en-US",
+        "en",
+        "en-GB"
+      ],
+      "expectedCatalog": "en"
+    },
+    {
+      "name": "an ICU region override denotes the overridden locale",
+      "requested": "en_US@rg=gbzzzz",
+      "expectedCandidates": [
+        "en-US",
+        "en",
+        "en-GB"
+      ],
+      "expectedCatalog": "en"
+    },
+    {
+      "name": "a Java Locale.toString extension marker denotes the locale before the marker",
+      "requested": "en_US_#u-rg-gbzzzz",
+      "expectedCandidates": [
+        "en-US",
+        "en",
+        "en-GB"
+      ],
+      "expectedCatalog": "en"
+    },
+    {
+      "name": "a malformed trailing subtag still reaches the base-language catalog",
+      "requested": "en-US-verylongsubtag",
+      "expectedCandidates": [
+        "en",
+        "en-GB"
+      ],
+      "expectedCatalog": "en"
+    }
+  ]
+}

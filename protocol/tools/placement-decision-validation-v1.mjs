@@ -230,9 +230,34 @@ function compareSemver(left, right) {
   return 0;
 }
 
-function normalizeLocale(value) {
+/**
+ * The canonical comparison form of one locale tag.
+ *
+ * Only the language-script-region core carries identity here. A one-character
+ * subtag opens a BCP 47 extension or private-use sequence (`-u-`, `-t-`, `-x-`),
+ * and everything from there on is device detail: a host that reports
+ * `en-US-u-rg-gbzzzz` for a region override is reporting the same locale as a
+ * host that reports `en-US`. Truncating at the first singleton is what keeps a
+ * runtime tag from mis-evaluating `equals`/`in` against an authored `en-US`,
+ * and it is the same rule the SDK source boundaries apply before a tag ever
+ * reaches an evaluator, so both layers agree on every input. Empty subtags are
+ * dropped for the same reason.
+ *
+ * The tag is first cut at `@`, `.`, or `#`, because a host reports an ICU
+ * identifier rather than a language tag: `en_US@rg=gbzzzz` (keyword),
+ * `en_US.UTF-8` (POSIX charset), and `en_US_#u-rg-gbzzzz` (Java
+ * `Locale.toString`) all denote the locale `en-US`. Without the cut the
+ * remainder fails the subtag grammar and the whole tag evaluates unknown, which
+ * is the original defect this contract clarification exists to close.
+ */
+export function normalizeLocale(value) {
   if (typeof value !== "string") return null;
-  const parts = value.trim().replaceAll("_", "-").split("-");
+  const parts = [];
+  for (const part of value.trim().split(/[@.#]/, 1)[0].replaceAll("_", "-").split("-")) {
+    if (part.length === 0) continue;
+    if (part.length === 1) break;
+    parts.push(part);
+  }
   if (parts.length === 0 || parts.length > 8 || !/^[A-Za-z]{2,8}$/.test(parts[0]) || parts.slice(1).some((part) => !/^[A-Za-z0-9]{1,8}$/.test(part))) return null;
   return parts.map((part, index) => {
     if (index === 0) return part.toLowerCase();
@@ -256,7 +281,11 @@ function sourceValue(source, context) {
   };
   if (Object.hasOwn(values, source.kind)) {
     const value = values[source.kind];
-    if (source.kind === "context.country" && typeof value === "string") return /^[A-Za-z]{2}$/.test(value) ? value.toUpperCase() : MISSING;
+    // Presence is "did the host supply a value", never "is the value usable".
+    // An unrecognizable country is reported, not absent, exactly as an
+    // unrecognizable locale, a malformed version, and an out-of-set platform
+    // are; only the comparisons on it are unknown.
+    if (source.kind === "context.country") return value == null ? MISSING : typeof value === "string" && /^[A-Za-z]{2}$/.test(value) ? value.toUpperCase() : value;
     if (source.kind === "application.locale") return value == null ? MISSING : normalizeLocale(value) ?? value;
     return value ?? MISSING;
   }
@@ -283,6 +312,7 @@ function evaluateLeaf(leaf, context) {
   };
   if (closedStates[leaf.source.kind] && !closedStates[leaf.source.kind].includes(value)) return "unknown";
   if (["device.os_version", "application.version"].includes(leaf.source.kind) && parseSemver(value) === null) return "unknown";
+  if (leaf.source.kind === "context.country" && !(typeof value === "string" && /^[A-Z]{2}$/.test(value))) return "unknown";
   if (leaf.source.kind === "application.locale" && normalizeLocale(value) === null) return "unknown";
   if (leaf.operand.type === "semantic_version" && ["equals", "not_equals", "greater_than", "greater_than_or_equal", "less_than", "less_than_or_equal"].includes(leaf.operator)) {
     const comparison = compareSemver(value, operand);

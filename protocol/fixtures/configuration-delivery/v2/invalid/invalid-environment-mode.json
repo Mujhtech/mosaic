@@ -10,7 +10,7 @@
       "mode": "preview"
     },
     "publishedAt": "2026-07-26T12:00:00.000Z",
-    "contentDigest": "sha256:99c78da6d47cee3c86b5cf6fe558e6210367e6bd1b50c3ae41940f0b5f6402cd",
+    "contentDigest": "sha256:519d28e21d338fece80bca2eaa09fea3c83b9feb4897e09f4652bbe54360d100",
     "compatibility": {
       "placementDecisionContracts": [
         {
@@ -18,12 +18,15 @@
           "requiredFeatures": [
             "condition.all",
             "condition.not",
+            "operator.does_not_exist",
             "operator.equals",
+            "operator.exists",
             "operator.greater_than",
             "operator.greater_than_or_equal",
             "operator.in",
             "operator.locale_matches",
             "operator.not_equals",
+            "operator.not_in",
             "outcome.fallback",
             "outcome.no_paywall",
             "outcome.paywall",
@@ -218,6 +221,340 @@
               }
             },
             {
+              "id": "rule_country_present_but_unusable",
+              "priority": 31,
+              "enabled": true,
+              "safeLabel": "Host-supplied country exists even when it is unusable",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.4"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "context.country"
+                    },
+                    "operator": "exists"
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_country_absent",
+              "priority": 32,
+              "enabled": true,
+              "safeLabel": "No country reported by the host application",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.3"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "context.country"
+                    },
+                    "operator": "does_not_exist"
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_fallback"
+              }
+            },
+            {
+              "id": "rule_country_equals_unusable",
+              "priority": 33,
+              "enabled": true,
+              "safeLabel": "Unusable country equality is never true",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.2"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "context.country"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "DE"
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_country_not_equals_unusable",
+              "priority": 34,
+              "enabled": true,
+              "safeLabel": "Unusable country inequality is never true",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.1"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "context.country"
+                    },
+                    "operator": "not_equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "DE"
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_platform_out_of_set",
+              "priority": 35,
+              "enabled": true,
+              "safeLabel": "Out-of-set platform equality is never true",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "6.6.6"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "device.platform"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "ios"
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_platform_out_of_set_negated",
+              "priority": 36,
+              "enabled": true,
+              "safeLabel": "Out-of-set platform equality is never false",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "6.6.5"
+                    }
+                  },
+                  {
+                    "type": "not",
+                    "child": {
+                      "type": "condition",
+                      "source": {
+                        "kind": "device.platform"
+                      },
+                      "operator": "equals",
+                      "operand": {
+                        "type": "string",
+                        "value": "ios"
+                      }
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_operand_unnormalizable",
+              "priority": 37,
+              "enabled": true,
+              "safeLabel": "Unnormalizable locale operand is never true",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "6.6.4"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "en-US-verylongsubtag"
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_operand_unnormalizable_negated",
+              "priority": 38,
+              "enabled": true,
+              "safeLabel": "Unnormalizable locale operand is never false",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "6.6.3"
+                    }
+                  },
+                  {
+                    "type": "not",
+                    "child": {
+                      "type": "condition",
+                      "source": {
+                        "kind": "application.locale"
+                      },
+                      "operator": "equals",
+                      "operand": {
+                        "type": "string",
+                        "value": "en-US-verylongsubtag"
+                      }
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_operand_unnormalizable_not_in",
+              "priority": 39,
+              "enabled": true,
+              "safeLabel": "Unnormalizable locale list member is never false",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "6.6.2"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "not_in",
+                    "operand": {
+                      "type": "string_list",
+                      "value": [
+                        "pt-BR",
+                        "!!bad"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
               "id": "rule_ios_rollout",
               "priority": 40,
               "enabled": true,
@@ -263,6 +600,156 @@
               "rollout": {
                 "algorithm": "sha256_length_prefixed_v1",
                 "thresholdBasisPoints": 7000
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_operand_unnormalizable_in",
+              "priority": 41,
+              "enabled": true,
+              "safeLabel": "Unnormalizable locale list member is never true",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "6.6.1"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "in",
+                    "operand": {
+                      "type": "string_list",
+                      "value": [
+                        "pt-BR",
+                        "!!bad"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_matches_unnormalizable_range",
+              "priority": 42,
+              "enabled": true,
+              "safeLabel": "Unnormalizable locale range is never true",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.6"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "locale_matches",
+                    "operand": {
+                      "type": "string",
+                      "value": "en-AA-BB-CC-DD-EE-FF-GG-HH"
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_matches_unnormalizable_range_negated",
+              "priority": 43,
+              "enabled": true,
+              "safeLabel": "Unnormalizable locale range is never false",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.5"
+                    }
+                  },
+                  {
+                    "type": "not",
+                    "child": {
+                      "type": "condition",
+                      "source": {
+                        "kind": "application.locale"
+                      },
+                      "operator": "locale_matches",
+                      "operand": {
+                        "type": "string",
+                        "value": "en-AA-BB-CC-DD-EE-FF-GG-HH"
+                      }
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_present_but_unusable",
+              "priority": 44,
+              "enabled": true,
+              "safeLabel": "Host-supplied locale exists even when it is unusable",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.7"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "exists"
+                  }
+                ]
               },
               "outcome": {
                 "type": "paywall",
@@ -437,12 +924,15 @@
             "requiredFeatures": [
               "condition.all",
               "condition.not",
+              "operator.does_not_exist",
               "operator.equals",
+              "operator.exists",
               "operator.greater_than",
               "operator.greater_than_or_equal",
               "operator.in",
               "operator.locale_matches",
               "operator.not_equals",
+              "operator.not_in",
               "outcome.fallback",
               "outcome.no_paywall",
               "outcome.paywall",

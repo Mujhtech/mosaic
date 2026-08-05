@@ -4,6 +4,105 @@ All notable Mosaic protocol changes are recorded here. A contract's artifacts
 become immutable when its `status` reaches `approved`; before that, its review
 gate may still change them. Every Mosaic contract is `approved` as of v1 GA.
 
+## Presence and unusable-value rulings, third round - 2026-08-05
+
+Status: housekeeping
+
+No schema or compatibility manifest changed. Three more unfixtured Placement
+Decision `1` divergences were ruled and pinned, all in the same hazard class:
+an evaluator that answers "no" where it should answer "cannot decide" produces a
+positive match under negation.
+
+- **`context.country` now follows the uniform presence rule.** An unrecognized
+  country is present with unknown comparisons instead of absent. The asymmetry
+  was not deliberate: closedness of a value set does not imply absence anywhere
+  else in this contract — an out-of-set `device.platform` has always been
+  present with unknown comparisons — so country was the sole outlier against a
+  rule the contract already applies to locale, both version sources, and
+  platform. Reference change in `tools/placement-decision-validation-v1.mjs`;
+  4 rules and 6 cases pin invalid and absent country against `exists`,
+  `does_not_exist`, `equals`, and `not_equals`.
+- **An out-of-set closed-vocabulary value compares unknown, never false.** The
+  reference already behaved this way; it is now pinned under both a direct and a
+  negated condition, which is the case that distinguishes unknown from false.
+- **An authored locale operand with no canonical form makes `equals`,
+  `not_equals`, `in`, and `not_in` unknown**, extending the `locale_matches`
+  ruling to the direct-comparison operators. A single unusable list member makes
+  the whole `in`/`not_in` condition unknown even when another member matches: the
+  list is a defective authored value, and partial evaluation would decide a Rule
+  on half of what its author wrote.
+
+## Locale-semantics clarifications, second round - 2026-08-05
+
+Status: housekeeping
+
+No schema or compatibility manifest changed.
+
+- Both reference normalizers (Placement Decision `1` and Paywall Protocol `0.2`
+  catalog lookup) now cut the value at the first `@`, `.`, or `#` before
+  canonicalizing, so the ICU identifier shapes hosts actually report —
+  `en_US@rg=gbzzzz`, `en_US.UTF-8`, and Java `Locale.toString`'s
+  `en_US_#u-rg-gbzzzz` — denote `en-US` instead of failing the subtag grammar.
+  This is the same runtime-input clarification as the singleton truncation, and
+  the SDK helpers already behaved this way; the reference was the strict one.
+- Ruled that catalog lookup recovers the leading language subtag when the whole
+  tag cannot be canonicalized (`en-US-verylongsubtag` → `en`), and that
+  Placement targeting does **not**. The asymmetry is deliberate and documented:
+  recovery in targeting would change which users match a Rule, while in lookup
+  the chain would otherwise fall through to the document's own fallback.
+- Ruled three previously unfixtured Placement evaluator semantics and pinned
+  each with conformance cases: a host-supplied locale that cannot be normalized
+  is **present** (`exists` true) and compares unknown; an authored range that
+  cannot be normalized makes `locale_matches` **unknown**, never false (pinned
+  under both a direct and a negated condition, which is what distinguishes
+  unknown from false); and the range grammar has **no `*` wildcard**, so no
+  implementation should carry a wildcard branch.
+- Stated that the locale-resolution corpus's `expectedCandidates` is normative
+  for lookup order only, not for public API shape, so bindings that expose the
+  full ordered list and bindings that expose only the declared subset are both
+  conformant.
+- **Declined**: a Studio-side authoring warning for a locale operand carrying a
+  singleton subtag. `warningPolicy` in
+  `compatibility/placement-decision/v1.json` is a closed object whose schema
+  (`additionalProperties: false`) declares exactly two warning kinds, both
+  pinned to `warn`. Emitting a third kind would make the validator's behaviour
+  undescribed by the approved manifest clients negotiate against, which is a
+  manifest change and therefore a version bump. The authoring guidance is
+  better placed in Studio's own client-side lint, which needs no contract
+  change, and the underlying semantics are harmless: an authored singleton now
+  compares on its core exactly as a runtime tag does.
+
+## Locale-semantics clarifications from the cross-SDK defect sweep - 2026-08-05
+
+Status: housekeeping
+
+No schema or compatibility manifest changed. Three questions raised by the
+cross-SDK locale sweep were ruled on, and the two rulings that are
+clarifications were implemented reference-side:
+
+- Placement Decision `1`: `application.locale` normalization now drops empty
+  subtags and truncates at the first singleton subtag, so a host-supplied
+  `en-US-u-rg-gbzzzz` evaluates `equals`/`in`/`locale_matches` as `en-US`
+  instead of matching nothing. This is a runtime-input clarification, not an
+  authored-grammar change: the comparable identity of a locale was always its
+  language-script-region core, extension subtags were never described by the
+  normalization rule, and the evaluator now agrees with the normalization every
+  SDK already applies at its locale boundary. Four cases were added to
+  `fixtures/placement-decision/v1/evaluator-conformance.json`.
+- Paywall Protocol `0.2`: requested-locale matching against localization catalog
+  keys is case-insensitive — a renderer canonicalizes the requested tag to the
+  authored grammar's casing (and to the same canonical form Placement targeting
+  uses) before an exact lookup. Added a reference implementation
+  (`tools/locale-resolution-v0.2.mjs`), a cross-SDK corpus
+  (`fixtures/v0.2/locale-resolution.json`), and the localization section of
+  `docs/protocol/v0.2.md`.
+- Paywall Protocol `0.2`: adding a language+region reduction step to the
+  candidate chain (`zh-Hans-CN` → `zh-CN` before `zh`) was **rejected** for
+  `0.2`. It changes a step the contract already defines and would silently move
+  shipped devices between two declared catalogs. Recorded under "Protocol" in
+  `docs/known-limitations.md` and deferred to the next Paywall Protocol version,
+  where it belongs together with script-aware catalog keys.
+
 ## Fallback-audit remediation in validators and tools - 2026-08-03
 
 Status: housekeeping
