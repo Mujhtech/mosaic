@@ -108,7 +108,6 @@ MOSAIC_PUBLIC_SDK_KEY=<environment public SDK key>
 MOSAIC_SDK_BASE_URL=http://127.0.0.1:8080
 MOSAIC_PLACEMENT=export_pdf
 MOSAIC_APPLICATION_ID=<Mosaic Application ID>
-MOSAIC_ANALYTICS_ENABLED=1
 REVENUECAT_PUBLIC_SDK_KEY=<platform public SDK key>
 ```
 
@@ -181,16 +180,18 @@ cd StoreKit && swift test --filter MosaicStoreKitProviderTests
 
 ## Analytics offline/restart demonstration
 
-Analytics remains disabled unless both the Environment owner/admin setting and
-the host opt-in are enabled. `MOSAIC_ANALYTICS_ENABLED=1` represents that
-Environment setting in this development example. Local Studio and bundled
-fallback paywalls never emit hosted analytics.
+Collection is on by default, matching the SDK default, so no environment
+variable is needed to demonstrate it. Set `MOSAIC_ANALYTICS_ENABLED=0` to
+demonstrate a host that explicitly opts out. Ingestion is still gated
+server-side by the Environment's collection setting, and a real host
+application is responsible for whatever end-user consent it owes. Local Studio
+and bundled fallback paywalls never emit hosted analytics.
 
 For a reproducible non-production queue demonstration:
 
 1. Run the local API with an Application-bound development public SDK key and
    enable Analytics for that Environment.
-2. Launch Hosted mode with `MOSAIC_ANALYTICS_ENABLED=1`, stop the API, and use
+2. Launch Hosted mode, stop the API, and use
    **Analytics → Queue demo events**. The status reports persistent queue depth.
 3. Terminate and relaunch without deleting app data. The queue is restored from
    backup-excluded Application Support storage.

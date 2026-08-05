@@ -44,9 +44,17 @@ public struct MosaicLocalizationResolver: Sendable, Equatable {
     }
 
     if let requestedLocale, !requestedLocale.isEmpty {
-      appendDeclared(requestedLocale)
-      if let base = requestedLocale.split(separator: "-", maxSplits: 1).first {
-        appendDeclared(String(base))
+      // Hosts pass what the platform hands them, which is an ICU identifier
+      // (`en_US`, `PT_br`, `en-US-u-rg-gbzzzz`), while catalog keys are authored
+      // in one canonical spelling. Protocol 0.2 canonicalizes the requested tag
+      // before an exact lookup; matching raw would miss the only catalog that
+      // exists. A tag that canonicalizes to nothing contributes no candidate
+      // rather than matching anything.
+      if let tag = MosaicDeviceLocale.catalogTag(requestedLocale) {
+        appendDeclared(tag)
+        if let base = tag.split(separator: "-", maxSplits: 1).first {
+          appendDeclared(String(base))
+        }
       }
       appendDeclared(localization.fallbackLocale)
       appendDeclared(localization.defaultLocale)

@@ -14,7 +14,7 @@ final class PlacementDecisionTests: XCTestCase {
     let decision = try JSONDecoder().decode(MosaicPlacementDecision.self, from: decisionData)
     let readiness = ["product_export_pro": MosaicProductReadiness.ready]
     let cases = try XCTUnwrap(root["cases"] as? [[String: Any]])
-    XCTAssertEqual(cases.count, 11, "The test must exercise every canonical evaluator case.")
+    XCTAssertEqual(cases.count, 34, "The test must exercise every canonical evaluator case.")
 
     for testCase in cases {
       let name = try XCTUnwrap(testCase["name"] as? String)
@@ -71,6 +71,43 @@ final class PlacementDecisionTests: XCTestCase {
       XCTAssertEqual(result.outcome, .noPaywall, op.rawValue)
       XCTAssertEqual(result.trace.steps.first?.result, .unknown, op.rawValue)
     }
+  }
+
+  /// Catalog lookup recovers the leading language subtag of a tag it cannot
+  /// canonicalize; targeting must not. Recovering here would silently retarget a
+  /// malformed locale onto a broader language Rule, which is a monetization
+  /// decision. The corpus pins the present-but-unknown case but not this
+  /// asymmetry, so it is pinned here.
+  func testTargetingNeverRecoversTheLanguageSubtagThatCatalogLookupDoes() {
+    let unnormalizable = "en-US-verylongsubtag"
+    // The asymmetry is only meaningful if the two really do disagree.
+    XCTAssertNil(MosaicDeviceLocale.canonicalTag(unnormalizable))
+    XCTAssertEqual(MosaicDeviceLocale.catalogTag(unnormalizable), "en")
+
+    let identity = MosaicIdentitySnapshot(
+      installationID: "installation", userID: nil, attributes: [:], generation: 0)
+    let context = MosaicDecisionContext(applicationLocale: unnormalizable)
+    for op in [MosaicDecisionOperator.localeMatches, .equals, .in] {
+      let operand: MosaicTypedValue = op == .in ? .stringList(["en", "en-US"]) : .string("en")
+      let matching = MosaicPlacementEvaluator.evaluate(
+        decision: decision(
+          with: .condition(source: .applicationLocale, operator: op, operand: operand)),
+        context: context, identity: identity, productReadiness: [:])
+      XCTAssertNil(matching.matchedRuleID, op.rawValue)
+      XCTAssertEqual(matching.trace.steps.first?.result, .unknown, op.rawValue)
+    }
+
+    // Present, though: an unusable locale is not an absent one.
+    let exists = MosaicPlacementEvaluator.evaluate(
+      decision: decision(
+        with: .condition(source: .applicationLocale, operator: .exists, operand: nil)),
+      context: context, identity: identity, productReadiness: [:])
+    XCTAssertEqual(exists.trace.steps.first?.result, .true)
+    let absent = MosaicPlacementEvaluator.evaluate(
+      decision: decision(
+        with: .condition(source: .applicationLocale, operator: .doesNotExist, operand: nil)),
+      context: context, identity: identity, productReadiness: [:])
+    XCTAssertEqual(absent.trace.steps.first?.result, .false)
   }
 
   func testCanonicalRolloutVectorsUseExactUTF8LengthPrefixedBuckets() throws {

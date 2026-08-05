@@ -2,6 +2,63 @@
 
 ## Unreleased
 
+- Apply the contract's uniform presence rule to every host-supplied targeting
+  source. An unrecognized `context.country` is now present with unknown
+  comparisons instead of absent, so a "no country reported" Rule no longer fires
+  on a device that reported one, and an out-of-set `device.platform` compares
+  unknown instead of false, so `not (platform equals "ios")` no longer matches a
+  platform the Rule was never written for.
+- Canonicalize the authored side of a locale comparison, not only the host side,
+  for `equals`, `not_equals`, `in`, and `not_in`. An operand with no canonical
+  form makes the condition unknown rather than false, and one unusable member
+  makes a whole `in`/`not_in` list unknown even when another member matches.
+- Accept a released Rule whose locale operand has no canonical form. Only a
+  `locale_matches` range is bound by the authored grammar; rejecting the others
+  discarded whole releases the contract considers valid.
+- Treat a host-supplied locale that cannot be normalized as present rather than
+  absent in Placement targeting: `exists` is true, every comparison is unknown,
+  and an authored range that cannot be normalized makes `locale_matches`
+  unknown rather than false. A `does_not_exist` Rule no longer matches users who
+  do have a locale.
+- Cut a locale at the first `@`, `.`, or `#` before canonicalizing, so the ICU
+  keyword, POSIX charset, and Java `Locale.toString` forms (`en_US@rg=gbzzzz`,
+  `en_US.UTF-8`, `en_US_#u-rg-gbzzzz`) all denote `en-US`. Catalog lookup also
+  recovers the leading language subtag when the whole tag cannot be
+  canonicalized; targeting deliberately does not, because recovery there would
+  change which users match a Rule.
+- Omit the analytics context locale entirely when the device reports nothing
+  representable, instead of substituting `en`.
+- Canonicalize every locale through one shared rule, per the Protocol 0.2
+  locale-resolution rulings. Catalog lookup canonicalizes the requested tag
+  before an exact match (`_`→`-`, empty subtags dropped, truncation at the first
+  singleton subtag, lowercase language, title-case script, uppercase alpha-2 or
+  numeric-3 region), and `application.locale` targeting applies the identical
+  rule, so the two subsystems cannot disagree about what "the same locale" is.
+  A host that passes the platform's own identifier (`en_US`, `PT_br`, or
+  `en-US-u-rg-gbzzzz` under a region override) previously matched no catalog key
+  and silently rendered the document's default language; an RTL request in that
+  form also fell through to an LTR default and mirrored the layout. A tag that
+  canonicalizes to nothing contributes no candidate rather than matching
+  anything. `0.2` still defines no language+region reduction: `zh-Hans-CN`
+  reduces to `zh`, never to `zh-CN`.
+- Normalize the device locale to a strict BCP-47 tag before it reaches the
+  analytics event context or the Placement decision context. `Locale.current`
+  reports an ICU identifier, so a region override (`en_US@rg=gbzzzz`) or a
+  non-Gregorian calendar (`zh_Hans_CN@calendar=chinese`) previously produced a
+  context the closed event codec rejects: every event on those devices was
+  dropped as invalid, and `application.locale` rules evaluated to unknown. Both
+  contexts now share one normalization, which drops Unicode extension subtags
+  and falls back to the language subtag rather than emitting a rejected value.
+- Enable analytics collection by default. A hosted client now queues Mosaic's
+  own product events without the host calling `setAnalyticsCollection`, matching
+  the Flutter SDK and the Environment's server-side default. Hosts opt out
+  explicitly with `setAnalyticsCollection(hostEnabled: false)`, whose
+  `environmentEnabled` argument now defaults to `true`. The Environment's
+  server-side collection setting still gates ingestion regardless, and the host
+  application remains responsible for whatever end-user consent its jurisdiction
+  requires. Transaction observations remain opt-in and are unaffected. A queue
+  state persisted by an earlier build keeps the gates it recorded.
+
 - Diagnose every style-resolution failure instead of rendering transparently.
   Unresolved colour tokens and malformed colour literals now recover by role:
   content colours fall back to the primary content colour so authored text stays

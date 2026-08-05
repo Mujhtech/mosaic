@@ -46,11 +46,23 @@ Paywall lifecycle events.
 ## Analytics identity and privacy
 
 Hosted clients implement the closed Analytics Event v1/v2 contracts with immutable
-event-time identity, session, correlation, and attribution. Collection starts
-disabled. The Environment setting and host override must both permit it:
+event-time identity, session, correlation, and attribution. Collection is enabled
+by default: a hosted client wires the analytics runtime and begins queueing
+Mosaic's own product events without the host touching a flag. Hosts opt *out*
+explicitly, and a host override may disable collection but can never override a
+disabled Environment. The host application is responsible for obtaining whatever
+end-user consent its jurisdiction and app-store policies require before leaving
+collection enabled. The Environment's server-side collection setting still gates
+ingestion regardless of the client setting, so events are only accepted once
+Mosaic is configured to collect them.
 
 ```swift
-await mosaic.setAnalyticsCollection(environmentEnabled: true, hostEnabled: true)
+// Nothing to call for the enabled default. Opt out explicitly:
+await mosaic.setAnalyticsCollection(hostEnabled: false)
+// Or mirror the Environment setting the host already knows:
+await mosaic.setAnalyticsCollection(
+  environmentEnabled: environmentSetting.collectionEnabled,
+  hostEnabled: consentAllowsCollection)
 let diagnostics = await mosaic.analyticsDiagnostics()
 let result = await mosaic.flushAnalytics()
 ```

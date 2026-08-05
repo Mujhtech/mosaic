@@ -400,7 +400,7 @@ public struct Mosaic: Sendable {
         operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersionString
           .split(separator: " ").first(where: { $0.first?.isNumber == true }).map(String.init),
         applicationVersion: configuration.applicationVersion,
-        applicationLocale: Locale.current.identifier.replacingOccurrences(of: "_", with: "-")
+        applicationLocale: MosaicDeviceLocale.currentTargetingLocale
       )
     if suppliedContext == nil {
       let requirements = await configurationClient.decisionRequirements(placement: placement)
@@ -562,8 +562,16 @@ public struct Mosaic: Sendable {
   /// Applies the Environment owner/admin collection setting and a host-app
   /// runtime override. Both must be true. Turning either off cancels delivery
   /// and clears all unsent events; the host cannot override a disabled Environment.
+  ///
+  /// Collection is enabled by default, so this is the explicit opt-out path:
+  /// `setAnalyticsCollection(hostEnabled: false)` declines collection without
+  /// the host having to know the Environment setting. The Environment's
+  /// server-side collection setting still gates ingestion regardless of what is
+  /// set here. The host application remains responsible for obtaining whatever
+  /// end-user consent its jurisdiction and app-store policies require before
+  /// leaving collection enabled.
   public func setAnalyticsCollection(
-    environmentEnabled: Bool,
+    environmentEnabled: Bool = true,
     hostEnabled: Bool = true
   ) async {
     await analyticsRuntime?.setCollection(

@@ -219,6 +219,10 @@ final class HostedConfigurationModel: ObservableObject {
   private let applicationID: String?
   private let revenueCatPublicSDKKey: String?
   private let commerceProviderSelection: String?
+  /// On by default, exactly as the SDK default is. `MOSAIC_ANALYTICS_ENABLED=0`
+  /// demonstrates the explicit host opt-out. Ingestion is still gated by the
+  /// Environment's server-side collection setting, and a real host application
+  /// is responsible for whatever end-user consent it owes.
   private let analyticsEnabled: Bool
   private let transactionObservationsEnabled: Bool
   private var storeKitProvider: MosaicStoreKitProvider?
@@ -232,7 +236,7 @@ final class HostedConfigurationModel: ObservableObject {
     applicationID = environment["MOSAIC_APPLICATION_ID"]
     revenueCatPublicSDKKey = environment["REVENUECAT_PUBLIC_SDK_KEY"]
     commerceProviderSelection = environment["MOSAIC_COMMERCE_PROVIDER"]
-    analyticsEnabled = environment["MOSAIC_ANALYTICS_ENABLED"] == "1"
+    analyticsEnabled = environment["MOSAIC_ANALYTICS_ENABLED"] != "0"
     transactionObservationsEnabled = environment["MOSAIC_TRANSACTION_OBSERVATIONS"] == "1"
     placement = environment["MOSAIC_PLACEMENT"] ?? "onboarding_complete"
     setupMessage =
@@ -287,9 +291,10 @@ final class HostedConfigurationModel: ObservableObject {
         customerTokenProvider: customerTokenProvider
       )
       mosaic = configured
-      await configured.setAnalyticsCollection(
-        environmentEnabled: analyticsEnabled,
-        hostEnabled: true)
+      // Collection is on by default, so the enabled path calls nothing.
+      if !analyticsEnabled {
+        await configured.setAnalyticsCollection(hostEnabled: false)
+      }
       // The provider exists before `configure`, so the observation sink is
       // attached afterwards. It is nil unless observations were opted in.
       await storeKitProvider?.attachTransactionObservationSink(
