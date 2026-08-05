@@ -60,7 +60,11 @@ func TestSameDayReportRangeUsesExactEventBoundaries(t *testing.T) {
 		INSERT INTO projects(id,organization_id,key,name,status,created_at,updated_at) VALUES('report_project','report_org','report','Report','active',now(),now()) ON CONFLICT(id) DO NOTHING;
 		INSERT INTO applications(id,project_id,name,platform,identifier,created_at,updated_at) VALUES('report_app','report_project','Report iOS','ios','dev.mosaic.report',now(),now()) ON CONFLICT(id) DO NOTHING;
 		INSERT INTO environments(id,project_id,key,name,mode,created_at,updated_at) VALUES('report_env','report_project','development','Development','development',now(),now()) ON CONFLICT(id) DO NOTHING;
-		INSERT INTO analytics_environment_settings(environment_id,project_id,collection_enabled,raw_retention_days,updated_at) VALUES('report_env','report_project',false,180,now()) ON CONFLICT(environment_id) DO NOTHING;
+		-- This fixture is about report windows, not about the collection switch:
+		-- state it as enabled so the seed does not read as a claim that querying
+		-- a disabled Environment is what is being exercised. DO UPDATE rather
+		-- than DO NOTHING because 00012's trigger already created this row.
+		INSERT INTO analytics_environment_settings(environment_id,project_id,collection_enabled,raw_retention_days,updated_at) VALUES('report_env','report_project',true,180,now()) ON CONFLICT(environment_id) DO UPDATE SET collection_enabled=true,raw_retention_days=180;
 		INSERT INTO api_keys(id,environment_id,application_id,application_project_id,kind,prefix,secret_digest,created_by_actor_id,created_at) VALUES('report_key','report_env','report_app','report_project','public_sdk','report_prefix',decode(repeat('00',32),'hex'),'report_actor',now());
 		INSERT INTO api_keys(id,environment_id,application_id,application_project_id,kind,prefix,secret_digest,created_by_actor_id,created_at) VALUES('report_secret_key','report_env',NULL,NULL,'secret_server','report_secret_prefix',decode(repeat('09',32),'hex'),'report_owner',now());
 		INSERT INTO analytics_subjects(id,project_id,kind,created_at) VALUES('report_subject','report_project','installation',now());

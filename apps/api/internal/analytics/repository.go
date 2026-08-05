@@ -13,6 +13,7 @@ type Repository interface {
 	UpdateSettings(context.Context, Actor, string, string, bool, int) (Settings, error)
 	Ingest(context.Context, Scope, string, []Candidate, time.Time) (map[string]EventResult, error)
 	Query(context.Context, Actor, Query, []string) (AnalyticsResult, error)
+	DailySeries(context.Context, Actor, Query, []string) (DailySeriesResult, error)
 	PreviewIdentity(context.Context, Actor, string, string, string) (PrivacyPreview, string, error)
 	CreateExport(context.Context, Actor, string, string, string, string, string, time.Time, time.Time) (Job, error)
 	CreateDeletion(context.Context, Actor, string, string, string, string, time.Time) (Job, error)

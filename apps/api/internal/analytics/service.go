@@ -181,6 +181,27 @@ func (s *Service) Query(ctx context.Context, actor Actor, query Query, metricIDs
 	}
 	return s.repository.Query(ctx, actor, query, metricIDs)
 }
+
+// DailySeries reads completed UTC-day aggregate buckets for the named metrics.
+//
+// The range is interpreted as whole UTC days and is expected to end at the
+// current midnight: the bucket for the day in progress is half-built, and this
+// method deliberately serves it as written rather than pretending otherwise, so
+// callers that care must not ask for it. Metric identifiers are required — an
+// unbounded series over every metric Mosaic defines is not a chart, it is a
+// table scan.
+func (s *Service) DailySeries(ctx context.Context, actor Actor, query Query, metricIDs []string) (DailySeriesResult, error) {
+	if actor.ID == "" {
+		return DailySeriesResult{}, ErrUnauthenticated
+	}
+	if len(metricIDs) == 0 {
+		return DailySeriesResult{}, ErrInvalidBatch
+	}
+	if query.From.IsZero() || !query.To.After(query.From) || query.To.Sub(query.From) > 366*24*time.Hour {
+		return DailySeriesResult{}, ErrInvalidBatch
+	}
+	return s.repository.DailySeries(ctx, actor, query, metricIDs)
+}
 func (s *Service) PreviewIdentity(ctx context.Context, actor Actor, projectID, kind, identity string) (PrivacyPreview, error) {
 	if actor.ID == "" {
 		return PrivacyPreview{}, ErrUnauthenticated

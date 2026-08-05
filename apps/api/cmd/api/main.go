@@ -61,10 +61,12 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/logging"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/objectstoreminio"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/placementdecisionpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/projectoverviewpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/protocolschema"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/ratelimit"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/revenuecat"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/telemetry"
+	"github.com/Mujhtech/mosaic/apps/api/internal/projectoverview"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/transport/health"
@@ -308,6 +310,12 @@ func run() (runErr error) {
 	)
 	placementDecisionService := placementdecision.NewService(placementdecisionpostgres.New(databasePool))
 	analyticsService := analytics.NewService(analyticspostgres.New(databasePool), objectStore, analyticsValidator)
+	// The overview summary is composed of billing and analytics reads, and is
+	// wired unconditionally: it is the dashboard's landing page and must answer
+	// for a Project that has enabled neither, reporting each unavailable metric
+	// with the reason rather than refusing.
+	projectOverviewService := projectoverview.NewService(
+		projectoverviewpostgres.New(databasePool), analyticsService)
 	experimentService := experiment.NewService(experimentpostgres.New(databasePool))
 	deliveryLimiter := ratelimit.New(cfg.Delivery.RequestsPerMinute, cfg.Delivery.Burst, cfg.Delivery.LimiterEntries)
 	authenticationLimiter := ratelimit.New(cfg.BrowserAuth.RequestsPerMinute, cfg.BrowserAuth.Burst, cfg.BrowserAuth.LimiterEntries)
@@ -493,6 +501,7 @@ func run() (runErr error) {
 		AnalyticsKeyLimiter:               analyticsKeyLimiter,
 		AnalyticsEventLimiter:             analyticsEventLimiter,
 		Experiment:                        experimentService,
+		ProjectOverview:                   projectOverviewService,
 		Billing:                           billingService,
 		BillingAccess:                     billingAccessService,
 		BillingDiagnostics:                billingDiagnosticsService,
