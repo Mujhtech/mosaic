@@ -9,6 +9,7 @@ import {
 } from "../queries/analytics-queries";
 import type { AnalyticsFilters, AnalyticsScope } from "../types/analytics";
 import { FreshnessBanner, WarningList } from "./analytics-states";
+import { AnalyticsTrendChart } from "./analytics-trend-chart";
 import { BreakdownTables } from "./breakdown-tables";
 import { MetricDictionary, MetricGrid } from "./metric-grid";
 import { AnalyticsQueryResult } from "./query-result";
@@ -16,10 +17,12 @@ import { AnalyticsQueryResult } from "./query-result";
 export function OverviewPanel({
   adapter,
   filters,
+  onFiltersChange,
   scope,
 }: {
   adapter: AnalyticsAdapter;
   filters: AnalyticsFilters;
+  onFiltersChange?: (filters: AnalyticsFilters) => void;
   scope: AnalyticsScope;
 }) {
   const overview = useQuery(overviewQueryOptions(scope, filters, adapter));
@@ -51,6 +54,14 @@ export function OverviewPanel({
               <FreshnessBanner freshness={overview.data.freshness} />
               <WarningList warnings={overview.data.warnings} />
               <MetricGrid metrics={overview.data.metrics} />
+              {/* The tiles answer "what is happening now"; the trend answers
+                  "is that normal", which no single number can. */}
+              <AnalyticsTrendChart
+                adapter={adapter}
+                filters={filters}
+                onFiltersChange={onFiltersChange}
+                scope={scope}
+              />
               <MetricDictionary metrics={overview.data.metrics} />
               <AnalyticsQueryResult
                 error={breakdowns.error}

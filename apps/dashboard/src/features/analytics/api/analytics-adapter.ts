@@ -11,6 +11,7 @@ import type {
   IssueRow,
   PaywallComparisonRow,
 } from "../types/analytics";
+import type { AnalyticsSeriesResult } from "../types/analytics-series";
 
 export interface AnalyticsAdapter {
   confirmDeletion: (
@@ -62,6 +63,20 @@ export interface AnalyticsAdapter {
     filters: AnalyticsFilters,
     signal?: AbortSignal
   ) => Promise<PaywallComparisonRow[]>;
+  /**
+   * The daily series for the named metrics, over a window of whole UTC days.
+   *
+   * The range is a day count rather than the filter row's instants because the
+   * points are whole UTC days and the server clamps and echoes the length it
+   * served.
+   */
+  getSeries: (
+    scope: AnalyticsScope,
+    metricIds: readonly string[],
+    filters: AnalyticsFilters,
+    days: number,
+    signal?: AbortSignal
+  ) => Promise<AnalyticsSeriesResult>;
   previewDeletion: (
     scope: AnalyticsScope,
     request: IdentityRequest
