@@ -121,14 +121,23 @@ flutter run --dart-define=MOSAIC_PHASE5_DEMO=true
 
 ## Phase 6 analytics demonstration
 
-Collection remains disabled unless the Environment owner has enabled it. Once
-enabled server-side, opt the example in explicitly:
+Collection is on by default, matching the SDK default. Ingestion is still gated
+server-side by the Environment's collection setting, and a real host application
+is responsible for whatever end-user consent it owes:
+
+```bash
+flutter run \
+  --dart-define=MOSAIC_HOSTED_BASE_URL=http://127.0.0.1:8080 \
+  --dart-define=MOSAIC_PUBLIC_SDK_KEY=public_example_key
+```
+
+Opt out to demonstrate a host that declines collection:
 
 ```bash
 flutter run \
   --dart-define=MOSAIC_HOSTED_BASE_URL=http://127.0.0.1:8080 \
   --dart-define=MOSAIC_PUBLIC_SDK_KEY=public_example_key \
-  --dart-define=MOSAIC_ANALYTICS_ENABLED=true
+  --dart-define=MOSAIC_ANALYTICS_ENABLED=false
 ```
 
 Exercise a hosted Placement, Product selection, purchase/cancellation, and

@@ -52,6 +52,51 @@ void main() {
     );
   });
 
+  group('analytics collection default', () {
+    // Analytics is opt-out. A host that configures nothing beyond a base URL
+    // must get a wired, collecting runtime; a silent regression here would
+    // lose every product event without any signal.
+    test('a default-configured client wires a collecting analytics runtime',
+        () async {
+      final diagnostics = <MosaicDiagnostic>[];
+      final mosaic = Mosaic.configure(
+        publicSdkKey: 'public_analytics_default',
+        baseUrl: Uri.parse('https://api.mosaic.test'),
+        purchaseProvider: MockMosaicPurchaseProvider(),
+        identityStorage: MosaicMemoryIdentityStorage(),
+        analyticsStorage: MosaicMemoryAnalyticsStorage(),
+        onDiagnostic: diagnostics.add,
+      );
+
+      expect(mosaic.analytics, isNotNull);
+      expect((await mosaic.analyticsDiagnostics()).collectionEnabled, isTrue);
+      // The auto-wiring diagnostic must stay reserved for genuine
+      // unavailability, not fire on every default configure.
+      expect(
+        diagnostics.map((diagnostic) => diagnostic.code),
+        isNot(contains('analytics.subsystem.disabled')),
+      );
+      mosaic.dispose();
+    });
+
+    test('no transport still reports the analytics subsystem as disabled', () {
+      final diagnostics = <MosaicDiagnostic>[];
+      final mosaic = Mosaic.configure(
+        publicSdkKey: 'public_analytics_untransported',
+        purchaseProvider: MockMosaicPurchaseProvider(),
+        identityStorage: MosaicMemoryIdentityStorage(),
+        onDiagnostic: diagnostics.add,
+      );
+
+      expect(mosaic.analytics, isNull);
+      expect(
+        diagnostics.map((diagnostic) => diagnostic.code),
+        contains('analytics.subsystem.disabled'),
+      );
+      mosaic.dispose();
+    });
+  });
+
   group('authoritative entitlements through the client', () {
     final snapshot = wrapCustomerSnapshotV2(repositoryFile(
       'protocol/fixtures/authoritative-entitlement/v1/snapshots/'

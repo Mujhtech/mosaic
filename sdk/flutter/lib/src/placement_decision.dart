@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'locale_tag.dart';
 import 'placement_identity.dart';
 import 'sha256.dart';
 
@@ -543,11 +544,20 @@ final class MosaicPlacementDecisionEvaluator {
           : MosaicTruthValue.no;
     }
     final leaf = node as MosaicConditionLeaf;
-    final actual = _source(leaf, ruleSet, context);
-    if (leaf.operator == 'exists')
-      return actual == null ? MosaicTruthValue.no : MosaicTruthValue.yes;
-    if (leaf.operator == 'does_not_exist')
-      return actual == null ? MosaicTruthValue.yes : MosaicTruthValue.no;
+    final source = _resolveSource(leaf, ruleSet, context);
+    // Presence reports what the host supplied, never whether Mosaic can use
+    // it. Collapsing the two would let `does_not_exist` claim a device
+    // reported no locale, country, or platform when it reported an unusable
+    // one.
+    if (leaf.operator == 'exists') {
+      return source.present ? MosaicTruthValue.yes : MosaicTruthValue.no;
+    }
+    if (leaf.operator == 'does_not_exist') {
+      return source.present ? MosaicTruthValue.no : MosaicTruthValue.yes;
+    }
+    // Absent and present-but-unusable both compare unknown. Answering "no"
+    // here is the whole hazard: a `not` around it becomes a positive match.
+    final actual = source.comparable;
     final listComparison = leaf.operator == 'in' || leaf.operator == 'not_in';
     if (actual == null ||
         leaf.operand == null ||
@@ -556,56 +566,114 @@ final class MosaicPlacementDecisionEvaluator {
             : actual.type != leaf.operand!.type)) {
       return MosaicTruthValue.unknown;
     }
-    final compared = _compare(actual, leaf.operand!, leaf.operator);
+    // Locale comparison is symmetric: the authored operand is read in the same
+    // canonical form as the runtime value, so `equals` and `in` cannot depend
+    // on which spelling of one locale each side happens to carry. An operand
+    // with no canonical form makes the condition unknown.
+    final operand = leaf.sourceKind == 'application.locale'
+        ? _canonicalLocaleOperand(leaf.operand!)
+        : leaf.operand!;
+    if (operand == null) return MosaicTruthValue.unknown;
+    final compared = _compare(actual, operand, leaf.operator);
     return compared == null
         ? MosaicTruthValue.unknown
         : (compared ? MosaicTruthValue.yes : MosaicTruthValue.no);
   }
 
-  MosaicAttributeValue? _source(MosaicConditionLeaf leaf,
+  /// Resolves one source into what the host supplied and what, if anything,
+  /// can be compared against it.
+  ///
+  /// The three host-supplied sources with a validity rule — locale, country,
+  /// and the closed platform vocabulary — report present with no comparable
+  /// form when the host named something Mosaic cannot use. A malformed
+  /// semantic version is the same shape, expressed one layer down: it is
+  /// present and every ordering against it is unknown.
+  _SourceResolution _resolveSource(MosaicConditionLeaf leaf,
       MosaicPlacementRuleSet ruleSet, MosaicDecisionContext context) {
     final key = leaf.sourceKey;
     return switch (leaf.sourceKind) {
-      'device.platform' => context.platform == null
-          ? null
-          : MosaicStringAttribute(context.platform!),
-      'device.os_version' => context.osVersion == null
-          ? null
-          : MosaicSemanticVersionAttribute(context.osVersion!),
-      'application.version' => context.applicationVersion == null
-          ? null
-          : MosaicSemanticVersionAttribute(context.applicationVersion!),
-      'application.locale' => context.applicationLocale == null ||
-              !_validLocale(context.applicationLocale!)
-          ? null
-          : MosaicStringAttribute(_normalizeLocale(context.applicationLocale!)),
-      'context.country' => context.country == null ||
-              !RegExp(r'^[A-Za-z]{2}$').hasMatch(context.country!)
-          ? null
-          : MosaicStringAttribute(context.country!.toUpperCase()),
-      'environment.id' => MosaicStringAttribute(ruleSet.environmentId),
-      'environment.key' => MosaicStringAttribute(ruleSet.environmentKey),
-      'identity.user_present' => MosaicBooleanAttribute(context.userPresent),
-      'user_attribute' => context.attributes[key],
-      'entitlement_state' => context.entitlements[key] == null
-          ? null
-          : MosaicStringAttribute(_wireEntitlement(context.entitlements[key]!)),
-      'product_availability' => context.products[key] == null
-          ? null
-          : MosaicStringAttribute(_wireProduct(context.products[key]!)),
-      'product_readiness' => context.productReadiness[key] == null
-          ? null
-          : MosaicStringAttribute(
-              context.productReadiness[key] == MosaicProductReadiness.ready
-                  ? 'ready'
-                  : 'not_ready'),
-      'provider_capability' => context.providerCapabilities[key] == null
-          ? null
-          : MosaicStringAttribute(context.providerCapabilities[key]!.name),
-      _ => null,
+      'device.platform' => _reported(
+          context.platform,
+          (value) => const {'ios', 'android'}.contains(value)
+              ? MosaicStringAttribute(value)
+              : null,
+        ),
+      'device.os_version' =>
+        _reported(context.osVersion, MosaicSemanticVersionAttribute.new),
+      'application.version' => _reported(
+          context.applicationVersion, MosaicSemanticVersionAttribute.new),
+      // The host's identifier is canonicalized before it is read, so a POSIX
+      // or ICU-keyword shape targets the locale it names. One it cannot
+      // canonicalize is reported, not usable.
+      'application.locale' => _reported(
+          context.applicationLocale,
+          (value) => switch (mosaicNormalizeLocaleTag(value)) {
+            final String tag => MosaicStringAttribute(tag),
+            _ => null,
+          },
+        ),
+      'context.country' => _reported(
+          context.country,
+          (value) => RegExp(r'^[A-Za-z]{2}$').hasMatch(value)
+              ? MosaicStringAttribute(value.toUpperCase())
+              : null,
+        ),
+      'environment.id' => _usable(MosaicStringAttribute(ruleSet.environmentId)),
+      'environment.key' =>
+        _usable(MosaicStringAttribute(ruleSet.environmentKey)),
+      'identity.user_present' =>
+        _usable(MosaicBooleanAttribute(context.userPresent)),
+      'user_attribute' => _optional(context.attributes[key]),
+      'entitlement_state' => _optional(
+          context.entitlements[key] == null
+              ? null
+              : MosaicStringAttribute(
+                  _wireEntitlement(context.entitlements[key]!)),
+        ),
+      'product_availability' => _optional(
+          context.products[key] == null
+              ? null
+              : MosaicStringAttribute(_wireProduct(context.products[key]!)),
+        ),
+      'product_readiness' => _optional(
+          context.productReadiness[key] == null
+              ? null
+              : MosaicStringAttribute(
+                  context.productReadiness[key] == MosaicProductReadiness.ready
+                      ? 'ready'
+                      : 'not_ready'),
+        ),
+      'provider_capability' => _optional(
+          context.providerCapabilities[key] == null
+              ? null
+              : MosaicStringAttribute(context.providerCapabilities[key]!.name),
+        ),
+      _ => _absentSource,
     };
   }
 }
+
+/// What one source resolved to: whether the host reported anything, and the
+/// comparable form when Mosaic can use what it reported.
+typedef _SourceResolution = ({MosaicAttributeValue? comparable, bool present});
+
+const _SourceResolution _absentSource = (comparable: null, present: false);
+
+_SourceResolution _usable(MosaicAttributeValue value) =>
+    (comparable: value, present: true);
+
+_SourceResolution _optional(MosaicAttributeValue? value) =>
+    value == null ? _absentSource : _usable(value);
+
+/// A host-reported value is always present. It is comparable only when
+/// [comparable] can make sense of it.
+_SourceResolution _reported(
+  String? reported,
+  MosaicAttributeValue? Function(String value) comparable,
+) =>
+    reported == null
+        ? _absentSource
+        : (comparable: comparable(reported), present: true);
 
 bool? _compare(MosaicAttributeValue actual, MosaicAttributeValue operand,
     String operator) {
@@ -620,8 +688,12 @@ bool? _compare(MosaicAttributeValue actual, MosaicAttributeValue operand,
   if (operator == 'equals') return _equal(a, b);
   if (operator == 'not_equals') return !_equal(a, b);
   if (operator == 'locale_matches' && a is String && b is String) {
-    final normalizedA = _normalizeLocale(a);
-    final normalizedB = _normalizeLocale(b);
+    final normalizedA = mosaicNormalizeLocaleTag(a);
+    final normalizedB = mosaicNormalizeLocaleTag(b);
+    // An authored range with no canonical form is unknown, never false. False
+    // would be a claim that the device is outside the range, which a negated
+    // condition would then read as a match.
+    if (normalizedA == null || normalizedB == null) return null;
     return normalizedA == normalizedB ||
         normalizedA.startsWith('$normalizedB-');
   }
@@ -677,20 +749,31 @@ bool _validLocale(String value) =>
     RegExp(r'^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$')
         .hasMatch(value.replaceAll('_', '-'));
 
-String _normalizeLocale(String value) {
-  final parts = value.replaceAll('_', '-').split('-');
-  if (parts.isEmpty || !RegExp(r'^[A-Za-z]{2,8}$').hasMatch(parts.first))
-    return value;
-  return <String>[
-    parts.first.toLowerCase(),
-    for (final part in parts.skip(1))
-      if (RegExp(r'^[A-Za-z]{4}$').hasMatch(part))
-        '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}'
-      else if (RegExp(r'^(?:[A-Za-z]{2}|[0-9]{3})$').hasMatch(part))
-        part.toUpperCase()
-      else
-        part.toLowerCase(),
-  ].join('-');
+/// The authored side of a locale comparison, in the same canonical form the
+/// runtime value is read in, or `null` when the author wrote something with no
+/// canonical form.
+///
+/// One unusable member makes the whole list `null`, even when another member
+/// would have matched. The list is a single defective authored value, and
+/// evaluating the half that parsed would decide a Rule on half of what its
+/// author wrote — and would do it at that Rule's priority, selecting a
+/// different Rule rather than merely a different truth value.
+MosaicAttributeValue? _canonicalLocaleOperand(MosaicAttributeValue operand) {
+  switch (operand) {
+    case MosaicStringAttribute(:final value):
+      final tag = mosaicNormalizeLocaleTag(value);
+      return tag == null ? null : MosaicStringAttribute(tag);
+    case MosaicStringListAttribute(:final value):
+      final canonical = <String>[];
+      for (final member in value) {
+        final tag = mosaicNormalizeLocaleTag(member);
+        if (tag == null) return null;
+        canonical.add(tag);
+      }
+      return MosaicStringListAttribute(canonical);
+    default:
+      return operand;
+  }
 }
 
 int? _compareSemver(String left, String right) {

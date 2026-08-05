@@ -24,6 +24,7 @@ export 'src/customer_restore_sync.dart';
 export 'src/experiment_analytics.dart';
 export 'src/experiment_assignment.dart';
 export 'src/experiment_assignment_store.dart';
+export 'src/locale_tag.dart';
 export 'src/localization.dart';
 export 'src/mock_purchase_provider.dart';
 export 'src/placement.dart';

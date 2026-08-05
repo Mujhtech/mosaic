@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'locale_tag.dart';
 import 'protocol.dart';
 
 final class MosaicResolvedText {
@@ -88,7 +89,17 @@ final class MosaicLocaleResolver {
     String? requestedLocale,
   }) {
     final localization = document.localization;
-    final requested = requestedLocale?.trim();
+    // Catalog keys are authored in one canonical form, so the requested tag is
+    // canonicalized to that same form and matched exactly. Matching a raw
+    // platform string would simply miss the one catalog that exists: a `PT_br`
+    // device would render the fallback catalog rather than its own.
+    // Lookup — and only lookup — recovers the leading language subtag when the
+    // whole tag has no canonical form, so `en-US-verylongsubtag` still reaches
+    // the `en` catalog instead of falling through to the document's fallback.
+    // Placement targeting deliberately does not recover: there it would change
+    // which users match a Rule.
+    final requested = mosaicNormalizeLocaleTag(requestedLocale) ??
+        mosaicRecoverLocaleLanguage(requestedLocale);
     final ordered = <String>[];
 
     void add(String? locale) {
@@ -97,15 +108,15 @@ final class MosaicLocaleResolver {
       }
     }
 
-    if (requested != null && requested.isNotEmpty) {
-      add(requested);
-      add(requested.split('-').first);
-      add(localization.fallbackLocale);
-      add(localization.defaultLocale);
-    } else {
-      add(localization.defaultLocale);
-      add(localization.fallbackLocale);
-    }
+    // The Protocol 0.2 candidate chain, in order. A requested locale with no
+    // canonical form contributes no candidate rather than matching anything,
+    // which leaves the declared fallback and default exactly as they are. There
+    // is no language-plus-region reduction step in 0.2: `zh-Hans-CN` reduces to
+    // `zh`, never to `zh-CN`.
+    add(requested);
+    if (requested != null) add(requested.split('-').first);
+    add(localization.fallbackLocale);
+    add(localization.defaultLocale);
 
     return MosaicResolvedLocalization(
       localization: localization,

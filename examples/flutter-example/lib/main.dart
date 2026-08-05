@@ -34,7 +34,15 @@ const String _mosaicApplicationId = String.fromEnvironment(
 );
 const bool _commerceEnabled = bool.fromEnvironment('MOSAIC_COMMERCE_ENABLED');
 const bool _phase5Demo = bool.fromEnvironment('MOSAIC_PHASE5_DEMO');
-const bool _analyticsEnabled = bool.fromEnvironment('MOSAIC_ANALYTICS_ENABLED');
+
+/// On by default, exactly as the SDK default is. Opt out with
+/// `--dart-define=MOSAIC_ANALYTICS_ENABLED=false`. Ingestion is still gated by
+/// the Environment's server-side collection setting, and a real host is
+/// responsible for its own end-user consent.
+const bool _analyticsEnabled = bool.fromEnvironment(
+  'MOSAIC_ANALYTICS_ENABLED',
+  defaultValue: true,
+);
 
 /// Off by default, exactly as the SDK opt-in is. When absent the Transaction
 /// Observation subsystem is never constructed.

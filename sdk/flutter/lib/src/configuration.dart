@@ -19,6 +19,7 @@ import 'customer_entitlements.dart';
 import 'customer_restore_sync.dart';
 import 'experiment_analytics.dart';
 import 'experiment_assignment_store.dart';
+import 'locale_tag.dart';
 import 'placement_decision.dart';
 import 'placement_identity.dart';
 import 'presentation.dart';
@@ -199,6 +200,21 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
+  /// Configures an isolated Mosaic client.
+  ///
+  /// Analytics collection is **on by default**: a client configured with a base
+  /// URL (or an explicit [analyticsTransport]) wires the analytics runtime and
+  /// begins queueing Mosaic's own product events. Hosts opt *out* by passing
+  /// `analyticsEnvironmentSettings: MosaicAnalyticsEnvironmentSettings(
+  /// collectionEnabled: false)` or `analyticsHostEnabled: false`, or later by
+  /// calling [setAnalyticsCollection]; disabling clears anything already
+  /// queued. The host application remains responsible for obtaining whatever
+  /// end-user consent its jurisdiction and app-store policies require before
+  /// leaving collection enabled. Collection is additionally gated server-side:
+  /// the Environment's collection setting must also be enabled for Mosaic to
+  /// ingest what the SDK sends.
+  ///
+  /// Transaction observation stays opt-in and is unaffected by this default.
   factory Mosaic.configure({
     String? publicSdkKey,
     String? apiKey,
@@ -218,8 +234,10 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     MosaicAnalyticsStorage analyticsStorage =
         const MosaicFileAnalyticsStorage(),
     MosaicAnalyticsTransport? analyticsTransport,
+    // On by default. Hosts opt out here or through `setAnalyticsCollection`;
+    // the Environment's server-side setting still gates ingestion.
     MosaicAnalyticsEnvironmentSettings analyticsEnvironmentSettings =
-        const MosaicAnalyticsEnvironmentSettings(collectionEnabled: false),
+        const MosaicAnalyticsEnvironmentSettings(collectionEnabled: true),
     bool analyticsHostEnabled = true,
     String analyticsSdkVersion = mosaicFlutterSdkVersion,
     String? operatingSystemVersion,
@@ -309,7 +327,11 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
               sdkVersion: analyticsSdkVersion,
               operatingSystemVersion: operatingSystemVersion,
               applicationVersion: configuration.applicationVersion,
-              locale: locale,
+              // Hosts pass whatever their platform produced. An unnormalized
+              // POSIX or ICU-keyword identifier fails the closed locale codec,
+              // and the event codec rejects the whole event, so a single bad
+              // shape would drop all analytics on the affected devices.
+              locale: mosaicNormalizeLocaleTag(locale),
             ),
             transport: resolvedAnalyticsTransport,
             storage: analyticsStorage,

@@ -2,6 +2,48 @@
 
 ## Unreleased
 
+- Canonicalize every host-supplied locale identifier through
+  `mosaicNormalizeLocaleTag` before it reaches the analytics event context, the
+  `application.locale` decision attribute, or catalog resolution, implementing
+  the 2026-08-05 locale-semantics rulings. Empty subtags are dropped, the tag
+  is truncated at the first singleton subtag, and case is canonicalized, so
+  POSIX (`en_US`, `en_US.UTF-8`), ICU region-override (`en_US@rg=gbzzzz`),
+  extension (`en-US-u-ca-buddhist`), and mixed-case (`PT_br` → `pt-BR`) shapes
+  all reach the catalog and the rule they always denoted. Locale comparison is
+  symmetric: the authored operand is read in the same canonical form as the
+  runtime value. Previously such an identifier failed the closed locale codec,
+  which threw out of every analytics `record` and left locale targeting with no
+  attribute at all. The candidate chain is now uniformly requested → base
+  language → `fallbackLocale` → `defaultLocale`; an unusable requested locale
+  contributes no candidate instead of promoting `defaultLocale` ahead of
+  `fallbackLocale`. Values are cut at the first `@`, `.`, or `#`, so Java
+  `Locale.toString`'s `en_US_#u-rg-gbzzzz` also denotes `en-US`.
+- Apply the uniform Placement Decision `1` presence rule to every source: a
+  value the host reported `exists` even when Mosaic cannot use it, and
+  comparisons against it are unknown rather than false. `context.country` no
+  longer disappears when it is not an alpha-2 code, and an out-of-set
+  `device.platform` compares unknown instead of false. An authored
+  `application.locale` operand with no canonical form makes `equals`,
+  `not_equals`, `in`, and `not_in` unknown, and one unusable member makes a
+  whole `in`/`not_in` list unknown even when another member matches. Each of
+  these previously answered "no", which a negated condition read as a positive
+  match.
+- Catalog lookup recovers the leading language subtag when a requested tag has
+  no canonical form (`en-US-verylongsubtag` reaches the `en` catalog) through
+  the new `mosaicRecoverLocaleLanguage`. Placement targeting deliberately does
+  not recover: an unnormalizable host locale is present-but-unknown there, so
+  `exists` is true, every comparison is unknown rather than false, and an
+  authored range with no canonical form makes `locale_matches` unknown so a
+  negated condition cannot read it as a match.
+- **Breaking default:** analytics collection is now on by default.
+  `Mosaic.configure` defaults `analyticsEnvironmentSettings` to
+  `collectionEnabled: true`, so a client configured with a base URL (or an
+  explicit analytics transport) wires the analytics runtime and queues events
+  without further opt-in. Hosts opt *out* through
+  `analyticsEnvironmentSettings`, `analyticsHostEnabled`, or
+  `setAnalyticsCollection`, and remain responsible for their own end-user
+  consent. The Environment's server-side collection setting still gates
+  ingestion. Transaction observation is unchanged and stays opt-in.
 - Include the verified cached `knownSnapshotAuthorityDigest` in authoritative
   entitlement v2 sync requests. Stale customer, scope, epoch, or digest
   bindings are discarded and request a full snapshot. Decode

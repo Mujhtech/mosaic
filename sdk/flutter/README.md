@@ -96,9 +96,15 @@ configuration request and evaluates cached or bundled snapshots offline.
 
 ## Analytics, identity, and privacy
 
-Analytics is disabled by default. Enable it only after the Environment's
-server-side collection setting is enabled; a host override may disable but can
-never override a disabled Environment:
+Analytics is enabled by default: a client configured with a base URL wires the
+analytics runtime and begins queueing Mosaic's own product events. Hosts opt
+*out* through `analyticsEnvironmentSettings` or `analyticsHostEnabled`, or later
+through `setAnalyticsCollection`; a host override may disable but can never
+override a disabled Environment. The host application is responsible for
+obtaining whatever end-user consent its jurisdiction and app-store policies
+require before leaving collection enabled. The Environment's server-side
+collection setting still gates ingestion, so events are only accepted once
+Mosaic is configured to collect them.
 
 ```dart
 final mosaic = Mosaic.configure(
@@ -107,8 +113,9 @@ final mosaic = Mosaic.configure(
   applicationId: 'app_ios',
   applicationVersion: '4.2.0',
   purchaseProvider: provider,
+  // Opt out explicitly; omit both arguments to keep the enabled default.
   analyticsEnvironmentSettings: const MosaicAnalyticsEnvironmentSettings(
-    collectionEnabled: true,
+    collectionEnabled: false,
   ),
   analyticsHostEnabled: consentAllowsCollection,
 );
@@ -658,6 +665,47 @@ and withhold incompatible or oversized compact UTF-8 drafts before sending.
 Locale resolution is exact requested locale → requested base language →
 `fallbackLocale` → `defaultLocale` → inline default. Direction comes from the
 first declared locale candidate, independently of the string that resolves.
+
+Requested-locale matching is case-insensitive, and catalog lookup is exact
+against the canonical form. Every host-supplied locale identifier —
+`requestedLocale`, the decision context's `applicationLocale`, and
+`Mosaic.configure`'s `locale` — is canonicalized through
+`mosaicNormalizeLocaleTag` before it is matched, targeted, or reported, so
+Placement targeting and catalog lookup never disagree about what "the same
+locale" is. Hand it whatever the platform produced: `Platform.localeName` POSIX
+shapes (`en_US`, `en_US.UTF-8`), ICU region overrides (`en_US@rg=gbzzzz`), and
+BCP-47 extensions (`en-US-u-ca-buddhist`), and Java `Locale.toString` extension
+markers (`en_US_#u-rg-gbzzzz`) all resolve to `en-US`; `PT_br` resolves to
+`pt-BR`; `zh-Hans-CN` is preserved. `0.2` defines no language+region reduction,
+so `zh-Hans-CN` reduces to `zh`, never to `zh-CN`. Conformance is bound to
+`protocol/fixtures/v0.2/locale-resolution.json`.
+
+Catalog lookup — and only catalog lookup — recovers the leading language subtag
+when a tag has no canonical form, so `en-US-verylongsubtag` still reaches the
+`en` catalog. Placement targeting deliberately does not recover.
+
+### Presence and unusable values in targeting
+
+Targeting separates *what the host reported* from *what Mosaic can use*, because
+answering "no" where the honest answer is "cannot decide" turns any `not`,
+`not_equals`, `not_in`, or `does_not_exist` around it into a positive match.
+
+- **Presence reports what the host supplied.** A reported value `exists` even
+  when it is unusable — an unnormalizable `application.locale`, an alpha-3
+  `context.country`, an out-of-set `device.platform`, a malformed version. Only
+  a value the host never supplied is absent.
+- **Comparisons against an unusable value are unknown**, never false.
+- **An authored operand with no canonical form makes the condition unknown.**
+  This covers `locale_matches` ranges and equally `equals`, `not_equals`, `in`,
+  and `not_in` on `application.locale`. A single unusable member makes the whole
+  `in`/`not_in` unknown even when another member would have matched: the list is
+  one defective authored value, and evaluating the half that parsed would decide
+  a Rule on half of what its author wrote.
+- **There are no wildcard ranges.** `*` is not part of the authored grammar and
+  the SDK carries no wildcard branch.
+
+Conformance is bound to
+`protocol/fixtures/placement-decision/v1/evaluator-conformance.json`.
 
 ## Results
 
