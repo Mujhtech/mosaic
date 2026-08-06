@@ -414,10 +414,38 @@ export function evaluateDecisionV1(document, context, assignment) {
   return { matchedRuleId: null, ...resolveOutcome(ruleSet.defaultOutcome, fallbackByKey) };
 }
 
+/**
+ * Floors for the cross-SDK corpora.
+ *
+ * A conformance loop over an empty array reports perfect conformance, so a
+ * corpus that is truncated, emptied, or renamed out from under the loop is
+ * indistinguishable from one that passes. These are the sizes the corpora had
+ * when the rulings they pin were approved; growing a corpus is expected, and
+ * shrinking one has to be a deliberate edit here rather than a silent pass.
+ */
+const DECISION_V1_CORPUS_FLOORS = Object.freeze({
+  evaluatorCases: 34,
+  rolloutVectors: 3,
+  invalidFixtures: 9,
+});
+
 export function validateDecisionV1Artifacts(artifacts = loadDecisionV1Artifacts()) {
   const errors = [];
   const validators = compiledValidators(artifacts);
   if (!validators.manifest(artifacts.manifest)) errors.push(...schemaErrors("compatibility manifest", validators.manifest.errors));
+  for (const [name, corpus, floor] of [
+    ["evaluator conformance cases", artifacts.evaluatorFixture.cases, DECISION_V1_CORPUS_FLOORS.evaluatorCases],
+    ["rollout vectors", artifacts.rolloutFixture.vectors, DECISION_V1_CORPUS_FLOORS.rolloutVectors],
+    ["invalid fixtures", artifacts.invalidFixtures, DECISION_V1_CORPUS_FLOORS.invalidFixtures],
+  ]) {
+    if (!Array.isArray(corpus) || corpus.length < floor) {
+      errors.push(`Placement Decision 1 ${name} corpus holds ${Array.isArray(corpus) ? corpus.length : "no array"}, below the floor of ${floor}; a conformance loop over a shrunken corpus passes vacuously`);
+    }
+  }
+  const caseNames = artifacts.evaluatorFixture.cases.map((testCase) => testCase.name);
+  if (new Set(caseNames).size !== caseNames.length) {
+    errors.push("Placement Decision 1 evaluator conformance case names must be unique; a duplicated name hides a case that was meant to be distinct");
+  }
   errors.push(...validateDecisionV1(artifacts.evaluatorFixture.decision, artifacts));
   for (const invalid of artifacts.invalidFixtures) if (validateDecisionV1(invalid, artifacts).length === 0) errors.push(`invalid fixture ${invalid.ruleSet.id} was accepted`);
   for (const vector of artifacts.rolloutFixture.vectors) {

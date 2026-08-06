@@ -27,6 +27,53 @@ test("priority, canonical locales, unknown inputs, fallback, typed values, and s
   }
 });
 
+test("a shrunken conformance corpus fails instead of conforming over nothing", () => {
+  // Regression: every corpus loop here reports no errors over an empty array,
+  // so a corpus that failed to load or was truncated would read as perfect
+  // conformance -- for the evaluator cases, the rollout vectors, and the
+  // invalid fixtures alike.
+  const artifacts = loadDecisionV1Artifacts();
+  const shrink = [
+    (broken) => {
+      broken.evaluatorFixture.cases = [];
+    },
+    (broken) => {
+      broken.evaluatorFixture.cases = broken.evaluatorFixture.cases.slice(0, 3);
+    },
+    (broken) => {
+      broken.rolloutFixture.vectors = [];
+    },
+    (broken) => {
+      broken.invalidFixtures = [];
+    },
+  ];
+  for (const [index, mutate] of shrink.entries()) {
+    const broken = {
+      ...artifacts,
+      evaluatorFixture: structuredClone(artifacts.evaluatorFixture),
+      rolloutFixture: structuredClone(artifacts.rolloutFixture),
+      invalidFixtures: [...artifacts.invalidFixtures],
+    };
+    mutate(broken);
+    const errors = validateDecisionV1Artifacts(broken);
+    assert.ok(
+      errors.some((error) => error.includes("below the floor")),
+      `expected a corpus-floor error for mutation ${index}, got: ${errors.join("; ")}`,
+    );
+  }
+
+  // A duplicated case name silently collapses two cases the corpus meant to
+  // keep distinct, without changing the count.
+  const duplicated = {
+    ...artifacts,
+    evaluatorFixture: structuredClone(artifacts.evaluatorFixture),
+  };
+  duplicated.evaluatorFixture.cases[1].name = duplicated.evaluatorFixture.cases[0].name;
+  assert.ok(
+    validateDecisionV1Artifacts(duplicated).some((error) => error.includes("must be unique")),
+  );
+});
+
 test("targeting reads an ICU identifier as the locale it denotes, and never recovers a language", () => {
   // The three shapes hosts actually hand the SDKs. Targeting stops here: unlike
   // catalog lookup, it must not retarget a malformed tag onto a broader

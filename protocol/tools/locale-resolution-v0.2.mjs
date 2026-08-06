@@ -85,7 +85,50 @@ export function canonicalRequestedLocaleTag(value) {
  * its base language (`zh`); 0.2 defines no language+region reduction step, so
  * `zh-CN` is not a candidate. See `docs/protocol/v0.2.md`.
  */
+/**
+ * A refusal to resolve, rather than a plausible-looking answer over nothing.
+ *
+ * `localization` is required by the 0.2 schema to carry `defaultLocale`,
+ * `fallbackLocale`, and a non-empty `locales`. A document missing any of them
+ * never passed validation, and the honest response is to say so: defaulting the
+ * catalog set to `{}` would report "the document declares none of the
+ * candidates", which is the same answer a well-formed document with an
+ * unsupported locale gets, and the terminal guarantee of the chain -- that the
+ * default locale always resolves -- would be silently gone.
+ */
+export class LocaleResolutionError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = "LocaleResolutionError";
+    this.code = code;
+  }
+}
+
+function declaredCatalogKeys(localization) {
+  if (localization === null || typeof localization !== "object" || Array.isArray(localization)) {
+    throw new LocaleResolutionError("invalid_localization", `Locale resolution requires the document's localization object; received ${JSON.stringify(localization)}`);
+  }
+  // The 0.2 schema declares `locales` as an object keyed by locale tag. The
+  // cross-SDK corpus states the same set as an array, since it has no catalogs
+  // to carry; both are accepted, nothing else is.
+  const keys = Array.isArray(localization.locales)
+    ? localization.locales
+    : localization.locales !== null && typeof localization.locales === "object"
+      ? Object.keys(localization.locales)
+      : null;
+  if (keys === null || keys.length === 0) {
+    throw new LocaleResolutionError("no_declared_catalogs", `Locale resolution requires a non-empty localization.locales; received ${JSON.stringify(localization.locales)}`);
+  }
+  for (const field of ["defaultLocale", "fallbackLocale"]) {
+    if (typeof localization[field] !== "string" || localization[field].length === 0) {
+      throw new LocaleResolutionError("missing_terminal_locale", `Locale resolution requires localization.${field}; without it the candidate chain has no terminal fallback and an unsupported locale would resolve to nothing`);
+    }
+  }
+  return new Set(keys);
+}
+
 export function localeCandidatesV02(localization, requestedLocale) {
+  declaredCatalogKeys(localization);
   const candidates = [];
   const append = (value) => {
     if (typeof value === "string" && value.length > 0 && !candidates.includes(value)) candidates.push(value);
@@ -103,14 +146,28 @@ export function localeCandidatesV02(localization, requestedLocale) {
  * declares none of the candidates.
  */
 export function resolveLocaleCatalogV02(localization, requestedLocale) {
-  const declared = new Set(Array.isArray(localization.locales) ? localization.locales : Object.keys(localization.locales ?? {}));
+  const declared = declaredCatalogKeys(localization);
   const candidates = localeCandidatesV02(localization, requestedLocale);
   return { candidates, resolved: candidates.find((candidate) => declared.has(candidate)) ?? null };
 }
 
+/**
+ * The size the corpus had when the resolution rulings it pins were approved.
+ * The loop below reports no errors over an empty `cases`, so a truncated corpus
+ * would read as perfect conformance on every SDK that consumes it.
+ */
+const LOCALE_RESOLUTION_V02_CASE_FLOOR = 13;
+
 export function validateLocaleResolutionV02Artifacts(artifacts = loadLocaleResolutionV02Artifacts()) {
   const errors = [];
   const { localization, cases } = artifacts.fixture;
+  if (!Array.isArray(cases) || cases.length < LOCALE_RESOLUTION_V02_CASE_FLOOR) {
+    errors.push(`locale resolution corpus holds ${Array.isArray(cases) ? cases.length : "no array"} cases, below the floor of ${LOCALE_RESOLUTION_V02_CASE_FLOOR}; a conformance loop over a shrunken corpus passes vacuously`);
+  }
+  if (Array.isArray(cases)) {
+    const names = cases.map((testCase) => testCase.name);
+    if (new Set(names).size !== names.length) errors.push("locale resolution case names must be unique");
+  }
   const declared = new Set(localization.locales);
   for (const locale of [localization.defaultLocale, localization.fallbackLocale]) {
     if (!declared.has(locale)) errors.push(`locale resolution fixture declares no catalog for ${locale}`);
@@ -118,7 +175,7 @@ export function validateLocaleResolutionV02Artifacts(artifacts = loadLocaleResol
   for (const locale of localization.locales) {
     if (!/^[a-z]{2,3}(?:-(?:[A-Z]{2}|[0-9]{3}))?$/.test(locale)) errors.push(`locale resolution fixture catalog key ${locale} is not a valid Protocol 0.2 locale tag`);
   }
-  for (const testCase of cases) {
+  for (const testCase of Array.isArray(cases) ? cases : []) {
     const actual = resolveLocaleCatalogV02(localization, testCase.requested);
     if (JSON.stringify(actual.candidates) !== JSON.stringify(testCase.expectedCandidates)) {
       errors.push(`locale resolution case ${testCase.name} expected candidates ${JSON.stringify(testCase.expectedCandidates)} but received ${JSON.stringify(actual.candidates)}`);

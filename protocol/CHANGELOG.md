@@ -4,6 +4,35 @@ All notable Mosaic protocol changes are recorded here. A contract's artifacts
 become immutable when its `status` reaches `approved`; before that, its review
 gate may still change them. Every Mosaic contract is `approved` as of v1 GA.
 
+## Corpus floors and strict localization in the references - 2026-08-05
+
+Status: housekeeping
+
+No schema, manifest, or fixture changed. An adversarial re-read of the
+fallback-audit remediation found the same defect class inside the remediation
+itself, in the tooling that is supposed to prove the rulings hold:
+
+- **Every cross-SDK corpus loop reported perfect conformance over zero cases.**
+  `validateDecisionV1Artifacts` and `validateLocaleResolutionV02Artifacts` both
+  iterate their corpora and return no errors, so a corpus that was truncated,
+  emptied, or renamed out from under the loop was indistinguishable from one
+  that passes. Both now declare a case-count floor (34 evaluator cases, 3
+  rollout vectors, 9 invalid fixtures, 13 locale-resolution cases) and require
+  unique case names, so shrinking a corpus has to be a deliberate edit rather
+  than a silent pass.
+- **`resolveLocaleCatalogV02` defaulted a malformed `localization.locales` to
+  `{}`.** A document that never passed schema validation therefore got the same
+  answer as a well-formed document requesting an undeclared locale — "no
+  candidate resolves" — and the chain's terminal guarantee that the default
+  locale always resolves was silently gone. The reference now raises a typed
+  `LocaleResolutionError` (`invalid_localization`, `no_declared_catalogs`,
+  `missing_terminal_locale`), matching the `DecisionEvaluationError` posture the
+  Placement evaluator already takes for unvalidated documents.
+- The two reference normalizers are documented as sharing one rule but are two
+  implementations in two files. A test now pins their agreement across the
+  runtime input shapes, so neither can be corrected while the other is left
+  behind and targeting and catalog lookup quietly diverge.
+
 ## Presence and unusable-value rulings, third round - 2026-08-05
 
 Status: housekeeping

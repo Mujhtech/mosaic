@@ -4,16 +4,85 @@ import test from "node:test";
 import {
   canonicalLocaleTag,
   canonicalRequestedLocaleTag,
+  LocaleResolutionError,
   localeCandidatesV02,
   loadLocaleResolutionV02Artifacts,
   resolveLocaleCatalogV02,
   validateLocaleResolutionV02Artifacts,
   validateLocaleResolutionV02JsonFormatting,
 } from "./locale-resolution-v0.2.mjs";
+import { normalizeLocale } from "./placement-decision-validation-v1.mjs";
 
 test("the shared locale-resolution corpus matches the reference resolver", () => {
   assert.deepEqual(validateLocaleResolutionV02Artifacts(), []);
   assert.deepEqual(validateLocaleResolutionV02JsonFormatting(), []);
+});
+
+test("a shrunken locale-resolution corpus fails instead of conforming over nothing", () => {
+  // Regression: the conformance loop reports no errors over an empty `cases`,
+  // so a corpus that failed to load, was truncated, or was renamed out from
+  // under the loop would read as perfect conformance on every SDK.
+  const artifacts = loadLocaleResolutionV02Artifacts();
+  for (const cases of [[], artifacts.fixture.cases.slice(0, 2), undefined]) {
+    const shrunken = { fixture: { ...structuredClone(artifacts.fixture), cases } };
+    assert.ok(
+      validateLocaleResolutionV02Artifacts(shrunken).some((error) =>
+        error.includes("below the floor"),
+      ),
+      `expected a corpus-floor error for ${JSON.stringify(cases?.length ?? null)} cases`,
+    );
+  }
+});
+
+test("a localization block that never passed validation is refused, not resolved to null", () => {
+  // Regression: `localization.locales ?? {}` reported "the document declares
+  // none of the candidates" for a malformed document -- the same answer a
+  // well-formed document with an unsupported locale gets -- and silently
+  // dropped the chain's terminal guarantee that the default locale resolves.
+  const { localization } = loadLocaleResolutionV02Artifacts().fixture;
+  const refusals = [
+    [undefined, "invalid_localization"],
+    [{ ...localization, locales: undefined }, "no_declared_catalogs"],
+    [{ ...localization, locales: [] }, "no_declared_catalogs"],
+    [{ ...localization, locales: "en" }, "no_declared_catalogs"],
+    [{ ...localization, defaultLocale: undefined }, "missing_terminal_locale"],
+    [{ ...localization, fallbackLocale: undefined }, "missing_terminal_locale"],
+  ];
+  for (const [broken, code] of refusals) {
+    for (const call of [
+      () => localeCandidatesV02(broken, "pt-BR"),
+      () => resolveLocaleCatalogV02(broken, "pt-BR"),
+    ]) {
+      assert.throws(
+        call,
+        (error) => error instanceof LocaleResolutionError && error.code === code,
+        `expected ${code} for ${JSON.stringify(broken?.locales ?? broken)}`,
+      );
+    }
+  }
+});
+
+test("both reference normalizers really do share one rule", () => {
+  // `canonicalLocaleTag` documents itself as deliberately the same
+  // normalization Placement targeting applies, but they are two
+  // implementations in two files. Nothing but this test stops one from being
+  // corrected and the other left behind, at which point targeting and catalog
+  // lookup would disagree about what "the same locale" means -- silently, since
+  // each corpus only checks its own side.
+  const inputs = [
+    "pt-BR", "pt_br", "PT-br", "PT_BR", "en", "EN", "zh-Hans-CN", "zh_hans_cn",
+    "es-419", "es_419", "en-US-u-rg-gbzzzz", "en_US@rg=gbzzzz", "en_US.UTF-8",
+    "en_US_#u-rg-gbzzzz", "en--US", "en-US-", "  en-US  ", "x-private",
+    "en-US-verylongsubtag", "", "   ", "!!", "1234", "e", "a-b-c",
+    "en-Latn-US-a-b-c-d-e-f", null, undefined, 42, {},
+  ];
+  for (const input of inputs) {
+    assert.equal(
+      canonicalLocaleTag(input),
+      normalizeLocale(input),
+      `normalizers disagree on ${JSON.stringify(input)}`,
+    );
+  }
 });
 
 test("catalog lookup canonicalizes the runtime side to the authored grammar's casing", () => {
