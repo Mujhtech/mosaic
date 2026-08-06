@@ -35,13 +35,20 @@ const environments: Environment[] = [
   { id: "env_1", mode: "development", name: "Development" } as Environment,
 ];
 
-function renderSheet(onConnect = vi.fn().mockResolvedValue(undefined)) {
+function renderSheet(
+  onConnect = vi.fn().mockResolvedValue(undefined),
+  reads: {
+    applicationsUnreadable?: boolean;
+    environmentsUnreadable?: boolean;
+  } = {}
+) {
   render(
     <ConnectAppStoreConnectSheet
-      applications={applications}
-      environments={environments}
+      applications={reads.applicationsUnreadable ? [] : applications}
+      environments={reads.environmentsUnreadable ? [] : environments}
       onConnect={onConnect}
       providerBaseHref="/orgs/org_1/projects/proj_1/catalog/providers"
+      {...reads}
     />
   );
   fireEvent.click(
@@ -131,6 +138,30 @@ describe("ConnectAppStoreConnectSheet", () => {
       )
     ).toBeInTheDocument();
     expect(onConnect).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Risk: an unread Environment or Application list arrives as an empty array,
+   * so the scope field would tell the operator to create a scope that may
+   * already exist — an instruction derived from a source Mosaic never read.
+   * Acting on it creates a duplicate Environment against a live Project.
+   */
+  it("distinguishes an unread scope list from an empty Project", () => {
+    renderSheet(vi.fn(), { environmentsUnreadable: true });
+
+    expect(
+      screen.getByText(/could not read this Project's Environments/)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Create this scope before connecting App Store Connect."
+      )
+    ).toBeNull();
+    // Applications were read and are genuinely present, so that field is
+    // unaffected: only the failed read loses its create-scope recovery.
+    expect(
+      screen.getByRole("checkbox", { name: /Example/ })
+    ).toBeInTheDocument();
   });
 
   it("clears the uploaded key after a failed attempt", async () => {

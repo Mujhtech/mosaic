@@ -122,6 +122,59 @@ describe("overview metric tile", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("reports an unmeasured window calmly, without a retry or a settings link", () => {
+    // A rate with no denominator is the normal state of a new Environment. It
+    // must not print 0% (a claim that everyone declined) and must not borrow
+    // the failure treatment (an accusation that something broke), so it is
+    // checked against both neighbours at once.
+    render(
+      <dl>
+        <OverviewMetricTile
+          kind="rate"
+          label="Conversion rate"
+          metric={metric({
+            authority: "client_observed",
+            available: false,
+            reason: "not_measured",
+            value: null,
+          })}
+          onRetry={() => {
+            /* offered by the page; the tile must decline it here */
+          }}
+          renderRecovery={recovery}
+        />
+        <OverviewMetricTile
+          kind="rate"
+          label="Yesterday's conversion rate"
+          metric={metric({ value: 0 })}
+        />
+        <OverviewMetricTile
+          label="Total customers"
+          metric={metric({
+            available: false,
+            reason: "metric_unavailable",
+            value: null,
+          })}
+          onRetry={() => {
+            /* asserted by presence, not by invocation */
+          }}
+        />
+      </dl>
+    );
+
+    expect(
+      screen.getByText(/No paywall views in this window/)
+    ).toBeInTheDocument();
+    expect(screen.getByText("Not measured")).toBeInTheDocument();
+    // Distinct from a measured zero, which still prints its number.
+    expect(screen.getByText("0.0%")).toBeInTheDocument();
+    // Distinct from a failure, which keeps its own words and its retry. Exactly
+    // one retry is on screen, and it belongs to the failing tile.
+    expect(screen.getByText("Not available")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Retry" })).toHaveLength(1);
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
   it("offers a retry, not a settings link, when the source simply could not be read", () => {
     render(
       <dl>

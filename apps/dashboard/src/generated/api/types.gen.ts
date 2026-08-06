@@ -3407,12 +3407,12 @@ export type AnalyticsJob = {
 };
 
 /**
- * A single tri-state measure. `value` is null exactly when `available` is false, and `reason` then explains why. `billing_disabled` and `analytics_collection_disabled` are configuration states the operator chose; `metric_unavailable` means the source could not be read and the failure was logged server-side.
+ * A single tri-state measure. `value` is null exactly when `available` is false, and `reason` then explains why. `billing_disabled` and `analytics_collection_disabled` are configuration states the operator chose; `not_measured` means the measure has no denominator in the window — a rate is reported this way when nobody was shown a paywall, which is normal on a new or low-traffic Environment and is not a failure; `metric_unavailable` means the source could not be read and the failure was logged server-side.
  */
 export type OverviewMetric = {
     value: number | null;
     available: boolean;
-    reason?: 'billing_disabled' | 'analytics_collection_disabled' | 'metric_unavailable';
+    reason?: 'billing_disabled' | 'analytics_collection_disabled' | 'not_measured' | 'metric_unavailable';
     /**
      * Where the number came from. `provider_validated` is derived from validated Transaction Facts, `projected` from committed projection snapshots and pointers, and `client_observed` from SDK-reported analytics events, which Mosaic cannot confirm against a provider.
      */

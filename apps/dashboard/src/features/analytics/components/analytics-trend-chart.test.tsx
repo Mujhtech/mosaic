@@ -20,6 +20,7 @@ vi.mock("@/generated/api", async (importOriginal) => ({
 
 const SCOPE = {
   environmentId: "environment_01",
+  environmentKey: "prod",
   organizationId: "org_01",
   projectId: "project_01",
 };
@@ -207,6 +208,79 @@ describe("analytics trend chart", () => {
     expect(onFiltersChange).toHaveBeenCalledWith(
       expect.objectContaining({ locale: "en-US", platform: undefined })
     );
+  });
+
+  /**
+   * Risk: the clear control acts on the dimensions this chart can clear, but was
+   * named after every dimension the server refused. A button that promises to
+   * clear a filter it leaves in place sends the reader back to the same refusal
+   * with no explanation of why nothing changed.
+   */
+  it("promises to clear only the filters it actually clears", async () => {
+    getAnalyticsSeries.mockRejectedValue(
+      new ApiError("The requested filter cannot be applied.", {
+        code: "analytics_dimension_unsupported",
+        correlationId: "request_01",
+        details: {
+          paywallId: [
+            "Not carried by the daily aggregate for purchase_starts.",
+          ],
+          platform: ["Not carried by the daily aggregate for purchase_starts."],
+        },
+        retryable: false,
+        status: 422,
+      })
+    );
+    renderChart({ ...BASE_FILTERS, platform: "ios" });
+
+    const clear = await screen.findByRole("button", { name: /^Clear the/ });
+    expect(clear).toHaveAccessibleName("Clear the platform filter");
+    // The dimension this control cannot reach is still named, as something to
+    // change elsewhere rather than something this button will do.
+    expect(
+      screen.getByText(/paywallId is not cleared here/)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * Risk: `analytics_collection_disabled` explains that collection is off and
+   * names Environment settings as the fix. The link to it is built from the
+   * Environment alias, which the analytics scope now carries; without it the
+   * recovery is described and then not offered.
+   */
+  it("links to the Environment control that turns collection back on", async () => {
+    getAnalyticsSeries.mockRejectedValue(
+      new ApiError("Collection is disabled.", {
+        code: "analytics_collection_disabled",
+        correlationId: "request_02",
+        retryable: false,
+        status: 409,
+      })
+    );
+    renderChart(BASE_FILTERS);
+
+    expect(
+      await screen.findByRole("link", { name: "Open Environment settings" })
+    ).toHaveAttribute(
+      "href",
+      "/orgs/org_01/projects/project_01/env/prod/settings/environments#analytics-collection"
+    );
+  });
+
+  /**
+   * Risk: a missing aggregate watermark was folded into the "aggregation is
+   * behind" caption, which asserts a cause the response never reported.
+   */
+  it("does not claim aggregation is behind when no watermark was reported", async () => {
+    const withoutWatermark = response(DEFAULT_SERIES);
+    withoutWatermark.data.data.freshness.latestAggregatedAt = "";
+    getAnalyticsSeries.mockResolvedValue(withoutWatermark);
+    renderChart(BASE_FILTERS);
+
+    expect(
+      await screen.findByText(/Aggregation progress was not reported/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Aggregation is behind/)).toBeNull();
   });
 
   it("explains a metric Mosaic does not compute instead of drawing zeros", async () => {

@@ -17,18 +17,31 @@ import { defaultOverviewEnvironment } from "@/features/projects/types/overview-m
  * address names another.
  */
 export function useOverviewEnvironment(projectId: string) {
-  const { items, pathEnvironment, query, select } = useActiveEnvironment();
+  const { items, pathEnvironment, pathSegment, query, select } =
+    useActiveEnvironment();
   const rememberedId = useSyncExternalStore(
     subscribeToActiveEnvironment,
     () => rememberedEnvironmentId(projectId),
     () => undefined
   );
 
+  // An address that names an Environment this Project does not have is a wrong
+  // address, not a missing one. Falling back here would measure one Environment
+  // under a heading and a URL that name another, which is the failure the
+  // precedence rule exists to prevent — so it refuses to resolve and says so.
+  const unresolvedAlias =
+    query.isSuccess && pathSegment && !pathEnvironment
+      ? pathSegment
+      : undefined;
+
   return {
     items,
     query,
     select,
-    selected:
-      pathEnvironment ?? defaultOverviewEnvironment(items, rememberedId),
+    selected: unresolvedAlias
+      ? undefined
+      : (pathEnvironment ?? defaultOverviewEnvironment(items, rememberedId)),
+    /** The address's Environment segment, when nothing in the Project matches it. */
+    unresolvedAlias,
   };
 }

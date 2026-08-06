@@ -38,6 +38,7 @@ export function OverviewPanel({
       error={overview.error}
       isPending={overview.isPending}
       onRetry={handleRetry}
+      scope={scope}
     >
       {(() => {
         if (overview.data?.metrics.length === 0) {
@@ -67,6 +68,7 @@ export function OverviewPanel({
                 error={breakdowns.error}
                 isPending={breakdowns.isPending}
                 onRetry={handleRetry2}
+                scope={scope}
               >
                 {breakdowns.data ? (
                   <BreakdownTables breakdowns={breakdowns.data} />

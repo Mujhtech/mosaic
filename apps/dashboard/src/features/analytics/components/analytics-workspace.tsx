@@ -38,6 +38,7 @@ const tabs: Array<{ surface: AnalyticsSurface; label: string }> = [
 
 export function AnalyticsWorkspace({
   environmentId,
+  environmentKey,
   filters,
   organizationId,
   projectId,
@@ -50,7 +51,7 @@ export function AnalyticsWorkspace({
   const environment = environments.data?.items.find(
     (item) => item.id === environmentId
   );
-  const scope = { environmentId, organizationId, projectId };
+  const scope = { environmentId, environmentKey, organizationId, projectId };
   // The filter row and the surfaces below it change the same search params, so
   // a chart that refuses a filter can offer to clear exactly that filter
   // without owning a second copy of the state.
@@ -77,7 +78,7 @@ export function AnalyticsWorkspace({
       environments.refetch();
     },
     permissionDescription: "Project membership is required to read analytics.",
-    scope: { environmentId, organizationId, projectId },
+    scope,
   });
 
   return (

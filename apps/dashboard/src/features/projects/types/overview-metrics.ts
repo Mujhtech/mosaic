@@ -116,23 +116,48 @@ export function formatOverviewDelta(
 
 export type OverviewRecoveryTarget = "billing-setup" | "environment-settings";
 
+/**
+ * Whether the absence is a problem at all.
+ *
+ * `not_reported` is the ordinary state of an Environment nobody has used yet:
+ * there is no number because there was nothing to count, not because anything
+ * failed. Everything else is a condition the operator either chose or must act
+ * on, so it reads as an interruption.
+ */
+export type OverviewUnavailableTone = "not_reported" | "unavailable";
+
 export interface OverviewUnavailableCopy extends ApiCodeDescription {
+  /** The short state name the tile prints where the number would be. */
+  headline: string;
   /** Where the operator resolves it, or undefined when only a retry applies. */
   recoveryTarget?: OverviewRecoveryTarget;
   retryable: boolean;
+  tone: OverviewUnavailableTone;
 }
 
 const GENERIC_UNAVAILABLE =
   "Mosaic could not read the source for this metric. The failure is recorded server-side; retry to read it again.";
 
 /**
+ * A rate with no denominator, which is a reading rather than a fault.
+ *
+ * Nobody was shown a paywall in this window, so there is no ratio to state.
+ * Printing 0% would claim every viewer declined, and offering a retry or a
+ * settings link would suggest something is broken. Neither is true on a new or
+ * low-traffic Environment, which is exactly when this appears.
+ */
+const NOT_MEASURED =
+  "No paywall views in this window, so there is no rate to measure yet. Numbers appear once the Environment sees traffic.";
+
+/**
  * Why a metric is missing, in the same words the error path uses.
  *
  * `analytics_collection_disabled` and `billing_disabled` are choices an
  * operator made, so they get the configuration explanation and a pointer to the
- * screen that reverses it. `metric_unavailable` is a read that failed, so it
- * gets a retry instead of a settings link — sending someone to settings for a
- * transient failure would be a false accusation.
+ * screen that reverses it. `not_measured` is a normal empty window and gets
+ * neither. `metric_unavailable` is a read that failed, so it gets a retry
+ * instead of a settings link — sending someone to settings for a transient
+ * failure would be a false accusation.
  */
 export function describeOverviewUnavailable(
   reason: OverviewMetric["reason"]
@@ -141,9 +166,11 @@ export function describeOverviewUnavailable(
     const copy = describeApiCode(reason);
     return {
       description: copy?.description ?? GENERIC_UNAVAILABLE,
+      headline: "Not available",
       ...(copy?.recoveryLabel ? { recoveryLabel: copy.recoveryLabel } : {}),
       recoveryTarget: "environment-settings",
       retryable: false,
+      tone: "unavailable",
     };
   }
 
@@ -151,13 +178,29 @@ export function describeOverviewUnavailable(
     const copy = describeApiCode(reason);
     return {
       description: copy?.description ?? GENERIC_UNAVAILABLE,
+      headline: "Not available",
       ...(copy?.recoveryLabel ? { recoveryLabel: copy.recoveryLabel } : {}),
       recoveryTarget: "billing-setup",
       retryable: false,
+      tone: "unavailable",
     };
   }
 
-  return { description: GENERIC_UNAVAILABLE, retryable: true };
+  if (reason === "not_measured") {
+    return {
+      description: NOT_MEASURED,
+      headline: "Not measured",
+      retryable: false,
+      tone: "not_reported",
+    };
+  }
+
+  return {
+    description: GENERIC_UNAVAILABLE,
+    headline: "Not available",
+    retryable: true,
+    tone: "unavailable",
+  };
 }
 
 const utcDayFormat = new Intl.DateTimeFormat(undefined, {

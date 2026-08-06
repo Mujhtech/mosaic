@@ -31,6 +31,7 @@ export function FunnelPanel({
       error={query.error}
       isPending={query.isPending}
       onRetry={handleRetry}
+      scope={scope}
     >
       {(() => {
         if (query.data?.steps.length === 0) {

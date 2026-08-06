@@ -1,11 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { restAnalyticsAdapter } from "@/features/analytics/api/rest-analytics-adapter";
 import { AnalyticsCollectionPanel } from "@/features/analytics/components/analytics-collection-panel";
-import { useAnalyticsRole } from "@/features/analytics/hooks/use-analytics-role";
+import { useAnalyticsRoleState } from "@/features/analytics/hooks/use-analytics-role";
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
-import { environmentForAlias } from "@/features/environments/types/environment-alias";
+import {
+  environmentAlias,
+  environmentForAlias,
+} from "@/features/environments/types/environment-alias";
 import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
 import {
   WorkflowPanel,
@@ -34,7 +37,7 @@ export function EnvironmentsPage({
     enabled: scopeReady,
   });
   const items = environments.data?.items ?? [];
-  const role = useAnalyticsRole(organizationId);
+  const roleState = useAnalyticsRoleState(organizationId);
   // Analytics collection is Environment-scoped, so the panel describes the
   // Environment the address names rather than the first one in the list.
   const routedEnvironment = environmentForAlias(items, environmentKey);
@@ -96,9 +99,11 @@ export function EnvironmentsPage({
           <AnalyticsCollectionPanel
             adapter={restAnalyticsAdapter}
             environmentName={routedEnvironment.name}
-            role={role}
+            role={roleState.role}
+            roleUnknown={roleState.unknown}
             scope={{
               environmentId: routedEnvironment.id,
+              environmentKey: environmentAlias(routedEnvironment),
               organizationId,
               projectId,
             }}

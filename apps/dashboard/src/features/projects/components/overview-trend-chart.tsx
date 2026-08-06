@@ -33,8 +33,37 @@ interface UnavailableSeries {
   reason: OverviewSeries["reason"];
 }
 
+/**
+ * The unavailable series that share one reason, so each distinct reason is
+ * stated once and none is dropped. Reporting only the first series' reason
+ * would attribute every gap to whichever measure happened to sort first.
+ */
+interface UnavailableGroup {
+  copy: ReturnType<typeof describeOverviewUnavailable>;
+  labels: string[];
+}
+
+function groupUnavailable(entries: UnavailableSeries[]): UnavailableGroup[] {
+  const groups = new Map<string, UnavailableGroup>();
+  for (const entry of entries) {
+    const key = entry.reason ?? "unreported";
+    const group = groups.get(key);
+    if (group) {
+      group.labels.push(entry.label);
+      continue;
+    }
+    groups.set(key, {
+      copy: describeOverviewUnavailable(entry.reason),
+      labels: [entry.label],
+    });
+  }
+  return [...groups.values()];
+}
+
 export interface OverviewTrendChartProps {
   environmentId?: string;
+  /** The Environment as an address names it, which a recovery link needs. */
+  environmentKey?: string;
   organizationId: string;
   projectId: string;
   renderRecovery?: (target: OverviewRecoveryTarget, label: string) => ReactNode;
@@ -50,6 +79,7 @@ export interface OverviewTrendChartProps {
  */
 export function OverviewTrendChart({
   environmentId,
+  environmentKey,
   organizationId,
   projectId,
   renderRecovery,
@@ -71,6 +101,7 @@ export function OverviewTrendChart({
   const failure = series.error
     ? describeApiError(series.error, {
         environmentId,
+        ...(environmentKey ? { environmentKey } : {}),
         organizationId,
         projectId,
       })
@@ -193,16 +224,25 @@ function TrendBody({
   }
 
   if (resolved.length === 0) {
-    const [first] = unavailable;
-    const copy = describeOverviewUnavailable(first?.reason);
-    const recovery =
-      copy.recoveryTarget && copy.recoveryLabel && renderRecovery
-        ? renderRecovery(copy.recoveryTarget, copy.recoveryLabel)
-        : null;
+    const groups = groupUnavailable(unavailable);
+    const single = groups.length <= 1;
+    const copy = groups[0]?.copy ?? describeOverviewUnavailable(undefined);
+    const recoveries = groups.flatMap((group) =>
+      group.copy.recoveryTarget && group.copy.recoveryLabel && renderRecovery
+        ? [
+            <span key={group.copy.recoveryTarget}>
+              {renderRecovery(
+                group.copy.recoveryTarget,
+                group.copy.recoveryLabel
+              )}
+            </span>,
+          ]
+        : []
+    );
     return (
       <TrendMessage
         action={
-          copy.retryable ? (
+          groups.some((group) => group.copy.retryable) ? (
             <Button
               className="h-7 px-2 text-xs"
               onClick={onRetry}
@@ -212,10 +252,27 @@ function TrendBody({
               Retry
             </Button>
           ) : (
-            recovery
+            <span className="flex flex-wrap items-center gap-3">
+              {recoveries}
+            </span>
           )
         }
-        description={copy.description}
+        description={
+          single ? (
+            copy.description
+          ) : (
+            // Several measures can be missing for different reasons at once;
+            // showing only the first would misattribute the others.
+            <ul className="space-y-1">
+              {groups.map((group) => (
+                <li key={group.labels.join(",")}>
+                  <strong>{group.labels.join(", ")}:</strong>{" "}
+                  {group.copy.description}
+                </li>
+              ))}
+            </ul>
+          )
+        }
         title="Not available"
       />
     );
@@ -232,12 +289,15 @@ function TrendBody({
         tableCaption={`${view.label} by UTC day`}
       />
       {unavailable.length > 0 ? (
-        <p className="text-[11px] text-muted-foreground leading-4">
-          {unavailable.map((entry) => entry.label).join(", ")} could not be read
-          for this window, so {unavailable.length > 1 ? "they are" : "it is"}{" "}
-          not drawn.{" "}
-          {describeOverviewUnavailable(unavailable[0]?.reason).description}
-        </p>
+        <div className="space-y-1 text-[11px] text-muted-foreground leading-4">
+          {groupUnavailable(unavailable).map((group) => (
+            <p key={group.labels.join(",")}>
+              {group.labels.join(", ")} could not be read for this window, so{" "}
+              {group.labels.length > 1 ? "they are" : "it is"} not drawn.{" "}
+              {group.copy.description}
+            </p>
+          ))}
+        </div>
       ) : null}
     </>
   );

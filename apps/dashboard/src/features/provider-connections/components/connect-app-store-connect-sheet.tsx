@@ -29,7 +29,12 @@ import {
   AppStoreConnectPrivateKeyField,
   AppStoreConnectTextField,
 } from "@/features/provider-connections/components/app-store-connect-credential-fields";
-import { ConnectionScopeField } from "@/features/provider-connections/components/connection-scope-field";
+import {
+  ConnectionScopeField,
+  type ConnectionScopeReads,
+  UNREADABLE_APPLICATION_SCOPES,
+  UNREADABLE_ENVIRONMENT_SCOPES,
+} from "@/features/provider-connections/components/connection-scope-field";
 import { ProviderConnectionCreatedButTestFailed } from "@/features/provider-connections/mutations/provider-connection-mutations";
 import {
   buildAppStoreConnectCredential,
@@ -51,7 +56,7 @@ const CONNECTION_MODE_OPTIONS = [
   { label: "Production", value: "production" },
 ];
 
-interface ConnectAppStoreConnectSheetProps {
+interface ConnectAppStoreConnectSheetProps extends ConnectionScopeReads {
   applications: readonly Application[];
   environments: readonly Environment[];
   onConnect: (input: CreateAppStoreConnectConnectionInput) => Promise<void>;
@@ -72,8 +77,11 @@ interface ConnectAppStoreConnectSheetProps {
  */
 export function ConnectAppStoreConnectSheet({
   applications,
+  applicationsUnreadable,
   environments,
+  environmentsUnreadable,
   onConnect,
+  onRetryScopes,
   providerBaseHref,
 }: ConnectAppStoreConnectSheetProps) {
   const [open, setOpen] = useState(false);
@@ -356,7 +364,13 @@ export function ConnectAppStoreConnectSheet({
                     }))}
                   label="Environment scopes"
                   onChange={field.handleChange}
+                  onRetry={onRetryScopes}
                   selected={field.state.value}
+                  unreadableDescription={
+                    environmentsUnreadable
+                      ? UNREADABLE_ENVIRONMENT_SCOPES
+                      : undefined
+                  }
                 />
               )}
             </form.Field>
@@ -385,7 +399,13 @@ export function ConnectAppStoreConnectSheet({
                   }))}
                   label="Application scopes"
                   onChange={field.handleChange}
+                  onRetry={onRetryScopes}
                   selected={field.state.value}
+                  unreadableDescription={
+                    applicationsUnreadable
+                      ? UNREADABLE_APPLICATION_SCOPES
+                      : undefined
+                  }
                 />
               )}
             </form.Field>

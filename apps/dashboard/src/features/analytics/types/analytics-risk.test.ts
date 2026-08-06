@@ -9,6 +9,7 @@ const scope: AnalyticsScope = {
   organizationId: "org_01",
   projectId: "project_01",
   environmentId: "environment_01",
+  environmentKey: "prod",
 };
 
 describe("analytics URL and cache scope", () => {

@@ -17,7 +17,7 @@ import type { OverviewRecoveryTarget } from "@/features/projects/types/overview-
 import { describeOverviewWindow } from "@/features/projects/types/overview-metrics";
 import { CLIENT_OBSERVED_CAPTION } from "@/features/projects/types/overview-series";
 import type { Environment, ProjectOverviewMetrics } from "@/generated/api";
-import { describeApiError } from "@/lib/api/errors";
+import { type ApiErrorDetailEntry, describeApiError } from "@/lib/api/errors";
 import { ANALYTICS_COLLECTION_ANCHOR } from "@/lib/routing/workspace-hrefs";
 import { workspaceScopeParams } from "@/lib/routing/workspace-params";
 
@@ -36,6 +36,81 @@ interface ProjectOverviewMetricsSectionProps {
   projectId: string;
 }
 
+interface MetricsAlertProps {
+  correlationId?: string;
+  description: string;
+  details?: ApiErrorDetailEntry[];
+  onRetry?: () => void;
+  retryLabel?: string;
+}
+
+/**
+ * Why the Environment these numbers would describe could not be established.
+ *
+ * Both cases end the same way — no Environment, therefore no request — and both
+ * must be stated. A failed Environment list is a read to retry; an address that
+ * names an Environment the Project does not have is a wrong address, and
+ * retrying it would just fail the same way.
+ */
+function describeScopeFailure({
+  error,
+  onRetry,
+  organizationId,
+  projectId,
+  unresolvedAlias,
+}: {
+  error: unknown;
+  onRetry: () => void;
+  organizationId: string;
+  projectId: string;
+  unresolvedAlias?: string;
+}): MetricsAlertProps | null {
+  if (error) {
+    const described = describeApiError(error, { organizationId, projectId });
+    return {
+      ...(described.correlationId
+        ? { correlationId: described.correlationId }
+        : {}),
+      description: `${described.description} Mosaic could not read this Project's Environments, so it has no Environment to measure.`,
+      ...(described.details ? { details: described.details } : {}),
+      onRetry,
+      retryLabel: "Retry loading Environments",
+    };
+  }
+
+  if (unresolvedAlias) {
+    return {
+      description: `This address names the Environment "${unresolvedAlias}", which this Project does not have. Choose an Environment to measure.`,
+    };
+  }
+
+  return null;
+}
+
+function MetricsAlert({
+  correlationId,
+  description,
+  details,
+  onRetry,
+  retryLabel,
+}: MetricsAlertProps) {
+  return (
+    <div
+      className="space-y-2 rounded-lg border border-destructive/25 bg-destructive/5 p-4"
+      role="alert"
+    >
+      <p className="text-destructive text-sm">{description}</p>
+      <ApiErrorDetails details={details} />
+      {onRetry && retryLabel ? (
+        <Button onClick={onRetry} size="sm" variant="outline">
+          {retryLabel}
+        </Button>
+      ) : null}
+      {correlationId ? <RequestIdCopy requestId={correlationId} /> : null}
+    </div>
+  );
+}
+
 /**
  * Today at a glance for one Environment.
  *
@@ -49,20 +124,35 @@ export function ProjectOverviewMetricsSection({
 }: ProjectOverviewMetricsSectionProps) {
   const environment = useOverviewEnvironment(projectId);
   const environmentId = environment.selected?.id;
+  // The recovery link addresses the Environment the way a route does.
+  const environmentKey = environment.selected
+    ? environmentAlias(environment.selected)
+    : undefined;
   const metrics = useQuery({
     ...overviewMetricsQueryOptions(projectId, environmentId ?? ""),
     enabled: Boolean(environmentId),
   });
 
   const { data } = metrics;
-  const isPending = metrics.isPending || !environmentId;
+  // Without an Environment there is nothing to ask for, so the metrics query is
+  // never enabled and never leaves `isPending`. That is a terminal state, not a
+  // slow one: folding it into the loading flag renders skeletons forever with
+  // no message and no retry, which is exactly the silent failure the tri-state
+  // tiles exist to prevent.
+  const scopeFailure = describeScopeFailure({
+    error: environment.query.error,
+    onRetry: () => {
+      environment.query.refetch();
+    },
+    organizationId,
+    projectId,
+    unresolvedAlias: environment.unresolvedAlias,
+  });
+  const isPending = !scopeFailure && (metrics.isPending || !environmentId);
   const failure = metrics.error
     ? describeApiError(metrics.error, {
         environmentId,
-        // The recovery link addresses the Environment the way a route does.
-        ...(environment.selected
-          ? { environmentKey: environmentAlias(environment.selected) }
-          : {}),
+        ...(environmentKey ? { environmentKey } : {}),
         organizationId,
         projectId,
       })
@@ -92,6 +182,23 @@ export function ProjectOverviewMetricsSection({
     metrics.refetch();
   };
 
+  // The scope failure outranks the metrics failure: without a resolved
+  // Environment the metrics request was never made, so reporting it would
+  // describe a read that never happened.
+  const alert =
+    scopeFailure ??
+    (failure
+      ? {
+          ...(failure.correlationId
+            ? { correlationId: failure.correlationId }
+            : {}),
+          description: failure.description,
+          ...(failure.details ? { details: failure.details } : {}),
+          onRetry: retry,
+          retryLabel: "Retry loading metrics",
+        }
+      : null);
+
   return (
     <section aria-labelledby="overview-metrics-title" className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
@@ -116,20 +223,8 @@ export function ProjectOverviewMetricsSection({
         <FreshnessBanner freshness={freshness} />
       ) : null}
 
-      {failure ? (
-        <div
-          className="space-y-2 rounded-lg border border-destructive/25 bg-destructive/5 p-4"
-          role="alert"
-        >
-          <p className="text-destructive text-sm">{failure.description}</p>
-          <ApiErrorDetails details={failure.details} />
-          <Button onClick={retry} size="sm" variant="outline">
-            Retry loading metrics
-          </Button>
-          {failure.correlationId ? (
-            <RequestIdCopy requestId={failure.correlationId} />
-          ) : null}
-        </div>
+      {alert ? (
+        <MetricsAlert {...alert} />
       ) : (
         <>
           <TodayTiles
@@ -140,6 +235,7 @@ export function ProjectOverviewMetricsSection({
           />
           <OverviewTrendChart
             environmentId={environmentId}
+            {...(environmentKey ? { environmentKey } : {})}
             organizationId={organizationId}
             projectId={projectId}
             renderRecovery={renderRecovery}

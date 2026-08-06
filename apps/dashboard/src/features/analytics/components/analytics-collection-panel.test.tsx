@@ -11,6 +11,7 @@ const OWNER: AnalyticsRole = "owner";
 
 const scope = {
   environmentId: "environment_01",
+  environmentKey: "prod",
   organizationId: "org_01",
   projectId: "project_01",
 };

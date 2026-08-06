@@ -52,6 +52,8 @@ interface AnalyticsCollectionPanelProps {
   /** Named so the panel states which Environment the setting applies to. */
   environmentName?: string;
   role?: AnalyticsRole;
+  /** True when membership could not be read, so the role is not established. */
+  roleUnknown?: boolean;
   scope: AnalyticsScope;
 }
 
@@ -68,6 +70,7 @@ export function AnalyticsCollectionPanel({
   adapter,
   environmentName,
   role,
+  roleUnknown,
   scope,
 }: AnalyticsCollectionPanelProps) {
   const settings = useQuery(settingsQueryOptions(scope, adapter));
@@ -88,6 +91,7 @@ export function AnalyticsCollectionPanel({
           isPending={settings.isPending}
           onRetry={handleRetry}
           role={role}
+          roleUnknown={roleUnknown}
           scope={scope}
         />
       </WorkflowPanel>
@@ -102,6 +106,7 @@ function CollectionBody({
   isPending,
   onRetry,
   role,
+  roleUnknown,
   scope,
 }: {
   adapter: AnalyticsAdapter;
@@ -110,6 +115,7 @@ function CollectionBody({
   isPending: boolean;
   onRetry: () => void;
   role?: AnalyticsRole;
+  roleUnknown?: boolean;
   scope: AnalyticsScope;
 }) {
   if (isPending) {
@@ -156,6 +162,7 @@ function CollectionBody({
     <CollectionControls
       adapter={adapter}
       role={role}
+      roleUnknown={roleUnknown}
       scope={scope}
       settings={data}
     />
@@ -165,11 +172,13 @@ function CollectionBody({
 function CollectionControls({
   adapter,
   role,
+  roleUnknown,
   scope,
   settings,
 }: {
   adapter: AnalyticsAdapter;
   role?: AnalyticsRole;
+  roleUnknown?: boolean;
   scope: AnalyticsScope;
   settings: CollectionSettings;
 }) {
@@ -292,8 +301,13 @@ function CollectionControls({
       </dl>
 
       {canManage ? null : (
+        // Fail-closed either way, but only one of these is a statement about
+        // this actor's permission. An unread membership cannot support that
+        // statement, so it says what actually happened instead.
         <p className="text-muted-foreground text-sm">
-          Owner or admin permission is required to change analytics collection.
+          {roleUnknown
+            ? "Mosaic could not read your Organization role, so this control stays disabled. Reload to try again."
+            : "Owner or admin permission is required to change analytics collection."}
         </p>
       )}
 

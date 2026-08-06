@@ -27,6 +27,7 @@ export function PaywallComparison({
       error={query.error}
       isPending={query.isPending}
       onRetry={handleRetry}
+      scope={scope}
     >
       {(() => {
         if (query.data?.length === 0) {

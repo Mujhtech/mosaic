@@ -66,6 +66,13 @@ export function ProviderConnectionsPage({
   );
   const applicationItems = applications.data?.items ?? [];
   const environmentItems = environments.data?.items ?? [];
+  // An unread scope list is not an empty Project. The sheets are told which of
+  // the two they are looking at so they never instruct an operator to create a
+  // scope that may already exist.
+  const retryScopes = () => {
+    applications.refetch();
+    environments.refetch();
+  };
   // Purchase setup acts only on the Environment the address names, so it reads the
   // path Environment the workspace switcher moves rather than a page-local choice.
   const selectedEnvironment = pathEnvironment;
@@ -193,18 +200,24 @@ export function ProviderConnectionsPage({
               <div className="flex flex-wrap items-center gap-2">
                 <ConnectRevenueCatSheet
                   applications={applicationItems}
+                  applicationsUnreadable={applications.isError}
                   environments={environmentItems}
+                  environmentsUnreadable={environments.isError}
                   onConnect={async (input) => {
                     await connectRevenueCat.mutateAsync(input);
                   }}
+                  onRetryScopes={retryScopes}
                   providerBaseHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
                 />
                 <ConnectAppStoreConnectSheet
                   applications={applicationItems}
+                  applicationsUnreadable={applications.isError}
                   environments={environmentItems}
+                  environmentsUnreadable={environments.isError}
                   onConnect={async (input) => {
                     await connectAppStoreConnect.mutateAsync(input);
                   }}
+                  onRetryScopes={retryScopes}
                   providerBaseHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
                 />
               </div>

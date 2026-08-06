@@ -87,6 +87,7 @@ function CollectionSettingsPanel({
         error={settings.error}
         isPending={settings.isPending}
         onRetry={handleRetry}
+        scope={scope}
       >
         {settings.data ? (
           <form

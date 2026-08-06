@@ -199,11 +199,19 @@ const FILTER_LABELS: Record<string, string> = {
   platform: "Platform",
 };
 
+/**
+ * One refused filter: the key the chart can clear, paired with the words the
+ * filter row uses for it. They are kept together so a caller can never name one
+ * set of filters while acting on another.
+ */
+export interface RefusedDimension {
+  dimension: string;
+  label: string;
+}
+
 export interface DimensionRefusal {
-  /** The refused filter keys, so exactly those can be offered for clearing. */
-  dimensions: string[];
-  /** The same filters, in the words the filter row uses. */
-  filters: string[];
+  /** The refused filters, so exactly those can be offered for clearing. */
+  dimensions: RefusedDimension[];
   /** The metrics the server named, in the words the chart uses. */
   metrics: string[];
 }
@@ -231,13 +239,14 @@ export function describeDimensionRefusal(
     return null;
   }
   const fields = isRecord(error.details) ? error.details : {};
-  const dimensions: string[] = [];
-  const filters: string[] = [];
+  const dimensions: RefusedDimension[] = [];
   const metrics = new Set<string>();
 
   for (const [dimension, messages] of Object.entries(fields)) {
-    dimensions.push(dimension);
-    filters.push(FILTER_LABELS[dimension] ?? dimension);
+    dimensions.push({
+      dimension,
+      label: FILTER_LABELS[dimension] ?? dimension,
+    });
     const named = Array.isArray(messages) ? messages : [messages];
     for (const message of named) {
       if (typeof message !== "string") {
@@ -253,9 +262,7 @@ export function describeDimensionRefusal(
     }
   }
 
-  return filters.length > 0
-    ? { dimensions, filters, metrics: [...metrics] }
-    : null;
+  return dimensions.length > 0 ? { dimensions, metrics: [...metrics] } : null;
 }
 
 /** The dimension filters a chart may offer to clear, and nothing else. */

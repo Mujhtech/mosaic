@@ -11,10 +11,15 @@ import {
 } from "@/components/charts/trend-chart";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { AnalyticsMetricSeries } from "@/generated/api";
 import { describeApiError } from "@/lib/api/errors";
 import type { AnalyticsAdapter } from "../api/analytics-adapter";
 import { seriesQueryOptions } from "../queries/analytics-queries";
-import type { AnalyticsFilters, AnalyticsScope } from "../types/analytics";
+import type {
+  AnalyticsFilters,
+  AnalyticsScope,
+  Freshness,
+} from "../types/analytics";
 import {
   ANALYTICS_TREND_RANGES,
   ANALYTICS_TREND_VIEWS,
@@ -32,6 +37,47 @@ import { FreshnessBanner } from "./analytics-states";
 const PARTIAL_CAPTION = "Today is still accruing.";
 const DELAYED_CAPTION =
   "Aggregation is behind, so the most recent days can read low until it catches up.";
+/**
+ * A missing aggregate watermark is not evidence of a delay. Saying aggregation
+ * is behind would manufacture a cause from an absent fact, so the caption
+ * reports exactly what happened: the progress marker was not reported.
+ */
+const FRESHNESS_UNAVAILABLE_CAPTION =
+  "Aggregation progress was not reported, so Mosaic cannot say whether the most recent days are complete.";
+
+function freshnessCaptions(state: Freshness["aggregateState"] | undefined) {
+  if (state === "delayed") {
+    return [DELAYED_CAPTION];
+  }
+  if (state === "unavailable") {
+    return [FRESHNESS_UNAVAILABLE_CAPTION];
+  }
+  // "current", or no freshness record at all, which the banner already covers.
+  return [];
+}
+
+/**
+ * The unavailable series that share one reason. Distinct reasons are stated
+ * separately: reporting only the first would attribute every gap to it.
+ */
+function groupUnavailable(
+  entries: Array<{ label: string; reason?: AnalyticsMetricSeries["reason"] }>
+) {
+  const groups = new Map<string, { description: string; labels: string[] }>();
+  for (const entry of entries) {
+    const key = entry.reason ?? "unreported";
+    const group = groups.get(key);
+    if (group) {
+      group.labels.push(entry.label);
+      continue;
+    }
+    groups.set(key, {
+      description: describeSeriesUnavailable(entry.reason),
+      labels: [entry.label],
+    });
+  }
+  return [...groups.values()];
+}
 
 interface TrendScope {
   adapter: AnalyticsAdapter;
@@ -243,8 +289,9 @@ function TrendBody({
   const captions = [
     ...view.captions,
     ...(hasPartial ? [PARTIAL_CAPTION] : []),
-    ...(freshness?.aggregateState === "current" ? [] : [DELAYED_CAPTION]),
+    ...freshnessCaptions(freshness?.aggregateState),
   ];
+  const unavailableGroups = groupUnavailable(unavailable);
 
   return (
     <div className="space-y-3">
@@ -255,7 +302,21 @@ function TrendBody({
 
       {resolved.length === 0 ? (
         <TrendMessage
-          description={describeSeriesUnavailable(unavailable[0]?.reason)}
+          description={
+            unavailableGroups.length > 1 ? (
+              <ul className="space-y-1">
+                {unavailableGroups.map((group) => (
+                  <li key={group.labels.join(",")}>
+                    <strong>{group.labels.join(", ")}:</strong>{" "}
+                    {group.description}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              (unavailableGroups[0]?.description ??
+              describeSeriesUnavailable(undefined))
+            )
+          }
           plotHeight={plotHeight}
           title="Not available"
         />
@@ -271,11 +332,15 @@ function TrendBody({
         />
       )}
 
-      {resolved.length > 0 && unavailable.length > 0 ? (
-        <p className="text-[11px] text-muted-foreground leading-4">
-          {unavailable.map((entry) => entry.label).join(", ")} is not drawn.{" "}
-          {describeSeriesUnavailable(unavailable[0]?.reason)}
-        </p>
+      {resolved.length > 0 && unavailableGroups.length > 0 ? (
+        <div className="space-y-1 text-[11px] text-muted-foreground leading-4">
+          {unavailableGroups.map((group) => (
+            <p key={group.labels.join(",")}>
+              {group.labels.join(", ")} {group.labels.length > 1 ? "are" : "is"}{" "}
+              not drawn. {group.description}
+            </p>
+          ))}
+        </div>
       ) : null}
 
       {captions.length > 0 ? (
@@ -313,25 +378,40 @@ function TrendFailure({
 }) {
   const refusal = describeDimensionRefusal(error);
   if (refusal) {
-    const named = refusal.dimensions.filter(
+    const clearable = refusal.dimensions.filter(
       (
-        dimension
-      ): dimension is (typeof CLEARABLE_ANALYTICS_DIMENSIONS)[number] =>
+        entry
+      ): entry is {
+        dimension: (typeof CLEARABLE_ANALYTICS_DIMENSIONS)[number];
+        label: string;
+      } =>
         CLEARABLE_ANALYTICS_DIMENSIONS.some(
-          (clearable) => clearable === dimension
+          (candidate) => candidate === entry.dimension
         )
     );
     const clear =
-      onFiltersChange && named.length > 0
+      onFiltersChange && clearable.length > 0
         ? () => {
             const next = { ...filters };
-            for (const dimension of named) {
-              next[dimension] = undefined;
+            for (const entry of clearable) {
+              next[entry.dimension] = undefined;
             }
             onFiltersChange(next);
           }
         : undefined;
-    const filterList = refusal.filters.join(" and ");
+    const filterList = refusal.dimensions
+      .map((entry) => entry.label)
+      .join(" and ");
+    // The button is named after what it actually clears, never after the full
+    // refusal: promising to clear a dimension this control cannot reach would
+    // leave the reader looking at the same refusal after pressing it.
+    const clearableList = clearable.map((entry) => entry.label).join(" and ");
+    const unclearable = refusal.dimensions.filter(
+      (entry) =>
+        !CLEARABLE_ANALYTICS_DIMENSIONS.some(
+          (candidate) => candidate === entry.dimension
+        )
+    );
     return (
       <TrendMessage
         action={
@@ -342,7 +422,7 @@ function TrendFailure({
               size="sm"
               variant="outline"
             >
-              Clear the {filterList.toLowerCase()} filter
+              Clear the {clearableList.toLowerCase()} filter
             </Button>
           ) : undefined
         }
@@ -353,6 +433,15 @@ function TrendFailure({
             presentation that produced it, and the daily aggregate that holds
             that correlation is written without those dimensions. Clear the
             filter to chart it, or choose a measure counted per event.
+            {unclearable.length > 0 ? (
+              <>
+                {" "}
+                {unclearable.map((entry) => entry.label).join(" and ")}{" "}
+                {unclearable.length > 1 ? "are" : "is"} not cleared here; change{" "}
+                {unclearable.length > 1 ? "them" : "it"} in the filter row
+                above.
+              </>
+            ) : null}
           </>
         }
         plotHeight={plotHeight}
@@ -361,7 +450,27 @@ function TrendFailure({
     );
   }
 
+  // The scope carries the Environment alias as well as its id, which is what a
+  // coded recovery link is built from. Describing the fix and then offering no
+  // way to reach it is the failure this passes the whole scope to avoid.
   const failure = describeApiError(error, scope);
+  if (!failure.retryable && failure.recovery?.href) {
+    return (
+      <TrendMessage
+        action={
+          <a
+            className="font-semibold text-primary text-xs underline underline-offset-2"
+            href={failure.recovery.href}
+          >
+            {failure.recovery.label}
+          </a>
+        }
+        description={failure.description}
+        plotHeight={plotHeight}
+        title="Not available"
+      />
+    );
+  }
   return (
     <TrendMessage
       action={

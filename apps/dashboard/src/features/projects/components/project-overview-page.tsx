@@ -122,6 +122,62 @@ function applicationsMeta(applications: {
   );
 }
 
+/**
+ * The Environment names on the Environments card.
+ *
+ * A failed read says so, exactly as the Applications card does. Rendering no
+ * badges would be indistinguishable from a Project with no Environments, which
+ * is a state Mosaic does not allow and would therefore be read as "fine".
+ */
+function environmentsMeta(environments: {
+  isPending: boolean;
+  data?: { items: readonly { id: string; name: string }[] };
+}): ReactNode {
+  if (environments.isPending) {
+    return <Skeleton className="h-5 w-32" />;
+  }
+  const items = environments.data?.items;
+  if (!items) {
+    return <ScopeBadge>Names unavailable</ScopeBadge>;
+  }
+  if (items.length === 0) {
+    return <ScopeBadge>None reported</ScopeBadge>;
+  }
+  return items
+    .slice(0, 3)
+    .map((environment) => (
+      <ScopeBadge key={environment.id}>{environment.name}</ScopeBadge>
+    ));
+}
+
+/**
+ * The Environment the Monetization card will open into.
+ *
+ * A failed Environments read must not delete the card. Hiding it would remove a
+ * navigation target and read as "this Project has no Monetization", which is a
+ * stronger claim than "Mosaic could not name the Environment". The destination
+ * resolves from the address, so it stays reachable either way; only the label
+ * is withheld.
+ */
+function monetizationMeta(
+  environments: {
+    isPending: boolean;
+    data?: { items: readonly { name: string }[] };
+  },
+  environment?: { name: string }
+): ReactNode {
+  if (environments.isPending) {
+    return <Skeleton className="h-5 w-24" />;
+  }
+  if (environment) {
+    return <ScopeBadge>{environment.name}</ScopeBadge>;
+  }
+  if (!environments.data?.items) {
+    return <ScopeBadge>Environment unavailable</ScopeBadge>;
+  }
+  return <ScopeBadge>None reported</ScopeBadge>;
+}
+
 export function ProjectOverviewPage({
   organizationId,
   projectId,
@@ -240,15 +296,14 @@ export function ProjectOverviewPage({
             title="Applications"
             to={OVERVIEW_ROUTES.apps}
           />
-          {monetizationEnvironment ? (
-            <OverviewCard
-              icon={StorefrontIcon}
-              index={1}
-              meta={<ScopeBadge>{monetizationEnvironment.name}</ScopeBadge>}
-              title="Monetization"
-              to={OVERVIEW_ROUTES.monetization}
-            />
-          ) : null}
+          <OverviewCard
+            icon={StorefrontIcon}
+            index={1}
+            meta={monetizationMeta(environments, monetizationEnvironment)}
+            title="Monetization"
+            to={OVERVIEW_ROUTES.monetization}
+          />
+
           <OverviewCard
             icon={PackageIcon}
             index={2}
@@ -264,19 +319,7 @@ export function ProjectOverviewPage({
           <OverviewCard
             icon={StackIcon}
             index={4}
-            meta={
-              environments.isPending ? (
-                <Skeleton className="h-5 w-32" />
-              ) : (
-                environmentItems
-                  ?.slice(0, 3)
-                  .map((environment) => (
-                    <ScopeBadge key={environment.id}>
-                      {environment.name}
-                    </ScopeBadge>
-                  ))
-              )
-            }
+            meta={environmentsMeta(environments)}
             title="Environments"
             to={OVERVIEW_ROUTES.environments}
           />
@@ -302,16 +345,17 @@ export function ProjectOverviewPage({
               Drafts, bind Placements, review publish readiness, and restore
               immutable Releases.
             </p>
-            {monetizationEnvironment ? (
-              <Link
-                className={buttonVariants({ variant: "outline" })}
-                params={(prev) => ({ ...prev, ...workspaceScopeParams(prev) })}
-                to={OVERVIEW_ROUTES.monetization}
-              >
-                Open Monetization
-                <ArrowUpRightIcon aria-hidden className="size-4" />
-              </Link>
-            ) : null}
+            {/* The address, not the Environments read, resolves this route, so
+                an unreadable Environment list withholds a name — never the way
+                out of this page. */}
+            <Link
+              className={buttonVariants({ variant: "outline" })}
+              params={(prev) => ({ ...prev, ...workspaceScopeParams(prev) })}
+              to={OVERVIEW_ROUTES.monetization}
+            >
+              Open Monetization
+              <ArrowUpRightIcon aria-hidden className="size-4" />
+            </Link>
           </div>
         </WorkflowPanel>
       </HostedResourceBoundary>

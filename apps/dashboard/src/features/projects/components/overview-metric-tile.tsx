@@ -159,9 +159,22 @@ function OverviewMetricUnavailable({
       ? renderRecovery(copy.recoveryTarget, copy.recoveryLabel)
       : null;
 
+  // A window that measured nothing is not a fault, so it does not borrow the
+  // interrupted look: no emphasis, no retry, no settings link. It still says so
+  // in words rather than printing a number, because "0%" would be a claim.
+  const isNotReported = copy.tone === "not_reported";
+
   return (
     <>
-      <p className="font-medium text-muted-foreground text-sm">Not available</p>
+      <p
+        className={
+          isNotReported
+            ? "font-normal text-lg text-muted-foreground"
+            : "font-medium text-foreground text-sm"
+        }
+      >
+        {copy.headline}
+      </p>
       <p className="text-[11px] text-muted-foreground leading-4">
         {copy.description}
       </p>

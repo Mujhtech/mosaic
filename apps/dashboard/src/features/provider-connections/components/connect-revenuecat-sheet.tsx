@@ -25,7 +25,12 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { ConnectionScopeField } from "@/features/provider-connections/components/connection-scope-field";
+import {
+  ConnectionScopeField,
+  type ConnectionScopeReads,
+  UNREADABLE_APPLICATION_SCOPES,
+  UNREADABLE_ENVIRONMENT_SCOPES,
+} from "@/features/provider-connections/components/connection-scope-field";
 import { ProviderConnectionCreatedButTestFailed } from "@/features/provider-connections/mutations/provider-connection-mutations";
 import {
   type CreateRevenueCatConnectionInput,
@@ -36,7 +41,7 @@ import type { Application, Environment } from "@/generated/api";
 
 const PROVIDERS_SUFFIX = /\/catalog\/providers$/;
 
-interface ConnectRevenueCatSheetProps {
+interface ConnectRevenueCatSheetProps extends ConnectionScopeReads {
   applications: readonly Application[];
   environments: readonly Environment[];
   onConnect: (input: CreateRevenueCatConnectionInput) => Promise<void>;
@@ -50,8 +55,11 @@ const CONNECTION_MODE_OPTIONS = [
 
 export function ConnectRevenueCatSheet({
   applications,
+  applicationsUnreadable,
   environments,
+  environmentsUnreadable,
   onConnect,
+  onRetryScopes,
   providerBaseHref,
 }: ConnectRevenueCatSheetProps) {
   const [open, setOpen] = useState(false);
@@ -333,7 +341,13 @@ export function ConnectRevenueCatSheet({
                     }))}
                   label="Environment scopes"
                   onChange={field.handleChange}
+                  onRetry={onRetryScopes}
                   selected={field.state.value}
+                  unreadableDescription={
+                    environmentsUnreadable
+                      ? UNREADABLE_ENVIRONMENT_SCOPES
+                      : undefined
+                  }
                 />
               )}
             </form.Field>
@@ -362,7 +376,13 @@ export function ConnectRevenueCatSheet({
                   }))}
                   label="Application scopes"
                   onChange={field.handleChange}
+                  onRetry={onRetryScopes}
                   selected={field.state.value}
+                  unreadableDescription={
+                    applicationsUnreadable
+                      ? UNREADABLE_APPLICATION_SCOPES
+                      : undefined
+                  }
                 />
               )}
             </form.Field>
