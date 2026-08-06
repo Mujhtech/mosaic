@@ -167,8 +167,16 @@ func TestMigrationDownUpCycleOnAnEmptyDatabase(t *testing.T) {
 // also the guard behind the repository's absent-row ErrNotFound — a settings row
 // that is missing must stay a real error, not a silent "disabled".
 //
-// This drives the migration across a database that has the two shapes an upgrade
-// actually meets: a row explicitly disabled, and no row at all.
+// The backfill must also stop where consent starts. A row that reads `false`
+// because 00012's default made it so is a decision nobody took; a row that reads
+// `false` with an actor on it is an owner who deliberately turned collection
+// off, and flipping that would start collecting events for an Environment whose
+// operator asked Mosaic not to. `updated_by_actor_id` is the only thing that
+// tells the two apart, so the guard is tested rather than assumed.
+//
+// This drives the migration across a database that has the three shapes an
+// upgrade actually meets: a row disabled by the old default, a row deliberately
+// disabled by an operator, and no row at all.
 func TestMigration00066EnablesCollectionForExistingEnvironments(t *testing.T) {
 	db, ctx := openMigrationTestDB(t)
 
@@ -185,8 +193,11 @@ func TestMigration00066EnablesCollectionForExistingEnvironments(t *testing.T) {
 			VALUES('default_project','default_org','default','Default','active',now(),now());
 		INSERT INTO environments(id,project_id,key,name,mode,created_at,updated_at) VALUES
 			('disabled_environment','default_project','development','Development','development',now(),now()),
+			('opted_out_environment','default_project','staging','Staging','staging',now(),now()),
 			('orphan_environment','default_project','production','Production','production',now(),now());
 		DELETE FROM analytics_environment_settings WHERE environment_id='orphan_environment';
+		UPDATE analytics_environment_settings SET updated_by_actor_id='actor_owner',updated_at=now()
+			WHERE environment_id='opted_out_environment';
 	`); err != nil {
 		t.Fatalf("seed pre-00066 Environments: %v", err)
 	}
@@ -220,11 +231,23 @@ func TestMigration00066EnablesCollectionForExistingEnvironments(t *testing.T) {
 		if err := rows.Scan(&id, &enabled, &retention, &actor); err != nil {
 			t.Fatal(err)
 		}
-		if !enabled {
-			t.Fatalf("%s is still not collecting after 00066", id)
-		}
 		if retention != 180 {
 			t.Fatalf("%s raw retention = %d, want the 180-day default", id, retention)
+		}
+		if id == "opted_out_environment" {
+			// An operator turned this one off. The migration must leave both the
+			// decision and the record of who made it exactly as it found them.
+			if enabled {
+				t.Fatal("00066 re-enabled collection for an Environment an operator deliberately opted out")
+			}
+			if actor == nil || *actor != "actor_owner" {
+				t.Fatalf("opted_out_environment actor = %v, want the operator who made the decision preserved", actor)
+			}
+			found[id] = true
+			continue
+		}
+		if !enabled {
+			t.Fatalf("%s is still not collecting after 00066", id)
 		}
 		// Nobody decided this per Environment, so the row must not name an actor.
 		if actor != nil {
@@ -235,8 +258,8 @@ func TestMigration00066EnablesCollectionForExistingEnvironments(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if !found["disabled_environment"] || !found["orphan_environment"] {
-		t.Fatalf("settings rows after 00066 = %v, want both Environments present", found)
+	if !found["disabled_environment"] || !found["orphan_environment"] || !found["opted_out_environment"] {
+		t.Fatalf("settings rows after 00066 = %v, want every Environment present", found)
 	}
 
 	if got := collectionEnabledDefault(t, ctx, db); got != "true" {
@@ -260,7 +283,7 @@ func TestMigration00066EnablesCollectionForExistingEnvironments(t *testing.T) {
 		t.Fatal(err)
 	}
 	if stillEnabled != 2 {
-		t.Fatalf("Environments still collecting after the rollback = %d, want both left as the operator found them", stillEnabled)
+		t.Fatalf("Environments still collecting after the rollback = %d, want the two the migration enabled left as the operator found them", stillEnabled)
 	}
 
 	if err := goose.UpContext(ctx, db, "."); err != nil {

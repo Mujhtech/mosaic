@@ -345,9 +345,12 @@ func (s *Service) applyAnalyticsSeries(ctx context.Context, actor Actor, project
 // and denominator rather than the module's computed value.
 //
 // The computed value is not usable here: the analytics module reports a rate
-// with a zero denominator as 0, which is the right answer for a scalar tile
-// carrying its own denominator and the wrong one for a chart point, where 0%
-// draws as a conversion collapse on a day nobody opened the app.
+// with a zero denominator as 0, which is the right answer only for a caller
+// that reads the denominator beside it, and the wrong one for a chart point,
+// where 0% draws as a conversion collapse on a day nobody opened the app. The
+// scalar overview keeps the denominator for the same reason — its Metric does
+// not carry one either — so the tile and the chart agree about what "not
+// measured" means.
 func (s *Service) analyticsTodayCounts(ctx context.Context, actor Actor, projectID, environmentID string,
 	window Window) (map[string]dailyCounts, *analytics.Freshness, error) {
 

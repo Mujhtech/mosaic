@@ -9,7 +9,7 @@ import (
 // Reason codes explaining why a metric carries no value. The set is closed and
 // stable: the dashboard maps each one to a different piece of copy, and
 // `metric_unavailable` is deliberately the only one that means "something
-// broke" — the other two are configuration states the operator chose.
+// broke" — the others are states nobody needs to act on.
 const (
 	// ReasonBillingDisabled is reported for every billing-derived metric when
 	// the Project has billing turned off. It is never reported as a zero: a
@@ -23,6 +23,15 @@ const (
 	// not be read. The endpoint still answers, the other metrics still carry
 	// values, and the failure is logged at error level.
 	ReasonMetricUnavailable = "metric_unavailable"
+	// ReasonNotMeasured is reported for a rate whose denominator is zero or
+	// absent — nobody was shown a paywall in the window, so there is no
+	// conversion to state. It is emphatically not a failure: a new or
+	// low-traffic Environment hits it every day, and reporting it as
+	// `metric_unavailable` would render an error state on a healthy Project
+	// while reporting it as 0 would claim a measured collapse in something that
+	// was never measured. The daily series takes the same position by returning
+	// null for the identical condition, so the tile and the chart agree.
+	ReasonNotMeasured = "not_measured"
 )
 
 // Authorities describe where a value came from, so a reader can tell a

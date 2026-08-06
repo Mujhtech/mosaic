@@ -152,17 +152,24 @@ func (s *Service) billingMetrics(ctx context.Context, projectID, environmentID s
 // billingReason returns the reason every billing metric is unavailable, or the
 // empty string when billing may be read.
 //
-// It fails closed, matching every other billing surface: an unreadable setting
-// is treated as disabled, so a transient database error cannot make a Project
-// that asked Mosaic to hold no billing state look as though it holds some.
+// It fails closed on access, matching every other billing surface: an unreadable
+// setting withholds every billing metric, so a transient database error cannot
+// make a Project that asked Mosaic to hold no billing state look as though it
+// holds some.
+//
+// The reported reason is not the same thing as the access decision. A failed
+// read is `metric_unavailable`, because telling an operator their billing is
+// disabled when the database errored is a statement about their configuration
+// that Mosaic has no evidence for. `billing_disabled` is reserved for a
+// successful read that returned false.
 func (s *Service) billingReason(ctx context.Context, projectID string) string {
 	enabled, err := s.repository.BillingEnabled(ctx, projectID)
 	if err != nil {
 		zerolog.Ctx(ctx).Error().
 			Str("project_id", projectID).
 			Str("overview_error_kind", fmt.Sprintf("%T", err)).
-			Msg("billing enablement could not be read; treating the Project as disabled")
-		return ReasonBillingDisabled
+			Msg("billing enablement could not be read; every billing metric is withheld")
+		return ReasonMetricUnavailable
 	}
 	if !enabled {
 		return ReasonBillingDisabled
@@ -207,7 +214,15 @@ func (s *Service) applyAnalyticsMetrics(ctx context.Context, actor Actor, projec
 	// A metric the analytics module declined to value must not become a zero
 	// here: absence from the map is reported as unavailable, exactly as a failed
 	// query is. The provider-confirmed metrics do precisely this today.
-	pick := func(values map[string]float64, err error, metricID string) Metric {
+	//
+	// A rate needs a second guard. The analytics module reports a rate with a
+	// zero denominator as the value 0, which is the right answer for a caller
+	// that also reads the denominator; this surface's Metric carries no
+	// denominator, so a bare 0 here would claim a measured 0% conversion on
+	// every Environment where nobody has seen a paywall yet. The rate metrics
+	// are identified through the analytics vocabulary rather than by name, so
+	// the two cannot drift apart when a rate is added.
+	pick := func(values map[string]analyticsValue, err error, metricID string) Metric {
 		if err != nil {
 			return unavailable(ReasonMetricUnavailable, AuthorityClientObserved)
 		}
@@ -215,7 +230,12 @@ func (s *Service) applyAnalyticsMetrics(ctx context.Context, actor Actor, projec
 		if !ok {
 			return unavailable(ReasonMetricUnavailable, AuthorityClientObserved)
 		}
-		return available(value, AuthorityClientObserved)
+		if spec, known := analytics.SeriesMetricSpecFor(metricID); known && spec.Kind == analytics.SeriesMetricRate {
+			if value.denominator == nil || *value.denominator == 0 {
+				return unavailable(ReasonNotMeasured, AuthorityClientObserved)
+			}
+		}
+		return available(value.value, AuthorityClientObserved)
 	}
 	assign := func(target *WindowedMetrics, metricID string) {
 		target.Today = pick(todayValues, todayErr, metricID)
@@ -253,20 +273,33 @@ func (s *Service) analyticsReason(ctx context.Context, actor Actor, projectID, e
 	return ""
 }
 
+// analyticsValue is one metric as the analytics module answered it, keeping the
+// denominator the module used rather than only its computed value. The
+// denominator is what decides whether a rate was measured at all, and it is
+// dropped before the value reaches the response, so it is deliberately internal.
+type analyticsValue struct {
+	value float64
+	// denominator is nil for a count metric and for a rate the module answered
+	// without one.
+	denominator *int64
+}
+
 // analyticsWindow runs one query for all four metrics over one window.
 //
 // A zero-length window — the single instant per day when a request arrives
-// exactly at midnight UTC — is answered as zero without a query. Nothing has
-// happened yet in a range of zero duration, so zero is the true count rather
-// than a stand-in for one, and the analytics query machinery rejects an empty
-// range as an invalid request.
+// exactly at midnight UTC — is answered without a query. Nothing has happened
+// yet in a range of zero duration, so zero is the true count rather than a
+// stand-in for one, and the analytics query machinery rejects an empty range as
+// an invalid request. The counts are therefore honest zeros and the rate has no
+// denominator, which is exactly what the daily series does for the day in
+// progress.
 func (s *Service) analyticsWindow(ctx context.Context, actor Actor, projectID, environmentID string,
-	window Window) (map[string]float64, *analytics.Freshness, error) {
+	window Window) (map[string]analyticsValue, *analytics.Freshness, error) {
 
 	if window.Empty() {
-		values := make(map[string]float64, len(analyticsMetricIDs))
+		values := make(map[string]analyticsValue, len(analyticsMetricIDs))
 		for _, id := range analyticsMetricIDs {
-			values[id] = 0
+			values[id] = analyticsValue{}
 		}
 		return values, nil, nil
 	}
@@ -284,12 +317,12 @@ func (s *Service) analyticsWindow(ctx context.Context, actor Actor, projectID, e
 		return nil, nil, err
 	}
 
-	values := make(map[string]float64, len(result.Metrics))
+	values := make(map[string]analyticsValue, len(result.Metrics))
 	for _, metric := range result.Metrics {
 		if metric.Value == nil {
 			continue
 		}
-		values[metric.ID] = *metric.Value
+		values[metric.ID] = analyticsValue{value: *metric.Value, denominator: metric.Denominator}
 	}
 	freshness := result.Freshness
 	return values, &freshness, nil

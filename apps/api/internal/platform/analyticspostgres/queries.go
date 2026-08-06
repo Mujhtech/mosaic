@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 )
@@ -162,8 +164,23 @@ func (r *Repository) DailySeries(ctx context.Context, actor analytics.Actor, que
 		Points:    []analytics.DailyMetricPoint{},
 		Freshness: analytics.Freshness{LateEventPolicy: analytics.LateEventPolicy},
 	}
-	_ = r.pool.QueryRow(ctx, `SELECT latest_received_at,latest_aggregated_at FROM analytics_aggregate_watermarks WHERE environment_id=$1`,
-		query.EnvironmentID).Scan(&result.Freshness.LatestReceivedAt, &result.Freshness.LatestAggregatedAt)
+	// An Environment that has never been aggregated has no watermark row, and
+	// absent freshness is the honest answer for it. A read that actually failed
+	// is not the same thing: leaving freshness nil there would report "not yet
+	// aggregated" for a query that broke, so it is logged rather than discarded.
+	var latestReceivedAt, latestAggregatedAt *time.Time
+	switch err := r.pool.QueryRow(ctx, `SELECT latest_received_at,latest_aggregated_at FROM analytics_aggregate_watermarks WHERE environment_id=$1`,
+		query.EnvironmentID).Scan(&latestReceivedAt, &latestAggregatedAt); {
+	case err == nil:
+		result.Freshness.LatestReceivedAt = latestReceivedAt
+		result.Freshness.LatestAggregatedAt = latestAggregatedAt
+	case !errors.Is(err, pgx.ErrNoRows):
+		zerolog.Ctx(ctx).Error().
+			Str("project_id", query.ProjectID).
+			Str("environment_id", query.EnvironmentID).
+			Str("analytics_error_kind", fmt.Sprintf("%T", err)).
+			Msg("analytics aggregate watermark could not be read; the series omits freshness")
+	}
 
 	known := make([]string, 0, len(metricIDs))
 	for _, id := range metricIDs {

@@ -15,8 +15,10 @@
 --   2. a settings row for every Environment that somehow lacks one, so the
 --      absent-row case stays impossible and the repository's ErrNotFound stays
 --      an honest error rather than a silent "disabled";
---   3. existing rows, flipped on. The owner explicitly wants Environments that
---      already exist collecting, not only ones created after the upgrade.
+--   3. existing rows that nobody ever decided, flipped on. The owner explicitly
+--      wants Environments that already exist collecting, not only ones created
+--      after the upgrade — but an operator who deliberately turned collection
+--      off is a decision this migration must not overrule.
 --
 -- The `initialize_analytics_environment_settings` trigger from 00012 inserts
 -- without naming `collection_enabled`, so it picks up the new default with no
@@ -37,14 +39,27 @@ WHERE NOT EXISTS (
     SELECT 1 FROM analytics_environment_settings s WHERE s.environment_id = e.id
 );
 
--- `updated_by_actor_id` is cleared rather than attributed: no operator made
--- this choice for this Environment, and leaving a stale actor on the row would
--- misreport who enabled collection. `updated_at` moves because the setting
--- genuinely changed, and the settings surface reads it as "when this was last
--- decided".
+-- Only rows nobody ever decided are flipped.
+--
+-- `updated_by_actor_id IS NULL` is exactly that set. 00012 created the column
+-- with a `false` default and its `initialize_analytics_environment_settings`
+-- trigger inserts without naming either column, so a row that has never been
+-- through the settings endpoint carries no actor and reads `false` because
+-- nothing decided otherwise. The settings endpoint always records the actor who
+-- changed the setting, so a row reading `false` with an actor is an owner or
+-- admin who deliberately turned collection off. Flipping those would silently
+-- start collecting events for an Environment whose operator asked Mosaic not
+-- to, and would erase the attribution that is the only record of their
+-- decision. A privacy choice is not a stale default.
+--
+-- `updated_by_actor_id` stays NULL on the rows this does touch: no operator made
+-- this choice for this Environment, and attributing a platform default to a
+-- person would misreport who enabled collection. `updated_at` moves because the
+-- setting genuinely changed, and the settings surface reads it as "when this was
+-- last decided".
 UPDATE analytics_environment_settings
-SET collection_enabled = true, updated_by_actor_id = NULL, updated_at = now()
-WHERE collection_enabled = false;
+SET collection_enabled = true, updated_at = now()
+WHERE collection_enabled = false AND updated_by_actor_id IS NULL;
 
 -- +goose Down
 -- Only the default is restored. The flipped rows are deliberately left enabled.

@@ -201,7 +201,7 @@ func TestBillingDisabledReportsUnavailableNotZero(t *testing.T) {
 	analyticsReader := &stubAnalytics{collectionEnabled: true, values: map[string]float64{
 		"paywall_presentations": 12, "purchase_starts": 5,
 		"client_completed_purchases": 3, "presentation_to_client_completed_purchase_rate": 0.25,
-	}}
+	}, denominators: map[string]int64{"presentation_to_client_completed_purchase_rate": 12}}
 	result := read(t, newService(t, repository, analyticsReader, time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC)))
 
 	for name, metric := range map[string]projectoverview.Metric{
@@ -224,13 +224,20 @@ func TestBillingDisabledReportsUnavailableNotZero(t *testing.T) {
 // Mosaic to hold no billing state, or — worse for this surface — reports its
 // counts as zero. The fail-closed rule every other billing surface follows must
 // hold here too.
+//
+// The reported reason is a separate risk from the access decision: a read that
+// errored must not tell an operator they turned billing off, which sends them
+// to a settings page to fix a setting that is already correct. `billing_disabled`
+// is a claim about their configuration and is reserved for a successful read.
 func TestUnreadableBillingSettingFailsClosed(t *testing.T) {
 	repository := &stubRepository{enabled: true, enabledErr: errors.New("connection reset")}
 	analyticsReader := &stubAnalytics{collectionEnabled: true, values: map[string]float64{}}
 	result := read(t, newService(t, repository, analyticsReader, time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC)))
 
 	requireUnavailable(t, "customers.total", result.Metrics.Customers.Total,
-		projectoverview.ReasonBillingDisabled)
+		projectoverview.ReasonMetricUnavailable)
+	requireUnavailable(t, "subscriptions.active", result.Metrics.Subscriptions.Active,
+		projectoverview.ReasonMetricUnavailable)
 }
 
 // Risk: an Environment that turned analytics collection off shows a funnel of
@@ -315,6 +322,35 @@ func TestAnalyticsMetricWithoutValueIsUnavailable(t *testing.T) {
 	requireValue(t, "paywallViews.today", result.Metrics.PaywallViews.Today, 12)
 }
 
+// Risk: the conversion tile reports a measured 0% on an Environment where
+// nobody has seen a paywall. The analytics module answers a rate with a zero
+// denominator as the value 0 — correct for a caller that reads the denominator
+// beside it, and a lie on this surface, whose Metric carries none. Every new and
+// low-traffic Project hits this on the dashboard's landing page, and the daily
+// series already returns null for the identical condition, so a bare 0 here also
+// makes the chart and the tile above it contradict each other.
+//
+// The counts must stay honest zeros: zero presentations is a measurement.
+func TestRateWithoutADenominatorIsNotMeasuredNotZero(t *testing.T) {
+	repository := &stubRepository{enabled: true}
+	analyticsReader := &stubAnalytics{
+		collectionEnabled: true,
+		values: map[string]float64{
+			"paywall_presentations": 0, "purchase_starts": 0,
+			"client_completed_purchases": 0, "presentation_to_client_completed_purchase_rate": 0,
+		},
+		denominators: map[string]int64{"presentation_to_client_completed_purchase_rate": 0},
+	}
+	result := read(t, newService(t, repository, analyticsReader, time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC)))
+
+	requireUnavailable(t, "conversionRate.today", result.Metrics.ConversionRate.Today,
+		projectoverview.ReasonNotMeasured)
+	requireUnavailable(t, "conversionRate.yesterday", result.Metrics.ConversionRate.Yesterday,
+		projectoverview.ReasonNotMeasured)
+	requireValue(t, "paywallViews.today", result.Metrics.PaywallViews.Today, 0)
+	requireValue(t, "purchases.today", result.Metrics.Purchases.Today, 0)
+}
+
 // Risk: "today" silently means the server's local day, or ends at tomorrow's
 // midnight and so reports a partial day as complete. Both make every count on
 // the page wrong in a way no reader can see. The declared window is also the
@@ -380,6 +416,10 @@ func TestMidnightBoundaryReportsZeroTodayAndAFullYesterday(t *testing.T) {
 	// The stub fails every query it is asked to run, so an available today value
 	// proves the empty window was never sent to the analytics module.
 	requireValue(t, "paywallViews.today", result.Metrics.PaywallViews.Today, 0)
+	// Nothing was measured over a range of zero duration, so the rate has no
+	// denominator and must not report a 0% conversion for the day.
+	requireUnavailable(t, "conversionRate.today", result.Metrics.ConversionRate.Today,
+		projectoverview.ReasonNotMeasured)
 	requireUnavailable(t, "paywallViews.yesterday", result.Metrics.PaywallViews.Yesterday,
 		projectoverview.ReasonMetricUnavailable)
 	if len(analyticsReader.queries) != 1 {

@@ -94,7 +94,15 @@ if ! mirrored_count="$(find "${mirror_directory}" -type f | wc -l | tr -d ' ')";
   echo "failed to count the mirrored files under ${mirror_directory}" >&2
   exit 1
 fi
-if ! mirror_bytes="$(find "${mirror_directory}" -type f -exec wc -c {} + | tail -1 | awk '{print $1}')"; then
+# Every line is summed, not only the last. `wc -c {} +` runs one `wc` per batch
+# of arguments, so above the system argument limit it emits several `total`
+# lines and reading only the last one would report the final batch as the whole
+# backup — a manifest that under-reports by an arbitrary amount on exactly the
+# large buckets where the number matters. Per-file lines are summed and each
+# batch's own `total` line is skipped; a path always contains a separator, so it
+# can never be mistaken for one.
+if ! mirror_bytes="$(find "${mirror_directory}" -type f -exec wc -c {} + |
+  awk '!(NF == 2 && $2 == "total") { sum += $1 } END { printf "%d\n", sum }')"; then
   echo "failed to measure the mirrored files under ${mirror_directory}" >&2
   exit 1
 fi
