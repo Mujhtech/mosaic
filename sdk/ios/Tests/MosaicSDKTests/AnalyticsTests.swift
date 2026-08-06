@@ -608,6 +608,41 @@ final class AnalyticsTests: XCTestCase {
     XCTAssertEqual(afterOptOut, .collectionDisabled)
   }
 
+  /// The two collection gates are independent, and naming one must not write a
+  /// value for the other. With both parameters defaulted to `true`, the host
+  /// opt-out call `setAnalyticsCollection(hostEnabled:)` also wrote
+  /// `environmentEnabled: true`, so a host toggling its own gate back on would
+  /// silently re-enable a disabled Environment — the exact thing the API
+  /// documents it cannot do.
+  func testSettingOneCollectionGateLeavesTheOtherAtItsStoredValue() async throws {
+    // Port 1 is reserved, so nothing leaves the process during this test.
+    let baseURL = try XCTUnwrap(URL(string: "http://127.0.0.1:1"))
+    let mosaic = try await Mosaic.configureHosted(
+      publicSDKKey: "public_analytics_gate_key",
+      baseURL: baseURL,
+      applicationVersion: nil,
+      requestTimeout: 1,
+      bundledFallback: .packaged,
+      purchaseProvider: MockMosaicPurchaseProvider(),
+      persistenceRoot: .unavailable
+    )
+
+    await mosaic.setAnalyticsCollection(environmentEnabled: false)
+    let disabled = await mosaic.analyticsDiagnostics()
+    XCTAssertFalse(disabled.collectionEnabled)
+
+    // A host toggling only its own gate cannot revive the Environment gate.
+    await mosaic.setAnalyticsCollection(hostEnabled: true)
+    let stillDisabled = await mosaic.analyticsDiagnostics()
+    XCTAssertFalse(stillDisabled.collectionEnabled)
+
+    // And the host gate is likewise preserved across an Environment update.
+    await mosaic.setAnalyticsCollection(hostEnabled: false)
+    await mosaic.setAnalyticsCollection(environmentEnabled: true)
+    let hostStillOptedOut = await mosaic.analyticsDiagnostics()
+    XCTAssertFalse(hostStillOptedOut.collectionEnabled)
+  }
+
   /// `Locale.current.identifier` is an ICU identifier: a region override or a
   /// non-Gregorian calendar appends `@`-keywords that the closed event codec
   /// rejects, which silently dropped every event on those devices. The

@@ -195,12 +195,14 @@ actor MosaicAnalyticsRuntime {
     self.jitter = jitter
   }
 
-  func setCollection(environmentEnabled: Bool, hostEnabled: Bool) async {
+  /// A `nil` gate is left at its stored value. Only the gates the caller named
+  /// are written, so setting one never fabricates a value for the other.
+  func setCollection(environmentEnabled: Bool?, hostEnabled: Bool?) async {
     var value = await load()
     let wasEnabled = value.environmentCollectionEnabled && value.hostCollectionEnabled
-    value.environmentCollectionEnabled = environmentEnabled
-    value.hostCollectionEnabled = hostEnabled
-    let isEnabled = environmentEnabled && hostEnabled
+    value.environmentCollectionEnabled = environmentEnabled ?? value.environmentCollectionEnabled
+    value.hostCollectionEnabled = hostEnabled ?? value.hostCollectionEnabled
+    let isEnabled = value.environmentCollectionEnabled && value.hostCollectionEnabled
     if wasEnabled && !isEnabled {
       flushTask?.cancel()
       flushTask = nil

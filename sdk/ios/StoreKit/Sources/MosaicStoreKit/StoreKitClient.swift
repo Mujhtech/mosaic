@@ -17,6 +17,10 @@ struct StoreKitProductSnapshot: Sendable {
   /// know. The affected period is omitted rather than guessed, and the product
   /// stays purchasable.
   let unknownPeriodUnit: Bool
+  /// StoreKit reported an introductory payment mode this SDK version does not
+  /// know, so the offer is neither a trial nor an introductory offer here. The
+  /// product stays purchasable; only the offer is omitted.
+  let unknownOfferType: Bool
 
   init(
     handle: String,
@@ -29,7 +33,8 @@ struct StoreKitProductSnapshot: Sendable {
     localizedPeriod: String?,
     trial: MosaicCommerceTrial?,
     introductoryOffer: MosaicCommerceIntroductoryOffer?,
-    unknownPeriodUnit: Bool = false
+    unknownPeriodUnit: Bool = false,
+    unknownOfferType: Bool = false
   ) {
     self.handle = handle
     self.storeProductID = storeProductID
@@ -42,6 +47,7 @@ struct StoreKitProductSnapshot: Sendable {
     self.trial = trial
     self.introductoryOffer = introductoryOffer
     self.unknownPeriodUnit = unknownPeriodUnit
+    self.unknownOfferType = unknownOfferType
   }
 }
 
@@ -128,6 +134,14 @@ actor LiveStoreKitClient: StoreKitClient {
         || (offer != nil && offer?.paymentMode == .freeTrial && trial == nil)
         || (offer != nil && offer?.paymentMode != .freeTrial && introductoryOffer == nil
           && Self.isSupportedIntroductoryMode(offer?.paymentMode))
+      // An offer exists and Mosaic cannot classify its payment mode. Dropping it
+      // without a word hides an introductory price or trial the customer is
+      // entitled to see, so it is reported exactly as the RevenueCat adapter
+      // reports it.
+      let unknownOfferType =
+        offer.map {
+          $0.paymentMode != .freeTrial && !Self.isSupportedIntroductoryMode($0.paymentMode)
+        } ?? false
       snapshots.append(
         StoreKitProductSnapshot(
           handle: handle,
@@ -140,7 +154,8 @@ actor LiveStoreKitClient: StoreKitClient {
           localizedPeriod: nil,
           trial: trial,
           introductoryOffer: introductoryOffer,
-          unknownPeriodUnit: unknownPeriodUnit
+          unknownPeriodUnit: unknownPeriodUnit,
+          unknownOfferType: unknownOfferType
         )
       )
     }

@@ -570,9 +570,16 @@ public struct Mosaic: Sendable {
   /// set here. The host application remains responsible for obtaining whatever
   /// end-user consent its jurisdiction and app-store policies require before
   /// leaving collection enabled.
+  ///
+  /// The two gates are independent. An omitted argument leaves that gate at
+  /// whatever was last set, because there is no value the SDK could substitute
+  /// for it: writing `true` over an unmentioned gate would let
+  /// `setAnalyticsCollection(hostEnabled: false)` silently re-enable a
+  /// disabled Environment, contradicting "the host cannot override a disabled
+  /// Environment" above.
   public func setAnalyticsCollection(
-    environmentEnabled: Bool = true,
-    hostEnabled: Bool = true
+    environmentEnabled: Bool? = nil,
+    hostEnabled: Bool? = nil
   ) async {
     await analyticsRuntime?.setCollection(
       environmentEnabled: environmentEnabled,

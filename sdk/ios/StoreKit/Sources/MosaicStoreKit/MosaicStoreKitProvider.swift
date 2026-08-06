@@ -226,6 +226,19 @@ public actor MosaicStoreKitProvider:
           mosaicProductID: mapping.mosaicProductID
         )
       }
+      if snapshot.unknownOfferType {
+        // The product stays purchasable. Only the introductory offer is
+        // omitted, so the paywall cannot present terms Mosaic could not read —
+        // and the omission is reported rather than silently stripping a trial
+        // the customer is entitled to see.
+        record(
+          code: "commerce.unsupportedIntroductoryOffer",
+          message: "StoreKit reported an introductory offer type Mosaic does not support.",
+          providerCode: "unknown_offer_type",
+          retryable: false,
+          mosaicProductID: mapping.mosaicProductID
+        )
+      }
       return MosaicCommerceResolvedProduct(
         mosaicProductID: mapping.mosaicProductID,
         product: MosaicProduct(

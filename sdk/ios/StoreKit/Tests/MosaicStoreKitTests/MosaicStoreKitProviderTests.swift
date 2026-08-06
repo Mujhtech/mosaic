@@ -386,6 +386,37 @@ final class MosaicStoreKitProviderTests: XCTestCase {
     XCTAssertFalse(diagnostic.retryable)
   }
 
+  /// An introductory offer whose payment mode this SDK version cannot classify
+  /// is dropped from the product, so the paywall never states terms Mosaic
+  /// could not read. Dropping it without a diagnostic would hide a trial or
+  /// introductory price the customer is entitled to see, and would leave this
+  /// adapter reporting healthy while the RevenueCat adapter reports the same
+  /// condition. The product must stay purchasable either way.
+  func testUnclassifiableIntroductoryOfferIsReportedRatherThanSilentlyStripped() async throws {
+    let order = OrderRecorder()
+    let provider = MosaicStoreKitProvider(
+      client: StoreKitClientStub(order: order, purchase: .cancelled, unknownOfferType: true),
+      acceptor: AcceptorStub(order: order),
+      acceptanceStore: AcceptanceStoreStub(order: order))
+    try await provider.install(configuration: configuration, mappings: [mapping])
+
+    let products = await provider.loadProducts(mappings: [mapping])
+    XCTAssertEqual(products.count, 1)
+    let product = try XCTUnwrap(products.first?.product)
+    XCTAssertNil(product.introductoryOffer)
+    XCTAssertNil(product.trial)
+
+    let diagnostics = await provider.providerDiagnostics()
+    XCTAssertEqual(diagnostics.health, .degraded)
+    let reported = diagnostics.diagnostics.filter {
+      $0.code == "commerce.unsupportedIntroductoryOffer"
+    }
+    XCTAssertEqual(reported.count, 1)
+    XCTAssertEqual(reported.first?.providerCode, "unknown_offer_type")
+    XCTAssertEqual(reported.first?.mosaicProductID, mapping.mosaicProductID)
+    XCTAssertFalse(reported.first?.retryable ?? true)
+  }
+
   private var configuration: MosaicCommerceConfigurationReference {
     .init(
       configurationID: "commerce_configuration_storekit_42",
@@ -497,18 +528,25 @@ private actor StoreKitClientStub: StoreKitClient {
   nonisolated let unfinished: [StoreKitTransactionEvent]
   let entitlements: [StoreKitTransactionEvent]
 
+  let unknownPeriodUnit: Bool
+  let unknownOfferType: Bool
+
   init(
     order: OrderRecorder,
     purchase: StoreKitPurchaseEvent,
     purchaseError: Error? = nil,
     unfinished: [StoreKitTransactionEvent] = [],
-    entitlements: [StoreKitTransactionEvent] = []
+    entitlements: [StoreKitTransactionEvent] = [],
+    unknownPeriodUnit: Bool = false,
+    unknownOfferType: Bool = false
   ) {
     self.order = order
     purchaseEvent = purchase
     self.purchaseError = purchaseError
     self.unfinished = unfinished
     self.entitlements = entitlements
+    self.unknownPeriodUnit = unknownPeriodUnit
+    self.unknownOfferType = unknownOfferType
   }
 
   func products(identifiers: [String]) -> [StoreKitProductSnapshot] {
@@ -523,7 +561,9 @@ private actor StoreKitClientStub: StoreKitClient {
         billingPeriod: .init(unit: .month, value: 1),
         localizedPeriod: "1 month",
         trial: nil,
-        introductoryOffer: nil
+        introductoryOffer: nil,
+        unknownPeriodUnit: unknownPeriodUnit,
+        unknownOfferType: unknownOfferType
       )
     }
   }
