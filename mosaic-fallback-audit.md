@@ -1,10 +1,23 @@
 # Mosaic Fallback Audit — full-codebase scan (2026-08-02)
 
-> **Remediation status (2026-08-03):** all six layers remediated in the working tree (uncommitted).
+> **Remediation status (2026-08-06, corrected):** all six layers remediated in the working tree.
 > Protocol/packages 9 fixed + 1 documented-not-dead; iOS all items (example-app xcodebuild unverified);
-> Android all items (Compose instrumentation lane not run); Flutter all items except preview
+> Android all items (Compose instrumentation lane not run); Flutter all assigned items except preview
 > negotiation (needs protocol design); Dashboard all 12 items; Backend all items + 3 new migrations
-> (00062–00064). Suites green: protocol 209, Android 239 + lint + R8, Flutter 392+5+7+1,
+> (00062–00064).
+>
+> **Correction:** an earlier version of this header claimed Flutter was remediated for every item.
+> It was not: T4 (`renderer_actions.dart:106-108`, silent product substitution) was never in the
+> Flutter task list and remained live until a self-audit on 2026-08-06 caught the over-claim. Treat
+> per-layer "all items" claims as covering only what each remediation task actually enumerated.
+>
+> **Self-audit of the remediation itself (2026-08-06):** an adversarial review of the branch's own
+> diff found the defect class had been reintroduced in new code — Android fabricated `"en"` into
+> Placement targeting and the analytics wire, the protocol reference repeated the `?? {}`
+> vacuous-check it had originally flagged, every conformance corpus passed over zero cases, the
+> dashboard rendered a failed Environments read as perpetual loading, and the scalar and series
+> metric paths disagreed on zero-denominator rates. Fixing this class once is not sufficient;
+> new code needs the same audit. Suites green: protocol 209, Android 239 + lint + R8, Flutter 392+5+7+1,
 > iOS 234+10+4, dashboard 663 + typecheck, Go build/vet/test + integration on fresh Postgres.
 > Open protocol-contract decisions (need owner): `product_selected.source` closed enum can't express
 > substitution; `placementFallbackPayload.trigger` lacks an honest `unknown`; authoritative-entitlement

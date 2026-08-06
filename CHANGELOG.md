@@ -120,8 +120,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Analytics collection is now on by default for every Environment.** A new
   Project reports its funnel without an operator step, and the first SDK batch
   is accepted instead of returning `409 analytics_collection_disabled`.
-  Migration 00066 also enables collection for Environments that already exist:
-  **upgrading turns analytics collection on**. Turn it off per Environment with
+  Migration 00066 also enables collection for Environments that already exist,
+  but only where nobody ever decided otherwise: **upgrading turns analytics
+  collection on except for Environments an operator explicitly disabled**, which
+  are identified by the actor recorded against their setting and are left off
+  with that attribution intact. Turn it off per Environment with
   `PUT /v1/projects/{projectId}/environments/{environmentId}/analytics/settings`
   `{"collectionEnabled": false, ...}`, which records the actor in the analytics
   privacy audit trail. Rolling 00066 back restores the old default for new
