@@ -418,9 +418,11 @@ void _defineRendererV02ProductTests(
     );
   });
 
-  testWidgets('a current unavailable card falls back to first authored card',
+  testWidgets(
+      'a current unavailable card falls back to first authored card, and says so',
       (tester) async {
     final document = fixture('complete-paywall.json');
+    final diagnostics = <MosaicDiagnostic>[];
     MosaicPurchaseProvider provider = MockMosaicPurchaseProvider(
       products: products,
     );
@@ -439,6 +441,7 @@ void _defineRendererV02ProductTests(
               document: document,
               purchaseProvider: provider,
               onResult: (_) {},
+              onDiagnostic: diagnostics.add,
             );
           },
         ),
@@ -452,6 +455,11 @@ void _defineRendererV02ProductTests(
       ),
     );
     await tester.pump();
+    // Nothing has been substituted yet: the customer's own choice is available.
+    expect(
+      diagnostics.map((diagnostic) => diagnostic.code),
+      isNot(contains('product_selection_default_substituted')),
+    );
 
     rebuild(() {
       provider = MockMosaicPurchaseProvider(products: products.take(2));
@@ -471,6 +479,25 @@ void _defineRendererV02ProductTests(
       ),
     );
     expect(monthly.flagsCollection.isSelected, Tristate.isTrue);
+    // The substitution is sanctioned by `unavailableFallback.selection:
+    // firstAvailable`, so the re-point is correct — but the paywall now shows a
+    // plan nobody chose, and `product_selected.source` has no value that can
+    // say so. Without this diagnostic the swap is invisible to the host, and a
+    // conversion drop on a delisted product looks like a copy problem.
+    expect(
+      diagnostics.map((diagnostic) => diagnostic.code),
+      contains('product_selection_default_substituted'),
+    );
+    expect(
+      diagnostics
+          .where(
+            (diagnostic) =>
+                diagnostic.code == 'product_selection_default_substituted',
+          )
+          .length,
+      1,
+      reason: 'One substitution per Selector is reported once, not per frame.',
+    );
     semantics.dispose();
   });
 

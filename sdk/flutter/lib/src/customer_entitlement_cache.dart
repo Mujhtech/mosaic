@@ -318,17 +318,19 @@ final class MosaicFileCustomerEntitlementCache
 /// inside one shared document — is what makes a wrong-customer read a missing
 /// file instead of a filtering mistake.
 ///
-/// [applicationId] and [platform] are part of the authority scope. A caller that
-/// does not know both must not cache at all: the runtime disables the cache
-/// rather than hashing a placeholder that two differently-scoped installs would
-/// share. The defaults exist only so tests can name a scope compactly.
+/// [applicationId] and [platform] are part of the authority scope and are
+/// therefore required. A caller that does not know both must not cache at all:
+/// the runtime disables the cache rather than hashing a placeholder that two
+/// differently-scoped installs would share. There is deliberately no default —
+/// a default would let a future caller omit the scope and silently collide with
+/// another one.
 String mosaicCustomerEntitlementCacheNamespace(
   Uri baseUrl,
   String publicSdkKey,
-  String customerBinding, [
-  String applicationId = 'authority-unspecified',
-  String platform = 'authority-unspecified',
-]) =>
+  String customerBinding,
+  String applicationId,
+  String platform,
+) =>
     mosaicSha256String(
       '${_normalizedBaseUrl(baseUrl)}\n$publicSdkKey\n$customerBinding\n'
       '$applicationId\n$platform\nentitlements-v2',

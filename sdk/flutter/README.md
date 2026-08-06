@@ -729,6 +729,15 @@ The sealed presentation union maps one-to-one to RC1:
 Safe `MosaicDiagnostic` values expose stable SDK codes without raw provider
 errors or credentials.
 
+`product_selection_default_substituted` is reported once per Product Selector
+when the authored default — or the customer's current choice — becomes
+unavailable and the Selector's `unavailableFallback.selection: firstAvailable`
+rule selects the first available option instead. The substitution is correct;
+the diagnostic exists because the `product_selected` payload still reports
+`source: "default"`, that field's protocol enum admitting only `default` and
+`user` with no value for a substituted selection. The Swift SDK reports the
+same code for the same situation.
+
 ## Flutter-native conformance notes
 
 - One protocol logical unit maps to one Flutter logical pixel.

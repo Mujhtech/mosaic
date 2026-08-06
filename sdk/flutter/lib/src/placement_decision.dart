@@ -549,11 +549,23 @@ final class MosaicPlacementDecisionEvaluator {
     // it. Collapsing the two would let `does_not_exist` claim a device
     // reported no locale, country, or platform when it reported an unusable
     // one.
+    // A source this SDK does not implement reports neither presence nor
+    // absence: `present` is null, and every operator over it is unknown.
+    // Answering `does_not_exist` yes there would state that the host reported
+    // nothing, when the truth is that Mosaic cannot read what it reported.
     if (leaf.operator == 'exists') {
-      return source.present ? MosaicTruthValue.yes : MosaicTruthValue.no;
+      return switch (source.present) {
+        null => MosaicTruthValue.unknown,
+        true => MosaicTruthValue.yes,
+        false => MosaicTruthValue.no,
+      };
     }
     if (leaf.operator == 'does_not_exist') {
-      return source.present ? MosaicTruthValue.no : MosaicTruthValue.yes;
+      return switch (source.present) {
+        null => MosaicTruthValue.unknown,
+        true => MosaicTruthValue.no,
+        false => MosaicTruthValue.yes,
+      };
     }
     // Absent and present-but-unusable both compare unknown. Answering "no"
     // here is the whole hazard: a `not` around it becomes a positive match.
@@ -648,16 +660,26 @@ final class MosaicPlacementDecisionEvaluator {
               ? null
               : MosaicStringAttribute(context.providerCapabilities[key]!.name),
         ),
-      _ => _absentSource,
+      // Decoding rejects every source outside the closed vocabulary, so this
+      // arm means the accepted vocabulary and this resolver disagree — or a
+      // caller built a leaf directly. Either way Mosaic cannot say whether the
+      // host reported the source, so it says exactly that instead of reporting
+      // absence, which `does_not_exist` would turn into a positive match.
+      _ => _unreadableSource,
     };
   }
 }
 
 /// What one source resolved to: whether the host reported anything, and the
 /// comparable form when Mosaic can use what it reported.
-typedef _SourceResolution = ({MosaicAttributeValue? comparable, bool present});
+///
+/// `present` is null when this SDK cannot read the source at all. That is
+/// distinct from `false`, which asserts the host reported nothing.
+typedef _SourceResolution = ({MosaicAttributeValue? comparable, bool? present});
 
 const _SourceResolution _absentSource = (comparable: null, present: false);
+
+const _SourceResolution _unreadableSource = (comparable: null, present: null);
 
 _SourceResolution _usable(MosaicAttributeValue value) =>
     (comparable: value, present: true);

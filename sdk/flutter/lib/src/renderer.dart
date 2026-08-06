@@ -241,6 +241,7 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
       <String, MosaicProduct>{};
   final Map<String, String?> _selectedProductCardIds = <String, String?>{};
   final Set<String> _notifiedUnavailableSelectors = <String>{};
+  final Set<String> _notifiedSubstitutedSelections = <String>{};
   final Set<String> _notifiedHiddenPurchaseTargets = <String>{};
   final Set<String> _notifiedMediaFailures = <String>{};
   final Set<String> _notifiedUnboundedFill = <String>{};
@@ -346,6 +347,14 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
         _selectedProductCardIds.clear();
       }
       _notifiedUnavailableSelectors.clear();
+      if (documentChanged) {
+        // A new document authors its own defaults, so a substitution against
+        // the previous one says nothing about this one. A Provider swap alone
+        // does not reset it: the same authored default is still in play, and
+        // re-reporting it on every swap would turn a once-per-selector signal
+        // into noise.
+        _notifiedSubstitutedSelections.clear();
+      }
       _productsResolved = false;
       unawaited(_loadProducts());
     } else if (localeChanged && _productsResolved) {

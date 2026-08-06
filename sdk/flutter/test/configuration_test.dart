@@ -95,6 +95,44 @@ void main() {
       );
       mosaic.dispose();
     });
+
+    // `context.platform` names only ios and android, so a Flutter host on any
+    // other target has its events filed under android. With collection on by
+    // default that substitution is now continuous, so it must be reported —
+    // otherwise desktop traffic is indistinguishable from Android traffic.
+    Mosaic configureOn(TargetPlatform platform, List<MosaicDiagnostic> sink) {
+      debugDefaultTargetPlatformOverride = platform;
+      try {
+        return Mosaic.configure(
+          publicSdkKey: 'public_analytics_platform',
+          baseUrl: Uri.parse('https://api.mosaic.test'),
+          purchaseProvider: MockMosaicPurchaseProvider(),
+          identityStorage: MosaicMemoryIdentityStorage(),
+          analyticsStorage: MosaicMemoryAnalyticsStorage(),
+          onDiagnostic: sink.add,
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    }
+
+    test('an unnameable target reports the substituted analytics platform', () {
+      final diagnostics = <MosaicDiagnostic>[];
+      configureOn(TargetPlatform.macOS, diagnostics).dispose();
+      expect(
+        diagnostics.map((diagnostic) => diagnostic.code),
+        contains(mosaicAnalyticsPlatformSubstitutedCode),
+      );
+    });
+
+    test('a nameable target reports no platform substitution', () {
+      final diagnostics = <MosaicDiagnostic>[];
+      configureOn(TargetPlatform.android, diagnostics).dispose();
+      expect(
+        diagnostics.map((diagnostic) => diagnostic.code),
+        isNot(contains(mosaicAnalyticsPlatformSubstitutedCode)),
+      );
+    });
   });
 
   group('authoritative entitlements through the client', () {

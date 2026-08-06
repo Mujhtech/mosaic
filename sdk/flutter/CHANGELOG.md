@@ -35,6 +35,27 @@
   `exists` is true, every comparison is unknown rather than false, and an
   authored range with no canonical form makes `locale_matches` unknown so a
   negated condition cannot read it as a match.
+- Report `product_selection_default_substituted` once per Product Selector when
+  an unavailable authored default — or an unavailable current selection — is
+  replaced by the first available option. The substitution itself is unchanged
+  and Protocol-sanctioned (`unavailableFallback.selection: firstAvailable`); it
+  was previously silent, and the `product_selected` payload's `source` enum
+  admits only `default` and `user`, so no wire value can distinguish a
+  substituted selection from an authored one. The code matches the Swift SDK.
+- Report `analytics.platform.substituted` once at configure time when the
+  running Flutter target is neither iOS nor Android. The analytics event
+  contract's `context.platform` is a required, closed `ios | android` enum, so
+  such events are filed under `android`; with collection now on by default the
+  substitution is continuous and must not be silent.
+- Require `applicationId` and `platform` on
+  `mosaicCustomerEntitlementCacheNamespace`. They scope the authority, and a
+  default would let a caller omit the scope and collide with another install's
+  cached access.
+- A Placement Decision source this SDK cannot read now compares unknown for
+  every operator, including `exists` and `does_not_exist`. Reporting it as
+  absent made `does_not_exist` a positive Rule match asserting the host
+  reported nothing, when the truth is that Mosaic could not read what it
+  reported.
 - **Breaking default:** analytics collection is now on by default.
   `Mosaic.configure` defaults `analyticsEnvironmentSettings` to
   `collectionEnabled: true`, so a client configured with a base URL (or an

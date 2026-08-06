@@ -462,6 +462,21 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
             : 'no observation transport could be constructed',
       );
     }
+    if (runtime != null && !_analyticsPlatformIsNameable) {
+      // Collection is on by default, so an unnameable target now emits events
+      // continuously. `context.platform` admits only `ios` and `android`, so
+      // every one of them is filed under `android`. Naming it here is what
+      // keeps a desktop or web install from reading as Android traffic with no
+      // trace of the substitution.
+      onDiagnostic?.call(
+        const MosaicDiagnostic(
+          code: mosaicAnalyticsPlatformSubstitutedCode,
+          message: 'The analytics event contract names only ios and android, '
+              'so events from this target are reported as android.',
+          severity: MosaicDiagnosticSeverity.warning,
+        ),
+      );
+    }
     if (customerTokenProvider != null && customerEntitlements == null) {
       reportDisabled(
         'Authoritative entitlements',
@@ -990,10 +1005,23 @@ final class _MosaicPurchaseSignalSink
   }
 }
 
-String get _analyticsPlatform => switch (defaultTargetPlatform) {
-      TargetPlatform.iOS => 'ios',
-      _ => 'android',
-    };
+/// Whether the analytics event contract can name the running target honestly.
+///
+/// `context.platform` is a closed `ios | android` enum and is required, so a
+/// Flutter host running on desktop or web has no truthful value. The SDK still
+/// reports `android` to keep the batch schema-valid, but the substitution is
+/// named through [mosaicAnalyticsPlatformSubstitutedCode] rather than left to
+/// silently mislabel every event from those devices.
+bool get _analyticsPlatformIsNameable =>
+    defaultTargetPlatform == TargetPlatform.iOS ||
+    defaultTargetPlatform == TargetPlatform.android;
+
+/// Reported once when analytics events carry a substituted `context.platform`.
+const String mosaicAnalyticsPlatformSubstitutedCode =
+    'analytics.platform.substituted';
+
+String get _analyticsPlatform =>
+    defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android';
 
 final class MosaicConfigurationException implements Exception {
   const MosaicConfigurationException(this.message);
