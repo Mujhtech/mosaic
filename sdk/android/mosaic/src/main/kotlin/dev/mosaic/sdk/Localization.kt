@@ -13,8 +13,9 @@ class MosaicLocalizationResolver(
      * one catalog that exists and the user silently reads the document's default language —
      * direction included, so an Egyptian Arabic device lays out left-to-right. Protocol 0.2
      * canonicalizes the requested tag before an exact lookup; an unusable request contributes no
-     * candidate rather than becoming [MosaicDeviceLocale.FALLBACK] and selecting an `en` catalog
-     * the document may happen to declare. Lookup — unlike targeting — recovers the leading language
+     * candidate rather than being substituted with a plausible tag such as `en` and selecting an
+     * `en` catalog the document may happen to declare. Lookup — unlike targeting — recovers the
+     * leading language
      * subtag from a tag it cannot canonicalize, so `en-US-verylongsubtag` still reaches `en`.
      */
     private val canonicalRequest: String? =

@@ -22,25 +22,32 @@ import java.util.Locale
  * unencodable and loses it. Every locale the SDK sends or matches comes through here.
  */
 internal object MosaicDeviceLocale {
-    /** The last-resort tag when nothing usable can be recovered. */
-    const val FALLBACK = "en"
-
     /**
-     * The current device locale in canonical form.
+     * The current device locale in canonical form, or `null` when the platform reports nothing
+     * usable.
      *
-     * Never recovers a language subtag from a tag that cannot be canonicalized: Placement targeting
-     * must not retarget a malformed tag onto its broader language, because that changes which users
-     * match a Rule. Catalog lookup does recover — see [canonicalLookupOrNull].
+     * Null, never a substituted tag. `application.locale` is optional in both the Placement
+     * decision context and the analytics event context, and an absent locale makes every locale
+     * condition evaluate UNKNOWN through the three-valued evaluator. Substituting a plausible tag
+     * such as `en` would instead be a claim: a device whose locale Mosaic cannot read would be
+     * targeted, bucketed, and reported as an English device, and `does_not_exist` — the Rule that
+     * asks "did this host report a locale at all" — would silently stop matching it.
+     *
+     * Never recovers a language subtag from a tag that cannot be canonicalized either: Placement
+     * targeting must not retarget a malformed tag onto its broader language, because that changes
+     * which users match a Rule. Catalog lookup does recover — see [canonicalLookupOrNull].
      */
-    val current: String get() = canonical(rawDeviceTag())
+    val current: String? get() = canonicalOrNull(rawDeviceTag())
 
     /**
      * The current device locale for the analytics event context, whose 35-byte bound is tighter
-     * than the canonical form allows. A canonical tag past the bound degrades to its language
-     * subtag, because an event that cannot be encoded is an event that is lost. Targeting reads
-     * [current] instead, so this bound never moves anyone between Rules.
+     * than the canonical form allows, or `null` when nothing usable is reported. A canonical tag
+     * past the bound degrades to its language subtag, because an event that cannot be encoded is an
+     * event that is lost; that degradation is bounded by what the device actually reported and
+     * never invents a locale. Targeting reads [current] instead, so this bound never moves anyone
+     * between Rules.
      */
-    val currentForEventContext: String get() = boundedDeviceTag()
+    val currentForEventContext: String? get() = boundedDeviceTag()
 
     /**
      * The canonical form of one language tag or legacy `Locale.toString()` identifier, or `null`
@@ -73,9 +80,6 @@ internal object MosaicDeviceLocale {
         }.joinToString("-")
     }
 
-    /** [canonicalOrNull] with the last-resort tag, for callers that must produce a value. */
-    fun canonical(identifier: String): String = canonicalOrNull(identifier) ?: FALLBACK
-
     /**
      * The requested locale as a **catalog lookup** candidate.
      *
@@ -100,14 +104,15 @@ internal object MosaicDeviceLocale {
     private fun rawDeviceTag(): String =
         runCatching { Locale.getDefault().toLanguageTag() }.getOrNull().orEmpty()
 
-    private fun boundedDeviceTag(): String {
-        val canonical = canonicalOrNull(rawDeviceTag())
+    private fun boundedDeviceTag(): String? {
+        val canonical = canonicalOrNull(rawDeviceTag()) ?: return null
         // The analytics event context bounds the locale at 35 bytes on top of the pattern, and a
         // long variant chain can still exceed that after truncation. Degrading to the language
-        // subtag keeps the event encodable instead of losing it to the bound.
-        return canonical?.takeIf(::withinContextBound)
-            ?: canonical?.substringBefore('-')?.takeIf(::withinContextBound)
-            ?: FALLBACK
+        // subtag the device itself reported keeps the event encodable instead of losing it to the
+        // bound. If even that will not fit, the field is omitted rather than invented: `locale` is
+        // optional in the event context, so an absent locale is reportable and a wrong one is not.
+        return canonical.takeIf(::withinContextBound)
+            ?: canonical.substringBefore('-').takeIf(::withinContextBound)
     }
 
     /**

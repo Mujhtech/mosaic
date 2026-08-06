@@ -6,6 +6,7 @@ import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -120,7 +121,7 @@ class PlacementDecisionTest {
             "EN_us",
             "en--US",
         ).forEach { raw ->
-            listOf(raw, MosaicDeviceLocale.canonical(raw)).forEach { locale ->
+            listOfNotNull(raw, MosaicDeviceLocale.canonicalOrNull(raw)).forEach { locale ->
                 val result = decide(locale)
                 assertEquals(locale, "rule_locale_equals", (result as MosaicEvaluationResult.Paywall).matchedRuleId)
                 assertEquals(locale, expected.paywallVersionId, result.paywallVersionId)
@@ -129,7 +130,42 @@ class PlacementDecisionTest {
 
         // The default context must keep going through the shared rule, not the raw platform tag.
         val default = MosaicDecisionContext().applicationLocale
-        assertEquals(default, default?.let(MosaicDeviceLocale::canonical))
+        assertEquals(default, default?.let(MosaicDeviceLocale::canonicalOrNull))
+    }
+
+    /**
+     * A device whose locale the platform reports as nothing usable must be **absent**, not
+     * substituted. Substituting a plausible tag would target, bucket, and report that device as an
+     * English one, and would silently stop `does_not_exist` — the Rule that asks whether a locale
+     * was reported at all — from matching it. Absence instead makes every locale comparison UNKNOWN
+     * through the three-valued evaluator, which is the honest answer.
+     */
+    @Test
+    fun `an unreadable device locale is absent rather than substituted`() {
+        assertNull(MosaicDeviceLocale.canonicalOrNull("@calendar=chinese"))
+
+        val release = MosaicConfigurationDeliveryDecoder.decode(fixture("configuration-delivery/v2/advanced-release.json"))
+        val ruleSet = release.placementDecisions.getValue("export_pdf")
+        val corpus = JsonParser.parseString(fixture("placement-decision/v1/evaluator-conformance.json")).asJsonObject
+        val canonical = corpus.getAsJsonArray("cases").map { it.asJsonObject }
+            .first { it.getAsJsonObject("expected").optionalString("matchedRuleId") == "rule_locale_equals" }
+        val assignment = MosaicAssignmentKey(MosaicAssignmentKeyType.INSTALLATION, "install_01")
+        val base = context(canonical.getAsJsonObject("context"))
+
+        // The locale-equality rule matches the reported device and must not match the absent one.
+        assertEquals(
+            "rule_locale_equals",
+            (MosaicPlacementEvaluator.evaluate(ruleSet, base, assignment) as MosaicEvaluationResult.Paywall).matchedRuleId,
+        )
+        val absent = MosaicPlacementEvaluator.evaluate(
+            ruleSet,
+            base.copy(applicationLocale = null),
+            assignment,
+        )
+        assertTrue(
+            "an absent locale must not match the locale-equality rule",
+            (absent as? MosaicEvaluationResult.Paywall)?.matchedRuleId != "rule_locale_equals",
+        )
     }
 
     @Test

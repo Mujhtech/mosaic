@@ -57,6 +57,10 @@ class LocalizationTest {
         )
         val value = MosaicLocalizedText(defaultValue = "inline default", localizationKey = "paywall.headline")
 
+        // A `forEach` over an empty or renamed array passes silently, which would report full
+        // conformance against zero cases. The floor is the corpus as ruled; it only ever rises.
+        assertTrue("locale resolution corpus is empty", corpus.getAsJsonArray("cases").size() >= 13)
+
         corpus.getAsJsonArray("cases").map { it.asJsonObject }.forEach { case ->
             val name = case.get("name").asString
             val resolver = MosaicLocalizationResolver(localization, case.get("requested").asString)

@@ -4,6 +4,7 @@ import java.nio.file.Files
 import java.time.Instant
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -167,27 +168,32 @@ class AnalyticsQueueTest {
     @Test
     fun `device locale canonicalization follows the protocol rule and the event contract`() {
         // The protocol's canonical form, per `protocol/tools/locale-resolution-v0.2.mjs`.
-        assertEquals("en-US", MosaicDeviceLocale.canonical("en-US-u-rg-gbzzzz"))
-        assertEquals("en-US", MosaicDeviceLocale.canonical("en_US@rg=gbzzzz"))
-        assertEquals("zh-Hans-CN", MosaicDeviceLocale.canonical("zh-Hans-CN"))
-        assertEquals("zh-Hans-CN", MosaicDeviceLocale.canonical("zh_Hans_CN@calendar=chinese"))
+        assertEquals("en-US", MosaicDeviceLocale.canonicalOrNull("en-US-u-rg-gbzzzz"))
+        assertEquals("en-US", MosaicDeviceLocale.canonicalOrNull("en_US@rg=gbzzzz"))
+        assertEquals("zh-Hans-CN", MosaicDeviceLocale.canonicalOrNull("zh-Hans-CN"))
+        assertEquals("zh-Hans-CN", MosaicDeviceLocale.canonicalOrNull("zh_Hans_CN@calendar=chinese"))
         // Case is canonicalized, not preserved: language lowercase, alpha-2 region uppercase,
         // script title case, every other subtag lowercase.
-        assertEquals("pt-BR", MosaicDeviceLocale.canonical("PT_br"))
-        assertEquals("es-419", MosaicDeviceLocale.canonical("es_419"))
-        assertEquals("en-US-posix", MosaicDeviceLocale.canonical("en_US_POSIX"))
-        assertEquals("en", MosaicDeviceLocale.canonical(""))
-        assertEquals("en", MosaicDeviceLocale.canonical("@calendar=chinese"))
+        assertEquals("pt-BR", MosaicDeviceLocale.canonicalOrNull("PT_br"))
+        assertEquals("es-419", MosaicDeviceLocale.canonicalOrNull("es_419"))
+        assertEquals("en-US-posix", MosaicDeviceLocale.canonicalOrNull("en_US_POSIX"))
+        // Nothing usable is null, never a plausible substitute: `en` here would be a claim that the
+        // device is English, and `application.locale does_not_exist` would stop matching it.
+        assertNull(MosaicDeviceLocale.canonicalOrNull(""))
+        assertNull(MosaicDeviceLocale.canonicalOrNull("@calendar=chinese"))
         // Empty subtags are dropped rather than ending the tag.
-        assertEquals("en-US", MosaicDeviceLocale.canonical("en--US"))
+        assertEquals("en-US", MosaicDeviceLocale.canonicalOrNull("en--US"))
         // The ICU identifier shapes hosts actually report: a Java `Locale.toString()` extension
         // marker, a POSIX charset suffix, and the multi-preference tag that is 37 bytes raw — past
         // the 35-byte context bound.
-        assertEquals("en-US", MosaicDeviceLocale.canonical("en_US_#u-rg-gbzzzz"))
-        assertEquals("en-US", MosaicDeviceLocale.canonical("en_US.UTF-8"))
-        assertEquals("en-US", MosaicDeviceLocale.canonical("en-US-u-ca-japanese-fw-mon-mu-celsius"))
+        assertEquals("en-US", MosaicDeviceLocale.canonicalOrNull("en_US_#u-rg-gbzzzz"))
+        assertEquals("en-US", MosaicDeviceLocale.canonicalOrNull("en_US.UTF-8"))
+        assertEquals("en-US", MosaicDeviceLocale.canonicalOrNull("en-US-u-ca-japanese-fw-mon-mu-celsius"))
         // Canonicalization is a fixed point, so the live device value survives a second pass.
-        assertEquals(MosaicDeviceLocale.current, MosaicDeviceLocale.canonical(MosaicDeviceLocale.current))
+        assertEquals(
+            MosaicDeviceLocale.current,
+            MosaicDeviceLocale.current?.let(MosaicDeviceLocale::canonicalOrNull),
+        )
 
         // The lookup/targeting asymmetry is deliberate and must not be "fixed" into symmetry:
         // catalog lookup recovers the leading language subtag from a tag it cannot canonicalize,
@@ -201,12 +207,14 @@ class AnalyticsQueueTest {
         // Every canonical value must survive the codec that rejected the un-normalized one.
         val canonical = event("placement-request.json")
         val canonicalContext = canonical.context ?: MosaicAnalyticsContext()
-        listOf("en-US-u-rg-gbzzzz", "en-US-u-ca-japanese-fw-mon-mu-celsius", MosaicDeviceLocale.currentForEventContext)
-            .forEach { raw ->
-                val locale = MosaicDeviceLocale.canonical(raw)
-                val event = canonical.copy(context = canonicalContext.copy(locale = locale))
-                assertEquals(locale, MosaicAnalyticsCodec.decodeEvent(MosaicAnalyticsCodec.encodeEvent(event)).context?.locale)
-            }
+        listOfNotNull(
+            MosaicDeviceLocale.canonicalOrNull("en-US-u-rg-gbzzzz"),
+            MosaicDeviceLocale.canonicalOrNull("en-US-u-ca-japanese-fw-mon-mu-celsius"),
+            MosaicDeviceLocale.currentForEventContext,
+        ).forEach { locale ->
+            val event = canonical.copy(context = canonicalContext.copy(locale = locale))
+            assertEquals(locale, MosaicAnalyticsCodec.decodeEvent(MosaicAnalyticsCodec.encodeEvent(event)).context?.locale)
+        }
 
         // The loss this prevents, made concrete: an event carrying the raw multi-preference tag
         // encodes but no longer decodes, so reloading the persisted queue resets and drops it.
@@ -217,9 +225,13 @@ class AnalyticsQueueTest {
             MosaicAnalyticsCodec.decodeEvent(MosaicAnalyticsCodec.encodeEvent(unbounded))
         }
 
-        // The default context is the seam that ships: it must already be canonical.
+        // The default context is the seam that ships: it must already be canonical, and an
+        // unreadable device locale must reach the wire as an omitted field, never as a fabricated
+        // one — `locale` is optional in the event context precisely so absence is reportable.
         val default = MosaicAnalyticsContext().locale
-        assertEquals(default, default?.let(MosaicDeviceLocale::canonical))
+        assertEquals(default, default?.let(MosaicDeviceLocale::canonicalOrNull))
+        val absent = canonical.copy(context = canonicalContext.copy(locale = null))
+        assertNull(MosaicAnalyticsCodec.decodeEvent(MosaicAnalyticsCodec.encodeEvent(absent)).context?.locale)
     }
 
     /**

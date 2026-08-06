@@ -2,6 +2,14 @@
 
 ## Unreleased (Phase 9C: migration authority awareness)
 
+- A device locale the platform reports as nothing usable is now **absent**, not `en`.
+  `MosaicDeviceLocale.current` and `currentForEventContext` return `String?`, and `application.locale`
+  is optional in both the Placement decision context and the analytics event context, so absence is
+  reportable on the wire. Substituting a plausible tag was a claim rather than a default: it targeted,
+  bucketed, and reported such a device as an English one, and it silently stopped
+  `application.locale does_not_exist` — the Rule that asks whether a locale was reported at all — from
+  matching it. The bounded analytics form still degrades a too-long canonical tag to the language
+  subtag the device itself reported; it no longer invents one when the tag is unreadable.
 - Normalize the device locale once, in `MosaicDeviceLocale`, for both the analytics event context
   and the Placement decision context. Android reports regional preferences as Unicode extensions
   (`en-US-u-rg-gbzzzz`), which fits the locale pattern but is neither the canonical tag nor always
