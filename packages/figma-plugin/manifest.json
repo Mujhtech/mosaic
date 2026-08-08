@@ -1,0 +1,12 @@
+{
+  "name": "Mosaic Export",
+  "id": "mosaic-export",
+  "api": "1.0.0",
+  "main": "build/main.js",
+  "ui": "build/ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["none"],
+    "reasoning": "Mosaic Export never sends the selection anywhere. The document is produced locally and handed to the user as JSON."
+  }
+}
