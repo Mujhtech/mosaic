@@ -17,7 +17,7 @@ must be true before the flip.
 ## Entering `draft`
 
 - Scope accepted by the product owner; a new contract or a contract version
-  normally requires an ADR under `docs/architecture/adr/`.
+  normally requires an ADR under `docs/architecture/decisions/`.
 - Confirmation the change belongs in the protocol at all — framework
   convenience, native resource names, billing-provider models, and platform-only
   view behaviour are not reasons to change the shared schema.

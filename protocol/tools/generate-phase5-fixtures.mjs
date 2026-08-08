@@ -34,7 +34,7 @@ function compatibility(decisions, versions) {
   const requiredFeatures = [...new Set(decisions.flatMap((decision) => decision.ruleSet.compatibility.requiredFeatures))].sort();
   const bucketingAlgorithms = [...new Set(decisions.flatMap((decision) => decision.ruleSet.compatibility.bucketingAlgorithms))].sort();
   const requiredCapabilities = [...new Map(versions.flatMap((version) => version.document.compatibility.requiredCapabilities).map((capability) => [`${capability.name}@${capability.version}`, capability])).values()].sort((left, right) => left.name.localeCompare(right.name));
-  return { placementDecisionContracts: [{ version: "1", requiredFeatures, bucketingAlgorithms }], paywallProtocols: [{ version: "0.2", requiredCapabilities }], acceptance: "atomic" };
+  return { placementDecisionContracts: [{ version: "1", requiredFeatures, bucketingAlgorithms }], paywallProtocols: [{ version: "0.3", requiredCapabilities }], acceptance: "atomic" };
 }
 
 function envelope({ id, number, decisions, versions, products, entitlements = [], environment = { id: "environment_production", key: "production", mode: "production" } }) {

@@ -29,7 +29,7 @@ interprets one as the other.
 | `entitlementReferences` | — | **added, required** |
 | `assetReferences` | required | required |
 
-Embedded Paywall Protocol `0.2` documents are **byte-identical in shape**. v2
+Embedded Paywall Protocol `0.3` documents are **byte-identical in shape**. v2
 changes how a Paywall is selected, not what a Paywall is.
 
 `compatibility` gains Placement Decision declarations: contract version, required

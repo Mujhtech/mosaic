@@ -8,7 +8,7 @@ import { loadDeliveryV1Artifacts } from "./delivery-validation-v1.mjs";
 import { loadDeliveryV2Artifacts, validateDeliveryV2Release } from "./delivery-validation-v2.mjs";
 import { loadExperimentAssignmentV1Artifacts, validateExperimentAssignmentV1 } from "./experiment-assignment-validation-v1.mjs";
 import { loadDecisionV1Artifacts } from "./placement-decision-validation-v1.mjs";
-import { loadProtocolV02Artifacts } from "./validation-v0.2.mjs";
+import { loadProtocolV03Artifacts } from "./validation-v0.3.mjs";
 
 const root = resolve(dirname(new URL(import.meta.url).pathname), "..");
 export const deliveryV3Paths = Object.freeze({
@@ -35,7 +35,7 @@ export function loadDeliveryV3Artifacts() {
 }
 
 function validators(artifacts) {
-  const protocol = loadProtocolV02Artifacts(); const v1 = loadDeliveryV1Artifacts(); const v2 = loadDeliveryV2Artifacts();
+  const protocol = loadProtocolV03Artifacts(); const v1 = loadDeliveryV1Artifacts(); const v2 = loadDeliveryV2Artifacts();
   const decision = loadDecisionV1Artifacts(); const experiment = loadExperimentAssignmentV1Artifacts();
   const ajv = new Ajv2020({ allErrors: true, strict: true });
   for (const schema of [protocol.paywallSchema, decision.schema, v1.releaseSchema, v1.capabilityRequestSchema, experiment.schema, v2.releaseSchema, v2.capabilityRequestSchema]) ajv.addSchema(schema);

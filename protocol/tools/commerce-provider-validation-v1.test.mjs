@@ -153,3 +153,22 @@ test("non-success purchase and restore outcomes cannot grant access", () => {
     ),
   );
 });
+
+test("a shrunken Commerce Provider 1 corpus fails instead of conforming over nothing", () => {
+  // Regression: the fixture loop reported no errors over an empty array, so a
+  // corpus that failed to load read as perfect conformance. Found by
+  // tools/check-guard-vacuity.mjs.
+  const artifacts = loadCommerceProviderV1Artifacts();
+  assert.deepEqual(validateCommerceProviderV1Artifacts(artifacts), []);
+  assert.ok(artifacts.fixtures.length > 0);
+  for (const shrunken of [[], artifacts.fixtures.slice(0, 1), undefined]) {
+    const errors = validateCommerceProviderV1Artifacts({
+      ...artifacts,
+      fixtures: shrunken,
+    });
+    assert.ok(
+      errors.some((error) => error.includes("below the floor of")),
+      `expected a corpus-floor error, got: ${errors.join("; ")}`,
+    );
+  }
+});

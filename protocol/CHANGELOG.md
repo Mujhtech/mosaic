@@ -4,6 +4,297 @@ All notable Mosaic protocol changes are recorded here. A contract's artifacts
 become immutable when its `status` reaches `approved`; before that, its review
 gate may still change them. Every Mosaic contract is `approved` as of v1 GA.
 
+## Paywall Protocol 0.3 replaces 0.2 - 2026-08-06
+
+Status: release candidate (RC1). Breaking. Owner decision, recorded explicitly
+in ADR-0026.
+
+`0.3` is **not approved and not immutable**. The cross-platform
+implementability gate cannot have passed: the Flutter, SwiftUI, and Jetpack
+Compose renderers for the four new components are being written now, and Studio
+cannot yet author them. Local Preview `0.3` is a release candidate for the same
+reason -- it is version-locked to this contract. The outstanding approval gates
+are enumerated in `docs/protocol/v0.3.md`. Narrowing corrections that the
+renderer work surfaces are still permitted, and this is the only state in which
+they are.
+
+**Paywall Protocol `0.3` replaces `0.2` outright. `0.3` does not support `0.2`,
+there is no migration path, and every `0.2` artifact is deleted from the tree.**
+
+This is not a deprecation. `0.2` was not marked `deprecated` with a retirement
+date, and no reader accepts both versions: a `0.2` document is an unknown
+version to a `0.3` reader and is rejected atomically, resolving through
+last-accepted, then bundled fallback, then configuration unavailable. Mosaic is
+pre-release; a second live paywall contract would be redundant compatibility
+code, and redundant compatibility code is a liability. This mirrors the earlier
+decision to delete the RC-to-RC migrator rather than keep it.
+
+### Deleted
+
+- `protocol/schema/v0.2/` (paywall + compatibility manifest)
+- `protocol/schema/local-preview/v0.2/`
+- `protocol/compatibility/v0.2.json`, `protocol/compatibility/local-preview/v0.2.json`
+- `protocol/fixtures/v0.2/`, `protocol/fixtures/local-preview/v0.2/`
+- `docs/protocol/v0.2.md`, `docs/protocol/local-preview-v0.2.md`
+
+### Renamed
+
+`tools/validation-v0.2.mjs` -> `validation-v0.3.mjs`,
+`tools/preview-validation-v0.2.mjs` -> `preview-validation-v0.3.mjs`,
+`tools/locale-resolution-v0.2.mjs` -> `locale-resolution-v0.3.mjs`, with their
+test files. Every `V02`/`v02` symbol in `protocol/browser/` and
+`protocol/tools/` is now `V03`/`v03` (`validateProtocolV02` ->
+`validateProtocolV03`, `MosaicPaywallV02Document` ->
+`MosaicPaywallV03Document`, and so on). The browser contract and all derived
+fixtures were regenerated.
+
+Configuration Delivery `1`/`2`/`3` are **not** renumbered. They embed paywall
+documents, so their `protocolVersion` / `paywallProtocols[].version` constants
+and their `urn:mosaic:protocol:schema:v0.2:paywall` references now name `0.3`.
+Collapsing or renumbering the delivery contracts themselves is a separate
+decision nobody has made.
+
+### Carried forward unchanged
+
+Every `0.2` component, action, layout rule, design-token rule, localization
+rule, locale-resolution behaviour, capability, reader policy, and normalized
+outcome. `0.3` is `0.2` plus four components; nothing was removed or
+re-specified. `releaseCandidate` restarts at `RC1` because `0.3` replaces `0.2`
+rather than succeeding it.
+
+### Added: four components
+
+- **`tabs`** - N labelled panels, one visible at a time. Two through eight
+  entries, each with an id, a localized label, and a content Stack. Required
+  authored `initialTabId` (no positional default: reordering the array must not
+  change which panel opens). Default/Selected styles use the same recursive
+  overlay as Product Card, now expressed through neutral `selectionStyles` /
+  `selectionStateStyle` / `selectionStateStyleOverride` definitions that
+  `productCardStyles` aliases. `selectedLabelColor` is required rather than
+  optional, so "the label colour deliberately does not change" and "the label
+  colour was never authored" cannot share an encoding. Exposed as
+  tablist/tab/tabpanel, with the tab label naming both its control and its
+  panel.
+- **`timeline`** - two through twelve ordered entries, vertical only
+  (`orientation` is a required `"vertical"` constant, following the Scroll
+  Container `axis` precedent). Closed three-arm marker union: `dot`, `ordinal`,
+  `icon` over the existing icon vocabulary. Required `connector` with colour,
+  width, and `solid`/`dashed` style.
+- **`award`** - localized title, optional subtitle (mutually
+  `dependentRequired` with `subtitleTypography`), optional emblem as a closed
+  union over the existing image-asset and icon vocabularies. The emblem is
+  always decorative because the title carries the meaning.
+- **`socialProof`** - required localized quote and attribution, optional
+  integer-only bounded rating, optional avatar image asset. `value` counts
+  steps rather than points against a `whole`/`half` `step` and a `1...10`
+  `maximum`, with a semantic rule rejecting `value > maximum x stepsPerPoint`;
+  integers throughout so four runtimes cannot round a fraction four ways.
+  Aggregate statistics ("2M+ users") are deliberately **not** a variant here -
+  they are Text. `docs/protocol/v0.3.md` argues both decisions.
+
+`featureList` was reviewed and deliberately left unchanged; the assessment and
+the two deferred gaps are recorded in `docs/protocol/v0.3.md`.
+
+### Added: tab selection as runtime state
+
+Runtime state gains a `tabs` map alongside `switches`, `carousels`,
+`navigation`, and `selectedProducts`:
+
+```json
+{ "tabs": { "<tabsComponentId>": "<selectedTabId>" } }
+```
+
+`visibility` gains a third conditional mode:
+
+```json
+{ "mode": "tab", "tabsId": "billing-tabs", "equals": "billing-tabs-annual" }
+```
+
+with the same remove-from-layout-accessibility-and-focus semantics as a false
+Switch condition. Four rules reject atomically: the Tabs component must be on
+the same screen, the tab must be one it declares, the referencing node must not
+be the Tabs component, and the referencing node must not be a descendant of it.
+The last has no Switch analogue - inside a panel the condition is already
+decided, so it is either vacuously true or unsatisfiable, and both are dead
+layout.
+
+`evaluateVisibility` / `evaluateV03Visibility` now take a
+`{ switches, tabs }` selection state rather than a bare switch map, and
+**throw** when a condition names a controller the supplied state does not
+carry. Resolving it instead would read back as `false`, which is a component
+that silently disappears rather than a caller that is told it has a bug.
+
+### Added: five capabilities
+
+`component.tabs`, `component.timeline`, `component.award`,
+`component.socialProof`, `condition.tabVisibility`. All exact-version,
+`fallback: "rejectDocument"`, and derived only when the corresponding feature
+occurs.
+
+### Narrowing corrections after Android adoption (2026-08-06)
+
+Two gaps that Android's first `0.3` adoption exposed, corrected under the RC
+narrowing doctrine before approval. Both were visible cross-renderer divergence,
+and iOS and Flutter were mid-implementation.
+
+**The Social Proof rating announcement was specified incorrectly.** The contract
+document said to announce "*value* out of *maximum*", but `value` counts steps
+and `maximum` counts points, so a four-and-a-half-of-five rating
+(`value: 9, maximum: 5, step: "half"`) announced as "9 out of 5". Corrected:
+
+- the announced quantity is `value / (step === "half" ? 2 : 1)`, exact and never
+  rounded;
+- the phrasing comes from a new **reserved localization key**
+  `mosaic.a11y.rating` with the closed placeholders `{{ rating.value }}` and
+  `{{ rating.maximum }}`, each required exactly once per translation. A renderer
+  must not compose "out of" or any other connective in any language;
+- substituted numerals are locale-independent (ASCII digits, `.` separator, no
+  grouping, one fraction digit only for a half step) so that three renderers
+  produce identical bytes. Locale-aware numerals are deferred;
+- `protocol/fixtures/v0.3/rating-announcement.json` pins the complete expected
+  string for ten cases and is reconciled by `npm run validate` against a
+  declared floor.
+
+**Reserved accessibility strings are now a protocol concept.** This also settles
+the `accessibility.inProgress` question the fallback audit left open. Two keys,
+`mosaic.a11y.rating` and `mosaic.a11y.in_progress`, are consumed by the protocol
+rather than referenced by a component; each is required exactly when the
+document contains the feature that announces it and forbidden otherwise, and
+both directions are enforced. They exist because the audit found hardcoded
+English shipping to production on two platforms. New capability
+`accessibility.reservedStrings`.
+
+**Timeline connector geometry at the sequence ends is now specified.** The
+connector is one continuous run in a leading gutter, drawn first with markers
+over it — which is why an absent interior marker leaves it unbroken without a
+special case. At each end independently: a terminal entry **with** a marker
+starts or ends the connector at that marker's centre; a terminal entry
+**without** one starts or ends it at that entry's content-box edge. Top and
+bottom are physical and never mirror under RTL.
+
+### Rulings from Studio adoption (2026-08-06)
+
+**The capability-derivation surface is now exported rather than mirrored.**
+Studio was hand-maintaining copies of the capability ordering, the colour-field
+table, and the reserved-key table across a package boundary — the same drift
+class already found between the validator and the browser capability tables, and
+one that surfaces as a delivery rejection rather than a type error.
+`protocol/browser/index.js` now exports `expectedDocumentCapabilities`,
+`requiredCapabilitiesFor`, `capabilityNames`, `capabilityByComponentType`,
+`colorFieldNames`, `usesColor`, and `paywallContractVersion`, alongside the
+already-exported `reservedAccessibilityKeys`, `ratingPoints`,
+`ratingMaximumPoints`, and `resolveRatingAnnouncement`. All are declared in the
+generated `browser/index.d.ts`. The internal derivation consumes the exported
+values, and a test pins each export against the code that reads it: an exported
+colour field the predicate does not consult, or an ordering that diverges from
+the schema enum, fails the gate.
+
+**Tabs requires no style capability for its two states.** `styles` is required
+on `tabs`, so `component.tabs` already means "can render authored Default and
+Selected tab appearance" — a `style.tabStates` capability would be present in
+exactly the documents where `component.tabs` is present, and a negotiation
+signal that can never vary independently carries no information. A renderer
+supporting Product Card states but not Tab states is distinguished by declaring
+`component.productCard` and omitting `component.tabs`. Sharing the
+`selectionStyles` definitions states that the components have the same style
+contract, not that they share a capability.
+
+`style.productCardStates` is, by the same reasoning, a legacy signal exactly
+co-derived with `component.productSelector` / `component.productCard` /
+`component.productBadge`. It is retained rather than removed, because removing
+it would churn four teams mid-implementation for no behavioural gain, and a test
+now pins its exact co-derivation so it cannot quietly acquire a second meaning.
+It is a candidate for removal in `0.4`.
+
+### Accessibility composition rulings (2026-08-06)
+
+Flutter's adoption surfaced two more instances of the under-specified-composition
+class. The earlier sweep missed them because they are about how renderers
+**combine** strings, not about the strings themselves.
+
+**Announced segments are never joined.** Flutter joined a component's segments
+with `". "`; Android and iOS were about to pick differently. `". "` is
+renderer-invented punctuation in exactly the way a hardcoded "out of" is a
+renderer-invented word, and it is wrong outside Latin script — Chinese ends
+sentences with `。`, Arabic uses `،`, Thai uses no mark, Devanagari uses `।`.
+Ruled: each announced segment is its own accessibility element inside a
+container labelled by the component's authored `accessibility.label`, in a fixed
+order, with the platform supplying any pause. `separator` is `null` by contract.
+Order is `rating`/`quote`/`attribution` for Social Proof, `title`/`subtitle` for
+Award, and per-entry `title`/`description` list items for Timeline. An absent
+optional segment produces no element at all, never an empty one. Avatars,
+emblems, markers, and connectors are decorative and never announced.
+
+**A busy Button carries its state as a value, not in its name.** Flutter
+announced `mosaic.a11y.in_progress` as the semantic value leading the visible
+in-progress content; Android read it as the state description; iOS was
+unspecified. Ruled: a Button is one accessibility element whose name is its
+authored `accessibility.label` and **does not change** when it becomes busy — a
+control whose name changes mid-operation is disorienting and breaks automation
+that located it by name. The busy state is the control's value
+(`accessibilityValue` on iOS, `stateDescription` on Compose, `Semantics(value:)`
+on Flutter). `children` and `inProgressChildren` are never announced separately.
+Because the state occupies a distinct property rather than being concatenated,
+the leading-or-trailing question disappears.
+
+`protocol/fixtures/v0.3/accessibility-announcement.json` pins eleven cases
+covering all four components, both Button states, both sides of every optional
+segment, and three catalogs including RTL, reconciled against the reference
+implementation with a declared floor. New exports:
+`accessibilityAnnouncement` and `resolvedCatalogStrings`.
+
+### A mechanical check for guards that cannot fail (2026-08-06)
+
+Five sightings of one defect class on one branch: conformance corpora reporting
+success over zero cases; the validator and browser capability tables drifting
+apart; Flutter's `x !== V && x !== V` left behind by a collapsed version alias;
+a corpus-floor test asserting `cases.length >= FLOOR` against the constant the
+implementation already compares, so lowering the floor satisfied both. Manual
+review missed all of them.
+
+`tools/check-guard-vacuity.mjs`, wired into `npm run validate` and available as
+`npm run check:guards`, is the mechanical part. Three narrow textual rules over
+`protocol/`'s own JavaScript: a condition whose operands repeat; an exported
+`validate*` function that walks a corpus without ever comparing its size; and a
+test asserting a corpus length against a floor constant, which cannot fail while
+the implementation enforcing the same inequality is green.
+
+**It found a fifth instance on its first run.**
+`validateCommerceProviderV1Artifacts` and its v2 twin reported zero errors over
+an emptied fixture array — a corpus that failed to load read as perfect
+conformance. Both now declare a floor and carry a shrink-the-corpus test.
+
+Its own test writes probe files and asserts each rule both fires and stays quiet
+on correct code, because a lint that stops firing is the class it exists to
+catch. Two false-positive shapes are pinned deliberately: distinct
+single-character literal comparisons (`c === "(" || c === "["`), and a corpus
+count captured into a variable before being compared.
+
+**Not covered**, and documented in the script rather than implied: cross-file
+table duplication is not textually detectable and is prevented structurally
+instead, by exporting the derivation surface from one place with a test pinning
+each export against the code that reads it; whether a floor is set to a number
+that *means* anything stays a human judgement; and none of this extends to
+Kotlin, Swift, Dart, or Go, which have their own linters.
+
+### No-fallback discipline
+
+Every new optional field states what its absence means, and no absence is a
+masked default. Timeline `markerColor`, `markerSize`, and
+`descriptionTypography` are required when an entry consumes them and
+**forbidden** when none does - both directions enforced, so a value nothing
+reads cannot survive a redesign. The Social Proof rating bound, the Timeline
+co-presence rules, and the new corpus floor were each verified by breaking them
+and watching the suite fail.
+
+`validateRejectionLayers` now enforces a declared per-corpus case-count floor
+(`fixtures/v0.3/invalid` declares 12) and fails any registered corpus that holds
+zero fixtures. A corpus that has silently emptied reconciles perfectly against a
+recorded map of zero fixtures and reports success over nothing; that is the
+defect the 2026-08-05 entry above found in the analytics and decision corpora,
+and it does not get to recur in a new one.
+
+
 ## Corpus floors and strict localization in the references - 2026-08-05
 
 Status: housekeeping

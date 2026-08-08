@@ -4,20 +4,21 @@ The authoritative index of what Mosaic promises about its contracts. Every
 statement here is enforced by `protocol/compatibility/**` manifests and the
 validators in `protocol/tools/`, not only by prose.
 
-## Approved contract set at v1 GA
+## Contract set
 
-| Contract | Approved versions | Manifest |
-| --- | --- | --- |
-| Paywall Protocol | `0.2` | `protocol/compatibility/v0.2.json` |
-| Local Preview (development-only) | `0.2` | `protocol/compatibility/local-preview/v0.2.json` |
-| Configuration Delivery | `1`, `2`, `3` | `protocol/compatibility/configuration-delivery/` |
-| Placement Decision | `1` | `protocol/compatibility/placement-decision/v1.json` |
-| Experiment Assignment | `1` | `protocol/compatibility/experiment-assignment/v1.json` |
-| Analytics Event | `1`, `2` | `protocol/compatibility/analytics-event/` |
-| Commerce Provider Contract | `1`, `2` | `protocol/compatibility/commerce-provider/` |
-| Commerce Configuration | `1`, `2` | `protocol/compatibility/commerce-configuration/` |
+| Contract | Versions | Status | Manifest |
+| --- | --- | --- | --- |
+| Paywall Protocol | `0.3` | release candidate | `protocol/compatibility/v0.3.json` |
+| Local Preview (development-only) | `0.3` | release candidate | `protocol/compatibility/local-preview/v0.3.json` |
+| Configuration Delivery | `1`, `2`, `3` | approved | `protocol/compatibility/configuration-delivery/` |
+| Placement Decision | `1` | approved | `protocol/compatibility/placement-decision/v1.json` |
+| Experiment Assignment | `1` | approved | `protocol/compatibility/experiment-assignment/v1.json` |
+| Analytics Event | `1`, `2` | approved | `protocol/compatibility/analytics-event/` |
+| Commerce Provider Contract | `1`, `2` | approved | `protocol/compatibility/commerce-provider/` |
+| Commerce Configuration | `1`, `2` | approved | `protocol/compatibility/commerce-configuration/` |
 
-All 13 manifests are `status: "approved"`. Every version identifier is
+11 manifests are `status: "approved"`; the two Paywall Protocol `0.3` manifests
+are `status: "releaseCandidate"` and are not yet immutable (ADR-0026). Every version identifier is
 independent: Delivery `3` does not imply Paywall `3`, and a contract's number
 carries no compatibility meaning relative to any other contract.
 
@@ -106,9 +107,9 @@ imitation.
 
 ## Exact-match reading
 
-Readers match versions **exactly**. A reader declaring Paywall `0.2` accepts
-only `0.2`. Numeric ordering never implies support: a `0.3` document is as
-unreadable to a `0.2` reader as a `9.9` document, and a `1` reader must not
+Readers match versions **exactly**. A reader declaring Paywall `0.3` accepts
+only `0.3`. Numeric ordering never implies support: a `0.3` document is as
+unreadable to a `0.3` reader as a `9.9` document, and a `1` reader must not
 accept a `2` document because 2 is "newer".
 
 Unknown versions, unknown fields, unknown enumeration members, and unknown

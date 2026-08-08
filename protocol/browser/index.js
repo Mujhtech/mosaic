@@ -1,36 +1,36 @@
 import Ajv2020 from "ajv/dist/2020.js";
 
-import compatibilityManifest from "../compatibility/v0.2.json" with { type: "json" };
-import localProjectSchema from "../schema/local-preview/v0.2/local-project.schema.json" with { type: "json" };
-import previewMessageSchema from "../schema/local-preview/v0.2/preview-message.schema.json" with { type: "json" };
-import paywallSchema from "../schema/v0.2/paywall.schema.json" with { type: "json" };
+import compatibilityManifest from "../compatibility/v0.3.json" with { type: "json" };
+import localProjectSchema from "../schema/local-preview/v0.3/local-project.schema.json" with { type: "json" };
+import previewMessageSchema from "../schema/local-preview/v0.3/preview-message.schema.json" with { type: "json" };
+import paywallSchema from "../schema/v0.3/paywall.schema.json" with { type: "json" };
 
 export const localPreviewContractVersion =
   previewMessageSchema.properties.previewProtocolVersion.const;
 export const localPreviewWebSocketProtocol =
   `mosaic.local-preview.v${localPreviewContractVersion}`;
-export const localPreviewContractVersions = Object.freeze(["0.2"]);
-export const localPreviewVersionPreference = Object.freeze(["0.2"]);
+export const localPreviewContractVersions = Object.freeze(["0.3"]);
+export const localPreviewVersionPreference = Object.freeze(["0.3"]);
 export const localPreviewWebSocketProtocols = Object.freeze({
-  "0.2": "mosaic.local-preview.v0.2",
+  "0.3": "mosaic.local-preview.v0.3",
 });
 export const previewMessageTypes = Object.freeze([
   ...previewMessageSchema.properties.type.enum,
 ]);
 export const previewMessageTypesByVersion = Object.freeze({
-  "0.2": previewMessageTypes,
+  "0.3": previewMessageTypes,
 });
 export const requiredPreviewCapabilities = Object.freeze([
   ...previewMessageSchema.$defs.previewCapabilityName.enum,
 ]);
-const requiredPreviewCapabilitiesV02 = requiredPreviewCapabilities;
+const requiredPreviewCapabilitiesV03 = requiredPreviewCapabilities;
 export const canonicalSchemas = Object.freeze({
   paywall: paywallSchema,
   previewMessage: previewMessageSchema,
   localProject: localProjectSchema,
 });
 export const canonicalSchemasByVersion = Object.freeze({
-  "0.2": Object.freeze({
+  "0.3": Object.freeze({
     paywall: paywallSchema,
     previewMessage: previewMessageSchema,
     localProject: localProjectSchema,
@@ -41,12 +41,12 @@ function incompatibleSchemaVersionDiagnostic() {
   return {
     code: "preview.incompatibleSchemaVersion",
     message:
-      "This preview client cannot receive the current Protocol 0.2 draft.",
+      "This preview client cannot receive the current Protocol 0.3 draft.",
     fallback: "keepLastAcceptedDraft",
     recovery: {
       action: "updatePreviewClient",
       message:
-        "Update the preview client to a version that supports Local Preview and Protocol 0.2.",
+        "Update the preview client to a version that supports Local Preview and Protocol 0.3.",
     },
   };
 }
@@ -234,8 +234,8 @@ export function decideLocalPreviewDraftDelivery({
       version,
     ]),
   );
-  const missingPreviewCapabilities = requiredPreviewCapabilitiesV02.filter(
-    (name) => previewCapabilities.get(name) !== "0.2",
+  const missingPreviewCapabilities = requiredPreviewCapabilitiesV03.filter(
+    (name) => previewCapabilities.get(name) !== "0.3",
   );
   if (missingPreviewCapabilities.length > 0) {
     return {
@@ -243,8 +243,8 @@ export function decideLocalPreviewDraftDelivery({
       diagnostic: structuredDeliveryDiagnostic({
         code: "preview.unsupportedPreviewCapability",
         message:
-          "The preview client does not support every required Local Preview capability at version 0.2.",
-        recoveryMessage: `Update the preview client to support: ${missingPreviewCapabilities.join(", ")}@0.2.`,
+          "The preview client does not support every required Local Preview capability at version 0.3.",
+        recoveryMessage: `Update the preview client to support: ${missingPreviewCapabilities.join(", ")}@0.3.`,
       }),
     };
   }
@@ -311,38 +311,61 @@ if (!validatePaywallSchema || !validatePreviewMessageSchema) {
   throw new Error("Canonical Mosaic schemas were not registered.");
 }
 
-const capabilityByType = Object.freeze({
+/**
+ * The canonical capability ordering, taken from the schema enum.
+ *
+ * `requiredCapabilities` is serialised in this order. Consumers must not
+ * hand-maintain a copy: a divergence here is rejected at delivery rather than
+ * caught by a typechecker.
+ */
+export const capabilityNames = Object.freeze([
+  ...paywallSchema.$defs.capabilityName.enum,
+]);
+
+export const paywallContractVersion = paywallSchema.$defs.version.const;
+
+export const capabilityByComponentType = Object.freeze({
+  award: "component.award",
   button: "component.button",
   carousel: "component.carousel",
-  closeButton: "component.closeButton",
   featureList: "component.featureList",
   icon: "component.icon",
   image: "component.image",
-  legalText: "component.legalText",
   productBadge: "component.productBadge",
   productCard: "component.productCard",
   productSelector: "component.productSelector",
-  purchaseButton: "component.purchaseButton",
-  restoreButton: "component.restoreButton",
   scrollContainer: "layout.scrollContainer",
+  socialProof: "component.socialProof",
   stack: "layout.stack",
   switch: "component.switch",
+  tabs: "component.tabs",
   text: "component.text",
-  verticalStack: "layout.verticalStack",
+  timeline: "component.timeline",
   countdown: "component.countdown",
 });
 
-const colorFieldNames = new Set([
+/**
+ * Property names whose presence means a value carries an authored colour.
+ *
+ * Exported as the source the derivation itself reads -- `usesColor` builds its
+ * lookup from this array, so an entry that is not consulted cannot exist.
+ */
+export const colorFieldNames = Object.freeze([
   "background",
   "color",
+  "emptyColor",
+  "filledColor",
   "markerColor",
   "offTrackColor",
   "onTrackColor",
   "productLabelColor",
   "runtimePriceColor",
+  "selectedLabelColor",
   "textColor",
   "thumbColor",
 ]);
+
+const colorFieldNameSet = new Set(colorFieldNames);
 
 const countdownUnitOrder = Object.freeze({
   day: 0,
@@ -350,6 +373,59 @@ const countdownUnitOrder = Object.freeze({
   minute: 2,
   second: 3,
 });
+
+/**
+ * Localization keys the protocol consumes itself. Mirrors
+ * `tools/validation-v0.3.mjs`; the two must agree, and a test asserts it.
+ */
+export const reservedAccessibilityKeys = Object.freeze({
+  "mosaic.a11y.rating": Object.freeze({
+    placeholders: Object.freeze(["{{ rating.value }}", "{{ rating.maximum }}"]),
+    consumedBy: (entries) =>
+      entries.some(({ node }) => node.type === "socialProof" && node.rating),
+    consumer: "a Social Proof rating",
+  }),
+  "mosaic.a11y.in_progress": Object.freeze({
+    placeholders: Object.freeze([]),
+    consumedBy: (entries) =>
+      entries.some(({ node }) => node.type === "button" && node.inProgressChildren),
+    consumer: "Button in-progress content",
+  }),
+});
+
+/**
+ * A rating in points, as substituted into `{{ rating.value }}`. `value` counts
+ * steps and `maximum` counts points, so announcing `value` directly says
+ * "9 out of 5". Locale-independent by design -- see docs/protocol/v0.3.md.
+ */
+export function ratingPoints(rating) {
+  const stepsPerPoint = rating.step === "half" ? 2 : 1;
+  const points = rating.value / stepsPerPoint;
+  return Number.isInteger(points) ? String(points) : points.toFixed(1);
+}
+
+export function ratingMaximumPoints(rating) {
+  return String(rating.maximum);
+}
+
+export function resolveRatingAnnouncement(rating, template) {
+  if (typeof template !== "string") {
+    throw new TypeError(
+      "A rating announcement requires the resolved mosaic.a11y.rating string.",
+    );
+  }
+  for (const placeholder of reservedAccessibilityKeys["mosaic.a11y.rating"]
+    .placeholders) {
+    if (!template.includes(placeholder)) {
+      throw new TypeError(
+        `The mosaic.a11y.rating string is missing ${placeholder}.`,
+      );
+    }
+  }
+  return template
+    .replaceAll("{{ rating.value }}", ratingPoints(rating))
+    .replaceAll("{{ rating.maximum }}", ratingMaximumPoints(rating));
+}
 
 const externalUrlPattern =
   /^https:\/\/([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::([0-9]{1,5}))?(?:[/?#][^\s\\\u0000-\u001F\u007F]*)?$/u;
@@ -523,7 +599,7 @@ function walkDocumentNodes(document) {
     entries.push({ node, path, screenId, ancestors });
     if (node.type === "scrollContainer") {
       visit(node.content, `${path}/content`, screenId, [...ancestors, node]);
-    } else if (node.type === "verticalStack" || node.type === "stack") {
+    } else if (node.type === "stack") {
       for (const [index, child] of (node.children ?? []).entries()) {
         visit(child, `${path}/children/${index}`, screenId, [...ancestors, node]);
       }
@@ -532,6 +608,15 @@ function walkDocumentNodes(document) {
         visit(
           page.content,
           `${path}/pages/${index}/content`,
+          screenId,
+          [...ancestors, node],
+        );
+      }
+    } else if (node.type === "tabs") {
+      for (const [index, entry] of (node.tabs ?? []).entries()) {
+        visit(
+          entry.content,
+          `${path}/tabs/${index}/content`,
           screenId,
           [...ancestors, node],
         );
@@ -559,12 +644,8 @@ function walkDocumentNodes(document) {
     }
   }
 
-  if (document.schemaVersion === "0.2") {
-    for (const [index, screen] of document.screens.entries()) {
-      visit(screen.layout, `/screens/${index}/layout`, screen.id);
-    }
-  } else {
-    visit(document.layout, "/layout", null);
+  for (const [index, screen] of document.screens.entries()) {
+    visit(screen.layout, `/screens/${index}/layout`, screen.id);
   }
   return entries;
 }
@@ -770,6 +851,11 @@ export function runtimeStateForAcceptedRevision(document) {
         .filter(({ node }) => node.type === "switch")
         .map(({ node }) => [node.id, node.initialValue]),
     ),
+    tabs: Object.fromEntries(
+      entries
+        .filter(({ node }) => node.type === "tabs")
+        .map(({ node }) => [node.id, node.initialTabId]),
+    ),
     carousels: Object.fromEntries(
       entries
         .filter(({ node }) => node.type === "carousel")
@@ -813,21 +899,51 @@ export function applyNavigationAction(navigationState, action) {
   };
 }
 
-export function evaluateVisibility(visibility, switchValues = {}) {
+/**
+ * Selection state a conditional-visibility decision depends on.
+ *
+ * `selectionState` carries `{ switches, tabs }`. A condition whose controller
+ * is absent from the state it was handed throws rather than resolving: an
+ * unknown Switch compared with `===` reads back as `false`, and `false` is a
+ * component that silently disappears.
+ */
+export function evaluateVisibility(visibility, selectionState = {}) {
   if (!visibility || visibility.mode === "always") return true;
   if (visibility.mode === "hidden") return false;
-  return switchValues[visibility.switchId] === visibility.equals;
+  if (visibility.mode === "switch") {
+    const switches = selectionState.switches;
+    if (!switches || !Object.hasOwn(switches, visibility.switchId)) {
+      throw new TypeError(
+        `Visibility depends on Switch ${visibility.switchId}, which the supplied runtime state does not carry.`,
+      );
+    }
+    return switches[visibility.switchId] === visibility.equals;
+  }
+  const tabs = selectionState.tabs;
+  if (!tabs || !Object.hasOwn(tabs, visibility.tabsId)) {
+    throw new TypeError(
+      `Visibility depends on Tabs ${visibility.tabsId}, which the supplied runtime state does not carry.`,
+    );
+  }
+  return tabs[visibility.tabsId] === visibility.equals;
 }
 
 export function paywallRuntimeDiagnostics(
   document,
-  switchValues,
+  selectionState,
   navigationState,
 ) {
-  if (document?.schemaVersion !== "0.2") return [];
+  if (document?.schemaVersion !== "0.3") {
+    // Returning no diagnostics here would read as "nothing is wrong with this
+    // document", which is the opposite of what an unreadable version means.
+    throw new TypeError(
+      "Runtime diagnostics require a Paywall Protocol 0.3 document.",
+    );
+  }
   const entries = walkDocumentNodes(document);
+  const accepted = runtimeStateForAcceptedRevision(document);
   const values =
-    switchValues ?? runtimeStateForAcceptedRevision(document).switches;
+    selectionState ?? { switches: accepted.switches, tabs: accepted.tabs };
   const navigation = navigationState ?? {
     currentScreenId: document.initialScreenId,
     history: [document.initialScreenId],
@@ -896,6 +1012,157 @@ export function resolveCountdownState(countdown, now) {
   };
 }
 
+/**
+ * The strings a requested locale resolves to, per the documented candidate
+ * chain: the requested tag, its base language, `fallbackLocale`, then
+ * `defaultLocale`. A key missing from the first declared catalog falls through
+ * the remaining candidates -- catalogs are partial by design, so this is a
+ * declared lookup order and not a fallback that hides missing data.
+ */
+export function resolvedCatalogStrings(localization, requestedLocale) {
+  const candidates = [];
+  for (const candidate of [
+    requestedLocale,
+    typeof requestedLocale === "string" ? requestedLocale.split("-")[0] : null,
+    localization.fallbackLocale,
+    localization.defaultLocale,
+  ]) {
+    if (candidate && !candidates.includes(candidate)) candidates.push(candidate);
+  }
+  const declared = candidates.filter((candidate) =>
+    Object.hasOwn(localization.locales, candidate),
+  );
+  if (declared.length === 0) {
+    throw new TypeError(
+      `No declared catalog matches requested locale ${requestedLocale}.`,
+    );
+  }
+  const strings = {};
+  for (const candidate of [...declared].reverse()) {
+    Object.assign(strings, localization.locales[candidate].strings);
+  }
+  return strings;
+}
+
+/**
+ * Resolves one localized string from an explicit catalog.
+ *
+ * Throws rather than falling back to the inline `default`. These are
+ * conformance vectors: a missing key must fail loudly here, not quietly pin an
+ * announcement that a real renderer would resolve differently.
+ */
+function catalogString(strings, key) {
+  if (!Object.hasOwn(strings, key)) {
+    throw new TypeError(`The resolved catalog does not declare ${key}.`);
+  }
+  return strings[key];
+}
+
+/**
+ * The accessibility announcement contract for one component.
+ *
+ * Renderers do not join segments. Each announced segment is its own
+ * accessibility element inside a labelled container, in the order returned
+ * here, and the platform inserts whatever pause or punctuation its locale and
+ * screen reader use. A renderer that concatenates segments with `". "` has
+ * invented script-specific punctuation exactly the way a hardcoded "out of"
+ * invents a word -- it just looks innocuous because it is punctuation.
+ *
+ * `separator` is `null` by contract and is present in the returned shape so
+ * that "no joining happens" is a value a conformance vector can assert rather
+ * than an absence a reader has to infer.
+ */
+export function accessibilityAnnouncement(node, { strings, state = null } = {}) {
+  if (!strings || typeof strings !== "object") {
+    throw new TypeError("An announcement requires the resolved locale catalog.");
+  }
+  const text = (localizedText) => catalogString(strings, localizedText.localizationKey);
+  const elements = [];
+  const decorative = [];
+
+  if (node.type === "button") {
+    if (state !== "idle" && state !== "inProgress") {
+      throw new TypeError(
+        `Button announcement requires state "idle" or "inProgress", got ${state}.`,
+      );
+    }
+    // A Button is one control. Its name is authored and does not change when it
+    // becomes busy -- a name that changes mid-operation is disorienting and
+    // breaks UI automation -- so busy-ness is carried as the control's value.
+    for (const child of state === "inProgress"
+      ? (node.inProgressChildren ?? [])
+      : node.children) {
+      decorative.push(child.id);
+    }
+    return {
+      composition: "singleElement",
+      separator: null,
+      container: {
+        role: "button",
+        label: text(node.accessibility.label),
+        value:
+          state === "inProgress"
+            ? catalogString(strings, "mosaic.a11y.in_progress")
+            : null,
+        hint: node.accessibility.hint ? text(node.accessibility.hint) : null,
+      },
+      elements,
+      decorative,
+    };
+  }
+
+  if (node.type === "socialProof") {
+    if (node.rating) {
+      elements.push({
+        segment: "rating",
+        text: resolveRatingAnnouncement(
+          node.rating,
+          catalogString(strings, "mosaic.a11y.rating"),
+        ),
+      });
+    }
+    elements.push({ segment: "quote", text: text(node.quote) });
+    elements.push({ segment: "attribution", text: text(node.attribution) });
+    if (node.avatar) decorative.push("avatar");
+  } else if (node.type === "award") {
+    elements.push({ segment: "title", text: text(node.title) });
+    if (node.subtitle) {
+      elements.push({ segment: "subtitle", text: text(node.subtitle) });
+    }
+    if (node.emblem) decorative.push("emblem");
+  } else if (node.type === "timeline") {
+    for (const entry of node.entries) {
+      elements.push({ item: entry.id, segment: "title", text: text(entry.title) });
+      if (entry.description) {
+        elements.push({
+          item: entry.id,
+          segment: "description",
+          text: text(entry.description),
+        });
+      }
+      if (entry.marker) decorative.push(`${entry.id}.marker`);
+    }
+    decorative.push("connector");
+  } else {
+    throw new TypeError(
+      `${node.type} has no composed announcement contract in Protocol 0.3.`,
+    );
+  }
+
+  return {
+    composition: "separateElements",
+    separator: null,
+    container: {
+      role: node.type === "timeline" ? "list" : "group",
+      label: text(node.accessibility.label),
+      value: null,
+      hint: node.accessibility.hint ? text(node.accessibility.hint) : null,
+    },
+    elements,
+    decorative,
+  };
+}
+
 function walkObjectValues(value, visit, path = "") {
   if (Array.isArray(value)) {
     value.forEach((entry, index) =>
@@ -910,20 +1177,29 @@ function walkObjectValues(value, visit, path = "") {
   }
 }
 
-function objectUsesColor(value) {
-  let usesColor = false;
+/**
+ * Whether a value carries an authored colour anywhere inside it.
+ *
+ * This is the predicate `style.colors` derivation runs, exported so a consumer
+ * can ask rather than reimplement the field list.
+ */
+export function usesColor(value) {
+  let found = false;
   walkObjectValues(value, (entry) => {
-    if (entry.type === "colorToken") usesColor = true;
+    if (entry.type === "colorToken") found = true;
     if (
       Object.entries(entry).some(
-        ([key, fieldValue]) => colorFieldNames.has(key) && fieldValue !== undefined,
+        ([key, fieldValue]) =>
+          colorFieldNameSet.has(key) && fieldValue !== undefined,
       )
     ) {
-      usesColor = true;
+      found = true;
     }
   });
-  return usesColor;
+  return found;
 }
+
+const objectUsesColor = usesColor;
 
 function objectUsesType(value, types) {
   let match = false;
@@ -964,7 +1240,6 @@ function localizedTextUsesProductTemplate(document, localizedText) {
 }
 
 function documentUsesProductTemplates(document, nodeEntries) {
-  if (document.schemaVersion !== "0.2") return false;
   return nodeEntries.some(({ node, ancestors }) =>
     (node.type === "text" &&
       ancestors.some((ancestor) => ancestor.type === "productCard") &&
@@ -975,17 +1250,22 @@ function documentUsesProductTemplates(document, nodeEntries) {
   );
 }
 
-function expectedDocumentCapabilities(document, nodeEntries) {
+function deriveDocumentCapabilities(document, nodeEntries) {
   const capabilities = new Set(["localization.catalogs"]);
 
-  if (document.schemaVersion === "0.2") {
-    capabilities.add("navigation.screens");
-    if (document.screens.some((screen) => screen.presentation?.type === "sheet")) {
-      capabilities.add("navigation.sheets");
-    }
-    if (documentUsesProductTemplates(document, nodeEntries)) {
-      capabilities.add("localization.productTemplate");
-    }
+  capabilities.add("navigation.screens");
+  if (document.screens.some((screen) => screen.presentation?.type === "sheet")) {
+    capabilities.add("navigation.sheets");
+  }
+  if (documentUsesProductTemplates(document, nodeEntries)) {
+    capabilities.add("localization.productTemplate");
+  }
+  if (
+    Object.values(reservedAccessibilityKeys).some((reserved) =>
+      reserved.consumedBy(nodeEntries),
+    )
+  ) {
+    capabilities.add("accessibility.reservedStrings");
   }
 
   if (
@@ -996,101 +1276,91 @@ function expectedDocumentCapabilities(document, nodeEntries) {
     capabilities.add("localization.rtl");
   }
   if (document.products.length > 0) capabilities.add("product.references");
-  if (document.schemaVersion === "0.2") {
-    const designSystem = document.designSystem ?? {
-      colors: [],
-      backgrounds: [],
-      shadows: [],
-    };
-    if (
-      designSystem.colors.length > 0 ||
-      designSystem.backgrounds.length > 0 ||
-      designSystem.shadows.length > 0
-    ) {
-      capabilities.add("style.designTokens");
+  const designSystem = document.designSystem ?? {
+    colors: [],
+    backgrounds: [],
+    shadows: [],
+  };
+  if (
+    designSystem.colors.length > 0 ||
+    designSystem.backgrounds.length > 0 ||
+    designSystem.shadows.length > 0
+  ) {
+    capabilities.add("style.designTokens");
+  }
+  const authoredValues = [
+    designSystem,
+    ...nodeEntries.map(({ node }) => node),
+  ];
+  if (
+    authoredValues.some((value) =>
+      objectUsesType(value, new Set(["linearGradient", "radialGradient"])),
+    )
+  ) {
+    capabilities.add("style.gradientBackground");
+  }
+  if (authoredValues.some((value) => objectUsesMediaBackground(value))) {
+    capabilities.add("style.mediaBackground");
+  }
+  if (
+    authoredValues.some((value) =>
+      objectUsesType(value, new Set(["shadow", "shadowToken"])),
+    )
+  ) {
+    capabilities.add("style.shadow");
+  }
+  if (designSystem.colors.length > 0 || objectUsesColor(designSystem)) {
+    capabilities.add("style.colors");
+  }
+  for (const asset of document.assets) {
+    const sourceKind = asset.source?.type === "remote" ? "remote" : "bundled";
+    if (asset.type === "image") {
+      capabilities.add(`asset.${sourceKind}Image`);
+      capabilities.add("fallback.asset");
+    } else if (asset.type === "video") {
+      capabilities.add(`asset.${sourceKind}Video`);
     }
-    const authoredValues = [
-      designSystem,
-      ...nodeEntries.map(({ node }) => node),
-    ];
-    if (
-      authoredValues.some((value) =>
-        objectUsesType(value, new Set(["linearGradient", "radialGradient"])),
-      )
-    ) {
-      capabilities.add("style.gradientBackground");
-    }
-    if (authoredValues.some((value) => objectUsesMediaBackground(value))) {
-      capabilities.add("style.mediaBackground");
-    }
-    if (
-      authoredValues.some((value) =>
-        objectUsesType(value, new Set(["shadow", "shadowToken"])),
-      )
-    ) {
-      capabilities.add("style.shadow");
-    }
-    if (designSystem.colors.length > 0 || objectUsesColor(designSystem)) {
-      capabilities.add("style.colors");
-    }
-    for (const asset of document.assets) {
-      const sourceKind = asset.source?.type === "remote" ? "remote" : "bundled";
-      if (asset.type === "image") {
-        capabilities.add(`asset.${sourceKind}Image`);
-        capabilities.add("fallback.asset");
-      } else if (asset.type === "video") {
-        capabilities.add(`asset.${sourceKind}Video`);
-      }
-    }
-  } else if (document.assets.length > 0) {
-    capabilities.add("asset.bundledImage");
-    capabilities.add("fallback.asset");
   }
 
   for (const { node } of nodeEntries) {
-    const capability = capabilityByType[node.type];
+    const capability = capabilityByComponentType[node.type];
     if (capability) capabilities.add(capability);
     if (node.accessibility || node.type === "carousel") {
       capabilities.add("accessibility.metadata");
     }
-    if (document.schemaVersion === "0.2") {
-      if (node.typography) capabilities.add("style.typography");
-      if (
-        node.appearance ||
-        node.styles ||
-        node.padding ||
-        (node.type === "scrollContainer" && node.background)
-      ) {
-        capabilities.add("style.box");
-      }
-      if (node.sizing) {
-        capabilities.add("layout.sizing");
-        if (Object.hasOwn(node.sizing, "height")) {
-          capabilities.add("layout.heightSizing");
-        }
-      }
-      if (node.outerInsets) capabilities.add("layout.outerInsets");
-      if (Object.hasOwn(node.appearance ?? {}, "clipContent")) {
-        capabilities.add("style.clipping");
-      }
-      if (node.visibility?.mode === "switch") {
-        capabilities.add("condition.switchVisibility");
-      } else if (node.visibility) {
-        capabilities.add("visibility.static");
-      }
-      if (objectUsesColor(node)) capabilities.add("style.colors");
+    if (node.typography) capabilities.add("style.typography");
+    if (
+      node.appearance ||
+      node.styles ||
+      node.padding ||
+      (node.type === "scrollContainer" && node.background)
+    ) {
+      capabilities.add("style.box");
     }
+    if (node.sizing) {
+      capabilities.add("layout.sizing");
+      if (Object.hasOwn(node.sizing, "height")) {
+        capabilities.add("layout.heightSizing");
+      }
+    }
+    if (node.outerInsets) capabilities.add("layout.outerInsets");
+    if (Object.hasOwn(node.appearance ?? {}, "clipContent")) {
+      capabilities.add("style.clipping");
+    }
+    if (node.visibility?.mode === "switch") {
+      capabilities.add("condition.switchVisibility");
+    } else if (node.visibility?.mode === "tab") {
+      capabilities.add("condition.tabVisibility");
+    } else if (node.visibility) {
+      capabilities.add("visibility.static");
+    }
+    if (objectUsesColor(node)) capabilities.add("style.colors");
     if (node.type === "productSelector") {
       capabilities.add("fallback.product");
       capabilities.add("outcome.normalized");
-      if (document.schemaVersion === "0.2") {
-        capabilities.add("style.productCardStates");
-      }
+      capabilities.add("style.productCardStates");
     }
-    if (
-      document.schemaVersion === "0.2" &&
-      (node.type === "productCard" || node.type === "productBadge")
-    ) {
+    if (node.type === "productCard" || node.type === "productBadge") {
       capabilities.add("style.productCardStates");
     }
     if (node.action?.type) {
@@ -1102,6 +1372,31 @@ function expectedDocumentCapabilities(document, nodeEntries) {
   }
 
   return capabilities;
+}
+
+/**
+ * The capability names a document requires, in canonical order.
+ *
+ * The single reference implementation. Studio serialises
+ * `compatibility.requiredCapabilities` from this; the three SDKs compare
+ * against it. Nothing else should derive capabilities by hand -- an
+ * over-declared or under-declared capability is rejected at delivery, and the
+ * validator/browser capability tables had already drifted apart once.
+ */
+export function expectedDocumentCapabilities(document) {
+  const derived = deriveDocumentCapabilities(
+    document,
+    walkDocumentNodes(document),
+  );
+  return capabilityNames.filter((name) => derived.has(name));
+}
+
+/** The same set, shaped for `compatibility.requiredCapabilities`. */
+export function requiredCapabilitiesFor(document) {
+  return expectedDocumentCapabilities(document).map((name) => ({
+    name,
+    version: paywallContractVersion,
+  }));
 }
 
 function addDuplicateDiagnostics({
@@ -1156,10 +1451,7 @@ function semanticPaywallDiagnostics(document) {
   const diagnostics = [];
   const manifest = compatibilityManifest;
   const nodeEntries = walkDocumentNodes(document);
-  const expectedCapabilities = expectedDocumentCapabilities(
-    document,
-    nodeEntries,
-  );
+  const expectedCapabilities = deriveDocumentCapabilities(document, nodeEntries);
   const declaredCapabilities = document.compatibility.requiredCapabilities;
   const declaredByName = new Map();
   const supportedByName = new Map(
@@ -1169,114 +1461,112 @@ function semanticPaywallDiagnostics(document) {
     ]),
   );
 
-  if (document.schemaVersion === "0.2") {
-    const catalogs = {
-      colorToken: document.designSystem.colors,
-      backgroundToken: document.designSystem.backgrounds,
-      shadowToken: document.designSystem.shadows,
-    };
-    for (const [type, catalog] of Object.entries(catalogs)) {
-      const category =
-        type === "colorToken"
-          ? "colors"
-          : type === "backgroundToken"
-            ? "backgrounds"
-            : "shadows";
-      addDuplicateDiagnostics({
-        diagnostics,
-        entries: catalog,
-        field: "id",
-        path: `/designSystem/${category}`,
-        label: `${type} catalog`,
-        document,
-      });
-      addDuplicateDiagnostics({
-        diagnostics,
-        entries: catalog,
-        field: "name",
-        path: `/designSystem/${category}`,
-        label: `${type} catalog`,
-        document,
-      });
-    }
-    const known = Object.fromEntries(
-      Object.entries(catalogs).map(([type, catalog]) => [
-        type,
-        new Set(catalog.map((token) => token.id)),
-      ]),
-    );
-    const roots = [document.designSystem, ...nodeEntries.map(({ node }) => node)];
-    for (const root of roots) {
-      walkObjectValues(root, (value, path) => {
-        if (!Object.hasOwn(catalogs, value.type)) return;
-        if (!known[value.type].has(value.id)) {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.invalidReference",
-              message: `${value.type} references unknown token ${value.id}.`,
-              documentPath: path,
-              property: "id",
-              document,
-            }),
-          );
-        }
-      });
-    }
-    for (const [type, catalog] of Object.entries(catalogs)) {
-      const graph = new Map(catalog.map((token) => [token.id, new Set()]));
-      for (const token of catalog) {
-        walkObjectValues(token.value, (value) => {
-          if (value.type === type) graph.get(token.id).add(value.id);
-        });
-      }
-      const visiting = new Set();
-      const visited = new Set();
-      function hasCycle(id) {
-        if (visiting.has(id)) return true;
-        if (visited.has(id)) return false;
-        visiting.add(id);
-        for (const target of graph.get(id) ?? []) {
-          if (graph.has(target) && hasCycle(target)) return true;
-        }
-        visiting.delete(id);
-        visited.add(id);
-        return false;
-      }
-      if ([...graph.keys()].some(hasCycle)) {
+  const catalogs = {
+    colorToken: document.designSystem.colors,
+    backgroundToken: document.designSystem.backgrounds,
+    shadowToken: document.designSystem.shadows,
+  };
+  for (const [type, catalog] of Object.entries(catalogs)) {
+    const category =
+      type === "colorToken"
+        ? "colors"
+        : type === "backgroundToken"
+          ? "backgrounds"
+          : "shadows";
+    addDuplicateDiagnostics({
+      diagnostics,
+      entries: catalog,
+      field: "id",
+      path: `/designSystem/${category}`,
+      label: `${type} catalog`,
+      document,
+    });
+    addDuplicateDiagnostics({
+      diagnostics,
+      entries: catalog,
+      field: "name",
+      path: `/designSystem/${category}`,
+      label: `${type} catalog`,
+      document,
+    });
+  }
+  const known = Object.fromEntries(
+    Object.entries(catalogs).map(([type, catalog]) => [
+      type,
+      new Set(catalog.map((token) => token.id)),
+    ]),
+  );
+  const roots = [document.designSystem, ...nodeEntries.map(({ node }) => node)];
+  for (const root of roots) {
+    walkObjectValues(root, (value, path) => {
+      if (!Object.hasOwn(catalogs, value.type)) return;
+      if (!known[value.type].has(value.id)) {
         diagnostics.push(
           diagnostic({
-            code: "semantic.tokenCycle",
-            message: `${type} catalog contains a reference cycle.`,
-            documentPath: "/designSystem",
-            property: "designSystem",
+            code: "semantic.invalidReference",
+            message: `${value.type} references unknown token ${value.id}.`,
+            documentPath: path,
+            property: "id",
             document,
           }),
         );
       }
-    }
-    for (const root of roots) {
-      walkObjectValues(root, (value, path) => {
-        if (value.type !== "linearGradient" && value.type !== "radialGradient") {
-          return;
-        }
-        let prior = -1;
-        for (const stop of value.stops) {
-          if (stop.position <= prior) {
-            diagnostics.push(
-              diagnostic({
-                code: "semantic.gradientStops",
-                message: "Gradient stops must be ordered with unique positions.",
-                documentPath: `${path}/stops`,
-                property: "stops",
-                document,
-              }),
-            );
-            break;
-          }
-          prior = stop.position;
-        }
+    });
+  }
+  for (const [type, catalog] of Object.entries(catalogs)) {
+    const graph = new Map(catalog.map((token) => [token.id, new Set()]));
+    for (const token of catalog) {
+      walkObjectValues(token.value, (value) => {
+        if (value.type === type) graph.get(token.id).add(value.id);
       });
     }
+    const visiting = new Set();
+    const visited = new Set();
+    function hasCycle(id) {
+      if (visiting.has(id)) return true;
+      if (visited.has(id)) return false;
+      visiting.add(id);
+      for (const target of graph.get(id) ?? []) {
+        if (graph.has(target) && hasCycle(target)) return true;
+      }
+      visiting.delete(id);
+      visited.add(id);
+      return false;
+    }
+    if ([...graph.keys()].some(hasCycle)) {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.tokenCycle",
+          message: `${type} catalog contains a reference cycle.`,
+          documentPath: "/designSystem",
+          property: "designSystem",
+          document,
+        }),
+      );
+    }
+  }
+  for (const root of roots) {
+    walkObjectValues(root, (value, path) => {
+      if (value.type !== "linearGradient" && value.type !== "radialGradient") {
+        return;
+      }
+      let prior = -1;
+      for (const stop of value.stops) {
+        if (stop.position <= prior) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.gradientStops",
+              message: "Gradient stops must be ordered with unique positions.",
+              documentPath: `${path}/stops`,
+              property: "stops",
+              document,
+            }),
+          );
+          break;
+        }
+        prior = stop.position;
+      }
+    });
   }
 
   addDuplicateDiagnostics({
@@ -1331,16 +1621,14 @@ function semanticPaywallDiagnostics(document) {
     }
   }
 
-  if (document.schemaVersion === "0.2") {
-    addDuplicateDiagnostics({
-      diagnostics,
-      entries: document.screens,
-      field: "id",
-      path: "/screens",
-      label: "Screen catalog",
-      document,
-    });
-  }
+  addDuplicateDiagnostics({
+    diagnostics,
+    entries: document.screens,
+    field: "id",
+    path: "/screens",
+    label: "Screen catalog",
+    document,
+  });
 
   const seenNodeIds = new Set();
   for (const { node, path } of nodeEntries) {
@@ -1357,6 +1645,23 @@ function semanticPaywallDiagnostics(document) {
       );
     }
     seenNodeIds.add(node.id);
+    if (node.type === "tabs") {
+      for (const [index, tab] of node.tabs.entries()) {
+        if (seenNodeIds.has(tab.id)) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.duplicateIdentifier",
+              message: `Layout tree contains duplicate id ${tab.id}.`,
+              documentPath: `${path}/tabs/${index}/id`,
+              componentId: node.id,
+              property: "id",
+              document,
+            }),
+          );
+        }
+        seenNodeIds.add(tab.id);
+      }
+    }
     if (node.type === "carousel") {
       for (const [index, page] of node.pages.entries()) {
         if (seenNodeIds.has(page.id)) {
@@ -1387,6 +1692,17 @@ function semanticPaywallDiagnostics(document) {
         componentId: node.id,
       });
     }
+    if (node.type === "timeline") {
+      addDuplicateDiagnostics({
+        diagnostics,
+        entries: node.entries,
+        field: "id",
+        path: `${path}/entries`,
+        label: `Timeline ${node.id}`,
+        document,
+        componentId: node.id,
+      });
+    }
   }
 
   addDuplicateDiagnostics({
@@ -1399,80 +1715,93 @@ function semanticPaywallDiagnostics(document) {
   });
   const assetsById = new Map(document.assets.map((asset) => [asset.id, asset]));
   const referencedAssets = new Set();
-  for (const { node, path } of nodeEntries) {
-    if (node.type !== "image") continue;
-    const asset = assetsById.get(node.assetId);
-    if (!asset || asset.type !== "image") {
-      diagnostics.push(
-        diagnostic({
-          code: "semantic.invalidReference",
-          message: `Image ${node.id} references unknown asset ${node.assetId}.`,
-          documentPath: `${path}/assetId`,
-          componentId: node.id,
-          property: "assetId",
-          recoveryAction: "editProperty",
-          recoveryMessage: "Choose a declared bundled image asset.",
-          document,
-        }),
-      );
+  // Every place a component names an image asset. A component added without an
+  // entry here would have its asset go uncounted and then be reported unused.
+  const imageAssetReferences = (node, path) => {
+    if (node.type === "image") {
+      return [{ assetId: node.assetId, path: `${path}/assetId`, property: "assetId", label: `Image ${node.id}` }];
     }
-    referencedAssets.add(node.assetId);
-  }
-  if (document.schemaVersion === "0.2") {
-    for (const [index, asset] of document.assets.entries()) {
-      if (asset.source.type === "remote" && !safeAbsoluteHttps(asset.source.url)) {
+    if (node.type === "award" && node.emblem?.type === "image") {
+      return [{ assetId: node.emblem.assetId, path: `${path}/emblem/assetId`, property: "assetId", label: `Award ${node.id} emblem` }];
+    }
+    if (node.type === "socialProof" && node.avatar) {
+      return [{ assetId: node.avatar.assetId, path: `${path}/avatar/assetId`, property: "assetId", label: `Social proof ${node.id} avatar` }];
+    }
+    return [];
+  };
+  for (const { node, path } of nodeEntries) {
+    for (const reference of imageAssetReferences(node, path)) {
+      const asset = assetsById.get(reference.assetId);
+      if (!asset || asset.type !== "image") {
         diagnostics.push(
           diagnostic({
-            code: "semantic.externalUrl",
-            message: "Remote asset URL must be safe absolute HTTPS without credentials.",
-            documentPath: `/assets/${index}/source/url`,
-            property: "url",
+            code: "semantic.invalidReference",
+            message: `${reference.label} references unknown asset ${reference.assetId}.`,
+            documentPath: reference.path,
+            componentId: node.id,
+            property: reference.property,
+            recoveryAction: "editProperty",
+            recoveryMessage: "Choose a declared bundled image asset.",
             document,
           }),
         );
       }
+      referencedAssets.add(reference.assetId);
     }
-    const backgroundRoots = [document.designSystem, ...nodeEntries.map(({ node }) => node)];
-    for (const root of backgroundRoots) {
-      walkObjectValues(root, (value, path) => {
-        if (
-          (value.type !== "image" && value.type !== "video") ||
-          !Object.hasOwn(value, "fallbackColor")
-        ) {
-          return;
-        }
-        const asset = assetsById.get(value.assetId);
-        if (!asset || asset.type !== value.type) {
+  }
+  for (const [index, asset] of document.assets.entries()) {
+    if (asset.source.type === "remote" && !safeAbsoluteHttps(asset.source.url)) {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.externalUrl",
+          message: "Remote asset URL must be safe absolute HTTPS without credentials.",
+          documentPath: `/assets/${index}/source/url`,
+          property: "url",
+          document,
+        }),
+      );
+    }
+  }
+  const backgroundRoots = [document.designSystem, ...nodeEntries.map(({ node }) => node)];
+  for (const root of backgroundRoots) {
+    walkObjectValues(root, (value, path) => {
+      if (
+        (value.type !== "image" && value.type !== "video") ||
+        !Object.hasOwn(value, "fallbackColor")
+      ) {
+        return;
+      }
+      const asset = assetsById.get(value.assetId);
+      if (!asset || asset.type !== value.type) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message: `${value.type} background must reference a declared ${value.type} asset.`,
+            documentPath: `${path}/assetId`,
+            property: "assetId",
+            document,
+          }),
+        );
+      } else {
+        referencedAssets.add(value.assetId);
+      }
+      if (value.type === "video" && value.posterAssetId) {
+        const poster = assetsById.get(value.posterAssetId);
+        if (!poster || poster.type !== "image") {
           diagnostics.push(
             diagnostic({
               code: "semantic.invalidReference",
-              message: `${value.type} background must reference a declared ${value.type} asset.`,
-              documentPath: `${path}/assetId`,
-              property: "assetId",
+              message: "Video poster must reference a declared image asset.",
+              documentPath: `${path}/posterAssetId`,
+              property: "posterAssetId",
               document,
             }),
           );
         } else {
-          referencedAssets.add(value.assetId);
+          referencedAssets.add(value.posterAssetId);
         }
-        if (value.type === "video" && value.posterAssetId) {
-          const poster = assetsById.get(value.posterAssetId);
-          if (!poster || poster.type !== "image") {
-            diagnostics.push(
-              diagnostic({
-                code: "semantic.invalidReference",
-                message: "Video poster must reference a declared image asset.",
-                documentPath: `${path}/posterAssetId`,
-                property: "posterAssetId",
-                document,
-              }),
-            );
-          } else {
-            referencedAssets.add(value.posterAssetId);
-          }
-        }
-      });
-    }
+      }
+    });
   }
   for (const [index, asset] of document.assets.entries()) {
     if (!referencedAssets.has(asset.id)) {
@@ -1517,10 +1846,7 @@ function semanticPaywallDiagnostics(document) {
     const { node, path, screenId } = entry;
     if (node.type === "productSelector") {
       selectorsById.set(node.id, entry);
-      const references =
-        document.schemaVersion === "0.2"
-          ? node.cards.map((card) => card.productReferenceId)
-          : node.productReferenceIds;
+      const references = node.cards.map((card) => card.productReferenceId);
       const selectorReferences = new Set();
       for (const [index, referenceId] of references.entries()) {
         if (!productsById.has(referenceId)) {
@@ -1528,15 +1854,9 @@ function semanticPaywallDiagnostics(document) {
             diagnostic({
               code: "semantic.invalidReference",
               message: `Product selector ${node.id} references unknown product ${referenceId}.`,
-              documentPath:
-                document.schemaVersion === "0.2"
-                  ? `${path}/cards/${index}/productReferenceId`
-                  : `${path}/productReferenceIds/${index}`,
+              documentPath: `${path}/cards/${index}/productReferenceId`,
               componentId: node.id,
-              property:
-                document.schemaVersion === "0.2"
-                  ? "productReferenceId"
-                  : "productReferenceIds",
+              property: "productReferenceId",
               recoveryAction: "bindProduct",
               recoveryMessage: "Bind a product declared by this paywall.",
               document,
@@ -1560,26 +1880,17 @@ function semanticPaywallDiagnostics(document) {
         selectorReferences.add(referenceId);
         referencedProducts.add(referenceId);
       }
-      const initialIsValid =
-        document.schemaVersion === "0.2"
-          ? node.cards.some((card) => card.id === node.initialProductCardId)
-          : node.productReferenceIds.includes(
-              node.initiallySelectedProductReferenceId,
-            );
+      const initialIsValid = node.cards.some(
+        (card) => card.id === node.initialProductCardId,
+      );
       if (!initialIsValid) {
         diagnostics.push(
           diagnostic({
             code: "semantic.invalidReference",
-            message: `Product selector ${node.id} initially selects an unlisted ${document.schemaVersion === "0.2" ? "Product Card" : "product"}.`,
-            documentPath:
-              document.schemaVersion === "0.2"
-                ? `${path}/initialProductCardId`
-                : `${path}/initiallySelectedProductReferenceId`,
+            message: `Product selector ${node.id} initially selects an unlisted Product Card.`,
+            documentPath: `${path}/initialProductCardId`,
             componentId: node.id,
-            property:
-              document.schemaVersion === "0.2"
-                ? "initialProductCardId"
-                : "initiallySelectedProductReferenceId",
+            property: "initialProductCardId",
             recoveryAction: "bindProduct",
             recoveryMessage: "Choose one of the products bound to this selector.",
             document,
@@ -1587,20 +1898,12 @@ function semanticPaywallDiagnostics(document) {
         );
       }
     }
-    if (
-      node.type === "purchaseButton" ||
-      (node.type === "button" && node.action.type === "purchase")
-    ) {
-      purchaseSelectorIds.add(`${screenId ?? "root"}:${node.action.productSelectorId}`);
+    if (node.type === "button" && node.action.type === "purchase") {
+      purchaseSelectorIds.add(`${screenId}:${node.action.productSelectorId}`);
     }
   }
   for (const { node, path, screenId } of nodeEntries) {
-    if (
-      node.type !== "purchaseButton" &&
-      !(node.type === "button" && node.action.type === "purchase")
-    ) {
-      continue;
-    }
+    if (node.type !== "button" || node.action.type !== "purchase") continue;
     const selectorEntry = selectorsById.get(node.action.productSelectorId);
     if (!selectorEntry) {
       diagnostics.push(
@@ -1615,10 +1918,7 @@ function semanticPaywallDiagnostics(document) {
           document,
         }),
       );
-    } else if (
-      document.schemaVersion === "0.2" &&
-      selectorEntry.screenId !== screenId
-    ) {
+    } else if (selectorEntry.screenId !== screenId) {
       diagnostics.push(
         diagnostic({
           code: "semantic.invalidReference",
@@ -1634,8 +1934,7 @@ function semanticPaywallDiagnostics(document) {
     }
   }
   for (const [selectorId, selectorEntry] of selectorsById) {
-    const selectorScreen = selectorEntry.screenId ?? "root";
-    if (!purchaseSelectorIds.has(`${selectorScreen}:${selectorId}`)) {
+    if (!purchaseSelectorIds.has(`${selectorEntry.screenId}:${selectorId}`)) {
       diagnostics.push(
         diagnostic({
           code: "semantic.invalidReference",
@@ -1692,25 +1991,19 @@ function semanticPaywallDiagnostics(document) {
     const localizedEntries = [];
     collectLocalizedText(document.assets, "/assets", localizedEntries);
     collectLocalizedText(document.products, "/products", localizedEntries);
-    if (document.schemaVersion === "0.2") {
-      collectLocalizedText(document.screens, "/screens", localizedEntries);
-    } else {
-      collectLocalizedText(document.layout, "/layout", localizedEntries);
-    }
+    collectLocalizedText(document.screens, "/screens", localizedEntries);
     const referencedKeys = new Set();
     const defaultStrings = locales[defaultLocale].strings;
     const templateAllowed = new Set();
-    if (document.schemaVersion === "0.2") {
-      for (const { node, ancestors } of nodeEntries) {
-        if (
-          node.type === "text" &&
-          ancestors.some((ancestor) => ancestor.type === "productCard")
-        ) {
-          templateAllowed.add(node.value);
-        }
-        if (node.type === "productCard" && node.accessibility?.label) {
-          templateAllowed.add(node.accessibility.label);
-        }
+    for (const { node, ancestors } of nodeEntries) {
+      if (
+        node.type === "text" &&
+        ancestors.some((ancestor) => ancestor.type === "productCard")
+      ) {
+        templateAllowed.add(node.value);
+      }
+      if (node.type === "productCard" && node.accessibility?.label) {
+        templateAllowed.add(node.accessibility.label);
       }
     }
 
@@ -1737,37 +2030,89 @@ function semanticPaywallDiagnostics(document) {
           }),
         );
       }
-      if (document.schemaVersion === "0.2") {
-        for (const value of localizedTextValues(document, text)) {
-          const analysis = analyzeProductTemplate(value);
-          if (analysis.malformed) {
+      for (const value of localizedTextValues(document, text)) {
+        const analysis = analyzeProductTemplate(value);
+        if (analysis.malformed) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.productTemplate",
+              message: "The product template expression is malformed or unsupported.",
+              documentPath: `${path}/default`,
+              componentId: locationFor(document, path).componentId,
+              property: "default",
+              document,
+            }),
+          );
+        }
+        if (analysis.variables.length > 0 && !templateAllowed.has(text)) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.productTemplate",
+              message: "Product templates are valid only in Text or a card accessibility label within Product Card content.",
+              documentPath: `${path}/default`,
+              componentId: locationFor(document, path).componentId,
+              property: "default",
+              document,
+            }),
+          );
+        }
+      }
+    }
+    for (const [key, reserved] of Object.entries(reservedAccessibilityKeys)) {
+      const consumed = reserved.consumedBy(nodeEntries);
+      const declared = Object.hasOwn(defaultStrings, key);
+      if (consumed !== declared) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.reservedLocalization",
+            message: consumed
+              ? `Reserved key ${key} must be declared because the document contains ${reserved.consumer}.`
+              : `Reserved key ${key} is declared but the document contains nothing that announces it.`,
+            documentPath: `/localization/locales/${escapePointer(defaultLocale)}/strings`,
+            property: "strings",
+            document,
+          }),
+        );
+      }
+      if (!declared) continue;
+      for (const [locale, catalog] of Object.entries(locales)) {
+        const value = catalog.strings[key];
+        if (value === undefined) continue;
+        const path = `/localization/locales/${escapePointer(locale)}/strings/${escapePointer(key)}`;
+        for (const placeholder of reserved.placeholders) {
+          if (value.split(placeholder).length - 1 !== 1) {
             diagnostics.push(
               diagnostic({
-                code: "semantic.productTemplate",
-                message: "The product template expression is malformed or unsupported.",
-                documentPath: `${path}/default`,
-                componentId: locationFor(document, path).componentId,
-                property: "default",
-                document,
-              }),
-            );
-          }
-          if (analysis.variables.length > 0 && !templateAllowed.has(text)) {
-            diagnostics.push(
-              diagnostic({
-                code: "semantic.productTemplate",
-                message: "Product templates are valid only in Text or a card accessibility label within Product Card content.",
-                documentPath: `${path}/default`,
-                componentId: locationFor(document, path).componentId,
-                property: "default",
+                code: "semantic.reservedLocalization",
+                message: `Reserved key ${key} must contain ${placeholder} exactly once.`,
+                documentPath: path,
+                property: "strings",
                 document,
               }),
             );
           }
         }
+        const residue = reserved.placeholders.reduce(
+          (text, placeholder) => text.replaceAll(placeholder, ""),
+          value,
+        );
+        if (residue.includes("{{") || residue.includes("}}")) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.reservedLocalization",
+              message: `Reserved key ${key} contains an unsupported template expression.`,
+              documentPath: path,
+              property: "strings",
+              document,
+            }),
+          );
+        }
       }
     }
     for (const key of Object.keys(defaultStrings)) {
+      // Reserved keys are consumed by the protocol, not referenced by a
+      // component, so the unused sweep would flag every one of them.
+      if (Object.hasOwn(reservedAccessibilityKeys, key)) continue;
       if (!referencedKeys.has(key)) {
         diagnostics.push(
           diagnostic({
@@ -1798,366 +2143,487 @@ function semanticPaywallDiagnostics(document) {
     }
   }
 
-  if (document.schemaVersion === "0.2") {
-    const screensById = new Map(
-      document.screens.map((screen) => [screen.id, screen]),
+  const screensById = new Map(
+    document.screens.map((screen) => [screen.id, screen]),
+  );
+  if (!screensById.has(document.initialScreenId)) {
+    diagnostics.push(
+      diagnostic({
+        code: "semantic.invalidReference",
+        message: `Initial screen ${document.initialScreenId} does not exist.`,
+        documentPath: "/initialScreenId",
+        property: "initialScreenId",
+        document,
+      }),
     );
-    if (!screensById.has(document.initialScreenId)) {
+  } else if (
+    screensById.get(document.initialScreenId).presentation.type !== "screen"
+  ) {
+    diagnostics.push(
+      diagnostic({
+        code: "semantic.presentation",
+        message: "Initial screen presentation must be Screen.",
+        documentPath: "/initialScreenId",
+        property: "initialScreenId",
+        document,
+      }),
+    );
+  }
+  for (const [index, screen] of document.screens.entries()) {
+    const root = screen.layout.content;
+    if (root.direction !== "vertical") {
       diagnostics.push(
         diagnostic({
-          code: "semantic.invalidReference",
-          message: `Initial screen ${document.initialScreenId} does not exist.`,
-          documentPath: "/initialScreenId",
-          property: "initialScreenId",
-          document,
-        }),
-      );
-    } else if (
-      screensById.get(document.initialScreenId).presentation.type !== "screen"
-    ) {
-      diagnostics.push(
-        diagnostic({
-          code: "semantic.presentation",
-          message: "Initial screen presentation must be Screen.",
-          documentPath: "/initialScreenId",
-          property: "initialScreenId",
+          code: "semantic.layout",
+          message: `Screen ${screen.id} root scroll content must be a vertical stack.`,
+          documentPath: `/screens/${index}/layout/content/direction`,
+          componentId: root.id,
+          property: "direction",
           document,
         }),
       );
     }
-    for (const [index, screen] of document.screens.entries()) {
-      const root = screen.layout.content;
-      if (root.direction !== "vertical") {
+    if (root.children.length === 0) {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.layout",
+          message: `Screen ${screen.id} root scroll content must contain at least one child.`,
+          documentPath: `/screens/${index}/layout/content/children`,
+          componentId: root.id,
+          property: "children",
+          document,
+        }),
+      );
+    }
+  }
+  const switches = new Map(
+    nodeEntries
+      .filter(({ node }) => node.type === "switch")
+      .map((entry) => [entry.node.id, entry]),
+  );
+  const navigationEdges = new Map(
+    document.screens.map((screen) => [screen.id, new Set()]),
+  );
+  const tabsById = new Map(
+    nodeEntries
+      .filter(({ node }) => node.type === "tabs")
+      .map((entry) => [entry.node.id, entry]),
+  );
+  const interactiveButtonDescendants = new Set([
+    "button",
+    "productSelector",
+    "switch",
+    "carousel",
+    "tabs",
+  ]);
+  for (const { node, path, screenId, ancestors } of nodeEntries) {
+    if (node.type === "productCard") {
+      if (ancestors.at(-1)?.type !== "productSelector") {
         diagnostics.push(
           diagnostic({
             code: "semantic.layout",
-            message: `Screen ${screen.id} root scroll content must be a vertical stack.`,
-            documentPath: `/screens/${index}/layout/content/direction`,
-            componentId: root.id,
-            property: "direction",
+            message: "Product Card must be directly owned by a Product Selector.",
+            documentPath: path,
+            componentId: node.id,
             document,
           }),
         );
       }
-      if (root.children.length === 0) {
+      const badges = node.children.filter(
+        (child) => child.type === "productBadge",
+      );
+      if (badges.length > 1) {
         diagnostics.push(
           diagnostic({
             code: "semantic.layout",
-            message: `Screen ${screen.id} root scroll content must contain at least one child.`,
-            documentPath: `/screens/${index}/layout/content/children`,
-            componentId: root.id,
+            message: "Product Card may contain at most one direct Product Badge.",
+            documentPath: `${path}/children`,
+            componentId: node.id,
+            property: "children",
+            document,
+          }),
+        );
+      }
+      let passiveDescendants = 0;
+      let maximumStackDepth = 0;
+      const visitPassive = (child, stackDepth = 0) => {
+        passiveDescendants += 1;
+        const nextDepth = child.type === "stack" ? stackDepth + 1 : stackDepth;
+        maximumStackDepth = Math.max(maximumStackDepth, nextDepth);
+        for (const descendant of child.children ?? []) {
+          visitPassive(descendant, nextDepth);
+        }
+      };
+      for (const child of node.children) visitPassive(child);
+      if (passiveDescendants > 20 || maximumStackDepth > 4) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.layout",
+            message:
+              passiveDescendants > 20
+                ? "Product Card exceeds 20 passive descendants."
+                : "Product Card exceeds nested Stack depth 4.",
+            documentPath: `${path}/children`,
+            componentId: node.id,
             property: "children",
             document,
           }),
         );
       }
     }
-    const switches = new Map(
-      nodeEntries
-        .filter(({ node }) => node.type === "switch")
-        .map((entry) => [entry.node.id, entry]),
-    );
-    const navigationEdges = new Map(
-      document.screens.map((screen) => [screen.id, new Set()]),
-    );
-    const interactiveButtonDescendants = new Set([
-      "button",
-      "productSelector",
-      "switch",
-      "carousel",
-    ]);
-    for (const { node, path, screenId, ancestors } of nodeEntries) {
-      if (node.type === "productCard") {
-        if (ancestors.at(-1)?.type !== "productSelector") {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.layout",
-              message: "Product Card must be directly owned by a Product Selector.",
-              documentPath: path,
-              componentId: node.id,
-              document,
-            }),
-          );
-        }
-        const badges = node.children.filter(
-          (child) => child.type === "productBadge",
-        );
-        if (badges.length > 1) {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.layout",
-              message: "Product Card may contain at most one direct Product Badge.",
-              documentPath: `${path}/children`,
-              componentId: node.id,
-              property: "children",
-              document,
-            }),
-          );
-        }
-        let passiveDescendants = 0;
-        let maximumStackDepth = 0;
-        const visitPassive = (child, stackDepth = 0) => {
-          passiveDescendants += 1;
-          const nextDepth = child.type === "stack" ? stackDepth + 1 : stackDepth;
-          maximumStackDepth = Math.max(maximumStackDepth, nextDepth);
-          for (const descendant of child.children ?? []) {
-            visitPassive(descendant, nextDepth);
-          }
-        };
-        for (const child of node.children) visitPassive(child);
-        if (passiveDescendants > 20 || maximumStackDepth > 4) {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.layout",
-              message:
-                passiveDescendants > 20
-                  ? "Product Card exceeds 20 passive descendants."
-                  : "Product Card exceeds nested Stack depth 4.",
-              documentPath: `${path}/children`,
-              componentId: node.id,
-              property: "children",
-              document,
-            }),
-          );
-        }
-      }
-      if (
-        node.type === "productBadge" &&
-        ancestors.at(-1)?.type !== "productCard"
-      ) {
-        diagnostics.push(
-          diagnostic({
-            code: "semantic.layout",
-            message: "Product Badge must be a direct Product Card child.",
-            documentPath: path,
-            componentId: node.id,
-            document,
-          }),
-        );
-      }
-      if (
-        ancestors.some((ancestor) => ancestor.type === "button") &&
-        interactiveButtonDescendants.has(node.type)
-      ) {
-        diagnostics.push(
-          diagnostic({
-            code: "semantic.layout",
-            message: `Button content cannot contain interactive ${node.type}.`,
-            documentPath: path,
-            componentId: node.id,
-            document,
-          }),
-        );
-      }
-      if (
-        node.type === "button" &&
-        node.inProgressChildren &&
-        !["purchase", "restore"].includes(node.action.type)
-      ) {
-        diagnostics.push(
-          diagnostic({
-            code: "semantic.action",
-            message: "inProgressChildren are valid only for purchase or restore.",
-            documentPath: `${path}/inProgressChildren`,
-            componentId: node.id,
-            property: "inProgressChildren",
-            document,
-          }),
-        );
-      }
-      if (
-        node.type === "carousel" &&
-        ancestors.some((ancestor) => ancestor.type === "carousel")
-      ) {
-        diagnostics.push(
-          diagnostic({
-            code: "semantic.layout",
-            message: `Carousel ${node.id} cannot be nested inside another carousel.`,
-            documentPath: path,
-            componentId: node.id,
-            document,
-          }),
-        );
-      }
-      if (
-        node.type === "carousel" &&
-        node.initialPageIndex >= node.pages.length
-      ) {
-        diagnostics.push(
-          diagnostic({
-            code: "semantic.invalidReference",
-            message: "Carousel initialPageIndex must reference an existing page.",
-            documentPath: `${path}/initialPageIndex`,
-            componentId: node.id,
-            property: "initialPageIndex",
-            document,
-          }),
-        );
-      }
-      if (node.visibility?.mode === "switch") {
-        const controller = switches.get(node.visibility.switchId);
-        if (!controller) {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.invalidReference",
-              message: `Visibility references unknown switch ${node.visibility.switchId}.`,
-              documentPath: `${path}/visibility/switchId`,
-              componentId: node.id,
-              property: "switchId",
-              document,
-            }),
-          );
-        } else if (node.id === controller.node.id) {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.invalidReference",
-              message: "Visibility cannot reference the same component Switch.",
-              documentPath: `${path}/visibility/switchId`,
-              componentId: node.id,
-              property: "switchId",
-              document,
-            }),
-          );
-        } else if (controller.screenId !== screenId) {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.invalidReference",
-              message: "Visibility must reference a Switch on the same screen.",
-              documentPath: `${path}/visibility/switchId`,
-              componentId: node.id,
-              property: "switchId",
-              document,
-            }),
-          );
-        }
-      }
-      if (node.type === "button" && node.action.type === "navigateTo") {
-        const target = node.action.screenId;
-        if (!screensById.has(target)) {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.invalidReference",
-              message: `Navigate To references unknown screen ${target}.`,
-              documentPath: `${path}/action/screenId`,
-              componentId: node.id,
-              property: "screenId",
-              document,
-            }),
-          );
-        } else if (target === screenId) {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.invalidReference",
-              message: "Navigate To target must differ from its source screen.",
-              documentPath: `${path}/action/screenId`,
-              componentId: node.id,
-              property: "screenId",
-              document,
-            }),
-          );
-        } else {
-          navigationEdges.get(screenId)?.add(target);
-        }
-      }
-      if (node.type === "button" && node.action.type === "openExternalUrl") {
-        const value = node.action.url;
-        if (!safeAbsoluteHttps(value)) {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.externalUrl",
-              message: "External URL must be safe absolute HTTPS without credentials.",
-              documentPath: `${path}/action/url`,
-              componentId: node.id,
-              property: "url",
-              document,
-            }),
-          );
-        }
-      }
-      if (node.type === "countdown") {
-        const instant = Date.parse(node.endsAt);
-        const canonical = Number.isFinite(instant)
-          ? new Date(instant).toISOString().replace(".000Z", "Z")
-          : null;
-        if (canonical !== node.endsAt) {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.timestamp",
-              message: "Countdown endsAt must be a canonical UTC instant.",
-              documentPath: `${path}/endsAt`,
-              componentId: node.id,
-              property: "endsAt",
-              document,
-            }),
-          );
-        }
-        if (
-          countdownUnitOrder[node.largestUnit] >
-          countdownUnitOrder[node.smallestUnit]
-        ) {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.countdownUnits",
-              message:
-                "Countdown largestUnit must not be smaller than smallestUnit.",
-              documentPath: `${path}/largestUnit`,
-              componentId: node.id,
-              property: "largestUnit",
-              document,
-            }),
-          );
-        }
-      }
-    }
-
-    if (screensById.has(document.initialScreenId)) {
-      const reachable = new Set();
-      const pending = [document.initialScreenId];
-      while (pending.length > 0) {
-        const screenId = pending.pop();
-        if (reachable.has(screenId)) continue;
-        reachable.add(screenId);
-        pending.push(...(navigationEdges.get(screenId) ?? []));
-      }
-      for (const [index, screen] of document.screens.entries()) {
-        if (!reachable.has(screen.id)) {
-          diagnostics.push(
-            diagnostic({
-              code: "semantic.invalidReference",
-              message: `Screen ${screen.id} is unreachable from the initial screen.`,
-              documentPath: `/screens/${index}/id`,
-              property: "id",
-              document,
-            }),
-          );
-        }
-      }
-    }
-
-    const visiting = new Set();
-    const visited = new Set();
-    function graphHasCycle(screenId) {
-      if (visiting.has(screenId)) return true;
-      if (visited.has(screenId)) return false;
-      visiting.add(screenId);
-      for (const target of navigationEdges.get(screenId) ?? []) {
-        if (graphHasCycle(target)) return true;
-      }
-      visiting.delete(screenId);
-      visited.add(screenId);
-      return false;
-    }
-    if (document.screens.some((screen) => graphHasCycle(screen.id))) {
+    if (
+      node.type === "productBadge" &&
+      ancestors.at(-1)?.type !== "productCard"
+    ) {
       diagnostics.push(
         diagnostic({
-          code: "semantic.navigationCycle",
-          message: "Navigate To graph must be acyclic.",
-          documentPath: "/screens",
-          property: "screens",
+          code: "semantic.layout",
+          message: "Product Badge must be a direct Product Card child.",
+          documentPath: path,
+          componentId: node.id,
           document,
         }),
       );
     }
+    if (
+      ancestors.some((ancestor) => ancestor.type === "button") &&
+      interactiveButtonDescendants.has(node.type)
+    ) {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.layout",
+          message: `Button content cannot contain interactive ${node.type}.`,
+          documentPath: path,
+          componentId: node.id,
+          document,
+        }),
+      );
+    }
+    if (
+      node.type === "button" &&
+      node.inProgressChildren &&
+      !["purchase", "restore"].includes(node.action.type)
+    ) {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.action",
+          message: "inProgressChildren are valid only for purchase or restore.",
+          documentPath: `${path}/inProgressChildren`,
+          componentId: node.id,
+          property: "inProgressChildren",
+          document,
+        }),
+      );
+    }
+    if (
+      node.type === "carousel" &&
+      ancestors.some((ancestor) => ancestor.type === "carousel")
+    ) {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.layout",
+          message: `Carousel ${node.id} cannot be nested inside another carousel.`,
+          documentPath: path,
+          componentId: node.id,
+          document,
+        }),
+      );
+    }
+    if (
+      node.type === "carousel" &&
+      node.initialPageIndex >= node.pages.length
+    ) {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.invalidReference",
+          message: "Carousel initialPageIndex must reference an existing page.",
+          documentPath: `${path}/initialPageIndex`,
+          componentId: node.id,
+          property: "initialPageIndex",
+          document,
+        }),
+      );
+    }
+    if (node.type === "tabs") {
+      addDuplicateDiagnostics({
+        diagnostics,
+        entries: node.tabs,
+        field: "id",
+        path: `${path}/tabs`,
+        label: `Tabs ${node.id}`,
+        document,
+        componentId: node.id,
+      });
+      if (!node.tabs.some((tab) => tab.id === node.initialTabId)) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message: "Tabs initialTabId must name one of its declared tabs.",
+            documentPath: `${path}/initialTabId`,
+            componentId: node.id,
+            property: "initialTabId",
+            document,
+          }),
+        );
+      }
+    }
+    if (node.type === "timeline") {
+      const marked = node.entries.some((entry) => entry.marker);
+      const described = node.entries.some((entry) => entry.description);
+      for (const [field, used] of [
+        ["markerColor", marked],
+        ["markerSize", marked],
+        ["descriptionTypography", described],
+      ]) {
+        const declared = Object.hasOwn(node, field);
+        if (used === declared) continue;
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.layout",
+            message: used
+              ? `Timeline must declare ${field}.`
+              : `Timeline declares ${field} but no entry uses it.`,
+            documentPath: `${path}/${field}`,
+            componentId: node.id,
+            property: field,
+            document,
+          }),
+        );
+      }
+    }
+    if (node.type === "socialProof" && node.rating) {
+      const maximumSteps =
+        node.rating.maximum * (node.rating.step === "half" ? 2 : 1);
+      if (node.rating.value > maximumSteps) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.ratingBounds",
+            message: `Social proof rating value ${node.rating.value} exceeds ${maximumSteps} ${node.rating.step} steps out of ${node.rating.maximum}.`,
+            documentPath: `${path}/rating/value`,
+            componentId: node.id,
+            property: "value",
+            document,
+          }),
+        );
+      }
+    }
+    if (node.visibility?.mode === "tab") {
+      const controller = tabsById.get(node.visibility.tabsId);
+      if (!controller) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message: `Visibility references unknown tabs ${node.visibility.tabsId}.`,
+            documentPath: `${path}/visibility/tabsId`,
+            componentId: node.id,
+            property: "tabsId",
+            document,
+          }),
+        );
+      } else if (controller.screenId !== screenId) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message: "Visibility must reference a Tabs component on the same screen.",
+            documentPath: `${path}/visibility/tabsId`,
+            componentId: node.id,
+            property: "tabsId",
+            document,
+          }),
+        );
+      } else if (
+        controller.node.id === node.id ||
+        ancestors.some((ancestor) => ancestor === controller.node)
+      ) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message:
+              "Visibility cannot reference the Tabs component the node belongs to.",
+            documentPath: `${path}/visibility/tabsId`,
+            componentId: node.id,
+            property: "tabsId",
+            document,
+          }),
+        );
+      } else if (
+        !controller.node.tabs.some((tab) => tab.id === node.visibility.equals)
+      ) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message: `Visibility references unknown tab ${node.visibility.equals} of tabs ${controller.node.id}.`,
+            documentPath: `${path}/visibility/equals`,
+            componentId: node.id,
+            property: "equals",
+            document,
+          }),
+        );
+      }
+    }
+    if (node.visibility?.mode === "switch") {
+      const controller = switches.get(node.visibility.switchId);
+      if (!controller) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message: `Visibility references unknown switch ${node.visibility.switchId}.`,
+            documentPath: `${path}/visibility/switchId`,
+            componentId: node.id,
+            property: "switchId",
+            document,
+          }),
+        );
+      } else if (node.id === controller.node.id) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message: "Visibility cannot reference the same component Switch.",
+            documentPath: `${path}/visibility/switchId`,
+            componentId: node.id,
+            property: "switchId",
+            document,
+          }),
+        );
+      } else if (controller.screenId !== screenId) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message: "Visibility must reference a Switch on the same screen.",
+            documentPath: `${path}/visibility/switchId`,
+            componentId: node.id,
+            property: "switchId",
+            document,
+          }),
+        );
+      }
+    }
+    if (node.type === "button" && node.action.type === "navigateTo") {
+      const target = node.action.screenId;
+      if (!screensById.has(target)) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message: `Navigate To references unknown screen ${target}.`,
+            documentPath: `${path}/action/screenId`,
+            componentId: node.id,
+            property: "screenId",
+            document,
+          }),
+        );
+      } else if (target === screenId) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message: "Navigate To target must differ from its source screen.",
+            documentPath: `${path}/action/screenId`,
+            componentId: node.id,
+            property: "screenId",
+            document,
+          }),
+        );
+      } else {
+        navigationEdges.get(screenId)?.add(target);
+      }
+    }
+    if (node.type === "button" && node.action.type === "openExternalUrl") {
+      const value = node.action.url;
+      if (!safeAbsoluteHttps(value)) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.externalUrl",
+            message: "External URL must be safe absolute HTTPS without credentials.",
+            documentPath: `${path}/action/url`,
+            componentId: node.id,
+            property: "url",
+            document,
+          }),
+        );
+      }
+    }
+    if (node.type === "countdown") {
+      const instant = Date.parse(node.endsAt);
+      const canonical = Number.isFinite(instant)
+        ? new Date(instant).toISOString().replace(".000Z", "Z")
+        : null;
+      if (canonical !== node.endsAt) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.timestamp",
+            message: "Countdown endsAt must be a canonical UTC instant.",
+            documentPath: `${path}/endsAt`,
+            componentId: node.id,
+            property: "endsAt",
+            document,
+          }),
+        );
+      }
+      if (
+        countdownUnitOrder[node.largestUnit] >
+        countdownUnitOrder[node.smallestUnit]
+      ) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.countdownUnits",
+            message:
+              "Countdown largestUnit must not be smaller than smallestUnit.",
+            documentPath: `${path}/largestUnit`,
+            componentId: node.id,
+            property: "largestUnit",
+            document,
+          }),
+        );
+      }
+    }
+  }
+
+  if (screensById.has(document.initialScreenId)) {
+    const reachable = new Set();
+    const pending = [document.initialScreenId];
+    while (pending.length > 0) {
+      const screenId = pending.pop();
+      if (reachable.has(screenId)) continue;
+      reachable.add(screenId);
+      pending.push(...(navigationEdges.get(screenId) ?? []));
+    }
+    for (const [index, screen] of document.screens.entries()) {
+      if (!reachable.has(screen.id)) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message: `Screen ${screen.id} is unreachable from the initial screen.`,
+            documentPath: `/screens/${index}/id`,
+            property: "id",
+            document,
+          }),
+        );
+      }
+    }
+  }
+
+  const visiting = new Set();
+  const visited = new Set();
+  function graphHasCycle(screenId) {
+    if (visiting.has(screenId)) return true;
+    if (visited.has(screenId)) return false;
+    visiting.add(screenId);
+    for (const target of navigationEdges.get(screenId) ?? []) {
+      if (graphHasCycle(target)) return true;
+    }
+    visiting.delete(screenId);
+    visited.add(screenId);
+    return false;
+  }
+  if (document.screens.some((screen) => graphHasCycle(screen.id))) {
+    diagnostics.push(
+      diagnostic({
+        code: "semantic.navigationCycle",
+        message: "Navigate To graph must be acyclic.",
+        documentPath: "/screens",
+        property: "screens",
+        document,
+      }),
+    );
   }
 
   return diagnostics;

@@ -3,7 +3,7 @@
 ## Approved contract set
 
 Every Mosaic contract is `approved` at v1 GA. The approved set is: Paywall
-Protocol `0.2`; Local Preview `0.2` (development-only); Configuration Delivery
+Protocol `0.3`; Local Preview `0.3` (development-only); Configuration Delivery
 `1`/`2`/`3`; Placement Decision `1`; Experiment Assignment `1`; Analytics Event
 `1`/`2`; Commerce Provider Contracts `1`/`2`; Commerce Configurations `1`/`2`.
 Earlier experimental contracts were retired before approval rather than carried
@@ -26,7 +26,7 @@ imply compatibility with one another and do not change the Paywall
 `schemaVersion`.
 
 `schemaVersion`, Local Preview versions, and capability versions are exact
-identifiers. A reader declaring `0.2` accepts only `0.2`; it must not infer
+identifiers. A reader declaring `0.3` accepts only `0.3`; it must not infer
 forward or backward support from numeric ordering.
 
 ## Artifact lifecycle
@@ -55,11 +55,21 @@ deprecated → retired`. A contract never returns to an earlier state. Timing
 requirements for the last two transitions are in the
 [deprecation policy](deprecation-policy.md).
 
-Paywall Protocol `0.2` is approved. Its manifest retains
-`releaseCandidate: "RC4"` as an **approved-lineage record** — it names the
-release candidate the approved contract was cut from, for traceability. It is
-not a lifecycle state and does not mean the contract is a release candidate;
-`status` is the only lifecycle field.
+Paywall Protocol `0.3` is a **release candidate** (`status:
+"releaseCandidate"`, `releaseCandidate: "RC1"`), and so is Local Preview `0.3`,
+which is version-locked to it. `0.3` replaced approved Paywall Protocol `0.2`
+outright rather than succeeding it — `0.2` was deleted, not deprecated, per
+ADR-0026. That is a deliberate exception to the forward-only lifecycle above,
+available only because Mosaic is pre-release; it is not a precedent for any
+contract with external readers.
+
+`0.3` cannot be marked approved until the checklist in the
+[release approval process](release-approval-process.md#approval-checklist)
+clears, and its outstanding items are listed in
+[the contract document](v0.3.md#what-must-pass-before-03-can-be-marked-approved).
+The blocking category is cross-platform implementability: the three native
+renderers and Studio do not yet implement `tabs`, `timeline`, `award`,
+`socialProof`, or tab-selection runtime state.
 
 Because approved contracts are immutable, a correction to an approved contract's
 *behaviour* requires a new contract version. Corrections that do not change
@@ -94,8 +104,8 @@ This documents behaviour that already exists; Phase 8 did not change it.
 
 A reader must:
 
-1. require exact version `0.2`;
-2. compare every required capability at exact version `0.2`;
+1. require exact version `0.3`;
+2. compare every required capability at exact version `0.3`;
 3. validate the complete closed document and semantic references;
 4. render only after validation succeeds;
 5. retain the last accepted production configuration or use the host's bundled
@@ -111,7 +121,7 @@ so a demo cannot be mistaken for a synchronized design.
 Local Preview uses one exact WebSocket subprotocol:
 
 ```text
-mosaic.local-preview.v0.2
+mosaic.local-preview.v0.3
 ```
 
 The selected connection still does not imply support for every capability, so
@@ -130,7 +140,7 @@ release; readers never skip an unsupported Rule.
 
 Configuration Delivery `2` is parallel to immutable Delivery `1`. It adds
 atomic Placement Decision `1` Rule Sets and exact Product/Entitlement
-references without changing embedded Paywall Protocol `0.2` documents. A
+references without changing embedded Paywall Protocol `0.3` documents. A
 reader never interprets v2 as v1. A server may construct a v1 projection only
 from an explicit default Paywall outcome; it never projects `no_paywall` or an
 advanced Rule as an unconditional binding.
@@ -184,7 +194,7 @@ sidecar atomically with its Configuration Delivery release.
 
 Changing activation, mapping, freshness, or association semantics requires a
 reviewed compatibility decision and normally a later Commerce Configuration
-version. It does not authorize changes to Paywall Protocol `0.2`,
+version. It does not authorize changes to Paywall Protocol `0.3`,
 Configuration Delivery `1`, or Commerce Provider Contract `1`.
 
 Commerce Configuration `2` is parallel to v1 and adds native-store activation,
@@ -221,7 +231,7 @@ remain permitted under the
 Billing Ingestion is optional and independent. No other contract gains a
 required reference to it, an SDK that never submits an observation loses no
 capability, and changing Billing Ingestion never authorizes a change to Paywall
-Protocol `0.2`, Configuration Delivery `1`/`2`/`3`, Placement Decision `1`,
+Protocol `0.3`, Configuration Delivery `1`/`2`/`3`, Placement Decision `1`,
 Experiment Assignment `1`, Analytics Event `1`/`2`, Commerce Provider `1`/`2`,
 or Commerce Configuration `1`/`2`. Billing-to-analytics correlation uses only
 the existing opaque `purchaseAttemptId`, `providerOperationId`, and

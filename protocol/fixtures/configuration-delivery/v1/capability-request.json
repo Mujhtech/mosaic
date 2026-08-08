@@ -6,195 +6,219 @@
   ],
   "supportedPaywallProtocols": [
     {
-      "version": "0.2",
+      "version": "0.3",
       "capabilities": [
         {
           "name": "accessibility.metadata",
-          "version": "0.2"
+          "version": "0.3"
+        },
+        {
+          "name": "accessibility.reservedStrings",
+          "version": "0.3"
         },
         {
           "name": "action.close",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "action.navigateBack",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "action.navigateTo",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "action.openExternalUrl",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "action.purchase",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "action.restore",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "asset.bundledImage",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "asset.bundledVideo",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "asset.remoteImage",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "asset.remoteVideo",
-          "version": "0.2"
+          "version": "0.3"
+        },
+        {
+          "name": "component.award",
+          "version": "0.3"
         },
         {
           "name": "component.button",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "component.carousel",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "component.countdown",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "component.featureList",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "component.icon",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "component.image",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "component.productBadge",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "component.productCard",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "component.productSelector",
-          "version": "0.2"
+          "version": "0.3"
+        },
+        {
+          "name": "component.socialProof",
+          "version": "0.3"
         },
         {
           "name": "component.switch",
-          "version": "0.2"
+          "version": "0.3"
+        },
+        {
+          "name": "component.tabs",
+          "version": "0.3"
         },
         {
           "name": "component.text",
-          "version": "0.2"
+          "version": "0.3"
+        },
+        {
+          "name": "component.timeline",
+          "version": "0.3"
         },
         {
           "name": "condition.switchVisibility",
-          "version": "0.2"
+          "version": "0.3"
+        },
+        {
+          "name": "condition.tabVisibility",
+          "version": "0.3"
         },
         {
           "name": "fallback.asset",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "fallback.product",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "layout.heightSizing",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "layout.outerInsets",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "layout.scrollContainer",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "layout.sizing",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "layout.stack",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "localization.catalogs",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "localization.productTemplate",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "localization.rtl",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "navigation.screens",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "navigation.sheets",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "outcome.normalized",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "product.references",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "style.box",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "style.clipping",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "style.colors",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "style.designTokens",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "style.gradientBackground",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "style.mediaBackground",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "style.productCardStates",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "style.shadow",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "style.typography",
-          "version": "0.2"
+          "version": "0.3"
         },
         {
           "name": "visibility.static",
-          "version": "0.2"
+          "version": "0.3"
         }
       ]
     }

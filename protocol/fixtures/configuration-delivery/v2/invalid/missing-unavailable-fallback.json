@@ -10,7 +10,7 @@
       "mode": "production"
     },
     "publishedAt": "2026-07-26T12:00:00.000Z",
-    "contentDigest": "sha256:245453508d0c239a80cd11aac14e4554be9e66d48a0a3de98151972abf3f5195",
+    "contentDigest": "sha256:e67ef6b866c9aff591661b9a7e4d8bb7a73c6810a6757bdb14280b7a52e11335",
     "compatibility": {
       "placementDecisionContracts": [
         {
@@ -45,59 +45,59 @@
       ],
       "paywallProtocols": [
         {
-          "version": "0.2",
+          "version": "0.3",
           "requiredCapabilities": [
             {
               "name": "accessibility.metadata",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "action.navigateBack",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "action.navigateTo",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "action.openExternalUrl",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "component.button",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "component.text",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "layout.scrollContainer",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "layout.stack",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "localization.catalogs",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "navigation.screens",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "style.box",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "style.colors",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "style.typography",
-              "version": "0.2"
+              "version": "0.3"
             }
           ]
         }
@@ -956,65 +956,65 @@
       {
         "id": "paywall_version_fallback",
         "paywallId": "paywall_fallback",
-        "protocolVersion": "0.2",
-        "documentDigest": "sha256:ecd2bb27d0cef38521459c960fcc9b1ac99de30afe1f2cf48ddf6cc26600063a",
+        "protocolVersion": "0.3",
+        "documentDigest": "sha256:f2354f6b22fef03c4c3ce3a1404d3739a0fa7b243585e3989f326eae41b8a0df",
         "document": {
-          "schemaVersion": "0.2",
+          "schemaVersion": "0.3",
           "id": "paywall_fallback",
           "revision": 1,
           "compatibility": {
             "requiredCapabilities": [
               {
                 "name": "layout.scrollContainer",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "layout.stack",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "navigation.screens",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "component.text",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "component.button",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "localization.catalogs",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "action.navigateTo",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "action.navigateBack",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "action.openExternalUrl",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "accessibility.metadata",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "style.colors",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "style.box",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "style.typography",
-                "version": "0.2"
+                "version": "0.3"
               }
             ]
           },
@@ -1233,65 +1233,65 @@
       {
         "id": "paywall_version_student",
         "paywallId": "paywall_student",
-        "protocolVersion": "0.2",
-        "documentDigest": "sha256:59e3165a41dff365eff5d47cd0b664c6cfc8bc7abc62ce73033c2ba93ba12de9",
+        "protocolVersion": "0.3",
+        "documentDigest": "sha256:42842d0ab7ba9185cf479c726608d3ad03cc2a909b7de219db1613e856761410",
         "document": {
-          "schemaVersion": "0.2",
+          "schemaVersion": "0.3",
           "id": "paywall_student",
           "revision": 1,
           "compatibility": {
             "requiredCapabilities": [
               {
                 "name": "layout.scrollContainer",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "layout.stack",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "navigation.screens",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "component.text",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "component.button",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "localization.catalogs",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "action.navigateTo",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "action.navigateBack",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "action.openExternalUrl",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "accessibility.metadata",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "style.colors",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "style.box",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "style.typography",
-                "version": "0.2"
+                "version": "0.3"
               }
             ]
           },
@@ -1510,65 +1510,65 @@
       {
         "id": "paywall_version_ios",
         "paywallId": "paywall_ios",
-        "protocolVersion": "0.2",
-        "documentDigest": "sha256:520df4c8bd7f9422c7eadf68346be222652e98e026214ee76aae55eb4e4582ae",
+        "protocolVersion": "0.3",
+        "documentDigest": "sha256:2de86758739bd6812dae74cac2a4046a5f9f41fdaeb9eaada6f9a612c0120b02",
         "document": {
-          "schemaVersion": "0.2",
+          "schemaVersion": "0.3",
           "id": "paywall_ios",
           "revision": 1,
           "compatibility": {
             "requiredCapabilities": [
               {
                 "name": "layout.scrollContainer",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "layout.stack",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "navigation.screens",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "component.text",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "component.button",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "localization.catalogs",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "action.navigateTo",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "action.navigateBack",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "action.openExternalUrl",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "accessibility.metadata",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "style.colors",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "style.box",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "style.typography",
-                "version": "0.2"
+                "version": "0.3"
               }
             ]
           },

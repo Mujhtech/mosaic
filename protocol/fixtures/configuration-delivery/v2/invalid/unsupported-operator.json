@@ -10,7 +10,7 @@
       "mode": "production"
     },
     "publishedAt": "2026-07-26T12:00:00.000Z",
-    "contentDigest": "sha256:e5fa0932933949668917b330a1037618c50f08b4479f7b2982d540dc3a3989e3",
+    "contentDigest": "sha256:c1a3e6f019f26536635dc317de4160dfcd06228f876558af0590e5ade4dc1f07",
     "compatibility": {
       "placementDecisionContracts": [
         {
@@ -21,7 +21,7 @@
       ],
       "paywallProtocols": [
         {
-          "version": "0.2",
+          "version": "0.3",
           "requiredCapabilities": []
         }
       ],

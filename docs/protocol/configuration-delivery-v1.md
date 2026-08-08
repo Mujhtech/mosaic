@@ -3,7 +3,7 @@
 ## Purpose
 
 Configuration Delivery `1` is the immutable, Environment-scoped release envelope fetched by Mosaic
-SDKs. It wraps complete Paywall Protocol `0.2` documents without changing their component, layout,
+SDKs. It wraps complete Paywall Protocol `0.3` documents without changing their component, layout,
 action, localization, accessibility, Product, Asset, compatibility, or fallback semantics.
 
 Canonical artifacts:
@@ -47,7 +47,7 @@ An SDK validates the complete candidate before replacing its last accepted relea
 includes:
 
 1. exact Delivery version and closed JSON Schema validation;
-2. every embedded Paywall Protocol `0.2` schema and semantic rule;
+2. every embedded Paywall Protocol `0.3` schema and semantic rule;
 3. exact Paywall capability compatibility;
 4. Placement-to-Paywall-Version references;
 5. Paywall-Version-to-Product and Asset references;
@@ -66,9 +66,9 @@ or unused records reject the release.
 A Paywall Version record contains:
 
 - stable Version and logical Paywall IDs;
-- exact `protocolVersion: "0.2"`;
+- exact `protocolVersion: "0.3"`;
 - canonical document digest;
-- the complete immutable Protocol `0.2` document;
+- the complete immutable Protocol `0.3` document;
 - the exact stable Mosaic Product IDs used by that document; and
 - bindings from each remote document Asset ID to a hosted Asset reference.
 
@@ -88,19 +88,19 @@ Release Product records contain only:
 - bounded fallback display name.
 
 They contain no provider Product identifier, price, offer, credential, connection state, or
-authoritative customer Entitlement state. Protocol `0.2` continues to own visible Product labels
+authoritative customer Entitlement state. Protocol `0.3` continues to own visible Product labels
 and safe runtime Product interpolation.
 
 ## Assets
 
 Bundled Assets remain inside the host application and have no hosted Asset record.
 
-Every remote Protocol `0.2` Asset has exactly one Version binding to a release Asset record. The
+Every remote Protocol `0.3` Asset has exactly one Version binding to a release Asset record. The
 record contains stable Mosaic Asset ID, image/video kind, media type, byte length, SHA-256 digest,
 and immutable HTTPS URL. The record kind and URL must equal the embedded document Asset.
 
 URLs contain no bucket key, embedded credential, or expiring signature. Runtime media failure uses
-the fallback already declared by Protocol `0.2` and emits a safe diagnostic; it does not partially
+the fallback already declared by Protocol `0.3` and emits a safe diagnostic; it does not partially
 rewrite the release.
 
 ## Digests and ETags
@@ -126,9 +126,9 @@ The semantic SDK request metadata is:
   "supportedConfigurationDeliveryVersions": ["1"],
   "supportedPaywallProtocols": [
     {
-      "version": "0.2",
+      "version": "0.3",
       "capabilities": [
-        { "name": "component.text", "version": "0.2" }
+        { "name": "component.text", "version": "0.3" }
       ]
     }
   ],
@@ -145,13 +145,13 @@ Delivery v1 uses these exact headers:
 Mosaic-SDK-Platform: flutter
 Mosaic-SDK-Version: 0.2.0-dev.5
 Mosaic-Configuration-Versions: 1
-Mosaic-Paywall-Protocol-Versions: 0.2
-Mosaic-Paywall-Capabilities: component.text@0.2,layout.stack@0.2
+Mosaic-Paywall-Protocol-Versions: 0.3
+Mosaic-Paywall-Capabilities: component.text@0.3,layout.stack@0.3
 Mosaic-App-Version: 1.0.0 # optional
 ```
 
 `Mosaic-Paywall-Capabilities` contains unique comma-separated `name@version` pairs from the closed
-Protocol `0.2` capability catalog, with at most 128 pairs and a 16 KiB header bound. The backend
+Protocol `0.3` capability catalog, with at most 128 pairs and a 16 KiB header bound. The backend
 rejects malformed, duplicate, unknown, or incomplete reports atomically with
 `406 unsupported_capability`; it never returns a partially compatible Release.
 
@@ -195,4 +195,4 @@ Delivery v1 contains no secrets, Drafts, unpublished Versions, internal audit or
 targeting, rollout rules, user attributes, analytics state, experiments, provider credentials,
 provider Product mappings, receipt data, or authoritative customer Entitlement state.
 
-Local Preview `0.2` remains a separate WebSocket development contract and is unchanged.
+Local Preview `0.3` remains a separate WebSocket development contract and is unchanged.

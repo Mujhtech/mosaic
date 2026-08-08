@@ -15,7 +15,7 @@ the later version adds — not because it is newer.
 | [Commerce Provider Contract 1 → 2](commerce-provider-v1-to-v2.md) | Asynchronous commerce updates, native recovery, local acceptance |
 | [Commerce Configuration 1 → 2](commerce-configuration-v1-to-v2.md) | Direct native-store activation and exact native selectors |
 
-No guide exists for Paywall Protocol `0.2`, Local Preview `0.2`, Placement
+No guide exists for Paywall Protocol `0.3`, Local Preview `0.3`, Placement
 Decision `1`, or Experiment Assignment `1`: each has exactly one approved
 version, and the retired RC-candidate migration tools were removed from the
 tree; there is no upgrade path from unapproved candidates.

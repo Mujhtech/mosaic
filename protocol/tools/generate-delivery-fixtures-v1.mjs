@@ -71,7 +71,7 @@ function versionRecord({ id, paywallId, document }) {
   return {
     id,
     paywallId,
-    protocolVersion: "0.2",
+    protocolVersion: "0.3",
     documentDigest: sha256Digest(document),
     document,
     productReferenceIds: document.products.map((product) => product.productId),
@@ -106,7 +106,7 @@ function envelope({
       compatibility: {
         paywallProtocols: [
           {
-            version: "0.2",
+            version: "0.3",
             requiredCapabilities: sortedCapabilities(
               paywallVersions.map((version) => version.document),
             ),
@@ -124,8 +124,8 @@ function envelope({
   return value;
 }
 
-const navigation = readJson("fixtures/v0.2/navigation-only.json");
-const complete = readJson("fixtures/v0.2/complete-paywall.json");
+const navigation = readJson("fixtures/v0.3/navigation-only.json");
+const complete = readJson("fixtures/v0.3/complete-paywall.json");
 
 const navigationVersion = versionRecord({
   id: "paywall_version_navigation_1",
@@ -213,7 +213,7 @@ writeJson("capability-request.json", {
   supportedConfigurationDeliveryVersions: ["1"],
   supportedPaywallProtocols: [
     {
-      version: "0.2",
+      version: "0.3",
       capabilities: sortedCapabilities([complete]),
     },
   ],
@@ -225,9 +225,9 @@ unsupportedContract.configurationDeliveryVersion = "2";
 writeJson("unsupported-contract-version.json", unsupportedContract, invalidDirectory);
 
 const unsupportedPaywall = structuredClone(validRelease);
-unsupportedPaywall.release.compatibility.paywallProtocols[0].version = "0.3";
-unsupportedPaywall.release.paywallVersions[0].protocolVersion = "0.3";
-unsupportedPaywall.release.paywallVersions[0].document.schemaVersion = "0.3";
+unsupportedPaywall.release.compatibility.paywallProtocols[0].version = "0.4";
+unsupportedPaywall.release.paywallVersions[0].protocolVersion = "0.4";
+unsupportedPaywall.release.paywallVersions[0].document.schemaVersion = "0.4";
 writeJson("unsupported-paywall-protocol.json", unsupportedPaywall, invalidDirectory);
 
 const malformedRelease = structuredClone(validRelease);

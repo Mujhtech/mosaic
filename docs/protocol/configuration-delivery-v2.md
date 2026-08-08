@@ -1,6 +1,6 @@
 # Configuration Delivery Contract v2
 
-Configuration Delivery `2` atomically delivers immutable Paywall Protocol `0.2` documents and Placement Decision Contract `1` Rule Sets for one Project and Environment. It is additive: Delivery `1` and Paywall Protocol `0.2` remain unchanged.
+Configuration Delivery `2` atomically delivers immutable Paywall Protocol `0.3` documents and Placement Decision Contract `1` Rule Sets for one Project and Environment. It is additive: Delivery `1` and Paywall Protocol `0.3` remain unchanged.
 
 The canonical schemas are under `protocol/schema/configuration-delivery/v2/`. A release contains Project/Environment identity, compatibility requirements, Placement decisions, exact Paywall Versions, provider-neutral Product readiness references, stable Entitlement references, and hosted Asset references. It may contain zero Paywalls only when no outcome references a Paywall.
 
@@ -16,7 +16,7 @@ Before replacing accepted state, a reader validates the complete envelope:
 4. Project and Environment ownership;
 5. unique Placement key/ID and Rule Set ID;
 6. exact Paywall, Product, Entitlement, and Asset references;
-7. unchanged Paywall Protocol `0.2` document semantics and capability requirements;
+7. unchanged Paywall Protocol `0.3` document semantics and capability requirements;
 8. `environment.mode` and the non-production and duration rules for QA overrides.
 
 Unsupported or malformed semantics reject the whole candidate. Readers never skip a Rule, drop an unknown field, partially accept Paywalls, or retain a new envelope with an old decision subset. Rejection preserves the last accepted release; without one, readers try a bundled v2 release and then return configuration unavailable.

@@ -3,7 +3,7 @@
 Experiment Assignment `1` is the immutable, platform-neutral definition used
 to select one Variant locally. It extends an already eligible normal Placement
 decision; it does not replace the Placement API or change Paywall Protocol
-`0.2`.
+`0.3`.
 
 Canonical artifacts:
 

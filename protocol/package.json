@@ -12,6 +12,7 @@
     "generate:rejection-layers": "node tools/generate-rejection-layers.mjs",
     "generate": "npm run generate:browser-contract && npm run generate:delivery-fixtures && npm run generate:phase7-contracts && npm run generate:analytics-minimization && npm run generate:rejection-layers",
     "test": "node --test tools/*.test.mjs",
+    "check:guards": "node tools/check-guard-vacuity.mjs",
     "validate": "node tools/validate.mjs"
   },
   "dependencies": {

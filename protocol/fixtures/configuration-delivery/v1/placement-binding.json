@@ -8,63 +8,63 @@
       "key": "staging"
     },
     "publishedAt": "2026-07-22T12:00:00Z",
-    "contentDigest": "sha256:ea9d91a28e5e4aca6d123e72e5d41cf616d81f6c622f6bb83b9ab6c126e40822",
+    "contentDigest": "sha256:47b1ffd100ed953df0aa4457c298dbf86406213fb177246a5f4c3d1e9acbda2a",
     "compatibility": {
       "paywallProtocols": [
         {
-          "version": "0.2",
+          "version": "0.3",
           "requiredCapabilities": [
             {
               "name": "accessibility.metadata",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "action.navigateBack",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "action.navigateTo",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "action.openExternalUrl",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "component.button",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "component.text",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "layout.scrollContainer",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "layout.stack",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "localization.catalogs",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "navigation.screens",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "style.box",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "style.colors",
-              "version": "0.2"
+              "version": "0.3"
             },
             {
               "name": "style.typography",
-              "version": "0.2"
+              "version": "0.3"
             }
           ]
         }
@@ -81,65 +81,65 @@
       {
         "id": "paywall_version_navigation_1",
         "paywallId": "navigation-only",
-        "protocolVersion": "0.2",
-        "documentDigest": "sha256:67bbbfc5c28f64e241dfc7ba2f46a9b598ff5267df73ae19f5cca860ac8295a9",
+        "protocolVersion": "0.3",
+        "documentDigest": "sha256:d8439f6b0bb7dc41467d9c4316186521184467dab5334e310527ab26b309b531",
         "document": {
-          "schemaVersion": "0.2",
+          "schemaVersion": "0.3",
           "id": "navigation-only",
           "revision": 1,
           "compatibility": {
             "requiredCapabilities": [
               {
                 "name": "layout.scrollContainer",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "layout.stack",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "navigation.screens",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "component.text",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "component.button",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "localization.catalogs",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "action.navigateTo",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "action.navigateBack",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "action.openExternalUrl",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "accessibility.metadata",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "style.colors",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "style.box",
-                "version": "0.2"
+                "version": "0.3"
               },
               {
                 "name": "style.typography",
-                "version": "0.2"
+                "version": "0.3"
               }
             ]
           },

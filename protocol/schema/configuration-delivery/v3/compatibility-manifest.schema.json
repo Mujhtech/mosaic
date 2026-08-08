@@ -95,7 +95,7 @@
       "minItems": 1,
       "maxItems": 1,
       "items": {
-        "const": "0.2"
+        "const": "0.3"
       }
     },
     "readerPolicy": {

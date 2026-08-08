@@ -9,8 +9,8 @@ Mosaic Product and Entitlement identities into verified provider identifiers.
 
 It is independent of, and does not change:
 
-- Paywall Protocol `0.2`;
-- Local Preview `0.2`;
+- Paywall Protocol `0.3`;
+- Local Preview `0.3`;
 - Configuration Delivery `1`; or
 - Commerce Provider Contract `1`.
 

@@ -12,7 +12,7 @@
     "1"
   ],
   "supportedPaywallProtocols": [
-    "0.2"
+    "0.3"
   ],
   "readerPolicy": {
     "unknownDeliveryVersion": "rejectRelease",
