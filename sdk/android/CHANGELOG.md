@@ -1,5 +1,111 @@
 # Changelog
 
+## Unreleased (Paywall Protocol 0.3)
+
+- **Adopt Paywall Protocol `0.3`, which replaces `0.2` outright.** There is no `0.2` support, no
+  migration path, and no dual-version code: a `0.2` document is an unknown version to this reader
+  and is rejected atomically, resolving through last-accepted, then bundled fallback, then
+  configuration unavailable. Every `0.2` artifact is gone from the Android tree — the version
+  constant, the `ProtocolV02*` sources and their symbols, the Gradle fixture paths and task names,
+  the `mosaic/v0.2` instrumentation asset directory, the `ProtocolV02Test` suite, and the
+  `mosaic-paywall-v02-golden.sha256` baseline. Local Preview moves with it: the subprotocol is
+  `mosaic.local-preview.v0.3` and `MOSAIC_LOCAL_PREVIEW_VERSION` is `0.3`.
+- **Four new components decode, validate, and render natively.** `tabs` (two to eight labelled
+  panels, one visible, with a required authored `initialTabId` and a required `selectedLabelColor`),
+  `timeline` (two to twelve ordered entries, a closed `dot`/`ordinal`/`icon` marker union, and a
+  required connector), `award` (localized title, optional subtitle paired with its typography,
+  optional decorative emblem), and `socialProof` (required quote and attribution, optional
+  integer-only bounded rating, optional decorative avatar). Compose renders Tabs as a tab list of
+  `Role.Tab` controls plus one pane-titled panel, Timeline as a labelled ordered list with
+  decorative markers and connectors, and both Award and Social Proof as single announced groups.
+- **Tab selection is runtime state.** `MosaicPaywallState` gains a `tabSelections` map alongside
+  switches, carousels, navigation, and product selection, seeded from each component's authored
+  `initialTabId` and rebuilt — therefore reset — whenever a new document is accepted.
+- **`visibility` gains `{ "mode": "tab" }`**, with the same remove-from-layout-accessibility-and-focus
+  semantics as a false Switch condition. The decoder rejects a condition whose Tabs component is on
+  another screen, whose tab the component does not declare, or that sits on the Tabs component
+  itself or inside one of its panels — inside a panel the condition is already decided, so it is
+  either vacuously true or unsatisfiable, and both are dead layout.
+- **Visibility evaluation now takes `{ switches, tabs }` and throws.**
+  `mosaicVisibilityIsSatisfied` and `MosaicPaywallState.isVisible` raise
+  `MosaicVisibilityStateException` when a condition names a controller the supplied runtime state
+  does not carry. Resolving it to `false` would remove the node and read back exactly like an
+  authored `hidden`, turning a caller bug into a component that silently vanishes.
+- **No absence is a masked default.** Timeline `markerColor`, `markerSize`, and
+  `descriptionTypography` are required when an entry consumes them and forbidden when none does,
+  both directions enforced; Award `subtitle` and `subtitleTypography` are mutually required; a
+  Social Proof `value` above `maximum x stepsPerPoint` rejects; and an unrecognised marker kind,
+  rating step, visibility mode, or component type rejects the document rather than substituting a
+  glyph, a scale, or a render.
+- The neutral `selectionStyles` / `selectionStateStyle` / `selectionStateStyleOverride` contract is
+  adopted as `MosaicSelectionStyles`, `MosaicSelectionStateStyle`, and
+  `MosaicSelectionStateStyleOverride`, which Tabs and Product Cards now share; the
+  `MosaicProductCardBoxStyle*` names remain as type aliases.
+- The Local Preview draft validator's component vocabulary is now exactly the Protocol 0.3 node set
+  and descends into tab panels. It previously listed retired `0.2`-era types the strict decoder
+  rejects anyway, which downgraded an `unsupportedComponent` diagnostic naming the offending
+  component into a generic `invalidDocument` one that named nothing.
+- **Reserved accessibility strings replace every composed announcement.** A Social Proof rating is
+  announced by substituting `{{ rating.value }}` and `{{ rating.maximum }}` into the reserved
+  `mosaic.a11y.rating` string from the resolved catalog; the renderer composes no "out of", "/", or
+  other connective, so word order travels with the translation. Points come from the exact,
+  never-rounded `value / stepsPerPoint`, formatted in ASCII by contract — `.` decimal separator, no
+  grouping, one fraction digit only for a half step — because a platform formatter would announce
+  `4,5` on a German device and fail the cross-SDK vectors. `MosaicButtonComponent.busyStateDescription`
+  now reads the reserved `mosaic.a11y.in_progress` string, retiring the hardcoded English
+  "In progress" the 2026-08 fallback audit flagged and the label-echoing resolution order that had
+  replaced it. Both keys are required exactly when the feature that reads them is present and
+  forbidden otherwise, each declared translation must contain each placeholder exactly once and no
+  other `{{ ... }}` expression, and a document declaring either requires the new
+  `accessibility.reservedStrings` capability. `protocol/fixtures/v0.3/rating-announcement.json` is
+  bound as a conformance corpus asserting all ten `expectedAnnouncement` strings byte for byte
+  against a declared case-count floor — composing a plausible phrase now fails a test rather than
+  passing a review.
+- **Group announcements are no longer joined into one string.** Award, Social Proof, and Timeline
+  each put every announced segment in its own accessibility element inside an unmerged container
+  named by the authored `accessibility.label`, in the contract's order; Timeline uses native
+  collection semantics so TalkBack announces it as a list with item positions. The renderer supplies
+  no separator: it previously joined with `", "`, which is invented punctuation and wrong outside
+  Latin script. An absent optional segment now contributes no element rather than an empty one, and
+  the rating symbols, avatar, emblem, markers, and connector are all explicitly decorative.
+  `MosaicAccessibilityAnnouncement` models the container role, label, value, hint, ordered elements,
+  and decorative set, and both the renderers and the new conformance corpus read it, so the two
+  cannot drift. `protocol/fixtures/v0.3/accessibility-announcement.json` is bound with a declared
+  floor of eleven cases and asserted field by field — verified by breaking the Award builder to join
+  its segments and watching the suite fail.
+- **A Button is one accessibility element with a state-invariant name.** The authored label is the
+  name in both states, the reserved `mosaic.a11y.in_progress` string is the `stateDescription`, and
+  neither `children` nor `inProgressChildren` are announced in either state.
+- **Dead pre-0.3 rendering paths removed.** `cards` is required with `minItems: 1` and the decoder
+  reads it through `boundedArrayAt(1, 20)`, so no accepted document can yield a card-less Product
+  Selector — the `RenderLegacyProductCard` path and its `option.card == null` branches were
+  unreachable, and had already drifted out of the frozen contract by joining label, badge, and price
+  into one announcement. Removed with the style model that served only it
+  (`MosaicProductCardStyle`, `MosaicProductCardStyleOverride`, `MosaicProductCardStyles`,
+  `MosaicProductCardBadgeStyle`, `MosaicProductCardBadgeStyleOverride`,
+  `MosaicProductCardContentAlignment`, the selector's `cardStyles` field, `cardHorizontalAlignment`,
+  and `productCardContentAlignment`). `MosaicAvailableProduct.card` is now non-null, which is what
+  makes the removed branch unrepresentable rather than merely unused.
+- The same sweep removed the retired specialized node types no `0.3` decode path can produce, since
+  `node()` has no branch for them and the `0.3` capability enum does not name them:
+  `MosaicPurchaseButtonComponent`, `MosaicRestoreButtonComponent`, `MosaicCloseButtonComponent`,
+  and `MosaicLegalTextComponent`, their four renderers, `StyledTextButton`, the
+  `MosaicVerticalStack` alias, `MosaicTypography.legacy`, and the `layout.verticalStack`,
+  `component.purchaseButton`, `component.restoreButton`, `component.closeButton`, and
+  `component.legalText` capability names. This is a public API removal, made now because these
+  types exist only to describe a contract this repo no longer contains.
+- **Timeline connector geometry pinned.** One continuous run drawn first with markers drawn over it,
+  a gutter of `markerSize` when any entry declares a marker and `connector.width` when none does,
+  and head/tail decided independently at a terminal marker's centre or that entry's content edge.
+  The inter-entry gap moved from the row to the entry's content column, so the gutter — and
+  therefore the connector — spans it instead of breaking at every gap.
+- A host package with no `versionName` now reports `0.0.0+unreported` to Local Preview instead of
+  the literal `0.2.0`, which read as a protocol version and which Studio displayed as the app's
+  real version.
+- The Gradle canonical-fixture copy now fails the build when the fixture path does not exist. A
+  Gradle `Copy` over a missing source succeeds and produces nothing, so a moved fixture would have
+  shipped an AAR with no bundled fallback and a green build.
+
 ## Unreleased (Phase 9C: migration authority awareness)
 
 - A device locale the platform reports as nothing usable is now **absent**, not `en`.

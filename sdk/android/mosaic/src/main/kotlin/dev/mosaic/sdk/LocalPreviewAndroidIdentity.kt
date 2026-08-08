@@ -4,6 +4,15 @@ import android.content.Context
 import android.os.Build
 
 object MosaicAndroidPreviewIdentity {
+    /**
+     * Sent when the host package reports no `versionName`.
+     *
+     * The Local Preview schema requires a numeric version, so absence cannot be sent as absence
+     * here. The value is therefore one no build produces and whose build metadata says why it is
+     * there, rather than a plausible number Studio would display as the app's real version.
+     */
+    private const val UNREPORTED_APPLICATION_VERSION = "0.0.0+unreported"
+
     fun create(
         context: Context,
         clientId: String,
@@ -13,7 +22,7 @@ object MosaicAndroidPreviewIdentity {
         val packageName = applicationContext.packageName
         val version = runCatching {
             applicationContext.packageManager.getPackageInfo(packageName, 0).versionName
-        }.getOrNull().orEmpty().ifBlank { "0.2.0" }
+        }.getOrNull().orEmpty().ifBlank { UNREPORTED_APPLICATION_VERSION }
         return MosaicPreviewClientIdentity(
             clientId = clientId,
             displayName = safeDisplayName(displayName, "Android preview"),
@@ -27,7 +36,7 @@ object MosaicAndroidPreviewIdentity {
                     applicationContext.applicationInfo.loadLabel(applicationContext.packageManager).toString(),
                     "Android application",
                 ),
-                version = safeSingleLine(version, 64, "0.2.0"),
+                version = safeSingleLine(version, 64, UNREPORTED_APPLICATION_VERSION),
             ),
             device = MosaicPreviewDeviceIdentity(
                 displayName = safeDisplayName(Build.MODEL, "Android device"),

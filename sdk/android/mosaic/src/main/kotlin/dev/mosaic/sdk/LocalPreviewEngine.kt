@@ -596,8 +596,12 @@ class MosaicLocalPreviewEngine(
     }
 
     private data class ComponentIssue(val type: String, val componentId: String?, val pointer: String)
+    /**
+     * Exactly the Protocol 0.3 node vocabulary. Listing a type the strict decoder does not accept
+     * would turn an honest `unsupportedComponent` diagnostic, which names the offending component,
+     * into a generic `invalidDocument` one that does not.
+     */
     private val supportedComponentTypes = setOf(
-        "verticalStack",
         "stack",
         "text",
         "image",
@@ -607,13 +611,13 @@ class MosaicLocalPreviewEngine(
         "productCard",
         "productBadge",
         "button",
-        "purchaseButton",
-        "restoreButton",
-        "closeButton",
-        "legalText",
         "carousel",
         "switch",
         "countdown",
+        "tabs",
+        "timeline",
+        "award",
+        "socialProof",
     )
 
     private fun rawLayouts(root: JsonObject): List<Pair<JsonObject, String>> {
@@ -634,7 +638,7 @@ class MosaicLocalPreviewEngine(
             if (type !in supportedComponentTypes) {
                 return ComponentIssue(type, node.stringProperty("id"), "$pointer/type")
             }
-            if (type == "verticalStack" || type == "stack") {
+            if (type == "stack") {
                 node.getAsJsonArray("children")?.forEachIndexed { index, child ->
                     if (child.isJsonObject) walk(child.asJsonObject, "$pointer/children/$index")?.let { return it }
                 }
@@ -643,6 +647,14 @@ class MosaicLocalPreviewEngine(
                     if (page.isJsonObject) {
                         page.asJsonObject.getAsJsonObject("content")?.let { content ->
                             walk(content, "$pointer/pages/$index/content")?.let { return it }
+                        }
+                    }
+                }
+            } else if (type == "tabs") {
+                node.getAsJsonArray("tabs")?.forEachIndexed { index, tab ->
+                    if (tab.isJsonObject) {
+                        tab.asJsonObject.getAsJsonObject("content")?.let { content ->
+                            walk(content, "$pointer/tabs/$index/content")?.let { return it }
                         }
                     }
                 }
@@ -698,7 +710,7 @@ class MosaicLocalPreviewEngine(
             if (node.stringProperty("type") == "productSelector") {
                 node.stringProperty("id")?.let(selectorIds::add)
             }
-            if (node.stringProperty("type") in setOf("verticalStack", "stack")) {
+            if (node.stringProperty("type") == "stack") {
                 node.getAsJsonArray("children")?.forEachIndexed { index, child ->
                     if (child.isJsonObject) collect(child.asJsonObject, "$pointer/children/$index")
                 }
@@ -707,6 +719,12 @@ class MosaicLocalPreviewEngine(
                     page.takeIf(JsonElement::isJsonObject)?.asJsonObject
                         ?.getAsJsonObject("content")
                         ?.let { collect(it, "$pointer/pages/$index/content") }
+                }
+            } else if (node.stringProperty("type") == "tabs") {
+                node.getAsJsonArray("tabs")?.forEachIndexed { index, tab ->
+                    tab.takeIf(JsonElement::isJsonObject)?.asJsonObject
+                        ?.getAsJsonObject("content")
+                        ?.let { collect(it, "$pointer/tabs/$index/content") }
                 }
             } else if (node.stringProperty("type") == "button") {
                 listOf("children", "inProgressChildren").forEach { property ->

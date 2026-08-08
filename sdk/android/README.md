@@ -1,7 +1,7 @@
-# Mosaic Android SDK — Protocol 0.2 native rendering
+# Mosaic Android SDK — Protocol 0.3 native rendering
 
-The Android SDK strictly decodes Mosaic Protocol 0.2 and renders it with
-Jetpack Compose primitives. Local Preview uses the exact 0.2 contract.
+The Android SDK strictly decodes Mosaic Protocol 0.3 and renders it with
+Jetpack Compose primitives. Local Preview uses the exact 0.3 contract.
 It uses provider-neutral commerce, a generated bundled fallback, and Hosted
 Configuration Delivery v1, v2, and v3. RevenueCat support is isolated in the optional
 `:mosaic-revenuecat` module; the core `:mosaic` AAR has no RevenueCat or Play
@@ -470,14 +470,14 @@ actionable in this release.
 
 ## Canonical protocol ownership
 
-The canonical fixtures live under `protocol/fixtures/v0.2/`. The library build copies the current Protocol 0.2
+The canonical fixtures live under `protocol/fixtures/v0.3/`. The library build copies the current Protocol 0.3
 fixture as its bundled fallback into an ignored
 `mosaic/build/generated/mosaic/canonical-assets/` directory and packages that
 generated output into the AAR. Android source contains neither a fixture fork
 nor a JSON Schema copy. JVM conformance tests read the repository file
 directly.
 
-Local Preview 0.2 remains owned by `protocol/schema/local-preview/` and
+Local Preview 0.3 remains owned by `protocol/schema/local-preview/` and
 `docs/protocol/`. Android keeps no schema or fixture fork. Its codec reads both
 canonical message flows during JVM conformance tests, and every received draft
 still passes through the matching strict protocol decoder before rendering.
@@ -564,7 +564,7 @@ release is durably committed to the app-private cache. Failed writes and
 rejected candidates preserve the prior in-memory and persistent release. Cache
 files are isolated by a SHA-256 namespace derived from the delivery endpoint
 and public SDK key; neither value is written into the cache path or record.
-Each request advertises the full sorted Protocol 0.2 capability catalog as
+Each request advertises the full sorted Protocol 0.3 capability catalog as
 exact `name@version` pairs for backend compatibility validation.
 Diagnostics contain stable codes and safe messages, never SDK keys, response
 documents, or transport internals.
@@ -777,7 +777,7 @@ message for 15 seconds is safely re-established.
 
 - `Column`, native vertical scrolling, `Text`, `Image`, Material buttons, and
   radio-button selection semantics render the protocol tree in source order.
-- Protocol 0.2 design-system color, background, and shadow tokens are resolved
+- Protocol 0.3 design-system color, background, and shadow tokens are resolved
   strictly by category. Native Compose draws solid, linear-gradient, and
   radial-gradient backgrounds plus one authored shadow; invalid references or
   token cycles reject the whole candidate before it replaces a valid document.
@@ -791,7 +791,60 @@ message for 15 seconds is safely re-established.
 - A screen presented as `sheet` uses Material 3 `ModalBottomSheet` over the most
   recent full screen. Back, the authored `navigateBack` action, and native
   sheet dismissal all restore the previous navigation entry.
-- Protocol 0.2 Product Cards and Product Badges render their authored passive
+- Tabs renders one control per entry and exactly one panel: the container is the
+  tab list, each control carries the native `Tab` role, its selected state, and
+  its authored label, and the visible panel carries the same label as its pane
+  title. The initially visible panel is the authored `initialTabId`; reordering
+  the `tabs` array never changes it. `selectedLabelColor` is authored on every
+  Tabs component, so the selected label colour is never inferred from the
+  Default state.
+- A `visibility` of `{ "mode": "tab" }` removes the node from layout, the
+  accessibility tree, and focus order while its condition is false, exactly as a
+  false Switch condition does. Tab selection is runtime state keyed by the Tabs
+  component ID and is reset from `initialTabId` whenever a new document is
+  accepted. A condition naming a controller the runtime state does not carry
+  throws `MosaicVisibilityStateException` rather than resolving to hidden.
+- Timeline renders a labelled ordered list with native collection semantics.
+  Each entry is one item contributing its title, then its description when
+  declared; markers and connectors are decorative and never focusable. The connector is one
+  continuous run drawn first in a leading gutter, with markers drawn over it, so
+  an absent marker leaves it unbroken rather than being a special case. The
+  gutter is `markerSize` wide when any entry declares a marker and
+  `connector.width` wide when none does. Head and tail are decided
+  independently: a terminal entry's marker centre when it declares one, that
+  entry's content edge when it does not. An entry without a `description` draws
+  no second line and reserves no space for one. `ordinal` markers use the
+  resolved catalog locale's number format.
+- Award renders its title, optional subtitle, and optional emblem as one
+  labelled group. The emblem — image asset or icon — is always decorative. An
+  absent emblem renders text alone; an absent subtitle renders nothing in its
+  place and contributes no accessibility element.
+- Social Proof announces the rating, then the quote, then the attribution; the
+  avatar and the rating symbols are always decorative. `rating.value` counts steps, so it is announced
+  in points against `maximum`, and the phrasing comes from the reserved
+  `mosaic.a11y.rating` catalog string — the renderer composes no connective in
+  any language. Numerals are ASCII by contract (`.` decimal separator, no
+  grouping, one fraction digit only for a half step), so no platform number
+  formatter is used. An absent rating draws no symbols and adds nothing to the
+  announcement.
+- **Group announcements are never joined.** Award, Social Proof, and Timeline
+  put each announced segment in its own accessibility element inside an
+  unmerged container whose name is the authored `accessibility.label`; the
+  platform screen reader supplies the pause. No separator is composed, because
+  any choice is wrong outside Latin script. An absent optional segment produces
+  no element rather than an empty one.
+- A Button is one accessibility element. Its name is the authored label and does
+  not change between states; the busy state is the reserved
+  `mosaic.a11y.in_progress` string in `stateDescription`. Neither `children` nor
+  `inProgressChildren` are announced in either state.
+- Reserved accessibility strings are read from the resolved catalog and never
+  from a literal. `mosaic.a11y.rating` is required exactly when a Social Proof
+  declares a `rating`, `mosaic.a11y.in_progress` exactly when a Button declares
+  `inProgressChildren`; both directions are enforced, and a document declaring
+  either requires `accessibility.reservedStrings`. A Button announces
+  `mosaic.a11y.in_progress` as its accessible status while its in-progress
+  content is shown.
+- Protocol 0.3 Product Cards and Product Badges render their authored passive
   child trees. Default and Selected box leaves resolve independently; logical
   badge overlay anchors mirror in RTL without absolute protocol coordinates.
 - `WindowInsets.safeDrawing`, font scaling, direction-relative padding and
@@ -802,9 +855,10 @@ message for 15 seconds is safely re-established.
   from runtime `MosaicProduct` values.
 - Missing or undecodable logical images use the localized placeholder inside
   the same aspect-ratio frame.
-- Runtime selection is keyed by selector ID and Product Card ID. A missing
-  initial/current card falls back to the first available authored card in
-  source order. A blank localized price removes a card only when its Text or
+- Runtime selection is keyed by selector ID and Product Card ID. Every option is
+  bound to an authored Product Card — `cards` is required with a minimum of one,
+  so there is no card-less selector path. A missing initial/current card falls
+  back to the first available authored card in source order. A blank localized price removes a card only when its Text or
   card accessibility resolves `product.price` for the active locale. No cards
   shows the configured message, disables purchase, and reports a recoverable interaction.
   `productUnavailable` becomes a terminal presentation result only when a
@@ -816,13 +870,23 @@ Documented Android differences:
   Mosaic sets the native heading flag and preserves the RC1 level in
   `MosaicHeadingLevelKey` for inspection.
 - Compose has no separate public TalkBack hint property. Control label and hint
-  are joined in the native content description in protocol order.
+  are joined in the native content description in protocol order. The contract
+  keeps them apart, and so does `MosaicAccessibilityAnnouncement`, which the
+  conformance vectors assert field by field; the join is a Compose mapping, not
+  a modelled value. Every canonical group case carries a null hint, so no group
+  announcement is affected.
+- Compose has no `list` role. Timeline uses native collection semantics
+  (`CollectionInfo`/`CollectionItemInfo`), which is what TalkBack announces as a
+  list and its item positions.
 - Stable Compose vertical scrolling has no public system-scrollbar visibility
   switch. Mosaic overlays a small direction-relative Compose indicator only
   when `showsIndicators` is true; scrolling and overscroll remain native.
 - Typography metrics, Material control chrome, checkmark glyphs, focus visuals,
   safe-area inset sizes, and scroll physics remain Android-native, as RC1
   permits.
+- Compose exposes a native `Tab` role and pane titles but no distinct
+  `tabpanel` role. A panel is named by its tab's authored label through
+  `paneTitle`; there is no second authored string to drift from the control's.
 
 ## Validation commands
 
@@ -832,6 +896,17 @@ From `sdk/android`:
 ./gradlew test lint assemble
 ./gradlew :mosaic:assembleDebugAndroidTest
 ./gradlew :mosaic:connectedDebugAndroidTest
+```
+
+The renderer pixel baseline in
+`mosaic/src/androidTest/assets/mosaic-paywall-v03-golden.sha256` reads
+`unrecorded` until it is captured on a device. Both screenshot tests skip with
+the digest to commit rather than passing against a baseline recorded for a
+different document. Record it with:
+
+```bash
+./gradlew :mosaic:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.mosaic.recordRendererScreenshots=1
 ```
 
 `connectedDebugAndroidTest` requires a connected device or a running emulator;

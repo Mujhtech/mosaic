@@ -12,7 +12,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
-/** Strict Protocol 0.2 reader. JSON Schema in `protocol/` remains canonical. */
+/** Strict Protocol 0.3 reader. JSON Schema in `protocol/` remains canonical. */
 internal val identifierPattern = Regex("^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$")
 internal val localizationKeyPattern = Regex("^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$")
 internal val localeTagPattern = Regex("^[a-z]{2,3}(?:-(?:[A-Z]{2}|[0-9]{3}))?$")
@@ -44,7 +44,7 @@ internal data class RawDesignSystem(
 )
 
 
-internal object MosaicProtocolV02Decoder {
+internal object MosaicProtocolV03Decoder {
     fun decode(
         source: String,
         capabilityReport: MosaicCapabilityReport,

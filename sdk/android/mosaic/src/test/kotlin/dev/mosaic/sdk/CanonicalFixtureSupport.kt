@@ -39,6 +39,11 @@ internal fun findNode(root: JsonObject, id: String): JsonObject {
         objectValue.getAsJsonObject("content")?.let { content ->
             find(content)?.let { return it }
         }
+        objectValue.getAsJsonArray("tabs")?.forEach { tab ->
+            tab.takeIf(JsonElement::isJsonObject)?.asJsonObject
+                ?.getAsJsonObject("content")
+                ?.let { content -> find(content)?.let { return it } }
+        }
         objectValue.getAsJsonArray("pages")?.forEach { page ->
             page.takeIf(JsonElement::isJsonObject)?.asJsonObject
                 ?.getAsJsonObject("content")
@@ -56,7 +61,7 @@ internal fun findNode(root: JsonObject, id: String): JsonObject {
 }
 
 private fun canonicalFixture(): Path {
-    return repositoryFile("protocol/fixtures/v0.2/complete-paywall.json")
+    return repositoryFile("protocol/fixtures/v0.3/complete-paywall.json")
 }
 
 internal fun repositoryFile(relativePath: String): Path {

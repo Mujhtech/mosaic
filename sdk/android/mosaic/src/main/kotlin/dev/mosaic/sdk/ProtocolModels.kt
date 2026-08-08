@@ -1,7 +1,7 @@
 package dev.mosaic.sdk
 
 /** The single protocol contract supported during pre-release iteration. */
-const val MOSAIC_PROTOCOL_VERSION: String = "0.2"
+const val MOSAIC_PROTOCOL_VERSION: String = "0.3"
 const val MOSAIC_LATEST_PROTOCOL_VERSION: String = MOSAIC_PROTOCOL_VERSION
 /**
  * The exact published artifact version of `dev.mosaic.sdk:mosaic`. It is sent as
@@ -16,7 +16,6 @@ val MOSAIC_SUPPORTED_PROTOCOL_VERSIONS: Set<String> = setOf(
 
 enum class MosaicCapabilityName(val wireName: String) {
     SCROLL_CONTAINER("layout.scrollContainer"),
-    VERTICAL_STACK("layout.verticalStack"),
     STACK("layout.stack"),
     SCREENS("navigation.screens"),
     SHEETS("navigation.sheets"),
@@ -31,13 +30,13 @@ enum class MosaicCapabilityName(val wireName: String) {
     PRODUCT_BADGE("component.productBadge"),
     BUTTON("component.button"),
     ICON("component.icon"),
-    PURCHASE_BUTTON("component.purchaseButton"),
-    RESTORE_BUTTON("component.restoreButton"),
-    CLOSE_BUTTON("component.closeButton"),
-    LEGAL_TEXT("component.legalText"),
     CAROUSEL("component.carousel"),
     SWITCH("component.switch"),
     COUNTDOWN("component.countdown"),
+    TABS("component.tabs"),
+    TIMELINE("component.timeline"),
+    AWARD("component.award"),
+    SOCIAL_PROOF("component.socialProof"),
     LOCALIZATION_CATALOGS("localization.catalogs"),
     LOCALIZATION_RTL("localization.rtl"),
     PRODUCT_TEMPLATE("localization.productTemplate"),
@@ -53,6 +52,7 @@ enum class MosaicCapabilityName(val wireName: String) {
     NAVIGATE_BACK_ACTION("action.navigateBack"),
     OPEN_EXTERNAL_URL_ACTION("action.openExternalUrl"),
     ACCESSIBILITY_METADATA("accessibility.metadata"),
+    ACCESSIBILITY_RESERVED_STRINGS("accessibility.reservedStrings"),
     ASSET_FALLBACK("fallback.asset"),
     PRODUCT_FALLBACK("fallback.product"),
     NORMALIZED_OUTCOME("outcome.normalized"),
@@ -67,10 +67,11 @@ enum class MosaicCapabilityName(val wireName: String) {
     PRODUCT_CARD_STATES("style.productCardStates"),
     STATIC_VISIBILITY("visibility.static"),
     SWITCH_VISIBILITY("condition.switchVisibility"),
+    TAB_VISIBILITY("condition.tabVisibility"),
 }
 
 object MosaicCapabilityCatalog {
-    val v02: Set<MosaicCapabilityName> = setOf(
+    val v03: Set<MosaicCapabilityName> = setOf(
         MosaicCapabilityName.SCROLL_CONTAINER,
         MosaicCapabilityName.SCREENS,
         MosaicCapabilityName.SHEETS,
@@ -89,6 +90,10 @@ object MosaicCapabilityCatalog {
         MosaicCapabilityName.CAROUSEL,
         MosaicCapabilityName.SWITCH,
         MosaicCapabilityName.COUNTDOWN,
+        MosaicCapabilityName.TABS,
+        MosaicCapabilityName.TIMELINE,
+        MosaicCapabilityName.AWARD,
+        MosaicCapabilityName.SOCIAL_PROOF,
         MosaicCapabilityName.LOCALIZATION_CATALOGS,
         MosaicCapabilityName.LOCALIZATION_RTL,
         MosaicCapabilityName.PRODUCT_TEMPLATE,
@@ -104,6 +109,7 @@ object MosaicCapabilityCatalog {
         MosaicCapabilityName.NAVIGATE_BACK_ACTION,
         MosaicCapabilityName.OPEN_EXTERNAL_URL_ACTION,
         MosaicCapabilityName.ACCESSIBILITY_METADATA,
+        MosaicCapabilityName.ACCESSIBILITY_RESERVED_STRINGS,
         MosaicCapabilityName.ASSET_FALLBACK,
         MosaicCapabilityName.PRODUCT_FALLBACK,
         MosaicCapabilityName.NORMALIZED_OUTCOME,
@@ -118,6 +124,7 @@ object MosaicCapabilityCatalog {
         MosaicCapabilityName.PRODUCT_CARD_STATES,
         MosaicCapabilityName.STATIC_VISIBILITY,
         MosaicCapabilityName.SWITCH_VISIBILITY,
+        MosaicCapabilityName.TAB_VISIBILITY,
     )
 }
 
@@ -136,10 +143,10 @@ data class MosaicCapabilityReport(
 
 object MosaicProtocolCapabilities {
     fun report(sdkVersion: String = MOSAIC_ANDROID_SDK_VERSION): MosaicCapabilityReport {
-        val exact = MosaicCapabilityCatalog.v02.mapTo(mutableSetOf()) {
+        val exact = MosaicCapabilityCatalog.v03.mapTo(mutableSetOf()) {
             MosaicRequiredCapability(it, MOSAIC_PROTOCOL_VERSION)
         }
-        val highest = MosaicCapabilityCatalog.v02.associateWith { MOSAIC_PROTOCOL_VERSION }
+        val highest = MosaicCapabilityCatalog.v03.associateWith { MOSAIC_PROTOCOL_VERSION }
         return MosaicCapabilityReport(
             sdkVersion = sdkVersion,
             supportedSchemaVersions = MOSAIC_SUPPORTED_PROTOCOL_VERSIONS,
@@ -296,7 +303,6 @@ data class MosaicStack(
     val horizontalAlignment: MosaicHorizontalAlignment get() = crossAxisAlignment
 }
 
-typealias MosaicVerticalStack = MosaicStack
 
 enum class MosaicSemanticColor(val wireName: String) {
     TEXT_PRIMARY("text.primary"),
@@ -419,6 +425,54 @@ sealed interface MosaicVisibility {
     data object Always : MosaicVisibility
     data object Hidden : MosaicVisibility
     data class SwitchValue(val switchId: String, val equals: Boolean) : MosaicVisibility
+
+    /**
+     * Visible only while [tabsId]'s runtime selection equals [equals]. A false condition removes the
+     * node from layout, the accessibility tree, and focus order, exactly as a false Switch condition
+     * does.
+     */
+    data class TabValue(val tabsId: String, val equals: String) : MosaicVisibility
+}
+
+/**
+ * The runtime selection a visibility condition reads.
+ *
+ * Both maps are complete for the document they were built from: the decoder rejects a condition
+ * naming a controller the document does not declare, so a controller absent here is a caller bug,
+ * not an authoring one. [mosaicVisibilityIsSatisfied] therefore throws rather than resolving to
+ * hidden — a component that silently vanishes is indistinguishable from one that was authored
+ * hidden.
+ */
+data class MosaicSelectionState(
+    val switches: Map<String, Boolean> = emptyMap(),
+    val tabs: Map<String, String> = emptyMap(),
+)
+
+/** Raised when a visibility condition names a controller the supplied selection state omits. */
+class MosaicVisibilityStateException(message: String) : IllegalStateException(message)
+
+fun mosaicVisibilityIsSatisfied(
+    visibility: MosaicVisibility,
+    selection: MosaicSelectionState,
+): Boolean = when (visibility) {
+    MosaicVisibility.Always -> true
+    MosaicVisibility.Hidden -> false
+    is MosaicVisibility.SwitchValue -> {
+        val value = selection.switches[visibility.switchId]
+            ?: throw MosaicVisibilityStateException(
+                "Visibility depends on Switch ${visibility.switchId}, " +
+                    "which the supplied runtime state does not carry.",
+            )
+        value == visibility.equals
+    }
+    is MosaicVisibility.TabValue -> {
+        val value = selection.tabs[visibility.tabsId]
+            ?: throw MosaicVisibilityStateException(
+                "Visibility depends on Tabs ${visibility.tabsId}, " +
+                    "which the supplied runtime state does not carry.",
+            )
+        value == visibility.equals
+    }
 }
 
 enum class MosaicTypographyStyle { DISPLAY, TITLE, HEADING, BODY, LABEL, CAPTION }
@@ -435,39 +489,7 @@ data class MosaicTypography(
     val alignment: MosaicTextAlignment,
     val maxLines: Int? = null,
     val overflow: MosaicTextOverflow? = null,
-) {
-    companion object {
-        fun legacy(
-            style: MosaicTypographyStyle,
-            alignment: MosaicTextAlignment,
-        ): MosaicTypography = when (style) {
-            MosaicTypographyStyle.DISPLAY -> MosaicTypography(
-                style, 40.0, 1.1, MosaicFontWeight.BOLD,
-                MosaicColor.semantic(MosaicSemanticColor.TEXT_PRIMARY), alignment,
-            )
-            MosaicTypographyStyle.TITLE -> MosaicTypography(
-                style, 34.0, 1.18, MosaicFontWeight.BOLD,
-                MosaicColor.semantic(MosaicSemanticColor.TEXT_PRIMARY), alignment,
-            )
-            MosaicTypographyStyle.HEADING -> MosaicTypography(
-                style, 22.0, 1.25, MosaicFontWeight.SEMIBOLD,
-                MosaicColor.semantic(MosaicSemanticColor.TEXT_PRIMARY), alignment,
-            )
-            MosaicTypographyStyle.BODY -> MosaicTypography(
-                style, 17.0, 1.35, MosaicFontWeight.REGULAR,
-                MosaicColor.semantic(MosaicSemanticColor.TEXT_PRIMARY), alignment,
-            )
-            MosaicTypographyStyle.LABEL -> MosaicTypography(
-                style, 16.0, 1.25, MosaicFontWeight.SEMIBOLD,
-                MosaicColor.semantic(MosaicSemanticColor.TEXT_PRIMARY), alignment,
-            )
-            MosaicTypographyStyle.CAPTION -> MosaicTypography(
-                style, 13.0, 1.3, MosaicFontWeight.REGULAR,
-                MosaicColor.semantic(MosaicSemanticColor.TEXT_SECONDARY), alignment,
-            )
-        }
-    }
-}
+)
 
 sealed interface MosaicTextAccessibility {
     data object Text : MosaicTextAccessibility
@@ -567,112 +589,14 @@ data class MosaicUnavailableProductFallback(
         MosaicNoAvailableProductBehavior.SHOW_MESSAGE_AND_DISABLE_PURCHASE,
 )
 
-enum class MosaicProductCardContentAlignment { START, CENTER, END, SPACE_BETWEEN }
-
-data class MosaicProductCardBadgeStyle(
-    val background: MosaicColor,
-    val textColor: MosaicColor,
-    val border: MosaicBorder,
-    val cornerRadius: Double,
-    val padding: MosaicEdgeInsets,
-)
-
-data class MosaicProductCardBadgeStyleOverride(
-    val background: MosaicColor? = null,
-    val textColor: MosaicColor? = null,
-    val border: MosaicBorderOverride? = null,
-    val cornerRadius: Double? = null,
-    val padding: MosaicEdgeInsetsOverride? = null,
-) {
-    fun resolve(base: MosaicProductCardBadgeStyle): MosaicProductCardBadgeStyle =
-        MosaicProductCardBadgeStyle(
-            background = background ?: base.background,
-            textColor = textColor ?: base.textColor,
-            border = border?.resolve(base.border) ?: base.border,
-            cornerRadius = cornerRadius ?: base.cornerRadius,
-            padding = padding?.resolve(base.padding) ?: base.padding,
-        )
-}
-
-data class MosaicProductCardStyle(
-    val background: MosaicColor,
-    val border: MosaicBorder,
-    val cornerRadius: Double,
-    val padding: MosaicEdgeInsets,
-    val contentGap: Double,
-    val contentAlignment: MosaicProductCardContentAlignment,
-    val productLabelColor: MosaicColor,
-    val runtimePriceColor: MosaicColor,
-    val badge: MosaicProductCardBadgeStyle,
-) {
-    companion object {
-        val Legacy = MosaicProductCardStyle(
-            background = MosaicColor.semantic(MosaicSemanticColor.SURFACE_ELEVATED),
-            border = MosaicBorder(MosaicColor.semantic(MosaicSemanticColor.BORDER_DEFAULT), 1.0),
-            cornerRadius = 14.0,
-            padding = MosaicEdgeInsets(14.0, 14.0, 14.0, 14.0),
-            contentGap = 12.0,
-            contentAlignment = MosaicProductCardContentAlignment.SPACE_BETWEEN,
-            productLabelColor = MosaicColor.semantic(MosaicSemanticColor.TEXT_PRIMARY),
-            runtimePriceColor = MosaicColor.semantic(MosaicSemanticColor.TEXT_PRIMARY),
-            badge = MosaicProductCardBadgeStyle(
-                background = MosaicColor.semantic(MosaicSemanticColor.SURFACE_DEFAULT),
-                textColor = MosaicColor.semantic(MosaicSemanticColor.ACTION_PRIMARY),
-                border = MosaicBorder(MosaicColor.semantic(MosaicSemanticColor.BORDER_DEFAULT), 0.0),
-                cornerRadius = 999.0,
-                padding = MosaicEdgeInsets(3.0, 7.0, 3.0, 7.0),
-            ),
-        )
-    }
-}
-
-data class MosaicProductCardStyleOverride(
-    val background: MosaicColor? = null,
-    val border: MosaicBorderOverride? = null,
-    val cornerRadius: Double? = null,
-    val padding: MosaicEdgeInsetsOverride? = null,
-    val contentGap: Double? = null,
-    val contentAlignment: MosaicProductCardContentAlignment? = null,
-    val productLabelColor: MosaicColor? = null,
-    val runtimePriceColor: MosaicColor? = null,
-    val badge: MosaicProductCardBadgeStyleOverride? = null,
-) {
-    fun resolve(base: MosaicProductCardStyle): MosaicProductCardStyle = MosaicProductCardStyle(
-        background = background ?: base.background,
-        border = border?.resolve(base.border) ?: base.border,
-        cornerRadius = cornerRadius ?: base.cornerRadius,
-        padding = padding?.resolve(base.padding) ?: base.padding,
-        contentGap = contentGap ?: base.contentGap,
-        contentAlignment = contentAlignment ?: base.contentAlignment,
-        productLabelColor = productLabelColor ?: base.productLabelColor,
-        runtimePriceColor = runtimePriceColor ?: base.runtimePriceColor,
-        badge = badge?.resolve(base.badge) ?: base.badge,
-    )
-}
-
-data class MosaicProductCardStyles(
-    val defaultStyle: MosaicProductCardStyle,
-    val selected: MosaicProductCardStyleOverride,
-) {
-    fun resolve(selected: Boolean): MosaicProductCardStyle =
-        if (selected) this.selected.resolve(defaultStyle) else defaultStyle
-
-    companion object {
-        val Legacy = MosaicProductCardStyles(
-            defaultStyle = MosaicProductCardStyle.Legacy,
-            selected = MosaicProductCardStyleOverride(
-                background = MosaicColor.semantic(MosaicSemanticColor.SURFACE_DEFAULT),
-                border = MosaicBorderOverride(
-                    color = MosaicColor.semantic(MosaicSemanticColor.ACTION_PRIMARY),
-                    width = 2.0,
-                ),
-            ),
-        )
-    }
-}
-
-/** Complete authored box state for Protocol 0.2 Product Cards and Product Badges. */
-data class MosaicProductCardBoxStyle(
+/**
+ * Complete authored box state of a two-state selectable box.
+ *
+ * `0.3` expresses this through the neutral `selectionStateStyle` definition, which
+ * `productCardStyles` now aliases, so Product Cards, Product Badges, and Tabs share one resolution
+ * path instead of three that can drift.
+ */
+data class MosaicSelectionStateStyle(
     val background: MosaicBackground,
     val border: MosaicBorder,
     val cornerRadius: Double,
@@ -682,7 +606,7 @@ data class MosaicProductCardBoxStyle(
 )
 
 /** Recursively partial Selected state; absent leaves inherit from Default. */
-data class MosaicProductCardBoxStyleOverride(
+data class MosaicSelectionStateStyleOverride(
     val background: MosaicBackground? = null,
     val border: MosaicBorderOverride? = null,
     val cornerRadius: Double? = null,
@@ -690,8 +614,8 @@ data class MosaicProductCardBoxStyleOverride(
     val opacity: Double? = null,
     val shadow: MosaicShadow? = null,
 ) {
-    fun resolve(base: MosaicProductCardBoxStyle): MosaicProductCardBoxStyle =
-        MosaicProductCardBoxStyle(
+    fun resolve(base: MosaicSelectionStateStyle): MosaicSelectionStateStyle =
+        MosaicSelectionStateStyle(
             background = background ?: base.background,
             border = border?.resolve(base.border) ?: base.border,
             cornerRadius = cornerRadius ?: base.cornerRadius,
@@ -701,13 +625,18 @@ data class MosaicProductCardBoxStyleOverride(
         )
 }
 
-data class MosaicProductCardBoxStyles(
-    val defaultStyle: MosaicProductCardBoxStyle,
-    val selected: MosaicProductCardBoxStyleOverride,
+data class MosaicSelectionStyles(
+    val defaultStyle: MosaicSelectionStateStyle,
+    val selected: MosaicSelectionStateStyleOverride,
 ) {
-    fun resolve(selected: Boolean): MosaicProductCardBoxStyle =
+    fun resolve(selected: Boolean): MosaicSelectionStateStyle =
         if (selected) this.selected.resolve(defaultStyle) else defaultStyle
 }
+
+/** Source-compatible aliases for callers written against the Product Card-specific names. */
+typealias MosaicProductCardBoxStyle = MosaicSelectionStateStyle
+typealias MosaicProductCardBoxStyleOverride = MosaicSelectionStateStyleOverride
+typealias MosaicProductCardBoxStyles = MosaicSelectionStyles
 
 sealed interface MosaicProductBadgePlacement {
     data object Nested : MosaicProductBadgePlacement
@@ -756,14 +685,13 @@ data class MosaicProductSelectorComponent(
     val initiallySelectedProductReferenceId: String,
     val direction: MosaicStackDirection,
     val gap: Double,
-    val cardStyles: MosaicProductCardStyles,
     val unavailableFallback: MosaicUnavailableProductFallback,
     val accessibility: MosaicControlAccessibility,
     val appearance: MosaicBoxAppearance? = null,
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
-    /** Protocol 0.2 authored cards. */
+    /** Protocol 0.3 authored cards. */
     val cards: List<MosaicProductCardComponent> = emptyList(),
     val initialProductCardId: String = initiallySelectedProductReferenceId,
     val crossAxisAlignment: MosaicHorizontalAlignment = MosaicHorizontalAlignment.STRETCH,
@@ -828,58 +756,6 @@ data class MosaicButtonComponent(
     val visibility: MosaicVisibility = MosaicVisibility.Always,
 ) : MosaicNode { override val type: String = "button" }
 
-data class MosaicPurchaseButtonComponent(
-    override val id: String,
-    val label: MosaicLocalizedText,
-    val inProgressLabel: MosaicLocalizedText,
-    val typography: MosaicTypography,
-    val action: MosaicPurchaseAction,
-    val accessibility: MosaicControlAccessibility,
-    val appearance: MosaicBoxAppearance? = null,
-    val sizing: MosaicBoxSizing? = null,
-    val outerInsets: MosaicEdgeInsets? = null,
-    val visibility: MosaicVisibility = MosaicVisibility.Always,
-) : MosaicNode { override val type: String = "purchaseButton" }
-
-data class MosaicRestoreButtonComponent(
-    override val id: String,
-    val label: MosaicLocalizedText,
-    val inProgressLabel: MosaicLocalizedText,
-    val typography: MosaicTypography,
-    val action: MosaicRestoreAction,
-    val accessibility: MosaicControlAccessibility,
-    val appearance: MosaicBoxAppearance? = null,
-    val sizing: MosaicBoxSizing? = null,
-    val outerInsets: MosaicEdgeInsets? = null,
-    val visibility: MosaicVisibility = MosaicVisibility.Always,
-) : MosaicNode { override val type: String = "restoreButton" }
-
-data class MosaicCloseButtonComponent(
-    override val id: String,
-    val label: MosaicLocalizedText,
-    val typography: MosaicTypography,
-    val action: MosaicCloseAction,
-    val accessibility: MosaicControlAccessibility,
-    val appearance: MosaicBoxAppearance? = null,
-    val sizing: MosaicBoxSizing? = null,
-    val outerInsets: MosaicEdgeInsets? = null,
-    val visibility: MosaicVisibility = MosaicVisibility.Always,
-) : MosaicNode { override val type: String = "closeButton" }
-
-data class MosaicLegalTextComponent(
-    override val id: String,
-    val value: MosaicLocalizedText,
-    val typography: MosaicTypography,
-    val accessibility: MosaicTextAccessibility,
-    val appearance: MosaicBoxAppearance? = null,
-    val sizing: MosaicBoxSizing? = null,
-    val outerInsets: MosaicEdgeInsets? = null,
-    val visibility: MosaicVisibility = MosaicVisibility.Always,
-) : MosaicNode {
-    override val type: String = "legalText"
-    val alignment: MosaicTextAlignment get() = typography.alignment
-}
-
 data class MosaicCarouselPage(
     val id: String,
     val accessibilityLabel: MosaicLocalizedText,
@@ -932,6 +808,235 @@ data class MosaicCountdownComponent(
     val visibility: MosaicVisibility = MosaicVisibility.Always,
 ) : MosaicNode { override val type: String = "countdown" }
 
+
+// --- Protocol 0.3 components -------------------------------------------------------------------
+
+enum class MosaicTabBarDirection { VERTICAL, HORIZONTAL }
+
+data class MosaicTabEntry(
+    val id: String,
+    val label: MosaicLocalizedText,
+    val content: MosaicStack,
+)
+
+/**
+ * N labelled panels with exactly one visible at a time.
+ *
+ * [initialTabId] is authored, never positional: reordering [tabs] is a layout edit and must not
+ * change which panel opens. [selectedLabelColor] is likewise required, so "the selected label
+ * deliberately keeps the Default colour" and "no colour was ever authored" cannot share an encoding.
+ */
+data class MosaicTabsComponent(
+    override val id: String,
+    val tabBarDirection: MosaicTabBarDirection,
+    val tabBarGap: Double,
+    val tabBarDistribution: MosaicMainAxisDistribution,
+    val gap: Double,
+    val initialTabId: String,
+    val tabs: List<MosaicTabEntry>,
+    val styles: MosaicSelectionStyles,
+    val labelTypography: MosaicTypography,
+    val selectedLabelColor: MosaicColor,
+    val accessibility: MosaicControlAccessibility,
+    val appearance: MosaicBoxAppearance? = null,
+    val sizing: MosaicBoxSizing? = null,
+    val outerInsets: MosaicEdgeInsets? = null,
+    val visibility: MosaicVisibility = MosaicVisibility.Always,
+) : MosaicNode { override val type: String = "tabs" }
+
+enum class MosaicTimelineConnectorStyle { SOLID, DASHED }
+
+data class MosaicTimelineConnector(
+    val color: MosaicColor,
+    val width: Double,
+    val style: MosaicTimelineConnectorStyle,
+)
+
+/** Closed three-arm marker union; an unrecognised arm rejects the document. */
+sealed interface MosaicTimelineMarker {
+    data object Dot : MosaicTimelineMarker
+
+    /** The entry's 1-based position, formatted by the platform's locale number formatting. */
+    data object Ordinal : MosaicTimelineMarker
+    data class Icon(val name: MosaicIconName) : MosaicTimelineMarker
+}
+
+data class MosaicTimelineEntry(
+    val id: String,
+    val title: MosaicLocalizedText,
+    /** Absent means the entry has a title and nothing else; no empty second line is reserved. */
+    val description: MosaicLocalizedText? = null,
+    /** Absent means no glyph and an unbroken connector, not a request for a default marker. */
+    val marker: MosaicTimelineMarker? = null,
+)
+
+/**
+ * An ordered sequence of steps. Array order is the sequence order and is never reordered.
+ *
+ * [markerColor], [markerSize], and [descriptionTypography] are required exactly when an entry
+ * consumes them and forbidden otherwise; the decoder enforces both directions.
+ */
+data class MosaicTimelineComponent(
+    override val id: String,
+    val gap: Double,
+    val connector: MosaicTimelineConnector,
+    val entries: List<MosaicTimelineEntry>,
+    val titleTypography: MosaicTypography,
+    val accessibility: MosaicControlAccessibility,
+    val markerColor: MosaicColor? = null,
+    val markerSize: Double? = null,
+    val descriptionTypography: MosaicTypography? = null,
+    val appearance: MosaicBoxAppearance? = null,
+    val sizing: MosaicBoxSizing? = null,
+    val outerInsets: MosaicEdgeInsets? = null,
+    val visibility: MosaicVisibility = MosaicVisibility.Always,
+) : MosaicNode { override val type: String = "timeline" }
+
+/** Closed two-arm union over the existing image-asset and icon vocabularies. */
+sealed interface MosaicAwardEmblem {
+    val size: Double
+
+    data class Image(val assetId: String, override val size: Double) : MosaicAwardEmblem
+    data class Icon(
+        val name: MosaicIconName,
+        override val size: Double,
+        val color: MosaicColor,
+    ) : MosaicAwardEmblem
+}
+
+/** A recognition or accolade. Passive: no action, no runtime state; the emblem is decorative. */
+data class MosaicAwardComponent(
+    override val id: String,
+    val direction: MosaicStackDirection,
+    val gap: Double,
+    val crossAxisAlignment: MosaicHorizontalAlignment,
+    val title: MosaicLocalizedText,
+    val titleTypography: MosaicTypography,
+    val accessibility: MosaicControlAccessibility,
+    /** Absent means the award renders its text alone, not a generic badge. */
+    val emblem: MosaicAwardEmblem? = null,
+    val subtitle: MosaicLocalizedText? = null,
+    val subtitleTypography: MosaicTypography? = null,
+    val appearance: MosaicBoxAppearance? = null,
+    val sizing: MosaicBoxSizing? = null,
+    val outerInsets: MosaicEdgeInsets? = null,
+    val visibility: MosaicVisibility = MosaicVisibility.Always,
+) : MosaicNode { override val type: String = "award" }
+
+/**
+ * Accessibility copy the protocol announces rather than a component referencing it.
+ *
+ * A renderer must never compose this copy from a string literal in any language: the 2026-08
+ * fallback audit found hardcoded English shipping to production on two platforms. Presence is
+ * enforced in both directions — required when the document contains the feature that reads the
+ * key, forbidden when it does not — and reserved keys are exempt from the unused-key sweep because
+ * no component references them by ID.
+ */
+object MosaicReservedAccessibilityKey {
+    const val RATING: String = "mosaic.a11y.rating"
+    const val IN_PROGRESS: String = "mosaic.a11y.in_progress"
+
+    const val RATING_VALUE_PLACEHOLDER: String = "{{ rating.value }}"
+    const val RATING_MAXIMUM_PLACEHOLDER: String = "{{ rating.maximum }}"
+
+    val placeholdersByKey: Map<String, List<String>> = mapOf(
+        RATING to listOf(RATING_VALUE_PLACEHOLDER, RATING_MAXIMUM_PLACEHOLDER),
+        IN_PROGRESS to emptyList(),
+    )
+
+    val all: Set<String> = placeholdersByKey.keys
+}
+
+/**
+ * A rating in points, as the exact string substituted into `{{ rating.value }}`.
+ *
+ * `value` counts steps and `maximum` counts points, so announcing `value` directly would say
+ * "9 out of 5". The conversion never rounds: `value` is an integer and there are one or two steps
+ * per point, so the result is a whole number or a whole number and a half.
+ *
+ * The form is ASCII by contract — ASCII digits, `.` as the decimal separator, no grouping, one
+ * fraction digit only for a half step. A platform number formatter is deliberately not used: a
+ * German locale would produce `4,5` and fail the cross-SDK conformance vectors, and formatters
+ * disagree with themselves across OS versions. All locale variation lives in the authored
+ * template instead.
+ */
+fun mosaicRatingPoints(rating: MosaicSocialProofRating): String {
+    val stepsPerPoint = rating.step.stepsPerPoint
+    val whole = rating.value / stepsPerPoint
+    return if (rating.value % stepsPerPoint == 0) whole.toString() else "$whole.5"
+}
+
+fun mosaicRatingMaximumPoints(rating: MosaicSocialProofRating): String = rating.maximum.toString()
+
+/** Raised when a reserved accessibility string is absent or malformed at announcement time. */
+class MosaicReservedStringException(message: String) : IllegalStateException(message)
+
+/**
+ * The exact string a renderer announces for a rating.
+ *
+ * [template] is the resolved `mosaic.a11y.rating` string for the resolved catalog. Substitution is
+ * closed to the two reserved placeholders; the template is authored copy and nothing else in it is
+ * interpreted. Word order travels with the catalog, so no connective is composed here.
+ */
+fun mosaicResolveRatingAnnouncement(
+    rating: MosaicSocialProofRating,
+    template: String,
+): String {
+    MosaicReservedAccessibilityKey.placeholdersByKey
+        .getValue(MosaicReservedAccessibilityKey.RATING)
+        .forEach { placeholder ->
+            if (placeholder !in template) {
+                throw MosaicReservedStringException(
+                    "The ${MosaicReservedAccessibilityKey.RATING} string is missing $placeholder.",
+                )
+            }
+        }
+    return template
+        .replace(MosaicReservedAccessibilityKey.RATING_VALUE_PLACEHOLDER, mosaicRatingPoints(rating))
+        .replace(
+            MosaicReservedAccessibilityKey.RATING_MAXIMUM_PLACEHOLDER,
+            mosaicRatingMaximumPoints(rating),
+        )
+}
+
+enum class MosaicSocialProofRatingStep(val stepsPerPoint: Int) { WHOLE(1), HALF(2) }
+
+/**
+ * A bounded, integer-only rating. [value] counts *steps*, not points: with [step] `HALF` and
+ * [maximum] 5, a [value] of 9 is four and a half out of five.
+ */
+data class MosaicSocialProofRating(
+    val value: Int,
+    val maximum: Int,
+    val step: MosaicSocialProofRatingStep,
+    val size: Double,
+    val filledColor: MosaicColor,
+    val emptyColor: MosaicColor,
+) {
+    val maximumSteps: Int get() = maximum * step.stepsPerPoint
+    val filledPoints: Double get() = value.toDouble() / step.stepsPerPoint
+}
+
+data class MosaicSocialProofAvatar(val assetId: String, val size: Double)
+
+/** An attributed testimonial, optionally rated and optionally illustrated. Passive. */
+data class MosaicSocialProofComponent(
+    override val id: String,
+    val gap: Double,
+    val quote: MosaicLocalizedText,
+    val quoteTypography: MosaicTypography,
+    val attribution: MosaicLocalizedText,
+    val attributionTypography: MosaicTypography,
+    val accessibility: MosaicControlAccessibility,
+    /** Absent means no rating is drawn. It is neither a zero rating nor an unknown one. */
+    val rating: MosaicSocialProofRating? = null,
+    val avatar: MosaicSocialProofAvatar? = null,
+    val appearance: MosaicBoxAppearance? = null,
+    val sizing: MosaicBoxSizing? = null,
+    val outerInsets: MosaicEdgeInsets? = null,
+    val visibility: MosaicVisibility = MosaicVisibility.Always,
+) : MosaicNode { override val type: String = "socialProof" }
+
 internal fun MosaicStack.walkDepthFirst(): Sequence<MosaicNode> = sequence {
     yield(this@walkDepthFirst)
     children.forEach { child ->
@@ -940,6 +1045,10 @@ internal fun MosaicStack.walkDepthFirst(): Sequence<MosaicNode> = sequence {
             is MosaicCarouselComponent -> {
                 yield(child)
                 child.pages.forEach { page -> yieldAll(page.content.walkDepthFirst()) }
+            }
+            is MosaicTabsComponent -> {
+                yield(child)
+                child.tabs.forEach { tab -> yieldAll(tab.content.walkDepthFirst()) }
             }
             is MosaicButtonComponent -> {
                 yield(child)
@@ -964,6 +1073,10 @@ private fun MosaicNode.walkDepthFirst(): Sequence<MosaicNode> = when (this) {
     is MosaicCarouselComponent -> sequence {
         yield(this@walkDepthFirst)
         pages.forEach { page -> yieldAll(page.content.walkDepthFirst()) }
+    }
+    is MosaicTabsComponent -> sequence {
+        yield(this@walkDepthFirst)
+        tabs.forEach { tab -> yieldAll(tab.content.walkDepthFirst()) }
     }
     is MosaicButtonComponent -> sequence {
         yield(this@walkDepthFirst)

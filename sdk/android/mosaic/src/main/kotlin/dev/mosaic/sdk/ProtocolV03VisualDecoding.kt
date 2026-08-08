@@ -204,6 +204,13 @@ internal fun visibility(value: JsonElement, path: String): MosaicVisibility {
                 equals = objectValue.requiredBoolean("equals", "$path.equals"),
             )
         }
+        "tab" -> {
+            objectValue.expectKeys(setOf("mode", "tabsId", "equals"), path)
+            MosaicVisibility.TabValue(
+                tabsId = objectValue.requiredIdentifier("tabsId", "$path.tabsId"),
+                equals = objectValue.requiredIdentifier("equals", "$path.equals"),
+            )
+        }
         else -> throw MosaicProtocolException("Invalid visibility mode at $path.mode.")
     }
 }

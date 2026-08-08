@@ -10,23 +10,34 @@ group = "dev.mosaic.sdk"
 version = "0.1.0-dev.7"
 
 val canonicalFixture = layout.projectDirectory.file(
-    "../../../protocol/fixtures/v0.2/complete-paywall.json",
+    "../../../protocol/fixtures/v0.3/complete-paywall.json",
 )
 val generatedCanonicalAssets = layout.buildDirectory.dir("generated/mosaic/canonical-assets")
-val protocolV02Fixture = layout.projectDirectory.file(
-    "../../../protocol/fixtures/v0.2/complete-paywall.json",
+val protocolV03Fixture = layout.projectDirectory.file(
+    "../../../protocol/fixtures/v0.3/complete-paywall.json",
 )
-val generatedProtocolV02TestAssets = layout.buildDirectory.dir(
-    "generated/mosaic/protocol-v02-test-assets",
+val generatedProtocolV03TestAssets = layout.buildDirectory.dir(
+    "generated/mosaic/protocol-v03-test-assets",
 )
+
+// A Gradle `Copy` whose source does not exist succeeds and produces nothing, so a renamed or
+// deleted canonical fixture would ship a library with no bundled fallback and no build failure.
+// `from` on a missing path is what makes that silent, so the path is checked at configuration time.
+check(canonicalFixture.asFile.isFile) {
+    "The canonical Protocol 0.3 fixture is missing at ${canonicalFixture.asFile.path}."
+}
+check(protocolV03Fixture.asFile.isFile) {
+    "The canonical Protocol 0.3 fixture is missing at ${protocolV03Fixture.asFile.path}."
+}
+
 val generateCanonicalPaywallAsset by tasks.registering(Copy::class) {
     from(canonicalFixture)
     into(generatedCanonicalAssets.map { it.dir("mosaic") })
     rename { "complete-paywall.json" }
 }
-val generateProtocolV02TestAsset by tasks.registering(Copy::class) {
-    from(protocolV02Fixture)
-    into(generatedProtocolV02TestAssets.map { it.dir("mosaic/v0.2") })
+val generateProtocolV03TestAsset by tasks.registering(Copy::class) {
+    from(protocolV03Fixture)
+    into(generatedProtocolV03TestAssets.map { it.dir("mosaic/v0.3") })
     rename { "complete-paywall.json" }
 }
 
@@ -69,7 +80,7 @@ android {
         assets.srcDir(generatedCanonicalAssets.get().asFile)
     }
     sourceSets.named("androidTest") {
-        assets.srcDir(generatedProtocolV02TestAssets.get().asFile)
+        assets.srcDir(generatedProtocolV03TestAssets.get().asFile)
     }
 }
 
@@ -90,7 +101,7 @@ afterEvaluate {
 
 tasks.named("preBuild") {
     dependsOn(generateCanonicalPaywallAsset)
-    dependsOn(generateProtocolV02TestAsset)
+    dependsOn(generateProtocolV03TestAsset)
 }
 
 dependencies {

@@ -256,7 +256,7 @@ object MosaicCountdownText {
 /**
  * The corner radius used when `appearance.cornerRadius` is absent.
  *
- * `cornerRadius` is an optional `logicalSize` in `schema/v0.2/paywall.schema.json` with no schema
+ * `cornerRadius` is an optional `logicalSize` in `schema/v0.3/paywall.schema.json` with no schema
  * default, so an absent value is square. Both other renderers read it that way — SwiftUI
  * `appearance?.cornerRadius ?? 0` and Flutter `appearance?.cornerRadius ?? 0` — and every Android
  * surface must agree, so an unstyled Button, TextButton, and purchase Button look identical across
@@ -703,45 +703,17 @@ internal fun MosaicProductCardComponent.accessibilityDescription(
 }
 
 /**
- * The busy state announced by TalkBack, always in the paywall's own language.
+ * The busy state announced by TalkBack while a Button's `inProgressChildren` are shown.
  *
- * Resolution order: the authored in-progress children, then the button's ordinary children, then
- * the optional localization key [MOSAIC_IN_PROGRESS_LOCALIZATION_KEY] if the document's catalogue
- * defines it. Returns null when the document says nothing — an untranslated English literal read
- * aloud inside an Arabic or Japanese paywall is worse than no state description at all.
+ * It comes from the reserved `mosaic.a11y.in_progress` string, which Protocol 0.3 requires in the
+ * default catalog of any document declaring `inProgressChildren`, and never from a literal: an
+ * untranslated English "In progress" read aloud inside an Arabic or Japanese paywall was a live
+ * defect in the 2026-08 fallback audit. Null means the document declares no usable translation,
+ * which the decoder rejects; no phrase is invented in its place.
  */
-internal const val MOSAIC_IN_PROGRESS_LOCALIZATION_KEY: String = "accessibility.inProgress"
-
 internal fun MosaicButtonComponent.busyStateDescription(
     localization: MosaicLocalizationResolver,
-): String? {
-    fun firstText(nodes: List<MosaicNode>): String? {
-        nodes.forEach { node ->
-            when (node) {
-                is MosaicTextComponent -> localization.resolve(node.value)
-                    .takeIf(String::isNotBlank)
-                    ?.let { return it }
-                is MosaicStack -> firstText(node.children)?.let { return it }
-                else -> Unit
-            }
-        }
-        return null
-    }
-
-    firstText(inProgressChildren ?: children)?.let { return it }
-    if (inProgressChildren != null) firstText(children)?.let { return it }
-    return localization
-        .resolve(MosaicLocalizedText(defaultValue = "", localizationKey = MOSAIC_IN_PROGRESS_LOCALIZATION_KEY))
-        .takeIf(String::isNotBlank)
-}
-
-internal fun MosaicProductCardStyle.cardHorizontalAlignment(): Alignment.Horizontal =
-    when (contentAlignment) {
-        MosaicProductCardContentAlignment.START,
-        MosaicProductCardContentAlignment.SPACE_BETWEEN -> Alignment.Start
-        MosaicProductCardContentAlignment.CENTER -> Alignment.CenterHorizontally
-        MosaicProductCardContentAlignment.END -> Alignment.End
-    }
+): String? = localization.reservedString(MosaicReservedAccessibilityKey.IN_PROGRESS)
 
 /**
  * [value] and [maximum] are read inside the draw scope, not during composition, so scrolling

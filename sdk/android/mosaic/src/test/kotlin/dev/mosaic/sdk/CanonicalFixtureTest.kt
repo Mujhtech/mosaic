@@ -19,7 +19,7 @@ class CanonicalFixtureTest {
         assertEquals(20.0, document.layout.content.spacing, 0.0)
         assertEquals(MosaicHorizontalAlignment.STRETCH, document.layout.content.horizontalAlignment)
         assertEquals(
-            MosaicCapabilityCatalog.v02,
+            MosaicCapabilityCatalog.v03,
             document.compatibility.requiredCapabilities.map { it.name }.toSet(),
         )
         val nodeTypes = document.layout.content.walkDepthFirst().map { it.type }.toSet()
@@ -50,9 +50,9 @@ class CanonicalFixtureTest {
 
         assertEquals("test-sdk", report.sdkVersion)
         assertEquals(setOf(MOSAIC_PROTOCOL_VERSION), report.supportedSchemaVersions)
-        assertEquals(MosaicCapabilityCatalog.v02, report.supportedCapabilities.keys)
+        assertEquals(MosaicCapabilityCatalog.v03, report.supportedCapabilities.keys)
         assertEquals(
-            MosaicCapabilityCatalog.v02.map {
+            MosaicCapabilityCatalog.v03.map {
                 MosaicRequiredCapability(it, MOSAIC_PROTOCOL_VERSION)
             }.toSet(),
             report.supportedCapabilityVersions,

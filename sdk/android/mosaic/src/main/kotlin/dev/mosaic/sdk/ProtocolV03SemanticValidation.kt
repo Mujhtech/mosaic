@@ -42,14 +42,21 @@ internal fun validateDocumentSemantics(
     }
     val nodes = nodesByScreen.values.flatten()
     val pages = nodes.filterIsInstance<MosaicCarouselComponent>().flatMap { it.pages }
+    // A tab ID names a control, a panel, and the value a tab-visibility condition compares
+    // against, so it shares the one layout namespace.
+    val tabEntries = nodes.filterIsInstance<MosaicTabsComponent>().flatMap { it.tabs }
     requireUnique(
         document.screens.map { it.layout.id } +
             nodes.map(MosaicNode::id) +
-            pages.map(MosaicCarouselPage::id),
-        "layout/component/page IDs",
+            pages.map(MosaicCarouselPage::id) +
+            tabEntries.map(MosaicTabEntry::id),
+        "layout/component/page/tab IDs",
     )
     nodes.filterIsInstance<MosaicFeatureListComponent>().forEach { featureList ->
         requireUnique(featureList.items.map(MosaicFeatureListItem::id), "feature IDs in ${featureList.id}")
+    }
+    nodes.filterIsInstance<MosaicTimelineComponent>().forEach { timeline ->
+        requireUnique(timeline.entries.map(MosaicTimelineEntry::id), "entry IDs in ${timeline.id}")
     }
     requireUnique(document.assets.map(MosaicAsset::id), "asset IDs")
     requireUnique(document.products.map(MosaicProductReference::id), "product reference IDs")
@@ -87,15 +94,31 @@ internal fun validateAssetReferences(
 ) {
     val assetsById = document.assets.associateBy(MosaicAsset::id)
     val used = mutableSetOf<String>()
-    nodes.filterIsInstance<MosaicImageComponent>().forEach { image ->
-        val asset = assetsById[image.assetId]
-        if (asset !is MosaicImageAsset) {
-            throw MosaicProtocolException(
-                "Image ${image.id} references an unknown asset.",
-                violation = MosaicProtocolViolation.INVALID_REFERENCE,
-            )
+    // Every place a component names an image asset, so an added component cannot leave its asset
+    // uncounted and then be reported as unused.
+    val imageAssetReferences: (MosaicNode) -> List<Pair<String, String>> = { node ->
+        when (node) {
+            is MosaicImageComponent -> listOf(node.assetId to "Image ${node.id}")
+            is MosaicAwardComponent -> when (val emblem = node.emblem) {
+                is MosaicAwardEmblem.Image -> listOf(emblem.assetId to "Award ${node.id} emblem")
+                else -> emptyList()
+            }
+            is MosaicSocialProofComponent -> node.avatar?.let {
+                listOf(it.assetId to "Social Proof ${node.id} avatar")
+            }.orEmpty()
+            else -> emptyList()
         }
-        used += image.assetId
+    }
+    nodes.forEach { node ->
+        imageAssetReferences(node).forEach { (assetId, owner) ->
+            if (assetsById[assetId] !is MosaicImageAsset) {
+                throw MosaicProtocolException(
+                    "$owner references an unknown or non-image asset.",
+                    violation = MosaicProtocolViolation.INVALID_REFERENCE,
+                )
+            }
+            used += assetId
+        }
     }
     fun validateBackground(owner: String, background: MosaicBackground?) {
         when (background) {
@@ -239,24 +262,6 @@ internal fun validateLocalizationSemantics(
                 }
                 is MosaicProductCardComponent -> node.accessibilityLabel?.let(::add)
                 is MosaicProductBadgeComponent -> Unit
-                is MosaicPurchaseButtonComponent -> {
-                    add(node.label)
-                    add(node.inProgressLabel)
-                    addControlAccessibility(node.accessibility)
-                }
-                is MosaicRestoreButtonComponent -> {
-                    add(node.label)
-                    add(node.inProgressLabel)
-                    addControlAccessibility(node.accessibility)
-                }
-                is MosaicCloseButtonComponent -> {
-                    add(node.label)
-                    addControlAccessibility(node.accessibility)
-                }
-                is MosaicLegalTextComponent -> {
-                    add(node.value)
-                    node.accessibility.labelOrNull?.let(::add)
-                }
                 is MosaicCarouselComponent -> {
                     addControlAccessibility(node.accessibility)
                     node.pages.forEach { add(it.accessibilityLabel) }
@@ -269,6 +274,27 @@ internal fun validateLocalizationSemantics(
                     add(node.completedText)
                     node.accessibility.labelOrNull?.let(::add)
                 }
+                is MosaicTabsComponent -> {
+                    node.tabs.forEach { add(it.label) }
+                    addControlAccessibility(node.accessibility)
+                }
+                is MosaicTimelineComponent -> {
+                    node.entries.forEach { entry ->
+                        add(entry.title)
+                        entry.description?.let(::add)
+                    }
+                    addControlAccessibility(node.accessibility)
+                }
+                is MosaicAwardComponent -> {
+                    add(node.title)
+                    node.subtitle?.let(::add)
+                    addControlAccessibility(node.accessibility)
+                }
+                is MosaicSocialProofComponent -> {
+                    add(node.quote)
+                    add(node.attribution)
+                    addControlAccessibility(node.accessibility)
+                }
             }
         }
     }
@@ -276,11 +302,14 @@ internal fun validateLocalizationSemantics(
         document.localization.locales[document.localization.defaultLocale],
     ).strings
     val referencedKeys = values.map(MosaicLocalizedText::localizationKey).toSet()
-    if (defaultStrings.keys != referencedKeys) {
+    // Reserved keys are consumed by the protocol, not referenced by a component, so the exact-match
+    // sweep would flag every one of them as unused.
+    if (defaultStrings.keys - MosaicReservedAccessibilityKey.all != referencedKeys) {
         throw MosaicProtocolException(
             "Default locale keys must exactly match the document's localized values.",
         )
     }
+    validateReservedAccessibilityStrings(document, nodes)
     values.forEach { value ->
         if (defaultStrings[value.localizationKey] != value.defaultValue) {
             throw MosaicProtocolException("Inline defaults must equal the default locale catalog.")
@@ -289,6 +318,64 @@ internal fun validateLocalizationSemantics(
     document.localization.locales.forEach { (tag, catalog) ->
         if (!defaultStrings.keys.containsAll(catalog.strings.keys)) {
             throw MosaicProtocolException("Locale $tag declares a key absent from the default locale.")
+        }
+    }
+}
+
+/**
+ * Reserved accessibility strings, both directions.
+ *
+ * A missing key would leave the renderer inventing a phrase — the exact defect the fallback audit
+ * found shipping as hardcoded English. A lingering one is copy nothing reads, which is how stale
+ * strings survive a redesign.
+ */
+internal fun validateReservedAccessibilityStrings(
+    document: MosaicPaywallDocument,
+    nodes: List<MosaicNode>,
+) {
+    val consumers = mapOf(
+        MosaicReservedAccessibilityKey.RATING to nodes.any {
+            it is MosaicSocialProofComponent && it.rating != null
+        },
+        MosaicReservedAccessibilityKey.IN_PROGRESS to nodes.any {
+            it is MosaicButtonComponent && it.inProgressChildren != null
+        },
+    )
+    val defaultStrings = checkNotNull(
+        document.localization.locales[document.localization.defaultLocale],
+    ).strings
+    consumers.forEach { (key, consumed) ->
+        val declared = key in defaultStrings
+        if (consumed && !declared) {
+            throw MosaicProtocolException(
+                "The default locale catalog must declare the reserved key $key.",
+            )
+        }
+        if (!consumed && declared) {
+            throw MosaicProtocolException(
+                "The default locale catalog declares reserved key $key but nothing announces it.",
+            )
+        }
+        if (!declared) return@forEach
+        val placeholders = MosaicReservedAccessibilityKey.placeholdersByKey.getValue(key)
+        document.localization.locales.forEach { (tag, catalog) ->
+            val value = catalog.strings[key] ?: return@forEach
+            placeholders.forEach { placeholder ->
+                // A translation that drops a placeholder announces a rating with no number in it.
+                if (value.split(placeholder).size - 1 != 1) {
+                    throw MosaicProtocolException(
+                        "Locale $tag key $key must contain $placeholder exactly once.",
+                    )
+                }
+            }
+            val residue = placeholders.fold(value) { text, placeholder ->
+                text.replace(placeholder, "")
+            }
+            if ("{{" in residue || "}}" in residue) {
+                throw MosaicProtocolException(
+                    "Locale $tag key $key contains an unsupported template expression.",
+                )
+            }
         }
     }
 }
@@ -406,11 +493,32 @@ internal fun validateProductTemplates(document: MosaicPaywallDocument) {
                     validate(it, false, "Countdown ${node.id} accessibility label")
                 }
             }
-            is MosaicPurchaseButtonComponent,
-            is MosaicRestoreButtonComponent,
-            is MosaicCloseButtonComponent,
-            is MosaicLegalTextComponent,
-            -> Unit // Retired specialized nodes cannot occur in a strict Protocol 0.2 document.
+            is MosaicTabsComponent -> {
+                validateControl(node.accessibility, "Tabs ${node.id}")
+                node.tabs.forEach { tab ->
+                    validate(tab.label, false, "Tab ${tab.id} label")
+                    visit(tab.content, insideProductCard)
+                }
+            }
+            is MosaicTimelineComponent -> {
+                validateControl(node.accessibility, "Timeline ${node.id}")
+                node.entries.forEach { entry ->
+                    validate(entry.title, false, "Timeline entry ${entry.id} title")
+                    entry.description?.let {
+                        validate(it, false, "Timeline entry ${entry.id} description")
+                    }
+                }
+            }
+            is MosaicAwardComponent -> {
+                validateControl(node.accessibility, "Award ${node.id}")
+                validate(node.title, false, "Award ${node.id} title")
+                node.subtitle?.let { validate(it, false, "Award ${node.id} subtitle") }
+            }
+            is MosaicSocialProofComponent -> {
+                validateControl(node.accessibility, "Social Proof ${node.id}")
+                validate(node.quote, false, "Social Proof ${node.id} quote")
+                validate(node.attribution, false, "Social Proof ${node.id} attribution")
+            }
         }
     }
 
@@ -460,6 +568,11 @@ internal fun validateRuntimeSemantics(
         val nodes = nodesByScreen.getValue(screen.id)
         val switches = nodes.filterIsInstance<MosaicSwitchComponent>()
             .associateBy(MosaicSwitchComponent::id)
+        val tabsById = nodes.filterIsInstance<MosaicTabsComponent>()
+            .associateBy(MosaicTabsComponent::id)
+        val descendantIdsByTabs = tabsById.mapValues { (_, tabs) ->
+            tabs.tabs.flatMap { tab -> tab.content.walkDepthFirst().map(MosaicNode::id) }.toSet()
+        }
         nodes.forEach { node ->
             val nodeVisibility = node.semanticVisibilityOrAlways()
             if (nodeVisibility is MosaicVisibility.SwitchValue) {
@@ -472,7 +585,38 @@ internal fun validateRuntimeSemantics(
                     throw MosaicProtocolException("${node.type} ${node.id} visibility references itself.")
                 }
             }
+            if (nodeVisibility is MosaicVisibility.TabValue) {
+                val controller = tabsById[nodeVisibility.tabsId]
+                    ?: throw MosaicProtocolException(
+                        "${node.type} ${node.id} visibility must reference a Tabs component on " +
+                            "screen ${screen.id}.",
+                    )
+                // Inside a panel the condition is already decided by the panel: comparing against
+                // the owning tab is vacuously true and against any other tab is unsatisfiable.
+                // Both are dead layout, so both reject rather than render.
+                if (controller.id == node.id ||
+                    node.id in descendantIdsByTabs.getValue(controller.id)
+                ) {
+                    throw MosaicProtocolException(
+                        "${node.type} ${node.id} visibility cannot reference the Tabs component " +
+                            "it belongs to.",
+                    )
+                }
+                if (controller.tabs.none { it.id == nodeVisibility.equals }) {
+                    throw MosaicProtocolException(
+                        "${node.type} ${node.id} visibility references undeclared tab " +
+                            "${nodeVisibility.equals} of tabs ${controller.id}.",
+                    )
+                }
+            }
             when (node) {
+                is MosaicTabsComponent -> {
+                    if (node.tabs.none { it.id == node.initialTabId }) {
+                        throw MosaicProtocolException(
+                            "Tabs ${node.id} initialTabId must name one of its declared tabs.",
+                        )
+                    }
+                }
                 is MosaicCarouselComponent -> {
                     if (node.initialPageIndex !in node.pages.indices) {
                         throw MosaicProtocolException(
@@ -553,6 +697,9 @@ internal fun validateProductCardStructure(card: MosaicProductCardComponent) {
             is MosaicIconComponent,
             is MosaicFeatureListComponent,
             is MosaicCountdownComponent,
+            is MosaicTimelineComponent,
+            is MosaicAwardComponent,
+            is MosaicSocialProofComponent,
             -> Unit
             else -> throw MosaicProtocolException(
                 "Product Card ${card.id} contains interactive or unsupported child ${node.id}.",
@@ -575,6 +722,7 @@ internal fun validatePassiveButtonChild(buttonId: String, node: MosaicNode) {
         is MosaicProductSelectorComponent,
         is MosaicSwitchComponent,
         is MosaicCarouselComponent,
+        is MosaicTabsComponent,
         -> throw MosaicProtocolException(
             "Button $buttonId contains interactive or paged component ${node.id}.",
         )
@@ -626,6 +774,9 @@ internal fun validateNoNestedCarousel(stack: MosaicStack, insideCarousel: Boolea
                 }
                 child.pages.forEach { validateNoNestedCarousel(it.content, insideCarousel = true) }
             }
+            is MosaicTabsComponent -> child.tabs.forEach {
+                validateNoNestedCarousel(it.content, insideCarousel)
+            }
             is MosaicButtonComponent -> {
                 child.children.filterIsInstance<MosaicStack>().forEach {
                     validateNoNestedCarousel(it, insideCarousel)
@@ -645,15 +796,15 @@ internal fun MosaicNode.semanticVisibilityOrAlways(): MosaicVisibility = when (t
     is MosaicImageComponent -> visibility
     is MosaicFeatureListComponent -> visibility
     is MosaicProductSelectorComponent -> visibility
-    is MosaicPurchaseButtonComponent -> visibility
-    is MosaicRestoreButtonComponent -> visibility
-    is MosaicCloseButtonComponent -> visibility
-    is MosaicLegalTextComponent -> visibility
     is MosaicCarouselComponent -> visibility
     is MosaicSwitchComponent -> visibility
     is MosaicCountdownComponent -> visibility
     is MosaicButtonComponent -> visibility
     is MosaicIconComponent -> visibility
+    is MosaicTabsComponent -> visibility
+    is MosaicTimelineComponent -> visibility
+    is MosaicAwardComponent -> visibility
+    is MosaicSocialProofComponent -> visibility
     is MosaicProductCardComponent,
     is MosaicProductBadgeComponent,
     -> MosaicVisibility.Always
@@ -670,10 +821,10 @@ internal fun MosaicNode.semanticAppearanceOrNull(): MosaicBoxAppearance? = when 
     is MosaicCarouselComponent -> appearance
     is MosaicSwitchComponent -> appearance
     is MosaicCountdownComponent -> appearance
-    is MosaicPurchaseButtonComponent -> appearance
-    is MosaicRestoreButtonComponent -> appearance
-    is MosaicCloseButtonComponent -> appearance
-    is MosaicLegalTextComponent -> appearance
+    is MosaicTabsComponent -> appearance
+    is MosaicTimelineComponent -> appearance
+    is MosaicAwardComponent -> appearance
+    is MosaicSocialProofComponent -> appearance
     is MosaicProductCardComponent,
     is MosaicProductBadgeComponent,
     -> null
@@ -689,6 +840,11 @@ internal fun deriveCapabilities(
         add(MosaicCapabilityName.SHEETS)
     }
     if (documentUsesProductTemplates(document)) add(MosaicCapabilityName.PRODUCT_TEMPLATE)
+    val defaultCatalogKeys = document.localization.locales[document.localization.defaultLocale]
+        ?.strings?.keys.orEmpty()
+    if (defaultCatalogKeys.any { it in MosaicReservedAccessibilityKey.all }) {
+        add(MosaicCapabilityName.ACCESSIBILITY_RESERVED_STRINGS)
+    }
     if (document.localization.locales.values.any { it.direction == MosaicLayoutDirection.RTL }) {
         add(MosaicCapabilityName.LOCALIZATION_RTL)
     }
@@ -741,6 +897,10 @@ internal fun deriveCapabilities(
             "carousel" -> add(MosaicCapabilityName.CAROUSEL)
             "switch" -> add(MosaicCapabilityName.SWITCH)
             "countdown" -> add(MosaicCapabilityName.COUNTDOWN)
+            "tabs" -> add(MosaicCapabilityName.TABS)
+            "timeline" -> add(MosaicCapabilityName.TIMELINE)
+            "award" -> add(MosaicCapabilityName.AWARD)
+            "socialProof" -> add(MosaicCapabilityName.SOCIAL_PROOF)
         }
         val type = node.get("type")?.asString
         if (node.hasNonNull("accessibility") || type == "carousel") {
@@ -771,10 +931,10 @@ internal fun deriveCapabilities(
             }
         }
         node.getAsJsonObjectOrNull("visibility")?.let { visibility ->
-            if (visibility.get("mode")?.asString == "switch") {
-                add(MosaicCapabilityName.SWITCH_VISIBILITY)
-            } else {
-                add(MosaicCapabilityName.STATIC_VISIBILITY)
+            when (visibility.get("mode")?.asString) {
+                "switch" -> add(MosaicCapabilityName.SWITCH_VISIBILITY)
+                "tab" -> add(MosaicCapabilityName.TAB_VISIBILITY)
+                else -> add(MosaicCapabilityName.STATIC_VISIBILITY)
             }
         }
         if (objectUsesColor(node)) add(MosaicCapabilityName.COLORS)

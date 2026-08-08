@@ -162,12 +162,12 @@ class AnalyticsQueueTest {
      * `en-US-u-rg-gbzzzz` and a device with several preferences exceeds the context's 35-byte
      * locale bound — which makes the event unencodable and loses it, the Android shape of the iOS
      * defect. Truncating at the first singleton keeps every device inside the contract, and the
-     * canonical form is the one Protocol 0.2 and Placement Decision 1 both define, so the tag the
+     * canonical form is the one Protocol 0.3 and Placement Decision 1 both define, so the tag the
      * SDK reports is the tag targeting and catalog lookup compare.
      */
     @Test
     fun `device locale canonicalization follows the protocol rule and the event contract`() {
-        // The protocol's canonical form, per `protocol/tools/locale-resolution-v0.2.mjs`.
+        // The protocol's canonical form, per `protocol/tools/locale-resolution-v0.3.mjs`.
         assertEquals("en-US", MosaicDeviceLocale.canonicalOrNull("en-US-u-rg-gbzzzz"))
         assertEquals("en-US", MosaicDeviceLocale.canonicalOrNull("en_US@rg=gbzzzz"))
         assertEquals("zh-Hans-CN", MosaicDeviceLocale.canonicalOrNull("zh-Hans-CN"))

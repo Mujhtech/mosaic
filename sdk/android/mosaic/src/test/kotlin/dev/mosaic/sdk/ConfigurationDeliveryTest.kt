@@ -125,7 +125,7 @@ class ConfigurationDeliveryTest {
         val actual = observed.get().header("Mosaic-Paywall-Capabilities")
             ?.split(',')
             .orEmpty()
-        val expected = MosaicCapabilityCatalog.v02
+        val expected = MosaicCapabilityCatalog.v03
             .map { capability -> "${capability.wireName}@$MOSAIC_PROTOCOL_VERSION" }
             .sorted()
         assertEquals(expected, actual)

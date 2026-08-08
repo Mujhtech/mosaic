@@ -71,6 +71,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
@@ -83,7 +84,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
@@ -224,7 +229,7 @@ internal fun RenderImage(
             .mosaicPresentation(component.appearance, null, null)
         .then(semanticModifier)
         .testTag("mosaic-node-${component.id}")
-    // `appearance.clipContent` is an optional boolean in `schema/v0.2/paywall.schema.json` with no
+    // `appearance.clipContent` is an optional boolean in `schema/v0.3/paywall.schema.json` with no
     // schema default, so an absent value means "do not clip" — the same reading as SwiftUI
     // (`clipContent == true`) and Flutter (`clipContent ?? false`). Images additionally clip when a
     // corner radius is authored, mirroring the Flutter renderer's image-only `forceClip`, so a
@@ -372,11 +377,11 @@ internal fun RenderProductSelector(
             verticalAlignment = component.selectorVerticalAlignment(),
         ) {
             selectorState.options.forEach { option ->
-                val cardWidth = option.card?.sizing?.width
-                val cardHeight = option.card?.sizing?.height
+                val cardWidth = option.card.sizing?.width
+                val cardHeight = option.card.sizing?.height
                 val cardModifier = Modifier
                     .then(
-                        if (option.card == null || cardWidth is MosaicWidthSizing.Fill) {
+                        if (cardWidth is MosaicWidthSizing.Fill) {
                             Modifier.weight(1f)
                         } else {
                             Modifier
@@ -392,30 +397,18 @@ internal fun RenderProductSelector(
                             Modifier
                         },
                     )
-                if (option.card != null) {
-                    RenderProductCard(
-                        component,
-                        option.card,
-                        option,
-                        selectorState.selectedProductCardId == option.productCardId,
-                        state,
-                        localization,
-                        imageResolver,
-                        diagnostics,
-                        onEvent,
-                        cardModifier,
-                    )
-                } else {
-                    RenderLegacyProductCard(
-                        component,
-                        option,
-                        selectorState.selectedProductReferenceId == option.reference.id,
-                        state,
-                        localization,
-                        onEvent,
-                        cardModifier,
-                    )
-                }
+                RenderProductCard(
+                    component,
+                    option.card,
+                    option,
+                    selectorState.selectedProductCardId == option.productCardId,
+                    state,
+                    localization,
+                    imageResolver,
+                    diagnostics,
+                    onEvent,
+                    cardModifier,
+                )
             }
         }
         else -> Column(
@@ -431,30 +424,18 @@ internal fun RenderProductSelector(
                 } else {
                     Modifier
                 }
-                if (option.card != null) {
-                    RenderProductCard(
-                        component,
-                        option.card,
-                        option,
-                        selectorState.selectedProductCardId == option.productCardId,
-                        state,
-                        localization,
-                        imageResolver,
-                        diagnostics,
-                        onEvent,
-                        cardModifier,
-                    )
-                } else {
-                    RenderLegacyProductCard(
-                        component,
-                        option,
-                        selectorState.selectedProductReferenceId == option.reference.id,
-                        state,
-                        localization,
-                        onEvent,
-                        cardModifier,
-                    )
-                }
+                RenderProductCard(
+                    component,
+                    option.card,
+                    option,
+                    selectorState.selectedProductCardId == option.productCardId,
+                    state,
+                    localization,
+                    imageResolver,
+                    diagnostics,
+                    onEvent,
+                    cardModifier,
+                )
             }
         }
     }
@@ -726,238 +707,6 @@ internal fun RenderProductBadge(
 }
 
 @Composable
-internal fun RenderLegacyProductCard(
-    component: MosaicProductSelectorComponent,
-    option: MosaicAvailableProduct,
-    isSelected: Boolean,
-    state: MosaicPaywallState,
-    localization: MosaicLocalizationResolver,
-    onEvent: (MosaicPaywallEvent) -> Unit,
-    modifier: Modifier,
-) {
-    val style = component.cardStyles.resolve(isSelected)
-    val shape = androidx.compose.foundation.shape.RoundedCornerShape(style.cornerRadius.dp)
-    Surface(
-        modifier = modifier
-            .selectable(
-                selected = isSelected,
-                role = Role.RadioButton,
-                onClick = { state.selectProduct(component.id, option.reference.id)?.let(onEvent) },
-            )
-            .semantics {
-                selected = isSelected
-                contentDescription = buildList {
-                    add(localization.resolve(option.reference.label))
-                    option.reference.badge?.let { add(localization.resolve(it)) }
-                    add(option.storeProduct.localizedPrice)
-                }.joinToString(", ")
-            }
-            .testTag("mosaic-product-${option.reference.id}"),
-        shape = shape,
-        color = style.background.toComposeColor(),
-        border = BorderStroke(style.border.width.dp, style.border.color.toComposeColor()),
-    ) {
-        Row(
-            modifier = Modifier.padding(style.padding.toPaddingValues()).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(style.contentGap.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = localization.resolve(option.reference.label),
-                modifier = Modifier.weight(1f),
-                color = style.productLabelColor.toComposeColor(),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = option.storeProduct.localizedPrice,
-                color = style.runtimePriceColor.toComposeColor(),
-                style = MaterialTheme.typography.titleMedium,
-            )
-        }
-    }
-}
-
-@Composable
-internal fun RenderPurchaseButton(
-    component: MosaicPurchaseButtonComponent,
-    state: MosaicPaywallState,
-    localization: MosaicLocalizationResolver,
-    onEvent: (MosaicPaywallEvent) -> Unit,
-    modifier: Modifier,
-) {
-    val scope = rememberCoroutineScope()
-    // A purchase button bound to a Product Selector the commerce state never saw renders disabled:
-    // there is no product to buy, and throwing here would take the whole paywall down.
-    val selector = state.selectorStates[component.action.productSelectorId]
-    val diagnostics = LocalMosaicDiagnostics.current
-    if (selector == null) {
-        LaunchedEffect(component.id) {
-            diagnostics.record(
-                MosaicDiagnostic(
-                    MosaicDiagnosticCode.RENDERING_SELECTOR_UNAVAILABLE,
-                    "A purchase button references a Product Selector without commerce state.",
-                ),
-            )
-        }
-    }
-    val isBusy = component.action.productSelectorId in state.purchaseBusySelectorIds
-    val appearance = component.appearance
-    Button(
-        onClick = { scope.launch { onEvent(state.purchase(component.action.productSelectorId, component.id)) } },
-        enabled = selector?.selectedProductReferenceId != null &&
-            state.isNodeVisible(component.action.productSelectorId) &&
-            !isBusy,
-        modifier = modifier
-            .mosaicOuterAndSizing(component.sizing, component.outerInsets)
-            .alpha((appearance?.opacity ?: 1.0).toFloat())
-            .semantics {
-                contentDescription = component.accessibility.resolvedDescriptions(localization)
-                if (isBusy) stateDescription = localization.resolve(component.inProgressLabel)
-            }
-            .testTag("mosaic-node-${component.id}"),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(
-            (appearance?.cornerRadius ?: MOSAIC_DEFAULT_CORNER_RADIUS).dp,
-        ),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = (appearance?.background as? MosaicBackground.Solid)?.color?.toComposeColor()
-                ?: MaterialTheme.colorScheme.primary,
-            contentColor = component.typography.color.toComposeColor(),
-        ),
-        border = appearance?.border?.let {
-            BorderStroke(it.width.dp, it.color.toComposeColor())
-        },
-        contentPadding = appearance?.padding?.toPaddingValues()
-            ?: ButtonDefaults.ContentPadding,
-    ) {
-        if (isBusy) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(18.dp).clearAndSetSemantics { },
-                color = component.typography.color.toComposeColor(),
-                strokeWidth = 2.dp,
-            )
-            Spacer(Modifier.width(8.dp))
-        }
-        MosaicStyledText(
-            value = localization.resolve(if (isBusy) component.inProgressLabel else component.label),
-            typography = component.typography,
-        )
-    }
-}
-
-@Composable
-internal fun RenderRestoreButton(
-    component: MosaicRestoreButtonComponent,
-    state: MosaicPaywallState,
-    localization: MosaicLocalizationResolver,
-    onEvent: (MosaicPaywallEvent) -> Unit,
-    modifier: Modifier,
-) {
-    val scope = rememberCoroutineScope()
-    val isBusy = state.isRestoreBusy
-    StyledTextButton(
-        label = localization.resolve(if (isBusy) component.inProgressLabel else component.label),
-        typography = component.typography,
-        appearance = component.appearance,
-        sizing = component.sizing,
-        outerInsets = component.outerInsets,
-        enabled = !isBusy,
-        modifier = modifier
-            .semantics {
-                contentDescription = component.accessibility.resolvedDescriptions(localization)
-                if (isBusy) stateDescription = localization.resolve(component.inProgressLabel)
-            }
-            .testTag("mosaic-node-${component.id}"),
-        onClick = { scope.launch { onEvent(state.restore(component.id)) } },
-        leading = if (isBusy) {
-            {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp).clearAndSetSemantics { },
-                    strokeWidth = 2.dp,
-                )
-                Spacer(Modifier.width(8.dp))
-            }
-        } else {
-            null
-        },
-    )
-}
-
-@Composable
-internal fun RenderCloseButton(
-    component: MosaicCloseButtonComponent,
-    state: MosaicPaywallState,
-    localization: MosaicLocalizationResolver,
-    onEvent: (MosaicPaywallEvent) -> Unit,
-    modifier: Modifier,
-) {
-    StyledTextButton(
-        label = localization.resolve(component.label),
-        typography = component.typography,
-        appearance = component.appearance,
-        sizing = component.sizing,
-        outerInsets = component.outerInsets,
-        enabled = true,
-        modifier = modifier
-            .semantics {
-                contentDescription = component.accessibility.resolvedDescriptions(localization)
-            }
-            .testTag("mosaic-node-${component.id}"),
-        onClick = { onEvent(state.close(component.id)) },
-    )
-}
-
-@Composable
-internal fun StyledTextButton(
-    label: String,
-    typography: MosaicTypography,
-    appearance: MosaicBoxAppearance?,
-    sizing: MosaicBoxSizing?,
-    outerInsets: MosaicEdgeInsets?,
-    enabled: Boolean,
-    modifier: Modifier,
-    onClick: () -> Unit,
-    leading: (@Composable () -> Unit)? = null,
-) {
-    TextButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier
-            .mosaicOuterAndSizing(sizing, outerInsets)
-            .alpha((appearance?.opacity ?: 1.0).toFloat()),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(
-            (appearance?.cornerRadius ?: MOSAIC_DEFAULT_CORNER_RADIUS).dp,
-        ),
-        colors = ButtonDefaults.textButtonColors(
-            containerColor = (appearance?.background as? MosaicBackground.Solid)?.color?.toComposeColor()
-                ?: Color.Transparent,
-            contentColor = typography.color.toComposeColor(),
-        ),
-        border = appearance?.border?.let { BorderStroke(it.width.dp, it.color.toComposeColor()) },
-        contentPadding = appearance?.padding?.toPaddingValues() ?: ButtonDefaults.TextButtonContentPadding,
-    ) {
-        leading?.invoke()
-        MosaicStyledText(value = label, typography = typography)
-    }
-}
-
-@Composable
-internal fun RenderLegalText(
-    component: MosaicLegalTextComponent,
-    localization: MosaicLocalizationResolver,
-    modifier: Modifier,
-) {
-    MosaicStyledText(
-        value = localization.resolve(component.value),
-        typography = component.typography,
-        accessibility = component.accessibility,
-        localization = localization,
-        modifier = modifier
-            .mosaicPresentation(component.appearance, component.sizing, component.outerInsets)
-            .testTag("mosaic-node-${component.id}"),
-    )
-}
-
-@Composable
 internal fun RenderSwitch(
     component: MosaicSwitchComponent,
     state: MosaicPaywallState,
@@ -997,3 +746,587 @@ internal fun RenderSwitch(
         )
     }
 }
+
+// --- Protocol 0.3 components -------------------------------------------------------------------
+
+/**
+ * Tabs renders one tab control per entry and exactly one panel.
+ *
+ * Compose semantics: the container is the tab list, each control carries [Role.Tab] with its
+ * selected state and is named by its authored label, and the visible panel carries the same label
+ * as its pane title. There is no second authored string, so the control name and the panel name
+ * cannot drift.
+ */
+@Composable
+internal fun RenderTabs(
+    component: MosaicTabsComponent,
+    state: MosaicPaywallState,
+    localization: MosaicLocalizationResolver,
+    imageResolver: MosaicBundledImageResolver,
+    diagnostics: MosaicDiagnosticSink,
+    onEvent: (MosaicPaywallEvent) -> Unit,
+    modifier: Modifier,
+) {
+    // The state carries a selection for every Tabs component in its own document. A state built
+    // from a different document degrades to the authored initial tab and diagnoses, rather than
+    // throwing inside composition.
+    val selectedId = state.selectedTabId(component.id)
+    LaunchedEffect(component.id, selectedId) {
+        if (selectedId == null) {
+            diagnostics.record(
+                MosaicDiagnostic(
+                    MosaicDiagnosticCode.RENDERING_FAILED,
+                    "A Tabs component has no runtime selection; its authored initial tab is shown.",
+                ),
+            )
+        }
+    }
+    val activeId = selectedId ?: component.initialTabId
+    val active = component.tabs.firstOrNull { it.id == activeId } ?: component.tabs.first()
+
+    Column(
+        modifier = modifier
+            .mosaicPresentation(component.appearance, component.sizing, component.outerInsets)
+            .testTag("mosaic-node-${component.id}"),
+        verticalArrangement = Arrangement.spacedBy(component.gap.dp),
+    ) {
+        val controls: @Composable () -> Unit = {
+            component.tabs.forEach { tab ->
+                MosaicTabControl(
+                    component = component,
+                    tab = tab,
+                    isSelected = tab.id == active.id,
+                    localization = localization,
+                    onSelect = { state.selectTab(component.id, tab.id) },
+                )
+            }
+        }
+        val barModifier = Modifier
+            .selectableGroup()
+            .semantics {
+                contentDescription = component.accessibility.resolvedDescriptions(localization)
+            }
+            .testTag("mosaic-tabbar-${component.id}")
+        if (component.tabBarDirection == MosaicTabBarDirection.HORIZONTAL) {
+            Row(
+                modifier = barModifier.fillMaxWidth(),
+                horizontalArrangement = component.tabBarHorizontalArrangement(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) { controls() }
+        } else {
+            Column(
+                modifier = barModifier,
+                verticalArrangement = component.tabBarVerticalArrangement(),
+                horizontalAlignment = Alignment.Start,
+            ) { controls() }
+        }
+        val panelLabel = localization.resolve(active.label)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .semantics { paneTitle = panelLabel }
+                .testTag("mosaic-tabpanel-${active.id}"),
+        ) {
+            RenderStack(
+                active.content,
+                state,
+                localization,
+                imageResolver,
+                diagnostics,
+                onEvent,
+                Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MosaicTabControl(
+    component: MosaicTabsComponent,
+    tab: MosaicTabEntry,
+    isSelected: Boolean,
+    localization: MosaicLocalizationResolver,
+    onSelect: () -> Unit,
+) {
+    val style = component.styles.resolve(isSelected)
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(style.cornerRadius.dp)
+    val label = localization.resolve(tab.label)
+    var controlModifier: Modifier = Modifier
+    style.shadow?.let { shadow ->
+        controlModifier = controlModifier.dropShadow(
+            shape,
+            Shadow(
+                radius = shadow.blurRadius.dp,
+                spread = 0.dp,
+                color = shadow.color.toComposeColor(),
+                offset = DpOffset(shadow.offsetX.dp, shadow.offsetY.dp),
+            ),
+        )
+    }
+    Surface(
+        modifier = controlModifier
+            .alpha(style.opacity.toFloat())
+            .selectable(selected = isSelected, role = Role.Tab, onClick = onSelect)
+            .semantics {
+                selected = isSelected
+                contentDescription = label
+            }
+            .testTag("mosaic-tab-${tab.id}"),
+        shape = shape,
+        color = (style.background as? MosaicBackground.Solid)?.color?.toComposeColor()
+            ?: Color.Transparent,
+        border = BorderStroke(style.border.width.dp, style.border.color.toComposeColor()),
+    ) {
+        Box(Modifier.mosaicBackground(style.background, shape).clearAndSetSemantics { }) {
+            MosaicBackgroundMedia(style.background, Modifier.matchParentSize(), tab.id)
+            MosaicStyledText(
+                value = label,
+                // `selectedLabelColor` is required, so the selected colour is always authored:
+                // the Default colour is never reused as a stand-in for an unstated intent.
+                typography = if (isSelected) {
+                    component.labelTypography.copy(color = component.selectedLabelColor)
+                } else {
+                    component.labelTypography
+                },
+                modifier = Modifier.padding(style.padding.toPaddingValues()),
+            )
+        }
+    }
+}
+
+/**
+ * Timeline renders a labelled ordered list. Each entry announces its title then its description;
+ * markers and connectors are decorative and carry no semantics.
+ */
+@Composable
+internal fun RenderTimeline(
+    component: MosaicTimelineComponent,
+    localization: MosaicLocalizationResolver,
+    modifier: Modifier,
+) {
+    // `markerSize` when any entry declares a marker, `connector.width` when none does. Both the
+    // connector and the markers are centred in this gutter.
+    val gutterWidth = component.markerSize ?: component.connector.width
+    val announcement = component.accessibilityAnnouncement(localization)
+    Column(
+        modifier = modifier
+            .mosaicPresentation(component.appearance, component.sizing, component.outerInsets)
+            // Unmerged: the container carries only the list label, and each entry's title and
+            // description stay separate elements. Merging would concatenate them into one string
+            // with whatever separator this renderer chose.
+            .semantics {
+                contentDescription = announcement.label
+                collectionInfo = CollectionInfo(component.entries.size, 1)
+            }
+            .testTag("mosaic-node-${component.id}"),
+    ) {
+        component.entries.forEachIndexed { index, entry ->
+            val isLast = index == component.entries.lastIndex
+            val title = localization.resolve(entry.title)
+            val description = entry.description?.let(localization::resolve)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
+                    .semantics {
+                        collectionItemInfo = CollectionItemInfo(index, 1, 0, 1)
+                    }
+                    .testTag("mosaic-timeline-entry-${entry.id}"),
+            ) {
+                MosaicTimelineGutter(
+                    component = component,
+                    entry = entry,
+                    ordinal = index + 1,
+                    isFirst = index == 0,
+                    isLast = isLast,
+                    localization = localization,
+                    modifier = Modifier
+                        .width(gutterWidth.dp)
+                        .fillMaxHeight()
+                        .clearAndSetSemantics { },
+                )
+                Spacer(Modifier.width(12.dp))
+                // The inter-entry gap is padding on the content, not on the row, so the gutter --
+                // and therefore the connector -- spans it. That is what makes the run continuous
+                // without treating a markerless entry as a special case.
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .padding(bottom = if (isLast) 0.dp else component.gap.dp),
+                ) {
+                    MosaicStyledText(value = title, typography = component.titleTypography)
+                    // An absent description draws no second line and reserves no space for one.
+                    if (description != null && component.descriptionTypography != null) {
+                        MosaicStyledText(
+                            value = description,
+                            typography = component.descriptionTypography,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MosaicTimelineGutter(
+    component: MosaicTimelineComponent,
+    entry: MosaicTimelineEntry,
+    ordinal: Int,
+    isFirst: Boolean,
+    isLast: Boolean,
+    localization: MosaicLocalizationResolver,
+    modifier: Modifier,
+) {
+    val markerSize = component.markerSize ?: 0.0
+    val markerColor = component.markerColor?.toComposeColor() ?: Color.Transparent
+    val connectorColor = component.connector.color.toComposeColor()
+    val connectorWidth = component.connector.width
+    val dashed = component.connector.style == MosaicTimelineConnectorStyle.DASHED
+    val hasMarker = entry.marker != null
+    // The connector is one continuous run drawn first; markers are drawn over it, so an opaque
+    // marker occludes the segment behind it and an absent one changes nothing.
+    Box(modifier, contentAlignment = Alignment.TopCenter) {
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = connectorWidth.dp.toPx()
+            val centre = markerSize.dp.toPx() / 2f
+            // Head and tail are decided independently: a marker's centre when that terminal entry
+            // declares one, the entry's content edge when it does not.
+            val start = if (isFirst && hasMarker) centre else 0f
+            val end = if (isLast && hasMarker) centre else size.height
+            if (end > start) {
+                drawLine(
+                    color = connectorColor,
+                    start = Offset(size.width / 2f, start),
+                    end = Offset(size.width / 2f, end),
+                    strokeWidth = stroke,
+                    pathEffect = if (dashed) {
+                        androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                            floatArrayOf(stroke * 3f, stroke * 3f),
+                        )
+                    } else {
+                        null
+                    },
+                )
+            }
+        }
+        when (val marker = entry.marker) {
+            null -> Unit
+            MosaicTimelineMarker.Dot -> Canvas(Modifier.size(markerSize.dp)) {
+                drawCircle(markerColor, radius = size.minDimension / 2f)
+            }
+            MosaicTimelineMarker.Ordinal -> Box(
+                Modifier.size(markerSize.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = localization.formatInteger(ordinal),
+                    color = markerColor,
+                    style = component.titleTypography.toComposeTextStyle().copy(
+                        fontSize = (markerSize * 0.7).sp,
+                        lineHeight = markerSize.sp,
+                        color = markerColor,
+                    ),
+                    textAlign = TextAlign.Center,
+                )
+            }
+            is MosaicTimelineMarker.Icon -> RenderIcon(
+                MosaicIconComponent(
+                    id = "${entry.id}-marker",
+                    name = marker.name,
+                    size = markerSize,
+                    color = requireNotNull(component.markerColor),
+                    accessibility = MosaicImageAccessibility.Decorative,
+                ),
+                localization,
+                Modifier,
+            )
+        }
+    }
+}
+
+/** Award renders its emblem and text as one group; the emblem is always decorative. */
+@Composable
+internal fun RenderAward(
+    component: MosaicAwardComponent,
+    document: MosaicPaywallDocument,
+    localization: MosaicLocalizationResolver,
+    imageResolver: MosaicBundledImageResolver,
+    diagnostics: MosaicDiagnosticSink,
+    modifier: Modifier,
+) {
+    val title = localization.resolve(component.title)
+    val subtitle = component.subtitle?.let(localization::resolve)
+    val announcement = component.accessibilityAnnouncement(localization)
+    val presented = modifier
+        .mosaicPresentation(component.appearance, component.sizing, component.outerInsets)
+        // Unmerged, and the title and subtitle Text nodes are the elements. An absent subtitle
+        // contributes no element rather than an empty one.
+        .semantics { contentDescription = announcement.containerDescription() }
+        .testTag("mosaic-node-${component.id}")
+    val content: @Composable () -> Unit = {
+        component.emblem?.let { emblem ->
+            MosaicAwardEmblemContent(
+                emblem = emblem,
+                ownerId = component.id,
+                document = document,
+                imageResolver = imageResolver,
+                localization = localization,
+                diagnostics = diagnostics,
+            )
+        }
+        MosaicStyledText(value = title, typography = component.titleTypography)
+        // An absent subtitle renders nothing; `subtitleTypography` cannot exist without it.
+        if (subtitle != null && component.subtitleTypography != null) {
+            MosaicStyledText(value = subtitle, typography = component.subtitleTypography)
+        }
+    }
+    if (component.direction == MosaicStackDirection.VERTICAL) {
+        Column(
+            modifier = presented,
+            verticalArrangement = Arrangement.spacedBy(component.gap.dp),
+            horizontalAlignment = component.crossAxisAlignment.toHorizontal(),
+        ) { content() }
+    } else {
+        Row(
+            modifier = presented,
+            horizontalArrangement = Arrangement.spacedBy(component.gap.dp),
+            verticalAlignment = component.crossAxisAlignment.toVertical(),
+        ) { content() }
+    }
+}
+
+@Composable
+private fun MosaicAwardEmblemContent(
+    emblem: MosaicAwardEmblem,
+    ownerId: String,
+    document: MosaicPaywallDocument,
+    imageResolver: MosaicBundledImageResolver,
+    localization: MosaicLocalizationResolver,
+    diagnostics: MosaicDiagnosticSink,
+) {
+    when (emblem) {
+        is MosaicAwardEmblem.Icon -> RenderIcon(
+            MosaicIconComponent(
+                id = "$ownerId-emblem",
+                name = emblem.name,
+                size = emblem.size,
+                color = emblem.color,
+                accessibility = MosaicImageAccessibility.Decorative,
+            ),
+            localization,
+            Modifier,
+        )
+        is MosaicAwardEmblem.Image -> RenderImage(
+            MosaicImageComponent(
+                id = "$ownerId-emblem",
+                assetId = emblem.assetId,
+                width = MosaicWidthSizing.Fixed(emblem.size),
+                aspectRatio = 1.0,
+                height = emblem.size,
+                contentMode = MosaicImageContentMode.FIT,
+                accessibility = MosaicImageAccessibility.Decorative,
+                sizing = MosaicBoxSizing(
+                    width = MosaicWidthSizing.Fixed(emblem.size),
+                    height = MosaicHeightSizing.Fixed(emblem.size),
+                ),
+            ),
+            document,
+            localization,
+            imageResolver,
+            diagnostics,
+            Modifier,
+        )
+    }
+}
+
+/**
+ * Social Proof announces, in order, the rating when present, then the quote, then the attribution.
+ * The avatar is always decorative.
+ */
+@Composable
+internal fun RenderSocialProof(
+    component: MosaicSocialProofComponent,
+    document: MosaicPaywallDocument,
+    localization: MosaicLocalizationResolver,
+    imageResolver: MosaicBundledImageResolver,
+    diagnostics: MosaicDiagnosticSink,
+    modifier: Modifier,
+) {
+    val quote = localization.resolve(component.quote)
+    val attribution = localization.resolve(component.attribution)
+    val ratingAnnouncement = component.rating?.let(localization::ratingAnnouncementOrNull)
+    val announcement = component.accessibilityAnnouncement(localization, ratingAnnouncement)
+    val diagnostics = LocalMosaicDiagnostics.current
+    LaunchedEffect(component.id, component.rating, ratingAnnouncement) {
+        if (component.rating != null && ratingAnnouncement == null) {
+            diagnostics.record(
+                MosaicDiagnostic(
+                    MosaicDiagnosticCode.RENDERING_FAILED,
+                    "The reserved ${MosaicReservedAccessibilityKey.RATING} string is unusable; " +
+                        "the rating was not announced.",
+                ),
+            )
+        }
+    }
+    Column(
+        modifier = modifier
+            .mosaicPresentation(component.appearance, component.sizing, component.outerInsets)
+            // Unmerged: rating, quote, and attribution stay three elements in that order.
+            .semantics { contentDescription = announcement.containerDescription() }
+            .testTag("mosaic-node-${component.id}"),
+        verticalArrangement = Arrangement.spacedBy(component.gap.dp),
+    ) {
+        // An absent rating draws no symbols and contributes no element: it is neither a zero
+        // rating nor an unknown one.
+        component.rating?.let { rating ->
+            Row(
+                // The symbols are decorative; the element is the reserved-string announcement.
+                modifier = Modifier
+                    .then(
+                        if (ratingAnnouncement == null) {
+                            Modifier.clearAndSetSemantics { }
+                        } else {
+                            Modifier.semantics(mergeDescendants = true) {
+                                contentDescription = ratingAnnouncement
+                            }
+                        },
+                    )
+                    .testTag("mosaic-rating-${component.id}"),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                repeat(rating.maximum) { index ->
+                    MosaicRatingStar(rating = rating, pointIndex = index)
+                }
+            }
+        }
+        MosaicStyledText(value = quote, typography = component.quoteTypography)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            component.avatar?.let { avatar ->
+                RenderImage(
+                    MosaicImageComponent(
+                        id = "${component.id}-avatar",
+                        assetId = avatar.assetId,
+                        width = MosaicWidthSizing.Fixed(avatar.size),
+                        aspectRatio = 1.0,
+                        height = avatar.size,
+                        contentMode = MosaicImageContentMode.FILL,
+                        accessibility = MosaicImageAccessibility.Decorative,
+                        appearance = MosaicBoxAppearance(cornerRadius = avatar.size / 2.0),
+                        sizing = MosaicBoxSizing(
+                            width = MosaicWidthSizing.Fixed(avatar.size),
+                            height = MosaicHeightSizing.Fixed(avatar.size),
+                        ),
+                    ),
+                    document,
+                    localization,
+                    imageResolver,
+                    diagnostics,
+                    Modifier,
+                )
+            }
+            MosaicStyledText(
+                value = attribution,
+                typography = component.attributionTypography,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MosaicRatingStar(rating: MosaicSocialProofRating, pointIndex: Int) {
+    val filled = rating.filledColor.toComposeColor()
+    val empty = rating.emptyColor.toComposeColor()
+    // `value` counts steps, so a half step fills exactly half of one symbol.
+    val fraction = (rating.value - pointIndex * rating.step.stepsPerPoint)
+        .coerceIn(0, rating.step.stepsPerPoint)
+        .toFloat() / rating.step.stepsPerPoint
+    Canvas(Modifier.size(rating.size.dp).clearAndSetSemantics { }) {
+        val star = mosaicStarPath(size.minDimension)
+        drawPath(star, empty)
+        if (fraction > 0f) {
+            clipRect(right = size.minDimension * fraction) { drawPath(star, filled) }
+        }
+    }
+}
+
+private fun mosaicStarPath(extent: Float): Path {
+    val centre = extent / 2f
+    val outer = extent / 2f
+    val inner = outer * 0.42f
+    return Path().apply {
+        repeat(10) { index ->
+            val radius = if (index % 2 == 0) outer else inner
+            val angle = Math.toRadians((-90 + index * 36).toDouble())
+            val x = centre + (radius * cos(angle)).toFloat()
+            val y = centre + (radius * sin(angle)).toFloat()
+            if (index == 0) moveTo(x, y) else lineTo(x, y)
+        }
+        close()
+    }
+}
+
+internal fun MosaicHorizontalAlignment.toHorizontal(): Alignment.Horizontal = when (this) {
+    MosaicHorizontalAlignment.START, MosaicHorizontalAlignment.STRETCH -> Alignment.Start
+    MosaicHorizontalAlignment.CENTER -> Alignment.CenterHorizontally
+    MosaicHorizontalAlignment.END -> Alignment.End
+}
+
+internal fun MosaicHorizontalAlignment.toVertical(): Alignment.Vertical = when (this) {
+    MosaicHorizontalAlignment.START, MosaicHorizontalAlignment.STRETCH -> Alignment.Top
+    MosaicHorizontalAlignment.CENTER -> Alignment.CenterVertically
+    MosaicHorizontalAlignment.END -> Alignment.Bottom
+}
+
+internal fun MosaicTabsComponent.tabBarHorizontalArrangement(): Arrangement.Horizontal =
+    when (tabBarDistribution) {
+        MosaicMainAxisDistribution.START -> Arrangement.spacedBy(tabBarGap.dp, Alignment.Start)
+        MosaicMainAxisDistribution.CENTER ->
+            Arrangement.spacedBy(tabBarGap.dp, Alignment.CenterHorizontally)
+        MosaicMainAxisDistribution.END -> Arrangement.spacedBy(tabBarGap.dp, Alignment.End)
+        MosaicMainAxisDistribution.SPACE_BETWEEN -> Arrangement.SpaceBetween
+    }
+
+internal fun MosaicTabsComponent.tabBarVerticalArrangement(): Arrangement.Vertical =
+    when (tabBarDistribution) {
+        MosaicMainAxisDistribution.START -> Arrangement.spacedBy(tabBarGap.dp, Alignment.Top)
+        MosaicMainAxisDistribution.CENTER ->
+            Arrangement.spacedBy(tabBarGap.dp, Alignment.CenterVertically)
+        MosaicMainAxisDistribution.END -> Arrangement.spacedBy(tabBarGap.dp, Alignment.Bottom)
+        MosaicMainAxisDistribution.SPACE_BETWEEN -> Arrangement.SpaceBetween
+    }
+
+private fun MosaicLocalizationResolver.numberLocale(): java.util.Locale =
+    catalogLocale?.let(java.util.Locale::forLanguageTag) ?: java.util.Locale.getDefault()
+
+internal fun MosaicLocalizationResolver.formatInteger(value: Int): String =
+    java.text.NumberFormat.getIntegerInstance(numberLocale()).format(value)
+
+/**
+ * The rating announcement, phrased entirely by the authored catalog.
+ *
+ * The renderer composes no connective — not "out of", not "/", not one in any other language. It
+ * reads `mosaic.a11y.rating` from the resolved catalog and substitutes the two reserved
+ * placeholders, so word order travels with the translation. Returns null when the catalog does not
+ * carry a usable template, which the decoder rejects; the caller then omits the rating from the
+ * announcement and diagnoses rather than inventing a phrase.
+ */
+internal fun MosaicLocalizationResolver.ratingAnnouncementOrNull(
+    rating: MosaicSocialProofRating,
+): String? {
+    val template = reservedString(MosaicReservedAccessibilityKey.RATING) ?: return null
+    return runCatching { mosaicResolveRatingAnnouncement(rating, template) }.getOrNull()
+}
+
+/**
+ * The container's accessible name.
+ *
+ * The label alone in every canonical case. Compose has no hint slot on a passive group, so an
+ * authored hint is appended here rather than dropped; the contract keeps the two separate, which is
+ * why [MosaicAccessibilityAnnouncement] does too and the conformance vectors assert them apart.
+ */
+internal fun MosaicAccessibilityAnnouncement.containerDescription(): String =
+    if (hint == null) label else "$label. $hint"

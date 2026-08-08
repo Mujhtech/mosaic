@@ -5,7 +5,7 @@ object MosaicProtocolDecoder {
     fun decode(
         source: String,
         capabilityReport: MosaicCapabilityReport = MosaicProtocolCapabilities.report(),
-    ): MosaicPaywallDocument = MosaicProtocolV02Decoder.decode(source, capabilityReport)
+    ): MosaicPaywallDocument = MosaicProtocolV03Decoder.decode(source, capabilityReport)
 }
 
 /**

@@ -255,7 +255,7 @@ class PaywallStateTest {
         val products = MockMosaicPurchaseProvider.phase1Products().map { product ->
             if (product.id == "mosaic_pro_yearly") product.copy(localizedPrice = "  ") else product
         }
-        val state = MosaicPaywallState(v02Document(), MockMosaicPurchaseProvider(products))
+        val state = MosaicPaywallState(v03Document(), MockMosaicPurchaseProvider(products))
 
         state.loadProducts()
 
@@ -286,7 +286,7 @@ class PaywallStateTest {
                     loadedProducts.filter { it.id in productIds },
                 )
         }
-        val state = MosaicPaywallState(v02Document(), provider)
+        val state = MosaicPaywallState(v03Document(), provider)
         state.loadProducts()
         state.selectProduct("plans", "plans-lifetime-plan-card")
         loadedProducts = loadedProducts.filterNot { it.id == "mosaic_pro_lifetime" }
@@ -301,7 +301,7 @@ class PaywallStateTest {
 
     @Test
     fun noAuthoredCardsAvailableClearsCardSelectionAndDisablesPurchase() = runTest {
-        val state = MosaicPaywallState(v02Document(), MockMosaicPurchaseProvider())
+        val state = MosaicPaywallState(v03Document(), MockMosaicPurchaseProvider())
 
         state.loadProducts()
 
@@ -314,7 +314,7 @@ class PaywallStateTest {
     @Test
     fun blankPriceRemainsAvailableWhenActiveLocaleCardIsNameOnly() = runTest {
         val localizationKey = "test.product_card.active_locale"
-        val source = v02Document()
+        val source = v03Document()
         val monthly = source.productCard("plans-monthly-plan-card")
         val name = monthly.children.filterIsInstance<MosaicTextComponent>().first().copy(
             value = MosaicLocalizedText("{{ product.name }}", localizationKey),
@@ -352,7 +352,7 @@ class PaywallStateTest {
     @Test
     fun activeLocalizedPriceTemplateInNestedBadgeStackMakesBlankPriceUnavailable() = runTest {
         val localizationKey = "test.product_card.badge"
-        val source = v02Document()
+        val source = v03Document()
         val monthly = source.productCard("plans-monthly-plan-card")
         val name = monthly.children.filterIsInstance<MosaicTextComponent>().first()
         val badge = source.productCard("plans-yearly-plan-card").children
@@ -392,7 +392,7 @@ class PaywallStateTest {
     @Test
     fun activeLocalizedPriceTemplateInCardAccessibilityMakesBlankPriceUnavailable() = runTest {
         val localizationKey = "test.product_card.accessibility"
-        val source = v02Document()
+        val source = v03Document()
         val monthly = source.productCard("plans-monthly-plan-card")
         val card = monthly.copy(
             children = listOf(monthly.children.filterIsInstance<MosaicTextComponent>().first()),
@@ -468,7 +468,7 @@ class PaywallStateTest {
     fun navigationAndExternalUrlsStayRuntimeOnlyAndDiagnoseSafeNoOps() {
         val diagnostics = mutableListOf<MosaicDiagnostic>()
         val document = MosaicProtocolDecoder.decode(
-            Files.readAllBytes(repositoryFile("protocol/fixtures/v0.2/navigation-only.json"))
+            Files.readAllBytes(repositoryFile("protocol/fixtures/v0.3/navigation-only.json"))
                 .toString(Charsets.UTF_8),
         )
         val state = MosaicPaywallState(
@@ -493,7 +493,7 @@ class PaywallStateTest {
 
     @Test
     fun sheetNavigationKeepsTheMostRecentScreenAsItsBackgroundAndBackDismissesIt() {
-        val state = MosaicPaywallState(v02Document(), MockMosaicPurchaseProvider())
+        val state = MosaicPaywallState(v03Document(), MockMosaicPurchaseProvider())
 
         assertEquals(MosaicScreenPresentation.SCREEN, state.currentScreen.presentation)
         assertTrue(state.navigateTo("details"))
@@ -625,30 +625,33 @@ class PaywallStateTest {
     }
 
     /**
-     * The busy state a screen reader announces must come from the document. A hardcoded English
-     * "In progress" was previously read aloud inside paywalls of every other language.
+     * The busy state a screen reader announces comes from the reserved `mosaic.a11y.in_progress`
+     * string in the resolved catalog. A hardcoded English "In progress" was previously read aloud
+     * inside paywalls of every other language, and the resolution order that replaced it — first
+     * text found in the button's own children — announced the button's label instead of its state.
      */
     @Test
-    fun busyStateDescriptionNeverFallsBackToAHardcodedEnglishLiteral() {
+    fun busyStateDescriptionComesFromTheReservedKeyInTheResolvedCatalog() {
         val document = canonicalDocument()
         val button = document.walkNodesDepthFirst()
             .filterIsInstance<MosaicButtonComponent>()
             .first { it.inProgressChildren != null }
-            .copy(children = emptyList(), inProgressChildren = emptyList())
 
-        assertNull(button.busyStateDescription(MosaicLocalizationResolver(document.localization, "ar")))
-
-        val catalogued = document.localization.withLocalizedValue(
-            locale = document.localization.defaultLocale,
-            key = MOSAIC_IN_PROGRESS_LOCALIZATION_KEY,
-            value = "En cours",
-        )
         assertEquals(
-            "En cours",
-            button.busyStateDescription(
-                MosaicLocalizationResolver(catalogued, document.localization.defaultLocale),
-            ),
+            checkNotNull(document.localization.locales["ar"])
+                .strings.getValue(MosaicReservedAccessibilityKey.IN_PROGRESS),
+            button.busyStateDescription(MosaicLocalizationResolver(document.localization, "ar")),
         )
+
+        // Without the reserved string nothing is announced: no literal is invented in its place.
+        val stripped = document.localization.copy(
+            locales = document.localization.locales.mapValues { (_, catalog) ->
+                catalog.copy(
+                    strings = catalog.strings - MosaicReservedAccessibilityKey.IN_PROGRESS,
+                )
+            },
+        )
+        assertNull(button.busyStateDescription(MosaicLocalizationResolver(stripped, "ar")))
     }
 
     private fun MosaicPaywallDocument.withFirstCardBoundTo(
@@ -691,8 +694,8 @@ class PaywallStateTest {
         return state
     }
 
-    private fun v02Document(): MosaicPaywallDocument = MosaicProtocolDecoder.decode(
-        Files.readAllBytes(repositoryFile("protocol/fixtures/v0.2/complete-paywall.json"))
+    private fun v03Document(): MosaicPaywallDocument = MosaicProtocolDecoder.decode(
+        Files.readAllBytes(repositoryFile("protocol/fixtures/v0.3/complete-paywall.json"))
             .toString(Charsets.UTF_8),
     )
 

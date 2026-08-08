@@ -677,16 +677,6 @@ internal fun RenderNodeCore(
             onEvent,
             modifier,
         )
-        is MosaicPurchaseButtonComponent -> RenderPurchaseButton(
-            node,
-            state,
-            localization,
-            onEvent,
-            modifier,
-        )
-        is MosaicRestoreButtonComponent -> RenderRestoreButton(node, state, localization, onEvent, modifier)
-        is MosaicCloseButtonComponent -> RenderCloseButton(node, state, localization, onEvent, modifier)
-        is MosaicLegalTextComponent -> RenderLegalText(node, localization, modifier)
         is MosaicCarouselComponent -> RenderCarousel(
             node,
             state,
@@ -708,6 +698,32 @@ internal fun RenderNodeCore(
             modifier,
         )
         is MosaicIconComponent -> RenderIcon(node, localization, modifier)
+        is MosaicTabsComponent -> RenderTabs(
+            node,
+            state,
+            localization,
+            imageResolver,
+            diagnostics,
+            onEvent,
+            modifier,
+        )
+        is MosaicTimelineComponent -> RenderTimeline(node, localization, modifier)
+        is MosaicAwardComponent -> RenderAward(
+            node,
+            state.document,
+            localization,
+            imageResolver,
+            diagnostics,
+            modifier,
+        )
+        is MosaicSocialProofComponent -> RenderSocialProof(
+            node,
+            state.document,
+            localization,
+            imageResolver,
+            diagnostics,
+            modifier,
+        )
         is MosaicProductCardComponent,
         is MosaicProductBadgeComponent,
         -> {
@@ -738,11 +754,11 @@ internal fun MosaicNode.appearanceOrNull(): MosaicBoxAppearance? = when (this) {
     is MosaicCarouselComponent -> appearance
     is MosaicSwitchComponent -> appearance
     is MosaicCountdownComponent -> appearance
-    is MosaicPurchaseButtonComponent -> appearance
-    is MosaicRestoreButtonComponent -> appearance
-    is MosaicCloseButtonComponent -> appearance
-    is MosaicLegalTextComponent -> appearance
-    // Product Cards and Badges declare no `appearance` in `schema/v0.2/paywall.schema.json`; they
+    is MosaicTabsComponent -> appearance
+    is MosaicTimelineComponent -> appearance
+    is MosaicAwardComponent -> appearance
+    is MosaicSocialProofComponent -> appearance
+    // Product Cards and Badges declare no `appearance` in `schema/v0.3/paywall.schema.json`; they
     // carry `styles`, resolved per selection state by their Product Selector-owned renderer. Null
     // here is the contract, not a dropped value.
     is MosaicProductCardComponent,
@@ -778,6 +794,7 @@ internal fun RenderButton(
         else -> true
     }
     val appearance = component.appearance
+    val announcement = component.accessibilityAnnouncement(localization, isBusy)
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(
         (appearance?.cornerRadius ?: MOSAIC_DEFAULT_CORNER_RADIUS).dp,
     )
@@ -803,11 +820,12 @@ internal fun RenderButton(
                 sizing = component.sizing,
                 outerInsets = component.outerInsets,
             )
+            // A Button is one accessibility element. Its name is the authored label and does not
+            // change between states; the busy state is the reserved `mosaic.a11y.in_progress`
+            // string in `stateDescription`. Swapping the name would read as a different control.
             .semantics {
-                contentDescription = component.accessibility.resolvedDescriptions(localization)
-                if (isBusy) {
-                    component.busyStateDescription(localization)?.let { stateDescription = it }
-                }
+                contentDescription = announcement.containerDescription()
+                announcement.value?.let { stateDescription = it }
             }
             .testTag("mosaic-node-${component.id}"),
         shape = shape,
@@ -819,6 +837,8 @@ internal fun RenderButton(
         contentPadding = appearance?.padding?.toPaddingValues() ?: PaddingValues(0.dp),
     ) {
         val children = if (isBusy) component.inProgressChildren ?: component.children else component.children
+        // Neither `children` nor `inProgressChildren` are announced in either state: the label
+        // already says what the control does, and the visible caption would be read twice.
         Box(Modifier.clearAndSetSemantics { }) {
             if (component.direction == MosaicStackDirection.VERTICAL) {
                 Column(

@@ -35,7 +35,7 @@ internal fun compatibility(
                 violation = MosaicProtocolViolation.UNSUPPORTED_CAPABILITY,
             )
         val required = MosaicRequiredCapability(name, version)
-        if (name !in MosaicCapabilityCatalog.v02 ||
+        if (name !in MosaicCapabilityCatalog.v03 ||
             version != MOSAIC_PROTOCOL_VERSION ||
             !capabilityReport.supports(required)
         ) {
@@ -268,8 +268,12 @@ internal fun node(value: JsonElement, path: String): MosaicNode {
         "carousel" -> carouselComponent(objectValue, path)
         "switch" -> switchComponent(objectValue, path)
         "countdown" -> countdownComponent(objectValue, path)
+        "tabs" -> tabsComponent(objectValue, path)
+        "timeline" -> timelineComponent(objectValue, path)
+        "award" -> awardComponent(objectValue, path)
+        "socialProof" -> socialProofComponent(objectValue, path)
         else -> throw MosaicProtocolException(
-            "Unsupported Protocol 0.2 component at $path.type.",
+            "Unsupported Protocol 0.3 component at $path.type.",
             violation = MosaicProtocolViolation.UNSUPPORTED_COMPONENT,
         )
     }
@@ -342,18 +346,7 @@ internal fun iconComponent(objectValue: JsonObject, path: String): MosaicIconCom
         path,
         optional = setOf("appearance", "sizing", "outerInsets", "visibility"),
     )
-    val name = when (objectValue.requiredString("name", "$path.name")) {
-        "checkmark" -> MosaicIconName.CHECKMARK
-        "close" -> MosaicIconName.CLOSE
-        "lock" -> MosaicIconName.LOCK
-        "restore" -> MosaicIconName.RESTORE
-        "externalLink" -> MosaicIconName.EXTERNAL_LINK
-        "arrowBackward" -> MosaicIconName.ARROW_BACKWARD
-        "arrowForward" -> MosaicIconName.ARROW_FORWARD
-        "chevronBackward" -> MosaicIconName.CHEVRON_BACKWARD
-        "chevronForward" -> MosaicIconName.CHEVRON_FORWARD
-        else -> throw MosaicProtocolException("Invalid icon name at $path.name.")
-    }
+    val name = iconName(objectValue, "name", "$path.name")
     return MosaicIconComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
         name = name,
@@ -484,7 +477,6 @@ internal fun productSelectorComponent(
             ?: cards.first().productReferenceId,
         direction = stackDirection(objectValue, "direction", "$path.direction"),
         gap = objectValue.requiredLogicalSize("gap", "$path.gap"),
-        cardStyles = MosaicProductCardStyles.Legacy,
         appearance = optionalBoxAppearance(objectValue, path),
         sizing = optionalWidthSizing(objectValue, path),
         outerInsets = optionalOuterInsets(objectValue, path),
@@ -546,7 +538,7 @@ internal fun productCardComponent(value: JsonElement, path: String): MosaicProdu
             "$path.crossAxisAlignment",
         ),
         children = children,
-        styles = productCardBoxStyles(objectValue.required("styles", path), "$path.styles"),
+        styles = selectionStyles(objectValue.required("styles", path), "$path.styles"),
         clipContent = false,
         accessibilityLabel = objectValue.optional("accessibility")?.let {
             val accessibility = it.objectAt("$path.accessibility")
@@ -598,7 +590,7 @@ internal fun productBadgeComponent(value: JsonElement, path: String): MosaicProd
         children = objectValue.required("children", path)
             .boundedArrayAt("$path.children", 1, 10)
             .mapIndexed { index, child -> node(child, "$path.children[$index]") },
-        styles = productCardBoxStyles(objectValue.required("styles", path), "$path.styles"),
+        styles = selectionStyles(objectValue.required("styles", path), "$path.styles"),
         sizing = optionalWidthSizing(objectValue, path),
     )
 }
@@ -634,32 +626,32 @@ internal fun productBadgePlacement(value: JsonElement, path: String): MosaicProd
     }
 }
 
-internal fun productCardBoxStyles(value: JsonElement, path: String): MosaicProductCardBoxStyles {
+internal fun selectionStyles(value: JsonElement, path: String): MosaicSelectionStyles {
     val objectValue = value.objectAt(path)
     objectValue.expectKeys(setOf("default", "selected"), path)
-    return MosaicProductCardBoxStyles(
-        defaultStyle = productCardBoxDefaultStyle(
+    return MosaicSelectionStyles(
+        defaultStyle = selectionStateStyle(
             objectValue.required("default", path),
             "$path.default",
         ),
-        selected = productCardBoxSelectedStyle(
+        selected = selectionStateStyleOverride(
             objectValue.required("selected", path),
             "$path.selected",
         ),
     )
 }
 
-internal fun productCardBoxDefaultStyle(
+internal fun selectionStateStyle(
     value: JsonElement,
     path: String,
-): MosaicProductCardBoxStyle {
+): MosaicSelectionStateStyle {
     val objectValue = value.objectAt(path)
     objectValue.expectKeys(
         setOf("background", "border", "cornerRadius", "padding", "opacity", "shadow"),
         path,
         optional = setOf("shadow"),
     )
-    return MosaicProductCardBoxStyle(
+    return MosaicSelectionStateStyle(
         background = background(objectValue.required("background", path), "$path.background"),
         border = border(objectValue.required("border", path), "$path.border"),
         cornerRadius = objectValue.requiredLogicalSize("cornerRadius", "$path.cornerRadius"),
@@ -675,17 +667,17 @@ internal fun productCardBoxDefaultStyle(
     )
 }
 
-internal fun productCardBoxSelectedStyle(
+internal fun selectionStateStyleOverride(
     value: JsonElement,
     path: String,
-): MosaicProductCardBoxStyleOverride {
+): MosaicSelectionStateStyleOverride {
     val objectValue = value.objectAt(path)
     objectValue.expectKeys(
         setOf("background", "border", "cornerRadius", "padding", "opacity", "shadow"),
         path,
         optional = setOf("background", "border", "cornerRadius", "padding", "opacity", "shadow"),
     )
-    return MosaicProductCardBoxStyleOverride(
+    return MosaicSelectionStateStyleOverride(
         background = objectValue.optional("background")?.let { background(it, "$path.background") },
         border = objectValue.optional("border")?.let { borderOverride(it, "$path.border") },
         cornerRadius = objectValue.optionalLogicalSize("cornerRadius", "$path.cornerRadius"),
@@ -839,3 +831,338 @@ internal fun countdownComponent(
     )
 }
 
+
+internal fun tabsComponent(objectValue: JsonObject, path: String): MosaicTabsComponent {
+    objectValue.expectKeys(
+        setOf(
+            "type", "id", "tabBarDirection", "tabBarGap", "tabBarDistribution", "gap",
+            "initialTabId", "tabs", "styles", "labelTypography", "selectedLabelColor",
+            "appearance", "sizing", "outerInsets", "visibility", "accessibility",
+        ),
+        path,
+        optional = setOf("appearance", "sizing", "outerInsets", "visibility"),
+    )
+    val entries = objectValue.required("tabs", path)
+        .boundedArrayAt("$path.tabs", 2, 8)
+        .mapIndexed { index, element -> tabsEntry(element, "$path.tabs[$index]") }
+    return MosaicTabsComponent(
+        id = objectValue.requiredIdentifier("id", "$path.id"),
+        tabBarDirection = when (objectValue.requiredString("tabBarDirection", "$path.tabBarDirection")) {
+            "vertical" -> MosaicTabBarDirection.VERTICAL
+            "horizontal" -> MosaicTabBarDirection.HORIZONTAL
+            else -> throw MosaicProtocolException("Invalid tab bar direction at $path.tabBarDirection.")
+        },
+        tabBarGap = objectValue.requiredLogicalSize("tabBarGap", "$path.tabBarGap"),
+        tabBarDistribution = mainAxisDistribution(
+            objectValue,
+            "tabBarDistribution",
+            "$path.tabBarDistribution",
+        ),
+        gap = objectValue.requiredLogicalSize("gap", "$path.gap"),
+        initialTabId = objectValue.requiredIdentifier("initialTabId", "$path.initialTabId"),
+        tabs = entries,
+        styles = selectionStyles(objectValue.required("styles", path), "$path.styles"),
+        labelTypography = typography(
+            objectValue.required("labelTypography", path),
+            "$path.labelTypography",
+            false,
+        ),
+        selectedLabelColor = color(
+            objectValue.required("selectedLabelColor", path),
+            "$path.selectedLabelColor",
+        ),
+        accessibility = controlAccessibility(
+            objectValue.required("accessibility", path),
+            "$path.accessibility",
+        ),
+        appearance = objectValue.optional("appearance")?.let {
+            containerAppearance(it, "$path.appearance")
+        },
+        sizing = optionalWidthSizing(objectValue, path),
+        outerInsets = optionalOuterInsets(objectValue, path),
+        visibility = optionalVisibility(objectValue, path),
+    )
+}
+
+internal fun tabsEntry(value: JsonElement, path: String): MosaicTabEntry {
+    val objectValue = value.objectAt(path)
+    objectValue.expectKeys(setOf("id", "label", "content"), path)
+    return MosaicTabEntry(
+        id = objectValue.requiredIdentifier("id", "$path.id"),
+        label = localizedText(objectValue.required("label", path), "$path.label"),
+        content = stack(objectValue.required("content", path), "$path.content"),
+    )
+}
+
+internal fun timelineComponent(objectValue: JsonObject, path: String): MosaicTimelineComponent {
+    objectValue.expectKeys(
+        setOf(
+            "type", "id", "orientation", "gap", "connector", "entries", "markerColor",
+            "markerSize", "titleTypography", "descriptionTypography", "appearance", "sizing",
+            "outerInsets", "visibility", "accessibility",
+        ),
+        path,
+        optional = setOf(
+            "markerColor", "markerSize", "descriptionTypography", "appearance", "sizing",
+            "outerInsets", "visibility",
+        ),
+    )
+    objectValue.requireConstant("orientation", "vertical", "$path.orientation")
+    val entries = objectValue.required("entries", path)
+        .boundedArrayAt("$path.entries", 2, 12)
+        .mapIndexed { index, element -> timelineEntry(element, "$path.entries[$index]") }
+    // Both directions are enforced: a marker with no declared style would leave the renderer
+    // choosing a colour, and a declared style no entry consumes is a stale field nothing reads.
+    val consumesMarkerStyle = entries.any { it.marker != null }
+    val consumesDescriptionStyle = entries.any { it.description != null }
+    listOf(
+        "markerColor" to consumesMarkerStyle,
+        "markerSize" to consumesMarkerStyle,
+        "descriptionTypography" to consumesDescriptionStyle,
+    ).forEach { (field, consumed) ->
+        val declared = objectValue.hasNonNull(field)
+        if (consumed && !declared) {
+            throw MosaicProtocolException("Timeline must declare $field at $path.$field.")
+        }
+        if (!consumed && declared) {
+            throw MosaicProtocolException("Timeline declares $field but no entry uses it at $path.$field.")
+        }
+    }
+    return MosaicTimelineComponent(
+        id = objectValue.requiredIdentifier("id", "$path.id"),
+        gap = objectValue.requiredLogicalSize("gap", "$path.gap"),
+        connector = timelineConnector(objectValue.required("connector", path), "$path.connector"),
+        entries = entries,
+        titleTypography = typography(
+            objectValue.required("titleTypography", path),
+            "$path.titleTypography",
+            false,
+        ),
+        accessibility = controlAccessibility(
+            objectValue.required("accessibility", path),
+            "$path.accessibility",
+        ),
+        markerColor = objectValue.optional("markerColor")?.let { color(it, "$path.markerColor") },
+        markerSize = if (objectValue.hasNonNull("markerSize")) {
+            objectValue.requiredPositiveLogicalSize("markerSize", "$path.markerSize")
+        } else {
+            null
+        },
+        descriptionTypography = objectValue.optional("descriptionTypography")?.let {
+            typography(it, "$path.descriptionTypography", false)
+        },
+        appearance = optionalBoxAppearance(objectValue, path),
+        sizing = optionalWidthSizing(objectValue, path),
+        outerInsets = optionalOuterInsets(objectValue, path),
+        visibility = optionalVisibility(objectValue, path),
+    )
+}
+
+internal fun timelineConnector(value: JsonElement, path: String): MosaicTimelineConnector {
+    val objectValue = value.objectAt(path)
+    objectValue.expectKeys(setOf("color", "width", "style"), path)
+    return MosaicTimelineConnector(
+        color = color(objectValue.required("color", path), "$path.color"),
+        width = objectValue.requiredPositiveLogicalSize("width", "$path.width"),
+        style = when (objectValue.requiredString("style", "$path.style")) {
+            "solid" -> MosaicTimelineConnectorStyle.SOLID
+            "dashed" -> MosaicTimelineConnectorStyle.DASHED
+            else -> throw MosaicProtocolException("Invalid timeline connector style at $path.style.")
+        },
+    )
+}
+
+internal fun timelineEntry(value: JsonElement, path: String): MosaicTimelineEntry {
+    val objectValue = value.objectAt(path)
+    objectValue.expectKeys(
+        setOf("id", "title", "description", "marker"),
+        path,
+        optional = setOf("description", "marker"),
+    )
+    return MosaicTimelineEntry(
+        id = objectValue.requiredIdentifier("id", "$path.id"),
+        title = localizedText(objectValue.required("title", path), "$path.title"),
+        description = objectValue.optional("description")?.let {
+            localizedText(it, "$path.description")
+        },
+        marker = objectValue.optional("marker")?.let { timelineMarker(it, "$path.marker") },
+    )
+}
+
+internal fun timelineMarker(value: JsonElement, path: String): MosaicTimelineMarker {
+    val objectValue = value.objectAt(path)
+    return when (objectValue.requiredString("kind", "$path.kind")) {
+        "dot" -> {
+            objectValue.expectKeys(setOf("kind"), path)
+            MosaicTimelineMarker.Dot
+        }
+        "ordinal" -> {
+            objectValue.expectKeys(setOf("kind"), path)
+            MosaicTimelineMarker.Ordinal
+        }
+        "icon" -> {
+            objectValue.expectKeys(setOf("kind", "name"), path)
+            MosaicTimelineMarker.Icon(iconName(objectValue, "name", "$path.name"))
+        }
+        else -> throw MosaicProtocolException("Invalid timeline marker kind at $path.kind.")
+    }
+}
+
+internal fun awardComponent(objectValue: JsonObject, path: String): MosaicAwardComponent {
+    objectValue.expectKeys(
+        setOf(
+            "type", "id", "direction", "gap", "crossAxisAlignment", "emblem", "title",
+            "titleTypography", "subtitle", "subtitleTypography", "appearance", "sizing",
+            "outerInsets", "visibility", "accessibility",
+        ),
+        path,
+        optional = setOf(
+            "emblem", "subtitle", "subtitleTypography", "appearance", "sizing", "outerInsets",
+            "visibility",
+        ),
+    )
+    // `subtitle` and `subtitleTypography` are mutually dependentRequired: a subtitle with no
+    // typography would leave the renderer inventing one, and typography with no subtitle is a
+    // value nothing reads.
+    if (objectValue.hasNonNull("subtitle") != objectValue.hasNonNull("subtitleTypography")) {
+        throw MosaicProtocolException(
+            "Award subtitle and subtitleTypography must be declared together at $path.",
+        )
+    }
+    return MosaicAwardComponent(
+        id = objectValue.requiredIdentifier("id", "$path.id"),
+        direction = stackDirection(objectValue, "direction", "$path.direction"),
+        gap = objectValue.requiredLogicalSize("gap", "$path.gap"),
+        crossAxisAlignment = crossAxisAlignment(
+            objectValue,
+            "crossAxisAlignment",
+            "$path.crossAxisAlignment",
+        ),
+        title = localizedText(objectValue.required("title", path), "$path.title"),
+        titleTypography = typography(
+            objectValue.required("titleTypography", path),
+            "$path.titleTypography",
+            false,
+        ),
+        accessibility = controlAccessibility(
+            objectValue.required("accessibility", path),
+            "$path.accessibility",
+        ),
+        emblem = objectValue.optional("emblem")?.let { awardEmblem(it, "$path.emblem") },
+        subtitle = objectValue.optional("subtitle")?.let { localizedText(it, "$path.subtitle") },
+        subtitleTypography = objectValue.optional("subtitleTypography")?.let {
+            typography(it, "$path.subtitleTypography", false)
+        },
+        appearance = optionalBoxAppearance(objectValue, path),
+        sizing = optionalWidthSizing(objectValue, path),
+        outerInsets = optionalOuterInsets(objectValue, path),
+        visibility = optionalVisibility(objectValue, path),
+    )
+}
+
+internal fun awardEmblem(value: JsonElement, path: String): MosaicAwardEmblem {
+    val objectValue = value.objectAt(path)
+    return when (objectValue.requiredString("type", "$path.type")) {
+        "image" -> {
+            objectValue.expectKeys(setOf("type", "assetId", "size"), path)
+            MosaicAwardEmblem.Image(
+                assetId = objectValue.requiredIdentifier("assetId", "$path.assetId"),
+                size = objectValue.requiredPositiveLogicalSize("size", "$path.size"),
+            )
+        }
+        "icon" -> {
+            objectValue.expectKeys(setOf("type", "name", "size", "color"), path)
+            MosaicAwardEmblem.Icon(
+                name = iconName(objectValue, "name", "$path.name"),
+                size = objectValue.requiredPositiveLogicalSize("size", "$path.size"),
+                color = color(objectValue.required("color", path), "$path.color"),
+            )
+        }
+        else -> throw MosaicProtocolException("Invalid award emblem at $path.type.")
+    }
+}
+
+internal fun socialProofComponent(
+    objectValue: JsonObject,
+    path: String,
+): MosaicSocialProofComponent {
+    objectValue.expectKeys(
+        setOf(
+            "type", "id", "gap", "quote", "quoteTypography", "attribution",
+            "attributionTypography", "rating", "avatar", "appearance", "sizing", "outerInsets",
+            "visibility", "accessibility",
+        ),
+        path,
+        optional = setOf(
+            "rating", "avatar", "appearance", "sizing", "outerInsets", "visibility",
+        ),
+    )
+    return MosaicSocialProofComponent(
+        id = objectValue.requiredIdentifier("id", "$path.id"),
+        gap = objectValue.requiredLogicalSize("gap", "$path.gap"),
+        quote = localizedText(objectValue.required("quote", path), "$path.quote"),
+        quoteTypography = typography(
+            objectValue.required("quoteTypography", path),
+            "$path.quoteTypography",
+            false,
+        ),
+        attribution = localizedText(
+            objectValue.required("attribution", path),
+            "$path.attribution",
+        ),
+        attributionTypography = typography(
+            objectValue.required("attributionTypography", path),
+            "$path.attributionTypography",
+            false,
+        ),
+        accessibility = controlAccessibility(
+            objectValue.required("accessibility", path),
+            "$path.accessibility",
+        ),
+        rating = objectValue.optional("rating")?.let { socialProofRating(it, "$path.rating") },
+        avatar = objectValue.optional("avatar")?.let { socialProofAvatar(it, "$path.avatar") },
+        appearance = optionalBoxAppearance(objectValue, path),
+        sizing = optionalWidthSizing(objectValue, path),
+        outerInsets = optionalOuterInsets(objectValue, path),
+        visibility = optionalVisibility(objectValue, path),
+    )
+}
+
+internal fun socialProofRating(value: JsonElement, path: String): MosaicSocialProofRating {
+    val objectValue = value.objectAt(path)
+    objectValue.expectKeys(
+        setOf("symbol", "value", "maximum", "step", "size", "filledColor", "emptyColor"),
+        path,
+    )
+    objectValue.requireConstant("symbol", "star", "$path.symbol")
+    val step = when (objectValue.requiredString("step", "$path.step")) {
+        "whole" -> MosaicSocialProofRatingStep.WHOLE
+        "half" -> MosaicSocialProofRatingStep.HALF
+        else -> throw MosaicProtocolException("Invalid social proof rating step at $path.step.")
+    }
+    val maximum = objectValue.requiredIntegerInRange("maximum", "$path.maximum", 1..10)
+    val steps = objectValue.requiredIntegerInRange("value", "$path.value", 0..20)
+    if (steps > maximum * step.stepsPerPoint) {
+        throw MosaicProtocolException(
+            "Social proof rating value $steps exceeds ${maximum * step.stepsPerPoint} " +
+                "steps out of $maximum at $path.value.",
+        )
+    }
+    return MosaicSocialProofRating(
+        value = steps,
+        maximum = maximum,
+        step = step,
+        size = objectValue.requiredPositiveLogicalSize("size", "$path.size"),
+        filledColor = color(objectValue.required("filledColor", path), "$path.filledColor"),
+        emptyColor = color(objectValue.required("emptyColor", path), "$path.emptyColor"),
+    )
+}
+
+internal fun socialProofAvatar(value: JsonElement, path: String): MosaicSocialProofAvatar {
+    val objectValue = value.objectAt(path)
+    objectValue.expectKeys(setOf("assetId", "size"), path)
+    return MosaicSocialProofAvatar(
+        assetId = objectValue.requiredIdentifier("assetId", "$path.assetId"),
+        size = objectValue.requiredPositiveLogicalSize("size", "$path.size"),
+    )
+}

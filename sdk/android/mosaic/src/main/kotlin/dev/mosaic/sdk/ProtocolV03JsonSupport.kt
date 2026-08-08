@@ -23,6 +23,9 @@ internal fun walkRawNodes(root: JsonObject): Sequence<JsonObject> = sequence {
         "carousel" -> root.getAsJsonArray("pages").forEach { page ->
             yieldAll(walkRawNodes(page.asJsonObject.getAsJsonObject("content")))
         }
+        "tabs" -> root.getAsJsonArray("tabs").forEach { tab ->
+            yieldAll(walkRawNodes(tab.asJsonObject.getAsJsonObject("content")))
+        }
         "button" -> {
             root.getAsJsonArray("children").forEach { child ->
                 yieldAll(walkRawNodes(child.asJsonObject))
@@ -43,8 +46,9 @@ internal fun walkRawNodes(root: JsonObject): Sequence<JsonObject> = sequence {
 }
 
 internal val colorFieldNames = setOf(
-    "background", "color", "markerColor", "offTrackColor", "onTrackColor",
-    "productLabelColor", "runtimePriceColor", "textColor", "thumbColor",
+    "background", "color", "emptyColor", "filledColor", "markerColor", "offTrackColor",
+    "onTrackColor", "productLabelColor", "runtimePriceColor", "selectedLabelColor", "textColor",
+    "thumbColor",
 )
 
 internal fun objectUsesColor(value: JsonElement): Boolean = when {
@@ -142,17 +146,19 @@ internal fun imageContentMode(objectValue: JsonObject, name: String, path: Strin
         else -> throw MosaicProtocolException("Invalid image content mode at $path.")
     }
 
-internal fun productCardContentAlignment(
-    objectValue: JsonObject,
-    name: String,
-    path: String,
-) = when (objectValue.requiredString(name, path)) {
-    "start" -> MosaicProductCardContentAlignment.START
-    "center" -> MosaicProductCardContentAlignment.CENTER
-    "end" -> MosaicProductCardContentAlignment.END
-    "spaceBetween" -> MosaicProductCardContentAlignment.SPACE_BETWEEN
-    else -> throw MosaicProtocolException("Invalid product-card alignment at $path.")
-}
+internal fun iconName(objectValue: JsonObject, name: String, path: String) =
+    when (objectValue.requiredString(name, path)) {
+        "checkmark" -> MosaicIconName.CHECKMARK
+        "close" -> MosaicIconName.CLOSE
+        "lock" -> MosaicIconName.LOCK
+        "restore" -> MosaicIconName.RESTORE
+        "externalLink" -> MosaicIconName.EXTERNAL_LINK
+        "arrowBackward" -> MosaicIconName.ARROW_BACKWARD
+        "arrowForward" -> MosaicIconName.ARROW_FORWARD
+        "chevronBackward" -> MosaicIconName.CHEVRON_BACKWARD
+        "chevronForward" -> MosaicIconName.CHEVRON_FORWARD
+        else -> throw MosaicProtocolException("Invalid icon name at $path.")
+    }
 
 internal fun countdownUnit(objectValue: JsonObject, name: String, path: String) =
     when (objectValue.requiredString(name, path)) {
