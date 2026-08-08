@@ -8,6 +8,16 @@ public enum MosaicAccessibilityRole: Sendable, Equatable {
   case button
   case productOption
   case switchControl
+  /// The Tabs component as a whole.
+  case tabList
+  /// One tab control, named by its label and carrying its selected state.
+  case tab
+  /// The visible panel, named by the same label as its tab.
+  case tabPanel
+  /// A Timeline, exposed as a labelled ordered list.
+  case list
+  /// One Timeline entry, announcing its title then its description.
+  case listItem
 }
 
 public struct MosaicAccessibilityElement: Sendable, Equatable, Identifiable {
@@ -75,7 +85,7 @@ extension MosaicPaywallModel {
     for node in stack.children {
       guard isVisible(node.visibility) else { continue }
       switch node {
-      case .verticalStack(let nested), .stack(let nested):
+      case .stack(let nested):
         appendAccessibility(from: nested, to: &elements)
       case .text(let component):
         let role =
@@ -179,58 +189,20 @@ extension MosaicPaywallModel {
           }
         }
       case .button(let component):
+        let busy = isButtonBusy(component.id)
         elements.append(
           MosaicAccessibilityElement(
             id: component.id,
             role: .button,
             label: localization.resolve(component.accessibility.label),
             hint: component.accessibility.hint.map(localization.resolve),
+            // The authored, translated reserved string. A button with no
+            // in-progress content announces no progress state at all rather
+            // than a literal this SDK invented.
+            value: busy && component.inProgressChildren != nil
+              ? localization.resolve(reserved: .inProgress) : nil,
             isEnabled: isButtonEnabled(component),
-            isBusy: isButtonBusy(component.id)
-          )
-        )
-      case .purchaseButton(let component):
-        let busy = busyPurchaseButtonID == component.id
-        elements.append(
-          MosaicAccessibilityElement(
-            id: component.id,
-            role: .button,
-            label: localization.resolve(component.accessibility.label),
-            hint: component.accessibility.hint.map(localization.resolve),
-            value: busy ? localization.resolve(component.inProgressLabel) : nil,
-            isEnabled: isPurchaseEnabled(component),
             isBusy: busy
-          )
-        )
-      case .restoreButton(let component):
-        let busy = busyRestoreButtonID == component.id
-        elements.append(
-          MosaicAccessibilityElement(
-            id: component.id,
-            role: .button,
-            label: localization.resolve(component.accessibility.label),
-            hint: component.accessibility.hint.map(localization.resolve),
-            value: busy ? localization.resolve(component.inProgressLabel) : nil,
-            isEnabled: isRestoreEnabled(component),
-            isBusy: busy
-          )
-        )
-      case .closeButton(let component):
-        elements.append(
-          MosaicAccessibilityElement(
-            id: component.id,
-            role: .button,
-            label: localization.resolve(component.accessibility.label),
-            hint: component.accessibility.hint.map(localization.resolve)
-          )
-        )
-      case .legalText(let component):
-        elements.append(
-          MosaicAccessibilityElement(
-            id: component.id,
-            role: .text,
-            label: component.accessibility.label.map(localization.resolve)
-              ?? localization.resolve(component.value)
           )
         )
       case .carousel(let component):
@@ -276,8 +248,165 @@ extension MosaicPaywallModel {
               )
           )
         )
+      case .tabs(let component):
+        appendTabsAccessibility(component, to: &elements)
+      case .timeline(let component):
+        appendTimelineAccessibility(component, to: &elements)
+      case .award(let component):
+        // Segments are never joined: each is its own element inside the
+        // labelled container, and the platform supplies any pause or
+        // punctuation. Joining them would invent script-specific punctuation.
+        elements.append(
+          MosaicAccessibilityElement(
+            id: component.id,
+            role: .group,
+            label: localization.resolve(component.accessibility.label),
+            hint: component.accessibility.hint.map(localization.resolve)
+          )
+        )
+        elements.append(
+          MosaicAccessibilityElement(
+            id: "\(component.id).title",
+            role: .text,
+            label: localization.resolve(component.title)
+          )
+        )
+        // An absent optional segment produces no element, never an empty one.
+        if let subtitle = component.subtitle {
+          elements.append(
+            MosaicAccessibilityElement(
+              id: "\(component.id).subtitle",
+              role: .text,
+              label: localization.resolve(subtitle)
+            )
+          )
+        }
+      case .socialProof(let component):
+        elements.append(
+          MosaicAccessibilityElement(
+            id: component.id,
+            role: .group,
+            label: localization.resolve(component.accessibility.label),
+            hint: component.accessibility.hint.map(localization.resolve)
+          )
+        )
+        // Order: rating, then quote, then attribution. The avatar is decorative
+        // and is never announced or focusable.
+        if let announcement = component.rating.flatMap(ratingAnnouncement) {
+          elements.append(
+            MosaicAccessibilityElement(
+              id: "\(component.id).rating",
+              role: .text,
+              label: announcement
+            )
+          )
+        }
+        elements.append(
+          MosaicAccessibilityElement(
+            id: "\(component.id).quote",
+            role: .text,
+            label: localization.resolve(component.quote)
+          )
+        )
+        elements.append(
+          MosaicAccessibilityElement(
+            id: "\(component.id).attribution",
+            role: .text,
+            label: localization.resolve(component.attribution)
+          )
+        )
       }
     }
+  }
+
+  private func appendTabsAccessibility(
+    _ component: MosaicTabsComponent,
+    to elements: inout [MosaicAccessibilityElement]
+  ) {
+    let selected = selectedTabID(for: component.id)
+    elements.append(
+      MosaicAccessibilityElement(
+        id: component.id,
+        role: .tabList,
+        label: localization.resolve(component.accessibility.label),
+        hint: component.accessibility.hint.map(localization.resolve),
+        value: selected.flatMap { component.tab(id: $0) }.map {
+          localization.resolve($0.label)
+        }
+      )
+    )
+    for tab in component.tabs {
+      elements.append(
+        MosaicAccessibilityElement(
+          id: "\(component.id).\(tab.id)",
+          role: .tab,
+          label: localization.resolve(tab.label),
+          isSelected: selected == tab.id
+        )
+      )
+    }
+    // Exactly one panel is present. An unselected panel is removed from the
+    // accessibility tree and focus order, not merely hidden visually.
+    guard let tab = component.tabs.first(where: { $0.id == selected }) else { return }
+    elements.append(
+      MosaicAccessibilityElement(
+        id: tab.id,
+        role: .tabPanel,
+        // The tab label names both its control and its panel.
+        label: localization.resolve(tab.label)
+      )
+    )
+    appendAccessibility(from: tab.content, to: &elements)
+  }
+
+  private func appendTimelineAccessibility(
+    _ component: MosaicTimelineComponent,
+    to elements: inout [MosaicAccessibilityElement]
+  ) {
+    elements.append(
+      MosaicAccessibilityElement(
+        id: component.id,
+        role: .list,
+        label: localization.resolve(component.accessibility.label),
+        hint: component.accessibility.hint.map(localization.resolve)
+      )
+    )
+    // Array order is the sequence order and carries meaning, so entries are
+    // announced in the order they were authored. Markers and the connector are
+    // decorative and are never announced or focusable. Title and description
+    // are separate elements rather than one joined string.
+    for entry in component.entries {
+      elements.append(
+        MosaicAccessibilityElement(
+          id: "\(component.id).\(entry.id).title",
+          role: .listItem,
+          label: localization.resolve(entry.title)
+        )
+      )
+      // An entry with no description produces no element, not an empty one.
+      if let description = entry.description {
+        elements.append(
+          MosaicAccessibilityElement(
+            id: "\(component.id).\(entry.id).description",
+            role: .listItem,
+            label: localization.resolve(description)
+          )
+        )
+      }
+    }
+  }
+
+  /// The rating announcement, shared with the renderer so the projection and
+  /// the rendered view cannot disagree about what VoiceOver hears.
+  ///
+  /// `nil` when the catalog carries no usable `mosaic.a11y.rating` template.
+  /// The rating then contributes nothing to the announcement rather than an
+  /// English phrase the document never authored.
+  func ratingAnnouncement(_ rating: MosaicSocialProofRating) -> String? {
+    MosaicSocialProofRatingAnnouncement.text(
+      for: rating,
+      template: localization.resolve(reserved: .rating)
+    )
   }
 
   func productCardAccessibilityLabel(
@@ -314,7 +443,7 @@ extension MosaicPaywallModel {
   ) -> [String] {
     guard isVisible(node.visibility) else { return [] }
     switch node {
-    case .verticalStack(let stack), .stack(let stack):
+    case .stack(let stack):
       return stack.children.flatMap { productCardLabels(from: $0, option: option) }
     case .text(let component):
       return [
@@ -343,8 +472,24 @@ extension MosaicPaywallModel {
             completedText: localization.resolve(component.completedText)
           )
       ]
-    case .productSelector, .button, .purchaseButton, .restoreButton, .closeButton,
-      .legalText, .carousel, .switchControl:
+    case .timeline(let component):
+      return [localization.resolve(component.accessibility.label)]
+        + component.entries.flatMap { entry in
+          [localization.resolve(entry.title), entry.description.map(localization.resolve)]
+            .compactMap { $0 }
+        }
+    case .award(let component):
+      return [
+        localization.resolve(component.title),
+        component.subtitle.map(localization.resolve),
+      ].compactMap { $0 }
+    case .socialProof(let component):
+      return [
+        component.rating.flatMap(ratingAnnouncement),
+        localization.resolve(component.quote),
+        localization.resolve(component.attribution),
+      ].compactMap { $0 }
+    case .productSelector, .button, .carousel, .switchControl, .tabs:
       return []
     }
   }

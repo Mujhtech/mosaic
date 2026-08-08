@@ -347,7 +347,7 @@ public final class MosaicLocalPreviewClient: ObservableObject {
     )
     try await send(
       .capabilityReport(
-        .v02(clientId: configuration.identity.clientId)
+        .v03(clientId: configuration.identity.clientId)
       )
     )
   }
@@ -667,7 +667,7 @@ struct MosaicPreviewUnsupportedRequirement {
 }
 
 extension MosaicLayoutNodeKind {
-  static let v02PreviewCases: [MosaicLayoutNodeKind] = [
+  static let v03PreviewCases: [MosaicLayoutNodeKind] = [
     .scrollContainer,
     .stack,
     .text,
@@ -679,6 +679,10 @@ extension MosaicLayoutNodeKind {
     .carousel,
     .switchControl,
     .countdown,
+    .tabs,
+    .timeline,
+    .award,
+    .socialProof,
   ]
 }
 

@@ -2,6 +2,74 @@
 
 ## Unreleased
 
+- Adopt Paywall Protocol `0.3`, which replaces `0.2` outright. There is no `0.2`
+  support, no migration, and no dual-version code: a `0.2` document is an
+  unknown version to this reader and is rejected atomically, resolving through
+  last accepted, then bundled fallback, then configuration unavailable. Every
+  `0.2` artifact is gone from the SDK — the version constants, the `V02`
+  validator symbols and their files, `MosaicCapabilityCatalog.v02`, the bundled
+  `Resources/v0.2` fixture, and the Local Preview subprotocol are all `0.3`.
+- Add the four `0.3` components. **Tabs** renders two through eight labelled
+  panels with one visible at a time, selected from the required authored
+  `initialTabId` rather than from array position, and resolves its Default and
+  Selected control appearance through the neutral `selectionStyles` overlay that
+  `productCardStyles` now aliases. **Timeline** renders two through twelve
+  ordered vertical entries with a required connector and a closed
+  `dot`/`ordinal`/`icon` marker union. **Award** renders a title with an optional
+  subtitle and an always-decorative image or icon emblem. **Social Proof**
+  renders a required quote and attribution with an optional avatar and an
+  integer-only bounded rating whose symbol fills are computed with integer
+  arithmetic, never a rounded fraction.
+- Add tab selection to runtime state and `{ "mode": "tab" }` to `visibility`,
+  with the same remove-from-layout-accessibility-and-focus semantics as a false
+  Switch condition. Visibility evaluation now takes a `MosaicSelectionState` of
+  `{ switches, tabs }` and **throws** when a condition names a controller that
+  state does not carry. Resolving it to "hidden" instead would read back as a
+  component that silently disappears rather than a caller that is told it has a
+  bug.
+- Enforce both directions of the `0.3` co-presence rules rather than only the
+  missing-value direction: Timeline `markerColor`, `markerSize`, and
+  `descriptionTypography` are required when an entry consumes them and rejected
+  when none does, Award `subtitle` and `subtitleTypography` are mutually
+  required, and a Social Proof `value` above `maximum × stepsPerPoint` rejects
+  the document. A style nothing reads is how a stale field survives a redesign.
+- Announce composed accessibility content as separate elements inside a
+  labelled container rather than one joined string. Timeline titles and
+  descriptions, Award titles and subtitles, and Social Proof ratings, quotes,
+  and attributions are each their own element, in the authored order, and the
+  platform supplies the pause. Joining them invented script-specific
+  punctuation. An absent optional segment produces no element rather than an
+  empty one, and the Social Proof avatar, Award emblem, Timeline markers, and
+  Timeline connector are never announced or focusable.
+- Announce a busy Button's progress state in the value slot, from the reserved
+  `mosaic.a11y.in_progress` string, leaving the authored `accessibility.label`
+  as the name in both states. The Button's children and in-progress children are
+  never announced in either state. iOS previously announced no progress state at
+  all for a composable Button, so a screen-reader user had no signal that a
+  purchase or restore was running.
+- Read the invalid-fixture corpus from the canonical directory with a declared
+  case-count floor instead of from a list copied into the test file. The list
+  had drifted to eight of the twelve fixtures, and a loop over a list can report
+  success over cases it never saw. The `rating-announcement` and
+  `accessibility-announcement` corpora are consumed the same way, byte-exact,
+  with their own floors — without them nothing forces this SDK to read the
+  reserved keys instead of composing its own string, and a composed string reads
+  as correct under inspection.
+- Delete the retired Protocol `0.1` node types the branch still carried:
+  `verticalStack`, `purchaseButton`, `restoreButton`, `closeButton`, and
+  `legalText`, their `MosaicLayoutNodeKind` and `MosaicNode` cases, their
+  capability names (`layout.verticalStack`, `component.purchaseButton`,
+  `component.restoreButton`, `component.closeButton`, `component.legalText`),
+  their component models and SwiftUI views, the `MosaicPaywallModel` methods and
+  busy-button state that only they used, the `MosaicVerticalStack` alias, and
+  the `MosaicStack` decoder branch that read a `verticalStack`'s `spacing` and
+  `horizontalAlignment`. The `0.3` schema names none of them in its node union
+  or its capability enum, and the single decode path runs shape validation
+  first, which rejects every one of them as an unsupported component — so no
+  accepted document could contain one. Roughly two dozen exhaustive-switch arms
+  existed only to satisfy the compiler, including two that threw
+  `protocol_0_1_node_in_0_3_document` for a case the reader can never construct.
+
 - Apply the contract's uniform presence rule to every host-supplied targeting
   source. An unrecognized `context.country` is now present with unknown
   comparisons instead of absent, so a "no country reported" Rule no longer fires
@@ -28,7 +96,7 @@
   change which users match a Rule.
 - Omit the analytics context locale entirely when the device reports nothing
   representable, instead of substituting `en`.
-- Canonicalize every locale through one shared rule, per the Protocol 0.2
+- Canonicalize every locale through one shared rule, per the Protocol 0.3
   locale-resolution rulings. Catalog lookup canonicalizes the requested tag
   before an exact match (`_`→`-`, empty subtags dropped, truncation at the first
   singleton subtag, lowercase language, title-case script, uppercase alpha-2 or
@@ -39,7 +107,7 @@
   and silently rendered the document's default language; an RTL request in that
   form also fell through to an LTR default and mirrored the layout. A tag that
   canonicalizes to nothing contributes no candidate rather than matching
-  anything. `0.2` still defines no language+region reduction: `zh-Hans-CN`
+  anything. `0.3` still defines no language+region reduction: `zh-Hans-CN`
   reduces to `zh`, never to `zh-CN`.
 - Normalize the device locale to a strict BCP-47 tag before it reaches the
   analytics event context or the Placement decision context. `Locale.current`

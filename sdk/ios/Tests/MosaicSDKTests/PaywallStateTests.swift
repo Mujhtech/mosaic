@@ -170,7 +170,7 @@ final class PaywallStateTests: XCTestCase {
   }
 
   func testUnifiedButtonUsesProgressContentAndRejectsDuplicateAsyncActions() async throws {
-    let document = try v02Document()
+    let document = try v03Document()
     let provider = DeferredPurchaseProvider(products: MosaicProduct.phase1MockProducts)
     let recorder = OutcomeRecorder()
     let model = MosaicPaywallModel(
@@ -197,7 +197,7 @@ final class PaywallStateTests: XCTestCase {
     XCTAssertEqual(purchaseRequestCount, 1)
 
     await provider.completePurchase(
-      with: .purchased(productID: "mosaic_pro_yearly", transactionID: "deferred-v02")
+      with: .purchased(productID: "mosaic_pro_yearly", transactionID: "deferred-v03")
     )
     await operation.value
     XCTAssertFalse(model.isButtonBusy(button.id))

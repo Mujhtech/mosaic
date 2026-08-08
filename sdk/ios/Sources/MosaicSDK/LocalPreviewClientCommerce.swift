@@ -293,7 +293,7 @@ extension MosaicLocalPreviewClient {
       let capabilities = compatibility["requiredCapabilities"] as? [[String: Any]]
     {
       let expectedDocumentVersion = mosaicProtocolVersion
-      let supported = Set(MosaicCapabilityCatalog.v02.map(\.rawValue))
+      let supported = Set(MosaicCapabilityCatalog.v03.map(\.rawValue))
       for (index, capability) in capabilities.enumerated() {
         guard
           let name = capability["name"] as? String,
@@ -336,7 +336,7 @@ extension MosaicLocalPreviewClient {
     permitsScrollContainer: Bool
   ) -> MosaicPreviewUnsupportedRequirement? {
     guard let type = node["type"] as? String else { return nil }
-    var supported = Set(MosaicLayoutNodeKind.v02PreviewCases.map(\.rawValue))
+    var supported = Set(MosaicLayoutNodeKind.v03PreviewCases.map(\.rawValue))
     supported.formUnion(["productCard", "productBadge"])
     if !supported.contains(type) || (!permitsScrollContainer && type == "scrollContainer") {
       let id = (node["id"] as? String).flatMap(safeComponentId)
@@ -353,9 +353,7 @@ extension MosaicLocalPreviewClient {
     if type == "scrollContainer", let content = node["content"] as? [String: Any] {
       return unsupportedNode(content, path: "\(path)/content", permitsScrollContainer: false)
     }
-    if type == "verticalStack" || type == "stack",
-      let children = node["children"] as? [[String: Any]]
-    {
+    if type == "stack", let children = node["children"] as? [[String: Any]] {
       for (index, child) in children.enumerated() {
         if let unsupported = unsupportedNode(
           child,
@@ -410,6 +408,23 @@ extension MosaicLocalPreviewClient {
           let unsupported = unsupportedNode(
             content,
             path: "\(path)/pages/\(index)/content",
+            permitsScrollContainer: false
+          )
+        {
+          return unsupported
+        }
+      }
+    }
+    // Tab panels hold arbitrary content, so an unsupported component can sit
+    // inside one. Without this descent the draft is still rejected, but as a
+    // generic invalid document that names no component — which tells the author
+    // nothing about what to fix.
+    if type == "tabs", let tabs = node["tabs"] as? [[String: Any]] {
+      for (index, tab) in tabs.enumerated() {
+        if let content = tab["content"] as? [String: Any],
+          let unsupported = unsupportedNode(
+            content,
+            path: "\(path)/tabs/\(index)/content",
             permitsScrollContainer: false
           )
         {

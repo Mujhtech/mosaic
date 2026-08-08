@@ -30,7 +30,7 @@ public struct MosaicVideoResolver: @unchecked Sendable {
   public static let missing = MosaicVideoResolver { _ in nil }
 }
 
-/// Native SwiftUI renderer for validated Mosaic Protocol 0.2 documents.
+/// Native SwiftUI renderer for validated Mosaic Protocol 0.3 documents.
 /// The host application retains ownership of sheet or full-screen dismissal.
 @MainActor
 public struct MosaicPaywall: View {
@@ -269,7 +269,7 @@ struct MosaicNodeView: View {
   var body: some View {
     if model.isVisible(node.visibility) {
       switch node {
-      case .verticalStack(let stack), .stack(let stack):
+      case .stack(let stack):
         MosaicStackView(
           stack: stack,
           document: document,
@@ -311,14 +311,6 @@ struct MosaicNodeView: View {
           model: model,
           imageResolver: imageResolver
         )
-      case .purchaseButton(let component):
-        MosaicPurchaseButtonView(component: component, localization: localization, model: model)
-      case .restoreButton(let component):
-        MosaicRestoreButtonView(component: component, localization: localization, model: model)
-      case .closeButton(let component):
-        MosaicCloseButtonView(component: component, localization: localization, model: model)
-      case .legalText(let component):
-        MosaicLegalTextView(component: component, localization: localization)
       case .carousel(let component):
         MosaicCarouselView(
           component: component,
@@ -331,6 +323,36 @@ struct MosaicNodeView: View {
         MosaicSwitchView(component: component, localization: localization, model: model)
       case .countdown(let component):
         MosaicCountdownView(component: component, localization: localization, model: model)
+      case .tabs(let component):
+        MosaicTabsView(
+          component: component,
+          document: document,
+          localization: localization,
+          model: model,
+          imageResolver: imageResolver
+        )
+      case .timeline(let component):
+        MosaicTimelineView(component: component, localization: localization)
+      case .award(let component):
+        MosaicAwardView(
+          component: component,
+          asset: {
+            guard let assetID = component.emblem?.imageAssetID else { return nil }
+            return document.assets.first { $0.id == assetID }
+          }(),
+          localization: localization,
+          resolver: imageResolver
+        )
+      case .socialProof(let component):
+        MosaicSocialProofView(
+          component: component,
+          asset: {
+            guard let assetID = component.avatar?.assetId else { return nil }
+            return document.assets.first { $0.id == assetID }
+          }(),
+          localization: localization,
+          resolver: imageResolver
+        )
       }
     }
   }
@@ -654,7 +676,7 @@ struct MosaicAuthoredProductCardView: View {
   let imageResolver: MosaicImageResolver
   let onSelect: () -> Void
 
-  private var style: MosaicAuthoredProductBoxStyle {
+  private var style: MosaicSelectionStateStyle {
     card.styles.resolving(selected: selected)
   }
 
@@ -924,7 +946,7 @@ struct MosaicProductBadgeView: View {
   @ObservedObject var model: MosaicPaywallModel
   let imageResolver: MosaicImageResolver
 
-  private var style: MosaicAuthoredProductBoxStyle {
+  private var style: MosaicSelectionStateStyle {
     badge.styles.resolving(selected: selected)
   }
 

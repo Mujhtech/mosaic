@@ -756,11 +756,11 @@ private enum ExamplePreviewBootstrap {
     let version =
       Bundle.main.object(
         forInfoDictionaryKey: "CFBundleShortVersionString"
-      ) as? String ?? "0.2"
+      ) as? String ?? "0.3"
     let identity = MosaicPreviewClientIdentity(
       clientId: ExampleProcessIdentity.clientId,
       displayName: "Mosaic iOS local preview",
-      renderer: MosaicPreviewSoftwareIdentity(id: "mosaic.ios", version: "0.2.0"),
+      renderer: MosaicPreviewSoftwareIdentity(id: "mosaic.ios", version: "0.3.0"),
       application: MosaicPreviewApplicationIdentity(
         id: Bundle.main.bundleIdentifier ?? "dev.mosaic.phase2.example",
         displayName: "Mosaic iOS Example",

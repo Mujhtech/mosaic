@@ -118,7 +118,7 @@ final class LocalPreviewClientTests: XCTestCase {
     var document = try XCTUnwrap(payload["document"] as? [String: Any])
     var compatibility = try XCTUnwrap(document["compatibility"] as? [String: Any])
     var capabilities = try XCTUnwrap(compatibility["requiredCapabilities"] as? [[String: Any]])
-    capabilities.append(["name": "component.future", "version": "0.2"])
+    capabilities.append(["name": "component.future", "version": "0.3"])
     compatibility["requiredCapabilities"] = capabilities
     document["compatibility"] = compatibility
     payload["document"] = document

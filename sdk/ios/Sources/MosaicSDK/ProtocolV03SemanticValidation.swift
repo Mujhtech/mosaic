@@ -1,6 +1,6 @@
 import Foundation
 
-enum MosaicProtocolV02Semantics {
+enum MosaicProtocolV03Semantics {
   static func validate(_ document: MosaicPaywallDocument) throws {
     guard document.schemaVersion == mosaicProtocolVersion else {
       throw MosaicProtocolError.unsupportedSchemaVersion(document.schemaVersion)
@@ -16,7 +16,7 @@ enum MosaicProtocolV02Semantics {
         throw MosaicProtocolError.unsupportedCapability(
           name: capability.name.rawValue, version: capability.version)
       }
-      guard MosaicCapabilityCatalog.v02.contains(capability.name) else {
+      guard MosaicCapabilityCatalog.v03.contains(capability.name) else {
         throw MosaicProtocolError.unsupportedCapability(
           name: capability.name.rawValue, version: capability.version)
       }
@@ -49,7 +49,7 @@ enum MosaicProtocolV02Semantics {
         try assetKey(key)
         state.capabilities.insert(asset.type == .image ? .bundledImage : .bundledVideo)
       case .remote(let url):
-        guard isSafeMosaicV02ExternalURL(url.absoluteString) else {
+        guard isSafeMosaicV03ExternalURL(url.absoluteString) else {
           throw violation("protocol_invalid_remote_asset_url")
         }
         state.capabilities.insert(asset.type == .image ? .remoteImage : .remoteVideo)
@@ -145,6 +145,24 @@ enum MosaicProtocolV02Semantics {
         throw violation("protocol_self_visibility_switch")
       }
     }
+    // The four Tabs-condition rules. Rule 4 has no Switch analogue: inside a
+    // panel the condition is already decided by the panel, so it is either
+    // vacuously true or unsatisfiable, and both are dead layout that renders
+    // indistinguishably from working layout.
+    for reference in state.tabVisibilityReferences {
+      guard state.tabsScreenByID[reference.tabsID] == reference.screenID else {
+        throw violation("protocol_unknown_visibility_tabs")
+      }
+      guard state.tabIDsByTabsID[reference.tabsID]?.contains(reference.tabID) == true else {
+        throw violation("protocol_unknown_visibility_tab")
+      }
+      guard reference.nodeID != reference.tabsID else {
+        throw violation("protocol_self_visibility_tabs")
+      }
+      guard !reference.enclosingTabsIDs.contains(reference.tabsID) else {
+        throw violation("protocol_tab_visibility_inside_referenced_tabs")
+      }
+    }
     for reference in state.purchaseReferences {
       guard state.selectorScreenByID[reference.selectorID] == reference.screenID else {
         throw violation("protocol_purchase_selector_must_share_screen")
@@ -163,8 +181,10 @@ enum MosaicProtocolV02Semantics {
 
     try validateLocalization(
       document.localization,
-      texts: state.localizedTextEntries.map(\.text)
+      texts: state.localizedTextEntries.map(\.text),
+      consumedReservedKeys: state.consumedReservedKeys
     )
+    if !state.consumedReservedKeys.isEmpty { state.capabilities.insert(.reservedStrings) }
     let usesProductTemplate = try validateProductTemplates(
       document.localization,
       entries: state.localizedTextEntries
@@ -187,6 +207,16 @@ enum MosaicProtocolV02Semantics {
     let nodeID: String
     let switchID: String
     let screenID: String
+  }
+
+  /// One `{ "mode": "tab" }` condition, with the Tabs components that enclose
+  /// the referencing node so the descendant rule can be checked afterwards.
+  struct TabVisibilityReference {
+    let nodeID: String
+    let tabsID: String
+    let tabID: String
+    let screenID: String
+    let enclosingTabsIDs: [String]
   }
 
   struct PurchaseReference {
@@ -213,7 +243,14 @@ enum MosaicProtocolV02Semantics {
     var purchaseSelectorIDs = Set<String>()
     var selectorScreenByID: [String: String] = [:]
     var switchScreenByID: [String: String] = [:]
+    var tabsScreenByID: [String: String] = [:]
+    var tabIDsByTabsID: [String: Set<String>] = [:]
+    var enclosingTabsIDs: [String] = []
     var visibilityReferences: [VisibilityReference] = []
+    var tabVisibilityReferences: [TabVisibilityReference] = []
+    /// Reserved accessibility keys the document's own content consumes.
+    /// Presence is enforced in both directions against the default catalog.
+    var consumedReservedKeys = Set<MosaicReservedAccessibilityKey>()
     var purchaseReferences: [PurchaseReference] = []
     var navigationEdges: [String: Set<String>] = [:]
     var localizedTextEntries: [LocalizedTextEntry] = []
@@ -260,8 +297,6 @@ enum MosaicProtocolV02Semantics {
         throw violation("protocol_interactive_product_card_descendant")
       }
       switch node {
-      case .verticalStack:
-        throw violation("protocol_0_1_node_in_0_2_document")
       case .stack(let component):
         try stack(
           component,
@@ -379,6 +414,7 @@ enum MosaicProtocolV02Semantics {
         }
         for child in component.children { try validate(child, carouselDepth: carouselDepth) }
         if let inProgressChildren = component.inProgressChildren {
+          consumedReservedKeys.insert(.inProgress)
           guard !inProgressChildren.isEmpty else {
             throw violation("protocol_empty_button_progress_content")
           }
@@ -418,8 +454,6 @@ enum MosaicProtocolV02Semantics {
           id: component.id, appearance: component.appearance,
           sizing: component.sizing, outerInsets: component.outerInsets,
           visibility: component.visibility)
-      case .purchaseButton, .restoreButton, .closeButton, .legalText:
-        throw violation("protocol_0_1_node_in_0_2_document")
       case .carousel(let component):
         try layoutID(component.id)
         capabilities.formUnion([.carousel, .accessibilityMetadata])
@@ -473,7 +507,166 @@ enum MosaicProtocolV02Semantics {
           id: component.id, appearance: component.appearance,
           sizing: component.sizing, outerInsets: component.outerInsets,
           visibility: component.visibility)
+      case .tabs(let component):
+        try tabs(component, carouselDepth: carouselDepth)
+      case .timeline(let component):
+        try timeline(component)
+      case .award(let component):
+        try award(component)
+      case .socialProof(let component):
+        try socialProof(component)
       }
+    }
+
+    mutating func tabs(_ component: MosaicTabsComponent, carouselDepth: Int) throws {
+      try layoutID(component.id)
+      capabilities.formUnion([
+        .tabs, .productCardStates, .typography, .colors, .boxStyle, .accessibilityMetadata,
+      ])
+      try logicalSize(component.tabBarGap)
+      try logicalSize(component.gap)
+      guard (2...8).contains(component.tabs.count) else {
+        throw violation("protocol_invalid_tabs_count")
+      }
+      tabsScreenByID[component.id] = try screenID()
+      var declaredTabIDs = Set<String>()
+      for tab in component.tabs {
+        // A tab id names a control, a panel, and the value a visibility
+        // condition compares against, so it joins the one global layout ID
+        // namespace.
+        try layoutID(tab.id)
+        declaredTabIDs.insert(tab.id)
+        localizedText(tab.label)
+      }
+      tabIDsByTabsID[component.id] = declaredTabIDs
+      guard declaredTabIDs.contains(component.initialTabId) else {
+        throw violation("protocol_unknown_initial_tab")
+      }
+      try selectionStyles(component.styles)
+      try typography(component.labelTypography, allowsTruncation: false)
+      try color(component.selectedLabelColor)
+      localizedText(component.accessibility.label)
+      localizedText(component.accessibility.hint)
+      try presentation(
+        id: component.id, appearance: component.appearance, sizing: component.sizing,
+        outerInsets: component.outerInsets, visibility: component.visibility)
+      enclosingTabsIDs.append(component.id)
+      defer { enclosingTabsIDs.removeLast() }
+      for tab in component.tabs {
+        try stack(tab.content, carouselDepth: carouselDepth)
+      }
+    }
+
+    mutating func timeline(_ component: MosaicTimelineComponent) throws {
+      try layoutID(component.id)
+      capabilities.formUnion([.timeline, .typography, .colors, .accessibilityMetadata])
+      try logicalSize(component.gap)
+      try color(component.connector.color)
+      try positiveSize(component.connector.width)
+      guard (2...12).contains(component.entries.count) else {
+        throw violation("protocol_invalid_timeline_entry_count")
+      }
+      var entryIDs = Set<String>()
+      for entry in component.entries {
+        try identifier(entry.id)
+        guard entryIDs.insert(entry.id).inserted else {
+          throw violation("protocol_duplicate_timeline_entry_id")
+        }
+        localizedText(entry.title)
+        localizedText(entry.description)
+      }
+      // Both directions are enforced. Missing style where a marker exists would
+      // leave the renderer choosing a colour; declared style where no marker
+      // exists is a value nothing reads.
+      let consumesMarker = component.consumesMarkerStyle
+      guard (component.markerColor != nil) == consumesMarker,
+        (component.markerSize != nil) == consumesMarker
+      else { throw violation("protocol_timeline_marker_style_mismatch") }
+      guard (component.descriptionTypography != nil) == component.consumesDescriptionTypography
+      else { throw violation("protocol_timeline_description_typography_mismatch") }
+      if let markerColor = component.markerColor { try color(markerColor) }
+      if let markerSize = component.markerSize { try positiveSize(markerSize) }
+      try typography(component.titleTypography, allowsTruncation: false)
+      if let descriptionTypography = component.descriptionTypography {
+        try typography(descriptionTypography, allowsTruncation: false)
+      }
+      localizedText(component.accessibility.label)
+      localizedText(component.accessibility.hint)
+      try presentation(
+        id: component.id, appearance: component.appearance, sizing: component.sizing,
+        outerInsets: component.outerInsets, visibility: component.visibility)
+    }
+
+    mutating func award(_ component: MosaicAwardComponent) throws {
+      try layoutID(component.id)
+      capabilities.formUnion([.award, .typography, .colors, .accessibilityMetadata])
+      try logicalSize(component.gap)
+      switch component.emblem {
+      case .image(let assetID, let size):
+        try identifier(assetID)
+        try positiveSize(size)
+        usedAssetIDs.insert(assetID)
+        guard assetTypes[assetID] == .image else {
+          throw violation("protocol_award_emblem_requires_image_asset")
+        }
+      case .icon(_, let size, let iconColor):
+        capabilities.insert(.icon)
+        try positiveSize(size)
+        try color(iconColor)
+      case .none:
+        break
+      }
+      localizedText(component.title)
+      try typography(component.titleTypography, allowsTruncation: false)
+      guard (component.subtitle != nil) == (component.subtitleTypography != nil) else {
+        throw violation("protocol_award_subtitle_typography_mismatch")
+      }
+      localizedText(component.subtitle)
+      if let subtitleTypography = component.subtitleTypography {
+        try typography(subtitleTypography, allowsTruncation: false)
+      }
+      localizedText(component.accessibility.label)
+      localizedText(component.accessibility.hint)
+      try presentation(
+        id: component.id, appearance: component.appearance, sizing: component.sizing,
+        outerInsets: component.outerInsets, visibility: component.visibility)
+    }
+
+    mutating func socialProof(_ component: MosaicSocialProofComponent) throws {
+      try layoutID(component.id)
+      capabilities.formUnion([.socialProof, .typography, .colors, .accessibilityMetadata])
+      try logicalSize(component.gap)
+      localizedText(component.quote)
+      try typography(component.quoteTypography, allowsTruncation: false)
+      localizedText(component.attribution)
+      try typography(component.attributionTypography, allowsTruncation: false)
+      if let rating = component.rating {
+        consumedReservedKeys.insert(.rating)
+        guard (0...20).contains(rating.value), (1...10).contains(rating.maximum) else {
+          throw violation("protocol_invalid_social_proof_rating")
+        }
+        // `value` counts steps, so the bound is points multiplied by the steps
+        // one point is worth. Integer arithmetic throughout.
+        guard rating.value <= rating.maximumSteps else {
+          throw violation("protocol_social_proof_rating_exceeds_maximum")
+        }
+        try positiveSize(rating.size)
+        try color(rating.filledColor)
+        try color(rating.emptyColor)
+      }
+      if let avatar = component.avatar {
+        try identifier(avatar.assetId)
+        try positiveSize(avatar.size)
+        usedAssetIDs.insert(avatar.assetId)
+        guard assetTypes[avatar.assetId] == .image else {
+          throw violation("protocol_social_proof_avatar_requires_image_asset")
+        }
+      }
+      localizedText(component.accessibility.label)
+      localizedText(component.accessibility.hint)
+      try presentation(
+        id: component.id, appearance: component.appearance, sizing: component.sizing,
+        outerInsets: component.outerInsets, visibility: component.visibility)
     }
 
     mutating func presentation(
@@ -513,6 +706,17 @@ enum MosaicProtocolV02Semantics {
         capabilities.insert(.switchVisibility)
         visibilityReferences.append(
           VisibilityReference(nodeID: id, switchID: switchID, screenID: try screenID()))
+      case .tabValue(let tabsID, let tabID):
+        capabilities.insert(.tabVisibility)
+        tabVisibilityReferences.append(
+          TabVisibilityReference(
+            nodeID: id,
+            tabsID: tabsID,
+            tabID: tabID,
+            screenID: try screenID(),
+            enclosingTabsIDs: enclosingTabsIDs
+          )
+        )
       }
     }
 
@@ -539,9 +743,11 @@ enum MosaicProtocolV02Semantics {
 
     private func containsInteractiveNode(_ node: MosaicNode) -> Bool {
       switch node {
-      case .button, .productSelector, .switchControl, .carousel:
+      // Tabs owns runtime selection state, so it is interactive for the same
+      // reason Switch and Carousel are.
+      case .button, .productSelector, .switchControl, .carousel, .tabs:
         true
-      case .stack(let stack), .verticalStack(let stack):
+      case .stack(let stack):
         stack.children.contains(where: containsInteractiveNode)
       default:
         false
@@ -550,10 +756,10 @@ enum MosaicProtocolV02Semantics {
 
     private func isPassiveProductCardNode(_ node: MosaicNode) -> Bool {
       switch node {
-      case .stack, .text, .image, .icon, .featureList, .countdown:
+      case .stack, .text, .image, .icon, .featureList, .countdown, .timeline, .award,
+        .socialProof:
         true
-      case .verticalStack, .productSelector, .button, .purchaseButton, .restoreButton,
-        .closeButton, .legalText, .carousel, .switchControl:
+      case .productSelector, .button, .carousel, .switchControl, .tabs:
         false
       }
     }
@@ -584,7 +790,7 @@ enum MosaicProtocolV02Semantics {
         throw violation("protocol_product_card_stack_depth")
       }
 
-      try authoredProductStyles(card.styles)
+      try selectionStyles(card.styles)
       if let sizing = card.sizing { try validateSizing(sizing) }
       if let accessibility = card.accessibility {
         localizedText(accessibility.label, productTemplateAllowed: true)
@@ -616,7 +822,7 @@ enum MosaicProtocolV02Semantics {
           code: "protocol_invalid_product_badge_inset"
         )
       }
-      try authoredProductStyles(badge.styles)
+      try selectionStyles(badge.styles)
       if let sizing = badge.sizing { try validateSizing(sizing) }
       for child in badge.children {
         try validate(child, carouselDepth: 0, productCardContext: true)
@@ -624,7 +830,7 @@ enum MosaicProtocolV02Semantics {
     }
 
     func color(_ value: MosaicColor) throws {
-      try MosaicProtocolV02Semantics.color(value)
+      try MosaicProtocolV03Semantics.color(value)
       guard document.resolvedColor(value) != nil else {
         throw violation("protocol_unknown_or_cyclic_color_token")
       }
@@ -636,7 +842,7 @@ enum MosaicProtocolV02Semantics {
     }
 
     func typography(_ value: MosaicTypography, allowsTruncation: Bool) throws {
-      try MosaicProtocolV02Semantics.typography(value, allowsTruncation: allowsTruncation)
+      try MosaicProtocolV03Semantics.typography(value, allowsTruncation: allowsTruncation)
       try color(value.color)
     }
 
@@ -718,7 +924,7 @@ enum MosaicProtocolV02Semantics {
       try logicalSize(blur)
     }
 
-    mutating func authoredProductStyles(_ styles: MosaicAuthoredProductStyles) throws {
+    mutating func selectionStyles(_ styles: MosaicSelectionStyles) throws {
       let base = styles.defaultStyle
       try background(base.background)
       try borderValue(base.border)

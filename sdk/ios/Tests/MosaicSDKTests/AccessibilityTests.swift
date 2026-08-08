@@ -24,6 +24,24 @@ final class AccessibilityTests: XCTestCase {
         "offer", "close", "hero", "headline", "subtitle", "show-offer-details",
         "show-technical-details", "offer-highlights", "offer-page-two-title", "features",
         "features.unlimited-projects", "features.native-rendering", "features.offline-ready",
+        // Segments are separate elements, never joined: each Timeline title and
+        // description, each Award title and subtitle, and each Social Proof
+        // rating, quote, and attribution is its own element inside its
+        // labelled container. An absent optional segment produces none.
+        "trial-timeline",
+        "trial-timeline.trial-today.title", "trial-timeline.trial-today.description",
+        "trial-timeline.trial-reminder.title", "trial-timeline.trial-reminder.description",
+        "trial-timeline.trial-charge.title",
+        "editor-award", "editor-award.title", "editor-award.subtitle",
+        "press-award", "press-award.title",
+        "rated-review", "rated-review.rating", "rated-review.quote",
+        "rated-review.attribution",
+        "whole-review", "whole-review.rating", "whole-review.quote",
+        "whole-review.attribution",
+        "analyst-note", "analyst-note.quote", "analyst-note.attribution",
+        "billing-tabs", "billing-tabs.billing-tabs-monthly", "billing-tabs.billing-tabs-annual",
+        "billing-tabs.billing-tabs-lifetime", "billing-tabs-annual", "billing-tabs-annual-body",
+        "annual-note",
         "plans", "plans.plans-monthly-plan-card", "plans.plans-yearly-plan-card",
         "view-details", "purchase", "restore", "legal",
       ]

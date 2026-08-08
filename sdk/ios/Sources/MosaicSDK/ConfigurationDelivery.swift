@@ -248,7 +248,7 @@ public enum MosaicConfigurationDeliveryDecoder {
       path: "\(path).paywallProtocols[0].requiredCapabilities"
     )
     var capabilities = Set<MosaicRequiredCapability>()
-    let supported = Set(MosaicCapabilityCatalog.v02)
+    let supported = Set(MosaicCapabilityCatalog.v03)
     for (index, value) in values.enumerated() {
       let capabilityPath = "\(path).paywallProtocols[0].requiredCapabilities[\(index)]"
       let item = try DeliveryValue.object(value, path: capabilityPath)

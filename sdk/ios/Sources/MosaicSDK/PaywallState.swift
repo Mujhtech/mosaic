@@ -21,11 +21,10 @@ public final class MosaicPaywallModel: ObservableObject {
   @Published public private(set) var selectedProductReferenceIDs: [String: String] = [:]
   @Published public private(set) var unavailableSelectorIDs: Set<String> = []
   @Published public private(set) var switchValues: [String: Bool] = [:]
+  @Published public private(set) var selectedTabIDs: [String: String] = [:]
   @Published public private(set) var carouselPageIndices: [String: Int] = [:]
   @Published public private(set) var navigationHistory: [String] = []
   @Published public private(set) var busyButtonIDs: Set<String> = []
-  @Published public private(set) var busyPurchaseButtonID: String?
-  @Published public private(set) var busyRestoreButtonID: String?
   @Published public private(set) var isLoadingProducts = false
   @Published public private(set) var diagnostics: [MosaicDiagnostic] = []
 
@@ -66,6 +65,12 @@ public final class MosaicPaywallModel: ObservableObject {
     )
     switchValues = Dictionary(
       uniqueKeysWithValues: document.switches.map { ($0.id, $0.initialValue) }
+    )
+    // Seeded from the authored `initialTabId` on every accepted revision. There
+    // is no positional default: a reordered `tabs` array must not change which
+    // panel opens.
+    selectedTabIDs = Dictionary(
+      uniqueKeysWithValues: document.tabsComponents.map { ($0.id, $0.initialTabId) }
     )
     carouselPageIndices = Dictionary(
       uniqueKeysWithValues: document.carousels.map { ($0.id, $0.initialPageIndex) }
@@ -262,12 +267,15 @@ public final class MosaicPaywallModel: ObservableObject {
 
   private func productCardNodeUsesProductPrice(_ node: MosaicNode) -> Bool {
     switch node {
-    case .verticalStack(let stack), .stack(let stack):
+    case .stack(let stack):
       stack.children.contains(where: productCardNodeUsesProductPrice)
     case .text(let text):
       localizedTextUsesProductPrice(text.value)
-    case .image, .icon, .featureList, .productSelector, .button, .purchaseButton,
-      .restoreButton, .closeButton, .legalText, .carousel, .switchControl, .countdown:
+    // Timeline, Award, and Social Proof are passive Product Card children but
+    // carry no `{{ product.* }}` substitution: `0.3` closes substitution to
+    // Product Card Text and accessibility copy.
+    case .image, .icon, .featureList, .productSelector, .button, .carousel, .switchControl,
+      .countdown, .tabs, .timeline, .award, .socialProof:
       false
     }
   }
@@ -310,11 +318,41 @@ public final class MosaicPaywallModel: ObservableObject {
     carouselPageIndices[carouselID] = index
   }
 
+  public func selectedTabID(for tabsID: String) -> String? {
+    selectedTabIDs[tabsID]
+  }
+
+  public func selectTab(_ tabID: String, in tabsID: String) {
+    guard let component = document.tabsComponents.first(where: { $0.id == tabsID }),
+      component.tab(id: tabID) != nil
+    else { return }
+    selectedTabIDs[tabsID] = tabID
+    refreshHiddenPurchaseDiagnostics()
+  }
+
+  /// The runtime selection state every visibility condition resolves against.
+  public var selectionState: MosaicSelectionState {
+    MosaicSelectionState(switches: switchValues, tabs: selectedTabIDs)
+  }
+
+  /// Whether an authored condition currently shows its node.
+  ///
+  /// The evaluator throws when a condition names a controller the state does
+  /// not carry, and this trapping wrapper is deliberate: the model seeds every
+  /// declared Switch and Tabs component from the accepted document, so the only
+  /// way to reach the failure is a document that never passed validation.
+  /// Answering "hidden" instead would erase an authored node and report
+  /// nothing.
   public func isVisible(_ visibility: MosaicVisibility) -> Bool {
-    switch visibility {
-    case .always: true
-    case .hidden: false
-    case .switchValue(let switchID, let equals): switchValue(for: switchID) == equals
+    do {
+      return try mosaicEvaluateVisibility(visibility, in: selectionState)
+    } catch let error as MosaicVisibilityEvaluationError {
+      preconditionFailure(
+        "Mosaic visibility condition names \(error.controllerID), "
+          + "which the runtime selection state does not declare (\(error.diagnosticCode))."
+      )
+    } catch {
+      preconditionFailure("Mosaic visibility evaluation failed: \(error).")
     }
   }
 
@@ -322,7 +360,7 @@ public final class MosaicPaywallModel: ObservableObject {
     document.isNodeVisible(
       nodeID,
       screenID: currentScreenID,
-      switchValues: switchValues
+      selection: selectionState
     )
   }
 
@@ -392,17 +430,6 @@ public final class MosaicPaywallModel: ObservableObject {
       payload: .init(source: "user"))
   }
 
-  public func isPurchaseEnabled(_ button: MosaicPurchaseButtonComponent) -> Bool {
-    guard busyPurchaseButtonID != button.id else { return false }
-    guard case .purchase(let selectorID) = button.action else { return false }
-    guard isNodeVisible(selectorID) else { return false }
-    return selectedProductReferenceIDs[selectorID] != nil
-  }
-
-  public func isRestoreEnabled(_ button: MosaicRestoreButtonComponent) -> Bool {
-    busyRestoreButtonID != button.id
-  }
-
   public func isButtonBusy(_ buttonID: String) -> Bool {
     busyButtonIDs.contains(buttonID)
   }
@@ -460,147 +487,6 @@ public final class MosaicPaywallModel: ObservableObject {
     busyButtonIDs.insert(button.id)
     defer { busyButtonIDs.remove(button.id) }
     await performRestore()
-  }
-
-  public func purchase(using button: MosaicPurchaseButtonComponent) async {
-    guard busyPurchaseButtonID != button.id else { return }
-    guard
-      case .purchase(let selectorID) = button.action,
-      let selector = document.productSelector(id: selectorID)
-    else {
-      reportRenderingFailure(code: "renderer_invalid_purchase_action")
-      return
-    }
-    guard
-      let referenceID = selectedProductReferenceIDs[selectorID],
-      let reference = productReferencesByID[referenceID]
-    else {
-      let fallbackReferenceID = selector.initialProductReferenceID
-      let interaction = MosaicInteractionOutcome.productUnavailable(
-        productReferenceID: fallbackReferenceID
-      )
-      interactionHandler(interaction)
-      resultHandler(.productUnavailable(productReferenceID: fallbackReferenceID))
-      return
-    }
-
-    busyPurchaseButtonID = button.id
-    defer { busyPurchaseButtonID = nil }
-    analytics?.emit(
-      .paywallActionSelected, payload: .init(action: "purchase", componentId: button.id))
-    let attemptID = MosaicAnalyticsRuntime.identifier(prefix: "purchase_attempt")
-    let startedAt = clock()
-    if let attribution = analytics?.purchaseAttribution(referenceID) {
-      analytics?.emit(
-        .purchaseStarted, correlation: .init(purchaseAttemptId: attemptID),
-        attribution: attribution, payload: .init(), occurredAt: startedAt)
-    }
-    let purchaseResult = await purchaseProvider.purchase(productID: reference.productId)
-    recordPurchaseAnalytics(
-      purchaseResult, referenceID: referenceID, attemptID: attemptID, startedAt: startedAt)
-    switch purchaseResult {
-    case .purchased:
-      interactionHandler(.purchased(productReferenceID: referenceID))
-      resultHandler(.purchased(productReferenceID: referenceID))
-    case .pending:
-      interactionHandler(.purchasePending(productReferenceID: referenceID))
-      resultHandler(.purchasePending(productReferenceID: referenceID))
-    case .deferred:
-      interactionHandler(.purchaseDeferred(productReferenceID: referenceID))
-      resultHandler(.purchaseDeferred(productReferenceID: referenceID))
-    case .alreadyEntitled:
-      interactionHandler(.alreadyEntitled(productReferenceID: referenceID))
-      resultHandler(.alreadyEntitled(productReferenceID: referenceID))
-    case .cancelled:
-      interactionHandler(.cancelled(productReferenceID: referenceID))
-      resultHandler(.cancelled(productReferenceID: referenceID))
-    case .productUnavailable:
-      interactionHandler(.productUnavailable(productReferenceID: referenceID))
-      resultHandler(.productUnavailable(productReferenceID: referenceID))
-    case .providerUnavailable(_, let diagnosticCode, _):
-      let safeCode = safeDiagnosticCode(
-        diagnosticCode,
-        fallback: "commerce_provider_unavailable"
-      )
-      diagnostics.append(MosaicDiagnostic(code: safeCode, stage: .commerce))
-      interactionHandler(
-        .providerUnavailable(productReferenceID: referenceID, diagnosticCode: safeCode)
-      )
-      resultHandler(
-        .providerUnavailable(productReferenceID: referenceID, diagnosticCode: safeCode)
-      )
-    case .failed(_, let diagnosticCode, _):
-      let safeCode = safeDiagnosticCode(
-        diagnosticCode,
-        fallback: "purchase_provider_failed"
-      )
-      diagnostics.append(MosaicDiagnostic(code: safeCode, stage: .commerce))
-      interactionHandler(
-        .purchaseFailed(productReferenceID: referenceID, diagnosticCode: safeCode)
-      )
-      resultHandler(
-        .purchaseFailed(productReferenceID: referenceID, diagnosticCode: safeCode)
-      )
-    }
-  }
-
-  public func restore(using button: MosaicRestoreButtonComponent) async {
-    guard busyRestoreButtonID != button.id else { return }
-    guard button.action == .restore else {
-      reportRenderingFailure(code: "renderer_invalid_restore_action")
-      return
-    }
-
-    busyRestoreButtonID = button.id
-    defer { busyRestoreButtonID = nil }
-    analytics?.emit(
-      .paywallActionSelected, payload: .init(action: "restore", componentId: button.id))
-    let attemptID = MosaicAnalyticsRuntime.identifier(prefix: "restore_attempt")
-    let startedAt = clock()
-    if let providerID = analytics?.providerID {
-      analytics?.emit(
-        .restoreStarted, correlation: .init(restoreAttemptId: attemptID),
-        payload: .init(providerId: providerID), occurredAt: startedAt)
-    }
-    let restoreResult = await purchaseProvider.restore()
-    recordRestoreAnalytics(restoreResult, attemptID: attemptID, startedAt: startedAt)
-    switch restoreResult {
-    case .restored:
-      interactionHandler(.restored)
-      resultHandler(.restored)
-    case .nothingToRestore:
-      interactionHandler(.restoreNoPurchases)
-    case .cancelled:
-      interactionHandler(.restoreCancelled)
-      resultHandler(.restoreCancelled)
-    case .providerUnavailable(let diagnosticCode, _):
-      let safeCode = safeDiagnosticCode(
-        diagnosticCode,
-        fallback: "commerce_provider_unavailable"
-      )
-      diagnostics.append(MosaicDiagnostic(code: safeCode, stage: .commerce))
-      interactionHandler(.providerUnavailable(productReferenceID: nil, diagnosticCode: safeCode))
-      resultHandler(.providerUnavailable(productReferenceID: nil, diagnosticCode: safeCode))
-    case .failed(let diagnosticCode, _):
-      let safeCode = safeDiagnosticCode(
-        diagnosticCode,
-        fallback: "restore_provider_failed"
-      )
-      diagnostics.append(MosaicDiagnostic(code: safeCode, stage: .commerce))
-      interactionHandler(.restoreFailed(diagnosticCode: safeCode))
-    }
-  }
-
-  public func close(using button: MosaicCloseButtonComponent) {
-    guard button.action == .close else {
-      reportRenderingFailure(code: "renderer_invalid_close_action")
-      return
-    }
-    analytics?.emit(
-      .paywallActionSelected, payload: .init(action: "close", componentId: button.id))
-    analytics?.emit(.paywallDismissed, payload: .init(reason: "user"))
-    interactionHandler(.dismissed)
-    resultHandler(.dismissed)
   }
 
   private func purchase(buttonID: String, selectorID: String) async {
@@ -881,16 +767,23 @@ extension MosaicPaywallDocument {
     }
   }
 
+  public var tabsComponents: [MosaicTabsComponent] {
+    allNodes.compactMap { node in
+      guard case .tabs(let value) = node else { return nil }
+      return value
+    }
+  }
+
   fileprivate func isNodeVisible(
     _ targetID: String,
     screenID: String?,
-    switchValues: [String: Bool]
+    selection: MosaicSelectionState
   ) -> Bool {
+    // Reachability shares the renderer's evaluator so the two cannot disagree
+    // about whether a purchase target is on screen.
     func visible(_ visibility: MosaicVisibility) -> Bool {
-      switch visibility {
-      case .always: true
-      case .hidden: false
-      case .switchValue(let switchID, let equals): switchValues[switchID] == equals
+      do { return try mosaicEvaluateVisibility(visibility, in: selection) } catch {
+        preconditionFailure("Mosaic visibility evaluation failed: \(error).")
       }
     }
 
@@ -901,7 +794,7 @@ extension MosaicPaywallDocument {
         let nodeVisible = stackVisible && visible(node.visibility)
         if node.id == targetID { return nodeVisible }
         switch node {
-        case .stack(let nested), .verticalStack(let nested):
+        case .stack(let nested):
           if let result = search(nested, ancestorsVisible: stackVisible) { return result }
         case .button(let button):
           for child in button.children {
@@ -924,6 +817,14 @@ extension MosaicPaywallDocument {
           for page in carousel.pages {
             if page.id == targetID { return nodeVisible }
             if let result = search(page.content, ancestorsVisible: nodeVisible) { return result }
+          }
+        case .tabs(let tabs):
+          for tab in tabs.tabs {
+            // A panel is on screen only while its tab is the selection, which is
+            // the same rule a `{ "mode": "tab" }` condition states elsewhere.
+            let panelVisible = nodeVisible && selection.tabs[tabs.id] == tab.id
+            if tab.id == targetID { return panelVisible }
+            if let result = search(tab.content, ancestorsVisible: panelVisible) { return result }
           }
         case .productSelector(let selector):
           for card in selector.cards {
@@ -968,7 +869,7 @@ extension MosaicStack {
   fileprivate var descendants: [MosaicNode] {
     children.flatMap { node in
       switch node {
-      case .verticalStack(let stack), .stack(let stack):
+      case .stack(let stack):
         return [node] + stack.descendants
       case .button(let button):
         return [node]
@@ -976,6 +877,8 @@ extension MosaicStack {
           + (button.inProgressChildren ?? []).flatMap { $0.descendantsIncludingSelf }
       case .carousel(let carousel):
         return [node] + carousel.pages.flatMap { $0.content.descendants }
+      case .tabs(let tabs):
+        return [node] + tabs.tabs.flatMap { $0.content.descendants }
       case .productSelector(let selector):
         return [node] + selector.cards.flatMap(\.descendantNodes)
       default:
@@ -988,13 +891,15 @@ extension MosaicStack {
 extension MosaicNode {
   fileprivate var descendantsIncludingSelf: [MosaicNode] {
     switch self {
-    case .verticalStack(let stack), .stack(let stack): [self] + stack.descendants
+    case .stack(let stack): [self] + stack.descendants
     case .button(let button):
       [self]
         + button.children.flatMap { $0.descendantsIncludingSelf }
         + (button.inProgressChildren ?? []).flatMap { $0.descendantsIncludingSelf }
     case .carousel(let carousel):
       [self] + carousel.pages.flatMap { $0.content.descendants }
+    case .tabs(let tabs):
+      [self] + tabs.tabs.flatMap { $0.content.descendants }
     case .productSelector(let selector):
       [self] + selector.cards.flatMap(\.descendantNodes)
     default: [self]
@@ -1003,20 +908,20 @@ extension MosaicNode {
 
   var visibility: MosaicVisibility {
     switch self {
-    case .verticalStack(let value), .stack(let value): value.visibility
+    case .stack(let value): value.visibility
     case .text(let value): value.visibility
     case .image(let value): value.visibility
     case .icon(let value): value.visibility
     case .featureList(let value): value.visibility
     case .productSelector(let value): value.visibility
     case .button(let value): value.visibility
-    case .purchaseButton(let value): value.visibility
-    case .restoreButton(let value): value.visibility
-    case .closeButton(let value): value.visibility
-    case .legalText(let value): value.visibility
     case .carousel(let value): value.visibility
     case .switchControl(let value): value.visibility
     case .countdown(let value): value.visibility
+    case .tabs(let value): value.visibility
+    case .timeline(let value): value.visibility
+    case .award(let value): value.visibility
+    case .socialProof(let value): value.visibility
     }
   }
 }

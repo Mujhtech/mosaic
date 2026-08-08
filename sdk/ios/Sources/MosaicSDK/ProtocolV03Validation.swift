@@ -1,11 +1,11 @@
 import Foundation
 
-private let mosaicV02ExternalURLPattern =
+private let mosaicV03ExternalURLPattern =
   #"^https://([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::([0-9]{1,5}))?(?:[/?#][^\s\\\u0000-\u001F\u007F]*)?$"#
 
-func isSafeMosaicV02ExternalURL(_ raw: String) -> Bool {
+func isSafeMosaicV03ExternalURL(_ raw: String) -> Bool {
   guard raw.unicodeScalars.count <= 2048,
-    raw.range(of: mosaicV02ExternalURLPattern, options: .regularExpression) != nil
+    raw.range(of: mosaicV03ExternalURLPattern, options: .regularExpression) != nil
   else { return false }
 
   let afterScheme = raw.dropFirst("https://".count)
@@ -28,7 +28,7 @@ func isSafeMosaicV02ExternalURL(_ raw: String) -> Bool {
   return true
 }
 
-enum MosaicProtocolV02Shape {
+enum MosaicProtocolV03Shape {
   static func validate(_ root: [String: Any]) throws {
     try keys(
       root,
@@ -171,7 +171,7 @@ enum MosaicProtocolV02Shape {
     case "bundled": try keys(source, required: ["type", "key"], at: "\(path).source")
     case "remote":
       try keys(source, required: ["type", "url"], at: "\(path).source")
-      guard let raw = source["url"] as? String, isSafeMosaicV02ExternalURL(raw) else {
+      guard let raw = source["url"] as? String, isSafeMosaicV03ExternalURL(raw) else {
         throw invalid("\(path).source.url", "invalid_remote_asset_url")
       }
     default: throw invalid("\(path).source.type", "invalid_asset_source")
@@ -293,9 +293,194 @@ enum MosaicProtocolV02Shape {
       try switchControl(node, at: path)
     case "countdown":
       try countdown(node, at: path)
+    case "tabs":
+      try tabs(node, at: path)
+    case "timeline":
+      try timeline(node, at: path)
+    case "award":
+      try award(node, at: path)
+    case "socialProof":
+      try socialProof(node, at: path)
     default:
       throw invalid("\(path).type", "unsupported_component")
     }
+  }
+
+  private static func tabs(_ node: [String: Any], at path: String) throws {
+    try keys(
+      node,
+      required: [
+        "type", "id", "tabBarDirection", "tabBarGap", "tabBarDistribution", "gap",
+        "initialTabId", "tabs", "styles", "labelTypography", "selectedLabelColor",
+        "accessibility",
+      ],
+      optional: ["appearance", "sizing", "outerInsets", "visibility"],
+      at: path
+    )
+    let entries = try array(node["tabs"], at: "\(path).tabs")
+    guard (2...8).contains(entries.count) else {
+      throw invalid("\(path).tabs", "expected_2_to_8_items")
+    }
+    for (index, raw) in entries.enumerated() {
+      let entryPath = "\(path).tabs[\(index)]"
+      let entry = try object(raw, at: entryPath)
+      try keys(entry, required: ["id", "label", "content"], at: entryPath)
+      try localizedText(entry["label"], at: "\(entryPath).label")
+      try stack(entry["content"], at: "\(entryPath).content")
+    }
+    try selectionStyles(node["styles"], at: "\(path).styles")
+    try typography(node["labelTypography"], at: "\(path).labelTypography", allowsTruncation: false)
+    try color(node["selectedLabelColor"], at: "\(path).selectedLabelColor")
+    try controlAccessibility(node["accessibility"], at: "\(path).accessibility")
+    try optionalPresentation(node, at: path, appearanceKind: .container, sizingKind: .box)
+  }
+
+  private static func timeline(_ node: [String: Any], at path: String) throws {
+    try keys(
+      node,
+      required: ["type", "id", "orientation", "gap", "connector", "entries", "titleTypography",
+        "accessibility"],
+      optional: [
+        "markerColor", "markerSize", "descriptionTypography", "appearance", "sizing",
+        "outerInsets", "visibility",
+      ],
+      at: path
+    )
+    guard node["orientation"] as? String == "vertical" else {
+      throw invalid("\(path).orientation", "invalid_timeline_orientation")
+    }
+    let connectorPath = "\(path).connector"
+    let connector = try object(node["connector"], at: connectorPath)
+    try keys(connector, required: ["color", "width", "style"], at: connectorPath)
+    try color(connector["color"], at: "\(connectorPath).color")
+    guard let connectorStyle = connector["style"] as? String,
+      connectorStyle == "solid" || connectorStyle == "dashed"
+    else { throw invalid("\(connectorPath).style", "invalid_timeline_connector_style") }
+
+    let entries = try array(node["entries"], at: "\(path).entries")
+    guard (2...12).contains(entries.count) else {
+      throw invalid("\(path).entries", "expected_2_to_12_items")
+    }
+    for (index, raw) in entries.enumerated() {
+      let entryPath = "\(path).entries[\(index)]"
+      let entry = try object(raw, at: entryPath)
+      try keys(
+        entry, required: ["id", "title"], optional: ["description", "marker"], at: entryPath)
+      try localizedText(entry["title"], at: "\(entryPath).title")
+      if let value = entry["description"] {
+        try localizedText(value, at: "\(entryPath).description")
+      }
+      if let value = entry["marker"] { try timelineMarker(value, at: "\(entryPath).marker") }
+    }
+    if let value = node["markerColor"] { try color(value, at: "\(path).markerColor") }
+    try typography(node["titleTypography"], at: "\(path).titleTypography", allowsTruncation: false)
+    if let value = node["descriptionTypography"] {
+      try typography(value, at: "\(path).descriptionTypography", allowsTruncation: false)
+    }
+    try controlAccessibility(node["accessibility"], at: "\(path).accessibility")
+    try optionalPresentation(node, at: path, appearanceKind: .box, sizingKind: .box)
+  }
+
+  private static func timelineMarker(_ value: Any, at path: String) throws {
+    let marker = try object(value, at: path)
+    switch marker["kind"] as? String {
+    case "dot", "ordinal":
+      try keys(marker, required: ["kind"], at: path)
+    case "icon":
+      try keys(marker, required: ["kind", "name"], at: path)
+    default:
+      throw invalid("\(path).kind", "invalid_timeline_marker_kind")
+    }
+  }
+
+  private static func award(_ node: [String: Any], at path: String) throws {
+    try keys(
+      node,
+      required: [
+        "type", "id", "direction", "gap", "crossAxisAlignment", "title", "titleTypography",
+        "accessibility",
+      ],
+      optional: [
+        "emblem", "subtitle", "subtitleTypography", "appearance", "sizing", "outerInsets",
+        "visibility",
+      ],
+      at: path
+    )
+    if let value = node["emblem"] { try awardEmblem(value, at: "\(path).emblem") }
+    try localizedText(node["title"], at: "\(path).title")
+    try typography(node["titleTypography"], at: "\(path).titleTypography", allowsTruncation: false)
+    // `dependentRequired` in both directions: a subtitle with no typography
+    // would leave the renderer choosing a style, and typography with no
+    // subtitle is a value nothing reads.
+    guard (node["subtitle"] == nil) == (node["subtitleTypography"] == nil) else {
+      throw invalid(path, "subtitle_and_typography_must_appear_together")
+    }
+    if let value = node["subtitle"] { try localizedText(value, at: "\(path).subtitle") }
+    if let value = node["subtitleTypography"] {
+      try typography(value, at: "\(path).subtitleTypography", allowsTruncation: false)
+    }
+    try controlAccessibility(node["accessibility"], at: "\(path).accessibility")
+    try optionalPresentation(node, at: path, appearanceKind: .box, sizingKind: .box)
+  }
+
+  private static func awardEmblem(_ value: Any, at path: String) throws {
+    let emblem = try object(value, at: path)
+    switch emblem["type"] as? String {
+    case "image":
+      try keys(emblem, required: ["type", "assetId", "size"], at: path)
+    case "icon":
+      try keys(emblem, required: ["type", "name", "size", "color"], at: path)
+      try color(emblem["color"], at: "\(path).color")
+    default:
+      throw invalid("\(path).type", "invalid_award_emblem")
+    }
+  }
+
+  private static func socialProof(_ node: [String: Any], at path: String) throws {
+    try keys(
+      node,
+      required: [
+        "type", "id", "gap", "quote", "quoteTypography", "attribution",
+        "attributionTypography", "accessibility",
+      ],
+      optional: ["rating", "avatar", "appearance", "sizing", "outerInsets", "visibility"],
+      at: path
+    )
+    try localizedText(node["quote"], at: "\(path).quote")
+    try typography(node["quoteTypography"], at: "\(path).quoteTypography", allowsTruncation: false)
+    try localizedText(node["attribution"], at: "\(path).attribution")
+    try typography(
+      node["attributionTypography"], at: "\(path).attributionTypography", allowsTruncation: false)
+    if let value = node["rating"] {
+      let ratingPath = "\(path).rating"
+      let rating = try object(value, at: ratingPath)
+      try keys(
+        rating,
+        required: ["symbol", "value", "maximum", "step", "size", "filledColor", "emptyColor"],
+        at: ratingPath
+      )
+      guard rating["symbol"] as? String == "star" else {
+        throw invalid("\(ratingPath).symbol", "invalid_rating_symbol")
+      }
+      guard let step = rating["step"] as? String, step == "whole" || step == "half" else {
+        throw invalid("\(ratingPath).step", "invalid_rating_step")
+      }
+      // Integers only. A JSON `4.5` would otherwise reach four runtimes that
+      // each round it independently.
+      for key in ["value", "maximum"] {
+        guard let number = rating[key] as? NSNumber,
+          CFNumberIsFloatType(number) == false
+        else { throw invalid("\(ratingPath).\(key)", "expected_integer") }
+      }
+      try color(rating["filledColor"], at: "\(ratingPath).filledColor")
+      try color(rating["emptyColor"], at: "\(ratingPath).emptyColor")
+    }
+    if let value = node["avatar"] {
+      let avatarPath = "\(path).avatar"
+      try keys(try object(value, at: avatarPath), required: ["assetId", "size"], at: avatarPath)
+    }
+    try controlAccessibility(node["accessibility"], at: "\(path).accessibility")
+    try optionalPresentation(node, at: path, appearanceKind: .box, sizingKind: .box)
   }
 
   private static func button(_ node: [String: Any], at path: String) throws {
@@ -336,7 +521,7 @@ enum MosaicProtocolV02Shape {
     case "openExternalUrl":
       try keys(action, required: ["type", "url"], at: "\(path).action")
       guard let url = action["url"] as? String,
-        isSafeMosaicV02ExternalURL(url)
+        isSafeMosaicV03ExternalURL(url)
       else { throw invalid("\(path).action.url", "invalid_external_url") }
     default:
       throw invalid("\(path).action.type", "unsupported_action")
@@ -392,7 +577,7 @@ enum MosaicProtocolV02Shape {
     for (index, child) in children.enumerated() {
       try productCardChild(child, at: "\(path).children[\(index)]")
     }
-    try authoredProductStyles(card["styles"], at: "\(path).styles")
+    try selectionStyles(card["styles"], at: "\(path).styles")
     if let sizing = card["sizing"] {
       try self.sizing(sizing, at: "\(path).sizing", allowsHeight: true)
     }
@@ -419,7 +604,8 @@ enum MosaicProtocolV02Shape {
     switch node["type"] as? String {
     case "stack":
       try productCardPassiveStack(node, at: path)
-    case "text", "image", "icon", "featureList", "countdown":
+    case "text", "image", "icon", "featureList", "countdown", "timeline", "award",
+      "socialProof":
       try self.node(node, at: path)
     default:
       throw invalid("\(path).type", "unsupported_product_card_child")
@@ -475,13 +661,16 @@ enum MosaicProtocolV02Shape {
         at: "\(path).children[\(index)]"
       )
     }
-    try authoredProductStyles(badge["styles"], at: "\(path).styles")
+    try selectionStyles(badge["styles"], at: "\(path).styles")
     if let sizing = badge["sizing"] {
       try self.sizing(sizing, at: "\(path).sizing", allowsHeight: true)
     }
   }
 
-  private static func authoredProductStyles(_ value: Any?, at path: String) throws {
+  /// The neutral `selectionStyles` shape that `0.3` gave Product Card, Product
+  /// Badge, and Tabs. `productCardStyles` is an alias of it in the schema, so it
+  /// is validated here once.
+  private static func selectionStyles(_ value: Any?, at path: String) throws {
     let styles = try object(value, at: path)
     try keys(styles, required: ["default", "selected"], at: path)
     let base = try object(styles["default"], at: "\(path).default")
@@ -698,6 +887,7 @@ enum MosaicProtocolV02Shape {
     switch mode {
     case "always", "hidden": try keys(value, required: ["mode"], at: path)
     case "switch": try keys(value, required: ["mode", "switchId", "equals"], at: path)
+    case "tab": try keys(value, required: ["mode", "tabsId", "equals"], at: path)
     default: throw invalid("\(path).mode", "invalid_visibility_mode")
     }
   }

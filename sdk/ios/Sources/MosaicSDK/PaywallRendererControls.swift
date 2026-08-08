@@ -159,6 +159,13 @@ struct MosaicButtonView: View {
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(Text(localization.resolve(component.accessibility.label)))
     .mosaicAccessibilityHint(component.accessibility.hint.map(localization.resolve))
+    // The authored, translated `mosaic.a11y.in_progress` string. A button with
+    // no in-progress content announces no progress state, and an unresolvable
+    // key announces nothing rather than an English literal.
+    .mosaicBusyValue(
+      busy && component.inProgressChildren != nil
+        ? localization.resolve(reserved: .inProgress) : nil
+    )
     .mosaicPresentation(
       appearance: component.appearance,
       sizing: component.sizing,
@@ -293,106 +300,6 @@ struct MosaicButtonContentView: View {
     case .center: .center
     case .end: .trailing
     }
-  }
-}
-
-@MainActor
-struct MosaicPurchaseButtonView: View {
-  let component: MosaicPurchaseButtonComponent
-  let localization: MosaicLocalizationResolver
-  @ObservedObject var model: MosaicPaywallModel
-
-  var body: some View {
-    let busy = model.busyPurchaseButtonID == component.id
-    Button {
-      Task { await model.purchase(using: component) }
-    } label: {
-      MosaicStyledText(
-        value: localization.resolve(busy ? component.inProgressLabel : component.label),
-        typography: component.typography
-      )
-    }
-    .buttonStyle(.plain)
-    .disabled(!model.isPurchaseEnabled(component))
-    .accessibilityLabel(Text(localization.resolve(component.accessibility.label)))
-    .mosaicAccessibilityHint(component.accessibility.hint.map(localization.resolve))
-    .mosaicBusyValue(busy ? localization.resolve(component.inProgressLabel) : nil)
-    .mosaicDefaultButtonAppearance(component.appearance, kind: .purchase)
-    .mosaicPresentation(
-      appearance: component.appearance,
-      sizing: component.sizing,
-      outerInsets: component.outerInsets
-    )
-  }
-}
-
-@MainActor
-struct MosaicRestoreButtonView: View {
-  let component: MosaicRestoreButtonComponent
-  let localization: MosaicLocalizationResolver
-  @ObservedObject var model: MosaicPaywallModel
-
-  var body: some View {
-    let busy = model.busyRestoreButtonID == component.id
-    Button {
-      Task { await model.restore(using: component) }
-    } label: {
-      MosaicStyledText(
-        value: localization.resolve(busy ? component.inProgressLabel : component.label),
-        typography: component.typography
-      )
-    }
-    .buttonStyle(.plain)
-    .disabled(!model.isRestoreEnabled(component))
-    .accessibilityLabel(Text(localization.resolve(component.accessibility.label)))
-    .mosaicAccessibilityHint(component.accessibility.hint.map(localization.resolve))
-    .mosaicBusyValue(busy ? localization.resolve(component.inProgressLabel) : nil)
-    .mosaicDefaultButtonAppearance(component.appearance, kind: .secondary)
-    .mosaicPresentation(
-      appearance: component.appearance,
-      sizing: component.sizing,
-      outerInsets: component.outerInsets
-    )
-  }
-}
-
-@MainActor
-struct MosaicCloseButtonView: View {
-  let component: MosaicCloseButtonComponent
-  let localization: MosaicLocalizationResolver
-  @ObservedObject var model: MosaicPaywallModel
-
-  var body: some View {
-    Button {
-      model.close(using: component)
-    } label: {
-      MosaicStyledText(
-        value: localization.resolve(component.label), typography: component.typography)
-    }
-    .buttonStyle(.plain)
-    .accessibilityLabel(Text(localization.resolve(component.accessibility.label)))
-    .mosaicAccessibilityHint(component.accessibility.hint.map(localization.resolve))
-    .mosaicDefaultButtonAppearance(component.appearance, kind: .secondary)
-    .mosaicPresentation(
-      appearance: component.appearance,
-      sizing: component.sizing,
-      outerInsets: component.outerInsets
-    )
-  }
-}
-
-struct MosaicLegalTextView: View {
-  let component: MosaicLegalTextComponent
-  let localization: MosaicLocalizationResolver
-
-  var body: some View {
-    MosaicStyledText(value: localization.resolve(component.value), typography: component.typography)
-      .mosaicTextAccessibilityLabel(component.accessibility, localization: localization)
-      .mosaicPresentation(
-        appearance: component.appearance,
-        sizing: component.sizing,
-        outerInsets: component.outerInsets
-      )
   }
 }
 
@@ -545,7 +452,7 @@ struct MosaicCountdownView: View {
 
 /// What a countdown resolved to at a point in time.
 ///
-/// `invalidEndsAt` exists because the 0.2 reader policy maps
+/// `invalidEndsAt` exists because the 0.3 reader policy maps
 /// `completedCountdown` to `showLocalizedCompletedText`, and an `endsAt` that
 /// cannot be parsed is a validation failure, not a completion. Presenting a
 /// malformed date as "offer expired" states a commercial fact the document
@@ -602,7 +509,7 @@ public enum MosaicCountdownText {
   /// lenient parser here would let the renderer disagree with the contract
   /// about what a valid countdown is.
   private static func endDate(_ value: String) -> Date? {
-    MosaicProtocolV02Semantics.canonicalDate(value)
+    MosaicProtocolV03Semantics.canonicalDate(value)
   }
 }
 

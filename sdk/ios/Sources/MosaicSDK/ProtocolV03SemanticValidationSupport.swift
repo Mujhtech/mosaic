@@ -1,6 +1,6 @@
 import Foundation
 
-extension MosaicProtocolV02Semantics {
+extension MosaicProtocolV03Semantics {
   static func validateNavigationGraph(
     initialScreenID: String,
     screenIDs: Set<String>,
@@ -77,7 +77,7 @@ extension MosaicProtocolV02Semantics {
   }
 
   static func externalURL(_ url: URL) throws {
-    guard isSafeMosaicV02ExternalURL(url.absoluteString) else {
+    guard isSafeMosaicV03ExternalURL(url.absoluteString) else {
       throw violation("protocol_invalid_external_url")
     }
   }
@@ -108,7 +108,9 @@ extension MosaicProtocolV02Semantics {
   }
 
   static func validateLocalization(
-    _ localization: MosaicLocalization, texts: [MosaicLocalizedText]
+    _ localization: MosaicLocalization,
+    texts: [MosaicLocalizedText],
+    consumedReservedKeys: Set<MosaicReservedAccessibilityKey>
   ) throws {
     try localeTag(localization.defaultLocale)
     try localeTag(localization.fallbackLocale)
@@ -127,8 +129,41 @@ extension MosaicProtocolV02Semantics {
     }
     let defaultCatalog = localization.locales[localization.defaultLocale]!.strings
     let usedKeys = Set(texts.map(\.localizationKey))
-    guard Set(defaultCatalog.keys) == usedKeys else {
+    let reservedKeyNames = Set(MosaicReservedAccessibilityKey.allCases.map(\.rawValue))
+    // Reserved keys are read by the protocol rather than referenced by a
+    // component, so the unused sweep would flag every one of them. They are
+    // checked separately, in both directions.
+    guard Set(defaultCatalog.keys).subtracting(reservedKeyNames) == usedKeys else {
       throw violation("protocol_default_catalog_key_mismatch")
+    }
+    for key in MosaicReservedAccessibilityKey.allCases {
+      let consumed = consumedReservedKeys.contains(key)
+      let declared = defaultCatalog[key.rawValue] != nil
+      guard consumed == declared else {
+        throw violation(
+          consumed
+            ? "protocol_missing_reserved_accessibility_key"
+            : "protocol_unused_reserved_accessibility_key"
+        )
+      }
+      guard declared else { continue }
+      // Every declared translation must carry each placeholder exactly once. A
+      // translation that drops one silently announces a rating with no number
+      // in it, and one that repeats it announces the number twice.
+      for catalog in localization.locales.values {
+        guard let value = catalog.strings[key.rawValue] else { continue }
+        for placeholder in key.placeholders {
+          guard value.components(separatedBy: placeholder).count == 2 else {
+            throw violation("protocol_invalid_reserved_accessibility_placeholder")
+          }
+        }
+        let residue = key.placeholders.reduce(value) {
+          $0.replacingOccurrences(of: $1, with: "")
+        }
+        guard !residue.contains("{{"), !residue.contains("}}") else {
+          throw violation("protocol_invalid_reserved_accessibility_template")
+        }
+      }
     }
     for text in texts {
       try localizedText(text)

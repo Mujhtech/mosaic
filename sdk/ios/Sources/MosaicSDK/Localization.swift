@@ -46,7 +46,7 @@ public struct MosaicLocalizationResolver: Sendable, Equatable {
     if let requestedLocale, !requestedLocale.isEmpty {
       // Hosts pass what the platform hands them, which is an ICU identifier
       // (`en_US`, `PT_br`, `en-US-u-rg-gbzzzz`), while catalog keys are authored
-      // in one canonical spelling. Protocol 0.2 canonicalizes the requested tag
+      // in one canonical spelling. Protocol 0.3 canonicalizes the requested tag
       // before an exact lookup; matching raw would miss the only catalog that
       // exists. A tag that canonicalizes to nothing contributes no candidate
       // rather than matching anything.
@@ -89,6 +89,21 @@ public struct MosaicLocalizationResolver: Sendable, Equatable {
       }
     }
     return value.defaultValue
+  }
+
+  /// Resolves a key the protocol reads directly.
+  ///
+  /// Reserved keys carry no inline `default`, because no component references
+  /// them. An absent key returns `nil` so the caller announces nothing rather
+  /// than substituting a literal in a language it cannot know; the semantic
+  /// validator already rejects a document that omits a key it consumes.
+  public func resolve(reserved key: MosaicReservedAccessibilityKey) -> String? {
+    for locale in resolvedLocale.candidateLocales {
+      if let resolved = localization.locales[locale]?.strings[key.rawValue] {
+        return resolved
+      }
+    }
+    return nil
   }
 
   public func resolve(

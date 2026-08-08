@@ -30,7 +30,7 @@ final class LocalizationTests: XCTestCase {
 
   /// The cross-SDK locale-resolution corpus. Every case must agree with the
   /// protocol's reference implementation
-  /// (`protocol/tools/locale-resolution-v0.2.mjs`), so iOS cannot drift from
+  /// (`protocol/tools/locale-resolution-v0.3.mjs`), so iOS cannot drift from
   /// Flutter or Compose on which catalog a device reaches.
   ///
   /// The corpus lists candidates as catalog *keys*, declared or not, while
@@ -38,7 +38,7 @@ final class LocalizationTests: XCTestCase {
   /// the expectation is filtered accordingly.
   func testCanonicalLocaleResolutionCorpus() throws {
     let corpus = try XCTUnwrap(
-      try JSONSerialization.jsonObject(with: v02FixtureData(named: "locale-resolution.json"))
+      try JSONSerialization.jsonObject(with: v03FixtureData(named: "locale-resolution.json"))
         as? [String: Any])
     let declaration = try XCTUnwrap(corpus["localization"] as? [String: Any])
     let declared = try XCTUnwrap(declaration["locales"] as? [String])
@@ -240,9 +240,3 @@ private func textComponent(
   return nil
 }
 
-private func legalText(in document: MosaicPaywallDocument) -> MosaicLegalTextComponent? {
-  for node in flattenedNodes(document.layout.content) {
-    if case .legalText(let legal) = node { return legal }
-  }
-  return nil
-}

@@ -1,6 +1,6 @@
 # Mosaic Apple SDK — native rendering and local Placement decisions
 
-The SDK strictly decodes Mosaic Protocol 0.2 and renders it with native
+The SDK strictly decodes Mosaic Protocol 0.3 and renders it with native
 SwiftUI, and can receive validated draft and mock-commerce revisions from a
 local Mosaic Studio session over WebSockets. It preserves the Phase 1 bundled
 fallback and adds hosted Configuration Delivery v1–v3 plus the provider-neutral
@@ -246,9 +246,9 @@ development-host test process. Mosaic does not expose a macOS renderer.
   the analytics queue then do not survive relaunch, and
   `configurationStatus()` reports `delivery_persistence_unavailable`.
 
-## Protocol 0.2 RC4 rendering
+## Protocol 0.3 rendering
 
-Protocol 0.2 RC4 uses one to ten named screens.
+Protocol 0.3 uses one to ten named screens.
 The renderer starts at `initialScreenId`, keeps a presentation-local history,
 pushes Screen destinations, presents Sheet destinations with SwiftUI's native
 modal surface over the most recent Screen, and safely pops or dismisses with
@@ -269,7 +269,62 @@ clips visual overflow without replacing its accessibility value. Fill on the
 vertically unbounded Scroll Container axis resolves to Fit and records
 `layout.unboundedFill` instead of producing infinite SwiftUI layout.
 
-Protocol 0.2 also replaces the specialized action components with one native
+### Tabs, Timeline, Award, and Social Proof
+
+`0.3` adds four components. `tabs` presents two through eight labelled panels
+with exactly one visible at a time, rendered as a native `Button` bar over a
+panel. The selected panel comes from the authored `initialTabId` — there is no
+positional default, so reordering the `tabs` array cannot change which panel
+opens — and the tab controls resolve their Default and Selected appearance
+through the same `selectionStyles` overlay Product Card uses, with the required
+`selectedLabelColor` applied to the selected label. The component is exposed as
+a tab list, each control as a tab carrying its selected state, and the visible
+panel as a tab panel named by the same authored label as its tab.
+
+`timeline` renders two through twelve vertical entries with an authored
+connector in `solid` or `dashed`, and a closed `dot`/`ordinal`/`icon` marker
+union; an unrecognised kind rejects the document rather than drawing a
+substitute glyph. An entry with no `marker` draws no glyph and lets the
+connector run unbroken through its position, and an entry with no `description`
+draws no second line and reserves no space for one. `markerColor`, `markerSize`,
+and `descriptionTypography` are required exactly when an entry consumes them and
+rejected when none does. Ordinal markers use the resolved locale's number
+formatting. Markers and connectors are decorative; the component is exposed as a
+labelled ordered list whose items announce title then description in authored
+order.
+
+`award` renders a localized title with an optional subtitle — mutually required
+with `subtitleTypography` — and an optional emblem drawn from the existing image
+asset or icon vocabulary. The emblem is always decorative, because the title
+already carries the award's meaning.
+
+`socialProof` renders a required quote and attribution with an optional avatar
+and an optional integer-only rating. `value` counts steps against a
+`whole`/`half` `step` and a `1...10` `maximum`, and nothing converts it to a
+floating-point intermediate: `MosaicSocialProofRating.steps(atSymbol:)` picks
+each symbol's fill with integer arithmetic. An absent rating draws and announces
+nothing — it is neither zero nor unknown. VoiceOver announces the rating in
+points rather than steps, so a `value` of 9 against a `maximum` of 5 is
+announced as "4.5 out of 5" rather than the literal "9 out of 5".
+
+### Tab selection state and visibility
+
+Runtime state gains a `tabs` map alongside product selection, Switch values,
+Carousel pages, and navigation history. It is reset from each Tabs component's
+`initialTabId` whenever a revision is accepted. `visibility` gains a
+`{ "mode": "tab", "tabsId": …, "equals": … }` condition with the same semantics
+as a false Switch condition: the node leaves layout, the accessibility tree, and
+focus order rather than merely being hidden.
+
+`mosaicEvaluateVisibility(_:in:)` takes a `MosaicSelectionState` of
+`{ switches, tabs }` and **throws** `MosaicVisibilityEvaluationError` when a
+condition names a controller the supplied state does not carry. Resolving that
+to "hidden" would read back as a component that silently disappears instead of a
+caller that is told it has a bug. `MosaicPaywallModel.isVisible(_:)` seeds its
+state from the accepted document, so the failure is unreachable there and traps
+rather than erasing an authored node.
+
+Protocol 0.3 also replaces the specialized action components with one native
 SwiftUI `Button` whose vertical or horizontal label may contain noninteractive
 protocol content. Purchase and restore buttons may supply
 `inProgressChildren`; while the provider is running, the button swaps content
@@ -359,7 +414,7 @@ struct PaywallPreview: View {
     let identity = MosaicPreviewClientIdentity(
       clientId: "client_ios_example",
       displayName: "iOS local preview",
-      renderer: .init(id: "mosaic.ios", version: "0.2.0"),
+      renderer: .init(id: "mosaic.ios", version: "0.3.0"),
       application: .init(
         id: "dev.example.app",
         displayName: "Example",
@@ -391,7 +446,7 @@ struct PaywallPreview: View {
 ```
 
 The default endpoint is `ws://127.0.0.1:4317/preview`, the default session is
-`session_local_01`, and the client uses `mosaic.local-preview.v0.2`. A custom endpoint must remain local: localhost,
+`session_local_01`, and the client uses `mosaic.local-preview.v0.3`. A custom endpoint must remain local: localhost,
 loopback, private LAN, `.local`, IPv6 ULA, and IPv6 link-local hosts are
 accepted; public remote hosts are rejected.
 
@@ -420,7 +475,7 @@ preview overrides without rebuilding the application.
 
 The client reports the exact capabilities for the negotiated Protocol version
 without adding SwiftUI concepts to the platform-neutral contract. Tests consume
-the canonical Local Preview 0.2 flow directly from the repository.
+the canonical Local Preview 0.3 flow directly from the repository.
 
 ## Mock commerce
 
@@ -882,7 +937,7 @@ or full-screen cover. Bundled images and videos remain host-resolved through
 declared placeholder, poster, or colour fallback.
 
 The packaged resource is a byte-identical checked-in copy of the current
-`protocol/fixtures/v0.2/complete-paywall.json`. SwiftPM copies symbolic links
+`protocol/fixtures/v0.3/complete-paywall.json`. SwiftPM copies symbolic links
 without rebasing their targets, so using a repository-relative symlink would
 produce a broken fallback in a built package. A package test prevents the copy
 from drifting; it is not an SDK-owned schema or fixture fork.

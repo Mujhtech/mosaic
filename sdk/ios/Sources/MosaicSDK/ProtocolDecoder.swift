@@ -43,7 +43,7 @@ public enum MosaicProtocolDecoder {
       throw MosaicProtocolError.unsupportedSchemaVersion(schemaVersion)
     }
 
-    try MosaicProtocolV02Shape.validate(root)
+    try MosaicProtocolV03Shape.validate(root)
 
     let document: MosaicPaywallDocument
     do {
@@ -57,7 +57,7 @@ public enum MosaicProtocolDecoder {
       throw MosaicProtocolError.invalidShape(path: "$", reason: "type_or_enum_mismatch")
     }
 
-    try MosaicProtocolV02Semantics.validate(document)
+    try MosaicProtocolV03Semantics.validate(document)
     return document
   }
 
