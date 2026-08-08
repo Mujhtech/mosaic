@@ -9,13 +9,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/pressly/goose/v3"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
-	"github.com/Mujhtech/mosaic/apps/api/migrations"
 )
 
 // A new Project must collect its own monetization events with no operator step:
@@ -35,23 +33,13 @@ func TestNewEnvironmentsCollectAnalyticsWithoutOperatorAction(t *testing.T) {
 	if databaseURL == "" {
 		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
 	db := openSQL(t, databaseURL)
 	defer db.Close()
-	goose.SetBaseFS(migrations.Files)
-	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatal(err)
-	}
-	// Reset by dropping the schema: irreversible down migrations correctly refuse
-	// when affected data exists, so a rollback is not a usable reset.
-	// DATABASE_TEST_URL is documented as a throwaway database.
-	if _, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`); err != nil {
-		t.Fatalf("reset the test schema (DATABASE_TEST_URL must be a throwaway database): %v", err)
-	}
-	if err := goose.UpContext(ctx, db, "."); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
+	resetAndMigrate(t, db, 0)
+	// The assertion clock starts after the schema is up: a deadline
+	// created before migration is spent by migration.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatalf("open pool: %v", err)

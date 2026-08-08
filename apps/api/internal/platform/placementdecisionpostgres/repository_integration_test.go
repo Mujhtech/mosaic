@@ -10,10 +10,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/placementdecision"
-	"github.com/Mujhtech/mosaic/apps/api/migrations"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/pgtest"
 )
 
 func TestArchiveRuleSetPreservesVersionsAndClearsActiveUsage(t *testing.T) {
@@ -21,27 +20,18 @@ func TestArchiveRuleSetPreservesVersionsAndClearsActiveUsage(t *testing.T) {
 	if databaseURL == "" {
 		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	goose.SetBaseFS(migrations.Files)
-	if err := goose.SetDialect("postgres"); err != nil {
+	if err := pgtest.ResetAndMigrate(db, 0); err != nil {
 		t.Fatal(err)
 	}
-	// Reset by dropping the schema rather than rolling migrations down: since
-	// Phase 8, irreversible down migrations correctly refuse when affected data
-	// exists, so a rollback is not a usable test reset. DATABASE_TEST_URL is
-	// documented as a throwaway database.
-	if _, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`); err != nil {
-		t.Fatalf("reset the test schema (DATABASE_TEST_URL must be a throwaway database): %v", err)
-	}
-	if err := goose.UpContext(ctx, db, "."); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
+	// The assertion clock starts after the schema is up: a deadline
+	// created before migration is spent by migration.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO organizations(id,name,created_at,updated_at) VALUES('archive_org','Archive','2026-07-26T12:00:00Z','2026-07-26T12:00:00Z');
 		INSERT INTO organization_members(organization_id,actor_id,role,created_at,updated_at) VALUES('archive_org','archive_actor','owner','2026-07-26T12:00:00Z','2026-07-26T12:00:00Z');
@@ -97,27 +87,18 @@ func TestRevokeOverrideIsTenantScoped(t *testing.T) {
 	if databaseURL == "" {
 		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	goose.SetBaseFS(migrations.Files)
-	if err := goose.SetDialect("postgres"); err != nil {
+	if err := pgtest.ResetAndMigrate(db, 0); err != nil {
 		t.Fatal(err)
 	}
-	// Reset by dropping the schema rather than rolling migrations down: since
-	// Phase 8, irreversible down migrations correctly refuse when affected data
-	// exists, so a rollback is not a usable test reset. DATABASE_TEST_URL is
-	// documented as a throwaway database.
-	if _, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`); err != nil {
-		t.Fatalf("reset the test schema (DATABASE_TEST_URL must be a throwaway database): %v", err)
-	}
-	if err := goose.UpContext(ctx, db, "."); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
+	// The assertion clock starts after the schema is up: a deadline
+	// created before migration is spent by migration.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO organizations(id,name,created_at,updated_at) VALUES
 			('override_org_a','Override A','2026-07-26T12:00:00Z','2026-07-26T12:00:00Z'),

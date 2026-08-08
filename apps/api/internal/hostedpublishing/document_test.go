@@ -14,7 +14,7 @@ import (
 
 func TestDocumentAnalysisExtractsRemoteAssetAndProductReferences(t *testing.T) {
 	document := json.RawMessage(`{
-        "schemaVersion":"0.2",
+        "schemaVersion":"0.3",
         "products":[{"id":"monthly","productId":"product_000001"}],
         "assets":[{"type":"image","id":"hero","source":{"type":"remote","url":"https://api.example.com/v1/sdk/assets/asset_1/sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]
     }`)
@@ -28,7 +28,7 @@ func TestDocumentAnalysisExtractsRemoteAssetAndProductReferences(t *testing.T) {
 }
 
 func TestDeliveryPayloadMatchesFrozenV1ShapeAndCanonicalDigest(t *testing.T) {
-	document, err := os.ReadFile("../../../../protocol/fixtures/v0.2/navigation-only.json")
+	document, err := os.ReadFile("../../../../protocol/fixtures/v0.3/navigation-only.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestDeliveryPayloadMatchesFrozenV1ShapeAndCanonicalDigest(t *testing.T) {
 }
 
 func TestSDKCapabilityRequestMustCoverSelectedReleaseExactly(t *testing.T) {
-	document, err := os.ReadFile("../../../../protocol/fixtures/v0.2/navigation-only.json")
+	document, err := os.ReadFile("../../../../protocol/fixtures/v0.3/navigation-only.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestSDKCapabilityRequestMustCoverSelectedReleaseExactly(t *testing.T) {
 	}
 	request := SDKCapabilityRequest{
 		Platform: "flutter", SDKVersion: "0.2.0-dev.5", SupportedConfigurationDeliveryVersions: []string{"1"},
-		SupportedPaywallProtocols: []SDKPaywallProtocolSupport{{Version: "0.2", Capabilities: capabilities}}, ApplicationVersion: "1.0.0",
+		SupportedPaywallProtocols: []SDKPaywallProtocolSupport{{Version: "0.3", Capabilities: capabilities}}, ApplicationVersion: "1.0.0",
 	}
 	release := Release{Payload: payload}
 	if err := ValidateSDKCapabilityRequest(request, release); err != nil {
@@ -118,7 +118,7 @@ func TestSDKCapabilityRequestMustCoverSelectedReleaseExactly(t *testing.T) {
 }
 
 func TestRollbackPayloadPreservesTargetSnapshot(t *testing.T) {
-	document, err := os.ReadFile("../../../../protocol/fixtures/v0.2/navigation-only.json")
+	document, err := os.ReadFile("../../../../protocol/fixtures/v0.3/navigation-only.json")
 	if err != nil {
 		t.Fatal(err)
 	}

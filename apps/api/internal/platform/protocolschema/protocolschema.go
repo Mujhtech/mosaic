@@ -34,7 +34,7 @@ var files embed.FS
 type Schema string
 
 const (
-	PaywallV02              Schema = "paywall/v0.2"
+	PaywallV03              Schema = "paywall/v0.3"
 	CommerceProviderV1      Schema = "commerce-provider/v1"
 	CommerceProviderV2      Schema = "commerce-provider/v2"
 	CommerceConfigurationV1 Schema = "commerce-configuration/v1"
@@ -49,7 +49,7 @@ type location struct {
 }
 
 var locations = map[Schema]location{
-	PaywallV02:              {"schemas/paywall-v0.2.schema.json", "protocol/schema/v0.2/paywall.schema.json"},
+	PaywallV03:              {"schemas/paywall-v0.3.schema.json", "protocol/schema/v0.3/paywall.schema.json"},
 	CommerceProviderV1:      {"schemas/commerce-provider-v1.schema.json", "protocol/schema/commerce-provider/v1/contract.schema.json"},
 	CommerceProviderV2:      {"schemas/commerce-provider-v2.schema.json", "protocol/schema/commerce-provider/v2/contract.schema.json"},
 	CommerceConfigurationV1: {"schemas/commerce-configuration-v1.schema.json", "protocol/schema/commerce-configuration/v1/configuration.schema.json"},

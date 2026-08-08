@@ -14,7 +14,7 @@ import (
 
 // copies maps the embedded file name to its canonical repository-relative path.
 var copies = map[string]string{
-	"paywall-v0.2.schema.json":              "protocol/schema/v0.2/paywall.schema.json",
+	"paywall-v0.3.schema.json":              "protocol/schema/v0.3/paywall.schema.json",
 	"commerce-provider-v1.schema.json":      "protocol/schema/commerce-provider/v1/contract.schema.json",
 	"commerce-provider-v2.schema.json":      "protocol/schema/commerce-provider/v2/contract.schema.json",
 	"commerce-configuration-v1.schema.json": "protocol/schema/commerce-configuration/v1/configuration.schema.json",

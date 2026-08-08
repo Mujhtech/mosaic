@@ -9,7 +9,10 @@ import (
 )
 
 const (
-	ProtocolVersion = "0.2"
+	// ProtocolVersion is the single Paywall Protocol version this backend
+	// reads and serves. 0.3 replaced 0.2 outright: there is no dual-version
+	// acceptance and no migration, so a 0.2 document is an unknown version.
+	ProtocolVersion = "0.3"
 	DeliveryVersion = "1"
 )
 

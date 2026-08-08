@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/pressly/goose/v3"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
@@ -23,7 +22,6 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/hostedpublishingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercatalog"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
-	"github.com/Mujhtech/mosaic/apps/api/migrations"
 )
 
 // TestAppStoreConnectProviderPersistence proves the widened schema accepts a
@@ -40,20 +38,13 @@ func TestAppStoreConnectProviderPersistence(t *testing.T) {
 	if databaseURL == "" {
 		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	db := openSQL(t, databaseURL)
 	defer db.Close()
-	goose.SetBaseFS(migrations.Files)
-	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`); err != nil {
-		t.Fatalf("reset the test schema (DATABASE_TEST_URL must be a throwaway database): %v", err)
-	}
-	if err := goose.UpContext(ctx, db, "."); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
+	resetAndMigrate(t, db, 0)
+	// The assertion clock starts after the schema is up: a deadline
+	// created before migration is spent by migration.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

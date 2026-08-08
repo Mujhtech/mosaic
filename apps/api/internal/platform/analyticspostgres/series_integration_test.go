@@ -10,10 +10,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
-	"github.com/Mujhtech/mosaic/apps/api/migrations"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/pgtest"
 )
 
 // A filtered daily series is served from analytics_daily_event_counts, which is
@@ -28,20 +27,18 @@ func TestDimensionedDailySeriesFiltersAndBucketsByUTCDay(t *testing.T) {
 	if databaseURL == "" {
 		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	goose.SetBaseFS(migrations.Files)
-	if err = goose.SetDialect("postgres"); err != nil {
+	if err := pgtest.Migrate(db, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err = goose.UpContext(ctx, db, "."); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
+	// The assertion clock starts after the schema is up: a deadline
+	// created before migration is spent by migration.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	_, err = db.ExecContext(ctx, `
 		DELETE FROM analytics_daily_funnel_counts WHERE project_id='series_project';
 		DELETE FROM analytics_daily_event_counts WHERE project_id='series_project';

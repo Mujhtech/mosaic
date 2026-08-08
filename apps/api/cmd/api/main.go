@@ -89,7 +89,7 @@ func main() {
 // embedded in the binary; a configured path is an explicit operator override.
 func openSchemas(cfg config.Config) (map[protocolschema.Schema]io.ReadCloser, error) {
 	overrides := map[protocolschema.Schema]string{
-		protocolschema.PaywallV02:              cfg.Protocol.V02SchemaPath,
+		protocolschema.PaywallV03:              cfg.Protocol.V03SchemaPath,
 		protocolschema.CommerceProviderV1:      cfg.Protocol.CommerceProviderSchemaPath,
 		protocolschema.CommerceProviderV2:      cfg.Protocol.CommerceProviderV2SchemaPath,
 		protocolschema.CommerceConfigurationV1: cfg.Protocol.CommerceConfigurationSchemaPath,
@@ -231,7 +231,7 @@ func run() (runErr error) {
 	if err != nil {
 		return err
 	}
-	protocolValidator, err := hostedpublishing.CompileProtocolValidator(schemas[protocolschema.PaywallV02])
+	protocolValidator, err := hostedpublishing.CompileProtocolValidator(schemas[protocolschema.PaywallV03])
 	if err != nil {
 		closeSchemas(schemas)
 		return err

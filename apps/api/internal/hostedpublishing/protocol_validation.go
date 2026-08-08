@@ -17,7 +17,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-const protocolSchemaID = "urn:mosaic:protocol:schema:v0.2:paywall"
+const protocolSchemaID = "urn:mosaic:protocol:schema:v0.3:paywall"
 
 type ProtocolValidator struct{ schema *jsonschema.Schema }
 
@@ -44,17 +44,17 @@ func CompileProtocolValidator(reader io.Reader) (*ProtocolValidator, error) {
 	var document any
 	decoder := json.NewDecoder(reader)
 	if err := decoder.Decode(&document); err != nil {
-		return nil, fmt.Errorf("decode canonical Protocol 0.2 schema: %w", err)
+		return nil, fmt.Errorf("decode canonical Protocol 0.3 schema: %w", err)
 	}
 	compiler := jsonschema.NewCompiler()
 	compiler.UseRegexpEngine(compileECMARegexp)
 	compiler.AssertFormat()
 	if err := compiler.AddResource(protocolSchemaID, document); err != nil {
-		return nil, fmt.Errorf("register canonical Protocol 0.2 schema: %w", err)
+		return nil, fmt.Errorf("register canonical Protocol 0.3 schema: %w", err)
 	}
 	schema, err := compiler.Compile(protocolSchemaID)
 	if err != nil {
-		return nil, fmt.Errorf("compile canonical Protocol 0.2 schema: %w", err)
+		return nil, fmt.Errorf("compile canonical Protocol 0.3 schema: %w", err)
 	}
 	return NewProtocolValidator(schema), nil
 }
@@ -63,8 +63,16 @@ func NewProtocolValidator(schema *jsonschema.Schema) *ProtocolValidator {
 	return &ProtocolValidator{schema: schema}
 }
 
+// Validate rejects a document atomically: any error means the whole document is
+// refused. The declared version is checked first and on its own so an unknown
+// version reports a named diagnostic rather than a generic schema failure, and
+// so the check holds even when this validator carries no compiled schema.
+// Protocol 0.3 replaced 0.2 outright; a 0.2 document is an unknown version.
 func (validator *ProtocolValidator) Validate(root map[string]any) []string {
 	errors := make([]string, 0)
+	if declared, ok := root["schemaVersion"].(string); !ok || declared != ProtocolVersion {
+		return []string{"protocol_version_unsupported"}
+	}
 	if validator != nil && validator.schema != nil {
 		if err := validator.schema.Validate(root); err != nil {
 			return []string{"protocol_schema_invalid"}
@@ -110,6 +118,10 @@ func walkProtocolNodes(root map[string]any) []protocolNode {
 			for _, page := range arrayValue(node["pages"]) {
 				visit(mapValue(mapValue(page)["content"]), screenID, next)
 			}
+		case "tabs":
+			for _, tab := range arrayValue(node["tabs"]) {
+				visit(mapValue(mapValue(tab)["content"]), screenID, next)
+			}
 		case "button":
 			for _, key := range []string{"children", "inProgressChildren"} {
 				for _, child := range arrayValue(node[key]) {
@@ -130,16 +142,18 @@ func walkProtocolNodes(root map[string]any) []protocolNode {
 }
 
 var componentCapability = map[string]string{
-	"button": "component.button", "carousel": "component.carousel", "countdown": "component.countdown",
-	"featureList": "component.featureList", "icon": "component.icon", "image": "component.image",
-	"productBadge": "component.productBadge", "productCard": "component.productCard",
+	"award": "component.award", "button": "component.button", "carousel": "component.carousel",
+	"countdown": "component.countdown", "featureList": "component.featureList", "icon": "component.icon",
+	"image": "component.image", "productBadge": "component.productBadge", "productCard": "component.productCard",
 	"productSelector": "component.productSelector", "scrollContainer": "layout.scrollContainer",
-	"stack": "layout.stack", "switch": "component.switch", "text": "component.text",
+	"socialProof": "component.socialProof", "stack": "layout.stack", "switch": "component.switch",
+	"tabs": "component.tabs", "text": "component.text", "timeline": "component.timeline",
 }
 
 var colorFields = map[string]bool{
-	"background": true, "color": true, "markerColor": true, "offTrackColor": true,
-	"onTrackColor": true, "productLabelColor": true, "runtimePriceColor": true,
+	"background": true, "color": true, "emptyColor": true, "filledColor": true,
+	"markerColor": true, "offTrackColor": true, "onTrackColor": true,
+	"productLabelColor": true, "runtimePriceColor": true, "selectedLabelColor": true,
 	"textColor": true, "thumbColor": true,
 }
 
@@ -157,6 +171,14 @@ func validateProtocolCapabilities(root map[string]any, entries []protocolNode) [
 	design := mapValue(root["designSystem"])
 	if len(arrayValue(design["colors"]))+len(arrayValue(design["backgrounds"]))+len(arrayValue(design["shadows"])) > 0 {
 		expected["style.designTokens"] = true
+	}
+	if len(arrayValue(design["colors"])) > 0 {
+		expected["style.colors"] = true
+	}
+	for _, reserved := range reservedAccessibilityKeys {
+		if reserved.consumedBy(entries) {
+			expected["accessibility.reservedStrings"] = true
+		}
 	}
 	for _, raw := range arrayValue(root["assets"]) {
 		asset := mapValue(raw)
@@ -206,9 +228,12 @@ func validateProtocolCapabilities(root map[string]any, entries []protocolNode) [
 			expected["style.clipping"] = true
 		}
 		if visibility := mapValue(node["visibility"]); len(visibility) > 0 {
-			if stringValue(visibility["mode"]) == "switch" {
+			switch stringValue(visibility["mode"]) {
+			case "switch":
 				expected["condition.switchVisibility"] = true
-			} else {
+			case "tab":
+				expected["condition.tabVisibility"] = true
+			default:
 				expected["visibility.static"] = true
 			}
 		}
@@ -286,8 +311,16 @@ func validateProtocolIdentifiers(root map[string]any, entries []protocolNode) []
 		if stringValue(entry.value["type"]) == "carousel" {
 			values = append(values, arrayValue(entry.value["pages"])...)
 		}
+		// A tab id names a control, a panel, and the value a tab-visibility
+		// condition compares against, so it shares the one layout namespace.
+		if stringValue(entry.value["type"]) == "tabs" {
+			values = append(values, arrayValue(entry.value["tabs"])...)
+		}
 		if stringValue(entry.value["type"]) == "featureList" && hasDuplicateField(arrayValue(entry.value["items"]), "id") {
 			errors = append(errors, "protocol_feature_id_duplicate")
+		}
+		if stringValue(entry.value["type"]) == "timeline" && hasDuplicateField(arrayValue(entry.value["entries"]), "id") {
+			errors = append(errors, "protocol_timeline_entry_id_duplicate")
 		}
 	}
 	if hasDuplicateField(values, "id") {
@@ -351,6 +384,27 @@ func validateProtocolDesignSystem(root map[string]any, entries []protocolNode) [
 	return errors
 }
 
+// imageAssetReferences lists every image asset a component names directly.
+// Every component that can name one is listed here, so a new component whose
+// asset went uncounted would be reported as an unused asset rather than pass
+// silently: the list is exhaustive by construction, not by convention.
+func imageAssetReferences(node map[string]any) []string {
+	switch stringValue(node["type"]) {
+	case "image":
+		return []string{stringValue(node["assetId"])}
+	case "award":
+		emblem := mapValue(node["emblem"])
+		if stringValue(emblem["type"]) == "image" {
+			return []string{stringValue(emblem["assetId"])}
+		}
+	case "socialProof":
+		if avatar := mapValue(node["avatar"]); len(avatar) > 0 {
+			return []string{stringValue(avatar["assetId"])}
+		}
+	}
+	return nil
+}
+
 func validateProtocolAssets(root map[string]any, entries []protocolNode) []string {
 	errors := []string{}
 	assetsRaw := arrayValue(root["assets"])
@@ -367,8 +421,7 @@ func validateProtocolAssets(root map[string]any, entries []protocolNode) []strin
 	}
 	referenced := map[string]bool{}
 	for _, entry := range entries {
-		if stringValue(entry.value["type"]) == "image" {
-			id := stringValue(entry.value["assetId"])
+		for _, id := range imageAssetReferences(entry.value) {
 			if stringValue(assets[id]["type"]) != "image" {
 				errors = append(errors, "protocol_asset_reference_invalid")
 			} else {
@@ -475,6 +528,54 @@ func validateProtocolProducts(root map[string]any, entries []protocolNode) []str
 
 var productTemplatePattern = regexp.MustCompile(`\{\{\s*product\.(name|price)\s*\}\}`)
 
+// reservedAccessibilityKey names a localization key the protocol itself
+// consumes rather than any component referencing it. A renderer must never
+// compose an accessibility phrase from a hardcoded string in any language, so
+// each key is required exactly when the document contains the feature that
+// announces it and forbidden otherwise. Mirrors reservedAccessibilityKeys in
+// protocol/tools/validation-v0.3.mjs.
+type reservedAccessibilityStrings struct {
+	key          string
+	placeholders []string
+	consumedBy   func([]protocolNode) bool
+}
+
+var reservedAccessibilityKeys = []reservedAccessibilityStrings{
+	{
+		key:          "mosaic.a11y.rating",
+		placeholders: []string{"{{ rating.value }}", "{{ rating.maximum }}"},
+		consumedBy: func(entries []protocolNode) bool {
+			for _, entry := range entries {
+				if stringValue(entry.value["type"]) == "socialProof" && len(mapValue(entry.value["rating"])) > 0 {
+					return true
+				}
+			}
+			return false
+		},
+	},
+	{
+		key:          "mosaic.a11y.in_progress",
+		placeholders: nil,
+		consumedBy: func(entries []protocolNode) bool {
+			for _, entry := range entries {
+				if stringValue(entry.value["type"]) == "button" && entry.value["inProgressChildren"] != nil {
+					return true
+				}
+			}
+			return false
+		},
+	},
+}
+
+func reservedAccessibilityKey(key string) bool {
+	for _, reserved := range reservedAccessibilityKeys {
+		if reserved.key == key {
+			return true
+		}
+	}
+	return false
+}
+
 type localizedValue struct {
 	key, fallback string
 }
@@ -514,7 +615,45 @@ func validateProtocolLocalization(root map[string]any, entries []protocolNode) [
 			}
 		}
 	})
+	for _, reserved := range reservedAccessibilityKeys {
+		consumed := reserved.consumedBy(entries)
+		_, declared := defaultStrings[reserved.key]
+		// Both directions, as with the timeline style rules: a phrase the
+		// document needs but never authored would leave a renderer composing
+		// one from a hardcoded English string, and a phrase nothing announces
+		// is a translation cost nobody reads.
+		if consumed != declared {
+			errors = append(errors, "protocol_reserved_accessibility_key_invalid")
+		}
+		if !declared {
+			continue
+		}
+		for _, raw := range locales {
+			text, exists := mapValue(mapValue(raw)["strings"])[reserved.key].(string)
+			if !exists {
+				continue
+			}
+			residue := text
+			for _, placeholder := range reserved.placeholders {
+				// Exactly once. A translation that drops the placeholder
+				// announces a rating with no number in it; one that repeats it
+				// announces the number twice.
+				if strings.Count(text, placeholder) != 1 {
+					errors = append(errors, "protocol_reserved_accessibility_placeholder_invalid")
+				}
+				residue = strings.ReplaceAll(residue, placeholder, "")
+			}
+			if strings.Contains(residue, "{{") || strings.Contains(residue, "}}") {
+				errors = append(errors, "protocol_reserved_accessibility_placeholder_invalid")
+			}
+		}
+	}
 	for key := range defaultStrings {
+		// Reserved keys are consumed by the protocol itself, not referenced by
+		// any component, so the unused sweep would flag every one of them.
+		if reservedAccessibilityKey(key) {
+			continue
+		}
 		if !referenced[key] {
 			errors = append(errors, "protocol_localization_key_unused")
 		}
@@ -550,12 +689,16 @@ func validateProtocolLayout(root map[string]any, entries []protocolNode) []strin
 		errors = append(errors, "protocol_initial_screen_invalid")
 	}
 	switches := map[string]protocolNode{}
+	tabs := map[string]protocolNode{}
 	for _, entry := range entries {
-		if stringValue(entry.value["type"]) == "switch" {
+		switch stringValue(entry.value["type"]) {
+		case "switch":
 			switches[stringValue(entry.value["id"])] = entry
+		case "tabs":
+			tabs[stringValue(entry.value["id"])] = entry
 		}
 	}
-	interactive := map[string]bool{"button": true, "productSelector": true, "switch": true, "carousel": true}
+	interactive := map[string]bool{"button": true, "productSelector": true, "switch": true, "carousel": true, "tabs": true}
 	for _, entry := range entries {
 		node, kind := entry.value, stringValue(entry.value["type"])
 		if kind == "productCard" {
@@ -594,7 +737,78 @@ func validateProtocolLayout(root map[string]any, entries []protocolNode) []strin
 				errors = append(errors, "protocol_carousel_invalid")
 			}
 		}
+		if kind == "tabs" {
+			declared := map[string]bool{}
+			for _, raw := range arrayValue(node["tabs"]) {
+				declared[stringValue(mapValue(raw)["id"])] = true
+			}
+			// Positional defaults are forbidden: the opening panel is authored,
+			// so reordering the array cannot change which panel opens.
+			if !declared[stringValue(node["initialTabId"])] {
+				errors = append(errors, "protocol_tabs_initial_tab_invalid")
+			}
+		}
+		if kind == "timeline" {
+			marked, described := false, false
+			for _, raw := range arrayValue(node["entries"]) {
+				timelineEntry := mapValue(raw)
+				if timelineEntry["marker"] != nil {
+					marked = true
+				}
+				if timelineEntry["description"] != nil {
+					described = true
+				}
+			}
+			// Both directions matter. A missing style where a marker exists
+			// leaves the renderer choosing one; a declared style no entry
+			// consumes is how a stale field survives a redesign.
+			for _, rule := range []struct {
+				field string
+				used  bool
+			}{
+				{"markerColor", marked}, {"markerSize", marked}, {"descriptionTypography", described},
+			} {
+				_, present := node[rule.field]
+				if rule.used != present {
+					errors = append(errors, "protocol_timeline_style_copresence_invalid")
+				}
+			}
+		}
+		if kind == "socialProof" {
+			if rating := mapValue(node["rating"]); len(rating) > 0 {
+				stepsPerPoint := 1.0
+				if stringValue(rating["step"]) == "half" {
+					stepsPerPoint = 2
+				}
+				if numberValue(rating["value"]) > numberValue(rating["maximum"])*stepsPerPoint {
+					errors = append(errors, "protocol_social_proof_rating_invalid")
+				}
+			}
+		}
 		visibility := mapValue(node["visibility"])
+		if stringValue(visibility["mode"]) == "tab" {
+			controller, ok := tabs[stringValue(visibility["tabsId"])]
+			switch {
+			case !ok || controller.screenID != entry.screenID:
+				errors = append(errors, "protocol_tab_visibility_invalid")
+			case stringValue(controller.value["id"]) == stringValue(node["id"]) ||
+				ancestorID(entry.ancestors, stringValue(controller.value["id"])):
+				// Inside a panel the condition is already decided: against the
+				// owning tab it is vacuously true, against any other tab it is
+				// unsatisfiable. Both are dead layout, so both reject.
+				errors = append(errors, "protocol_tab_visibility_invalid")
+			default:
+				declared := false
+				for _, raw := range arrayValue(controller.value["tabs"]) {
+					if stringValue(mapValue(raw)["id"]) == stringValue(visibility["equals"]) {
+						declared = true
+					}
+				}
+				if !declared {
+					errors = append(errors, "protocol_tab_visibility_invalid")
+				}
+			}
+		}
 		if stringValue(visibility["mode"]) == "switch" {
 			controller, ok := switches[stringValue(visibility["switchId"])]
 			if !ok || controller.screenID != entry.screenID || stringValue(controller.value["id"]) == stringValue(node["id"]) {
@@ -780,6 +994,18 @@ func collectLocalized(value any, visit func(localizedValue)) {
 			collectLocalized(child, visit)
 		}
 	}
+}
+
+// ancestorID reports whether the node is a descendant of the identified node.
+// Layout ids are unique across the tree (validateProtocolIdentifiers rejects
+// duplicates), so identity by id is identity by node.
+func ancestorID(values []map[string]any, id string) bool {
+	for _, value := range values {
+		if stringValue(value["id"]) == id {
+			return true
+		}
+	}
+	return false
 }
 
 func ancestorType(values []map[string]any, kind string) bool {

@@ -222,7 +222,7 @@ func issue(ctx context.Context, client *http.Client, opts options, etag string, 
 	}
 }
 
-// paywallCapabilities is the full Paywall 0.2 capability vocabulary a current
+// paywallCapabilities is the full Paywall 0.3 capability vocabulary a current
 // SDK advertises. Capability negotiation is a closed contract: a request that
 // advertises nothing is answered 406 for every delivery version, so without
 // these headers the delivery scenarios measured the refusal path and never
@@ -233,6 +233,7 @@ var paywallCapabilities = []string{
 	"component.text", "component.image", "component.icon", "component.featureList", "component.productSelector",
 	"component.productCard", "component.productBadge", "component.button", "component.carousel",
 	"component.switch", "component.countdown",
+	"component.tabs", "component.timeline", "component.award", "component.socialProof",
 	"localization.catalogs", "localization.rtl", "localization.productTemplate", "product.references",
 	"asset.bundledImage", "asset.remoteImage", "asset.bundledVideo", "asset.remoteVideo",
 	"action.purchase", "action.restore", "action.close", "action.navigateTo", "action.navigateBack",
@@ -240,7 +241,7 @@ var paywallCapabilities = []string{
 	"accessibility.metadata", "fallback.asset", "fallback.product", "outcome.normalized",
 	"style.colors", "style.designTokens", "style.gradientBackground", "style.mediaBackground", "style.shadow",
 	"style.box", "style.clipping", "style.typography", "style.productCardStates",
-	"visibility.static", "condition.switchVisibility",
+	"visibility.static", "condition.switchVisibility", "condition.tabVisibility",
 }
 
 var experimentFeatures = []string{
@@ -257,10 +258,10 @@ func setCapabilityHeaders(request *http.Request, opts options) {
 	request.Header.Set("Mosaic-SDK-Platform", opts.platform)
 	request.Header.Set("Mosaic-SDK-Version", opts.sdkVersion)
 	request.Header.Set("Mosaic-Configuration-Versions", "3,2,1")
-	request.Header.Set("Mosaic-Paywall-Protocol-Versions", "0.2")
+	request.Header.Set("Mosaic-Paywall-Protocol-Versions", "0.3")
 	capabilities := make([]string, 0, len(paywallCapabilities))
 	for _, name := range paywallCapabilities {
-		capabilities = append(capabilities, name+"@0.2")
+		capabilities = append(capabilities, name+"@0.3")
 	}
 	request.Header.Set("Mosaic-Paywall-Capabilities", strings.Join(capabilities, ","))
 	request.Header.Set("Mosaic-Placement-Decision-Versions", "1")

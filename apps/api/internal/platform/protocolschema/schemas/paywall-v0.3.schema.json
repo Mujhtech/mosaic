@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:mosaic:protocol:schema:v0.2:paywall",
-  "title": "Mosaic Paywall Protocol 0.2 RC4",
-  "description": "The platform-neutral Mosaic native-paywall document contract for design tokens, visual effects, media backgrounds, two-axis sizing, screen and sheet presentation, generalized content, actions, and authored product-card states.",
+  "$id": "urn:mosaic:protocol:schema:v0.3:paywall",
+  "title": "Mosaic Paywall Protocol 0.3",
+  "description": "The platform-neutral Mosaic native-paywall document contract for design tokens, visual effects, media backgrounds, two-axis sizing, screen and sheet presentation, generalized content, actions, authored selection states, tabbed panels, ordered timelines, awards, and social proof. 0.3 replaces 0.2 outright: a 0.2 document is not a 0.3 document and there is no migration path.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -103,7 +103,7 @@
   "$defs": {
     "version": {
       "type": "string",
-      "const": "0.2"
+      "const": "0.3"
     },
     "identifier": {
       "type": "string",
@@ -137,6 +137,14 @@
           "$ref": "#/$defs/localizationKey"
         }
       }
+    },
+    "reservedAccessibilityKey": {
+      "description": "Localization keys the protocol itself consumes rather than any component referencing them. A renderer must never compose an accessibility phrase from a hardcoded string in any language; it reads these. Each is required exactly when the document contains the feature that consumes it and forbidden otherwise, enforced by the semantic validator. See docs/protocol/v0.3.md.",
+      "type": "string",
+      "enum": [
+        "mosaic.a11y.rating",
+        "mosaic.a11y.in_progress"
+      ]
     },
     "localeCatalog": {
       "type": "object",
@@ -215,6 +223,10 @@
         "component.carousel",
         "component.switch",
         "component.countdown",
+        "component.tabs",
+        "component.timeline",
+        "component.award",
+        "component.socialProof",
         "localization.catalogs",
         "localization.rtl",
         "localization.productTemplate",
@@ -230,6 +242,7 @@
         "action.navigateBack",
         "action.openExternalUrl",
         "accessibility.metadata",
+        "accessibility.reservedStrings",
         "fallback.asset",
         "fallback.product",
         "outcome.normalized",
@@ -243,7 +256,8 @@
         "style.typography",
         "style.productCardStates",
         "visibility.static",
-        "condition.switchVisibility"
+        "condition.switchVisibility",
+        "condition.tabVisibility"
       ]
     },
     "requiredCapability": {
@@ -1011,6 +1025,27 @@
               "type": "boolean"
             }
           }
+        },
+        {
+          "description": "Visible only while the referenced Tabs component's runtime selection equals the named tab. The Tabs component must be declared on the same screen, the tab id must be one it declares, and the referencing node must not be a descendant of that Tabs component.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "tabsId",
+            "equals"
+          ],
+          "properties": {
+            "mode": {
+              "const": "tab"
+            },
+            "tabsId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "equals": {
+              "$ref": "#/$defs/identifier"
+            }
+          }
         }
       ]
     },
@@ -1428,6 +1463,18 @@
         },
         {
           "$ref": "#/$defs/countdownComponent"
+        },
+        {
+          "$ref": "#/$defs/tabsComponent"
+        },
+        {
+          "$ref": "#/$defs/timelineComponent"
+        },
+        {
+          "$ref": "#/$defs/awardComponent"
+        },
+        {
+          "$ref": "#/$defs/socialProofComponent"
         }
       ]
     },
@@ -1670,7 +1717,8 @@
         }
       }
     },
-    "productCardDefaultStyle": {
+    "selectionStateStyle": {
+      "description": "The complete authored appearance of a two-state selectable box in its unselected state. Every field is required: the Selected state is expressed as an overlay on this value, so a partially authored base would leave the Selected state resolving against nothing.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -1703,6 +1751,9 @@
         }
       }
     },
+    "productCardDefaultStyle": {
+      "$ref": "#/$defs/selectionStateStyle"
+    },
     "edgeInsetsOverride": {
       "type": "object",
       "additionalProperties": false,
@@ -1721,7 +1772,8 @@
         }
       }
     },
-    "productCardSelectedStyle": {
+    "selectionStateStyleOverride": {
+      "description": "Fields that differ in the Selected state, overlaid recursively onto the Default state. An absent field means the Selected state keeps the Default value for that field -- it is an authored statement that nothing changes, not a missing value. An override that changes nothing is legal and raises the productCard.indistinguishableStates authoring warning rather than being silently accepted.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -1747,7 +1799,7 @@
         }
       }
     },
-    "productCardStyles": {
+    "selectionStyles": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -1756,12 +1808,18 @@
       ],
       "properties": {
         "default": {
-          "$ref": "#/$defs/productCardDefaultStyle"
+          "$ref": "#/$defs/selectionStateStyle"
         },
         "selected": {
-          "$ref": "#/$defs/productCardSelectedStyle"
+          "$ref": "#/$defs/selectionStateStyleOverride"
         }
       }
+    },
+    "productCardSelectedStyle": {
+      "$ref": "#/$defs/selectionStateStyleOverride"
+    },
+    "productCardStyles": {
+      "$ref": "#/$defs/selectionStyles"
     },
     "productCardAccessibility": {
       "type": "object",
@@ -1910,6 +1968,15 @@
         },
         {
           "$ref": "#/$defs/countdownComponent"
+        },
+        {
+          "$ref": "#/$defs/timelineComponent"
+        },
+        {
+          "$ref": "#/$defs/awardComponent"
+        },
+        {
+          "$ref": "#/$defs/socialProofComponent"
         }
       ]
     },
@@ -2519,6 +2586,544 @@
         },
         "accessibility": {
           "$ref": "#/$defs/textAccessibility"
+        }
+      }
+    },
+    "tabsEntry": {
+      "description": "One labelled panel. The label names the tab control; the same label names the panel, so no second accessibility string is authored and none can drift from the first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "content"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "label": {
+          "$ref": "#/$defs/localizedText"
+        },
+        "content": {
+          "$ref": "#/$defs/stack"
+        }
+      }
+    },
+    "tabsComponent": {
+      "description": "A container presenting N labelled panels with exactly one visible at a time. The visible panel is runtime selection state keyed by this component's id; the initially selected tab is authored, never inferred from ordering.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "tabBarDirection",
+        "tabBarGap",
+        "tabBarDistribution",
+        "gap",
+        "initialTabId",
+        "tabs",
+        "styles",
+        "labelTypography",
+        "selectedLabelColor",
+        "accessibility"
+      ],
+      "properties": {
+        "type": {
+          "const": "tabs"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "tabBarDirection": {
+          "description": "Axis along which the tab controls are laid out. Start and end are writing-direction relative, so an RTL catalog mirrors a horizontal bar.",
+          "type": "string",
+          "enum": [
+            "vertical",
+            "horizontal"
+          ]
+        },
+        "tabBarGap": {
+          "$ref": "#/$defs/logicalSize"
+        },
+        "tabBarDistribution": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "spaceBetween"
+          ]
+        },
+        "gap": {
+          "description": "Space between the tab bar and the visible panel.",
+          "$ref": "#/$defs/logicalSize"
+        },
+        "initialTabId": {
+          "description": "The tab selected when the component first appears and whenever runtime state is reset. Required: there is no positional default, because a reordered tabs array must not silently change which panel opens.",
+          "$ref": "#/$defs/identifier"
+        },
+        "tabs": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/tabsEntry"
+          }
+        },
+        "styles": {
+          "description": "Tab-control appearance in the Default and Selected states, using the same two-state contract as Product Card.",
+          "$ref": "#/$defs/selectionStyles"
+        },
+        "labelTypography": {
+          "description": "Typography of every tab label in the Default state.",
+          "$ref": "#/$defs/baseTypography"
+        },
+        "selectedLabelColor": {
+          "description": "Label colour of the selected tab. Required rather than optional: a selected tab that keeps its Default colour is a deliberate authoring choice and must be stated by repeating the colour, so that an omitted value can never be read as either intent.",
+          "$ref": "#/$defs/color"
+        },
+        "appearance": {
+          "$ref": "#/$defs/containerAppearance"
+        },
+        "sizing": {
+          "$ref": "#/$defs/boxSizing"
+        },
+        "outerInsets": {
+          "$ref": "#/$defs/edgeInsets"
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "accessibility": {
+          "description": "Names the tab list as a whole. Renderers expose the component as a tablist, each tab control as a tab named by its label and carrying its selected state, and each panel as a tabpanel named by the same label and associated with its tab.",
+          "$ref": "#/$defs/controlAccessibility"
+        }
+      }
+    },
+    "timelineMarker": {
+      "description": "The glyph rendered at an entry's position on the connector. A closed union: an unrecognised kind rejects the document rather than rendering an arbitrary substitute.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "dot"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "description": "The entry's 1-based position in the entries array, rendered as a numeral by the platform's locale number formatting.",
+              "const": "ordinal"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "name"
+          ],
+          "properties": {
+            "kind": {
+              "const": "icon"
+            },
+            "name": {
+              "$ref": "#/$defs/iconName"
+            }
+          }
+        }
+      ]
+    },
+    "timelineConnector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "color",
+        "width",
+        "style"
+      ],
+      "properties": {
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "width": {
+          "$ref": "#/$defs/positiveLogicalSize"
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "solid",
+            "dashed"
+          ]
+        }
+      }
+    },
+    "timelineEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "title": {
+          "$ref": "#/$defs/localizedText"
+        },
+        "description": {
+          "description": "A secondary line. Absent means this entry has a title and nothing else -- the renderer draws no empty second line and reserves no space for one.",
+          "$ref": "#/$defs/localizedText"
+        },
+        "marker": {
+          "description": "Absent means this entry carries no glyph and the connector runs unbroken through its position. It is not a request for a default marker.",
+          "$ref": "#/$defs/timelineMarker"
+        }
+      }
+    },
+    "timelineComponent": {
+      "description": "An ordered sequence of steps, such as the stages of a free trial. Order is the entries array order and carries meaning; renderers must not reorder. Vertical only: a horizontal timeline needs different connector routing, different RTL mirroring, and a different truncation model for long titles, so it is deferred rather than approximated.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "orientation",
+        "gap",
+        "connector",
+        "entries",
+        "titleTypography",
+        "accessibility"
+      ],
+      "properties": {
+        "type": {
+          "const": "timeline"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "orientation": {
+          "const": "vertical"
+        },
+        "gap": {
+          "description": "Space between consecutive entries.",
+          "$ref": "#/$defs/logicalSize"
+        },
+        "connector": {
+          "$ref": "#/$defs/timelineConnector"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 12,
+          "items": {
+            "$ref": "#/$defs/timelineEntry"
+          }
+        },
+        "markerColor": {
+          "description": "Required when any entry declares a marker and forbidden when none does; the semantic validator enforces both directions so a colour can neither be missing where it is used nor declared where nothing consumes it.",
+          "$ref": "#/$defs/color"
+        },
+        "markerSize": {
+          "description": "Required when any entry declares a marker and forbidden when none does.",
+          "$ref": "#/$defs/positiveLogicalSize"
+        },
+        "titleTypography": {
+          "$ref": "#/$defs/baseTypography"
+        },
+        "descriptionTypography": {
+          "description": "Required when any entry declares a description and forbidden when none does.",
+          "$ref": "#/$defs/baseTypography"
+        },
+        "appearance": {
+          "$ref": "#/$defs/boxAppearance"
+        },
+        "sizing": {
+          "$ref": "#/$defs/boxSizing"
+        },
+        "outerInsets": {
+          "$ref": "#/$defs/edgeInsets"
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "accessibility": {
+          "description": "Names the sequence as a whole. Renderers expose the component as a labelled ordered list, each entry as one item announcing its title then its description, and treat markers and connectors as decorative.",
+          "$ref": "#/$defs/controlAccessibility"
+        }
+      }
+    },
+    "awardEmblem": {
+      "description": "The visual mark accompanying an award. A closed union over the existing asset and icon vocabularies; no third form is inferred.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "assetId",
+            "size"
+          ],
+          "properties": {
+            "type": {
+              "const": "image"
+            },
+            "assetId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "size": {
+              "$ref": "#/$defs/positiveLogicalSize"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name",
+            "size",
+            "color"
+          ],
+          "properties": {
+            "type": {
+              "const": "icon"
+            },
+            "name": {
+              "$ref": "#/$defs/iconName"
+            },
+            "size": {
+              "$ref": "#/$defs/positiveLogicalSize"
+            },
+            "color": {
+              "$ref": "#/$defs/color"
+            }
+          }
+        }
+      ]
+    },
+    "awardComponent": {
+      "description": "A recognition or accolade, such as an editorial award. Passive: it has no action and no runtime state.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "direction",
+        "gap",
+        "crossAxisAlignment",
+        "title",
+        "titleTypography",
+        "accessibility"
+      ],
+      "properties": {
+        "type": {
+          "const": "award"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "vertical",
+            "horizontal"
+          ]
+        },
+        "gap": {
+          "$ref": "#/$defs/logicalSize"
+        },
+        "crossAxisAlignment": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        },
+        "emblem": {
+          "description": "Absent means the award renders its text alone. It is not a request for a generic badge.",
+          "$ref": "#/$defs/awardEmblem"
+        },
+        "title": {
+          "$ref": "#/$defs/localizedText"
+        },
+        "titleTypography": {
+          "$ref": "#/$defs/baseTypography"
+        },
+        "subtitle": {
+          "description": "Absent means the award has a title and nothing else. Required to be accompanied by subtitleTypography when present.",
+          "$ref": "#/$defs/localizedText"
+        },
+        "subtitleTypography": {
+          "description": "Required when subtitle is present and forbidden when it is absent.",
+          "$ref": "#/$defs/baseTypography"
+        },
+        "appearance": {
+          "$ref": "#/$defs/boxAppearance"
+        },
+        "sizing": {
+          "$ref": "#/$defs/boxSizing"
+        },
+        "outerInsets": {
+          "$ref": "#/$defs/edgeInsets"
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "accessibility": {
+          "description": "Names the award as a single group announcing its title then its subtitle. The emblem is always decorative, because the title already carries the award's meaning.",
+          "$ref": "#/$defs/controlAccessibility"
+        }
+      },
+      "dependentRequired": {
+        "subtitle": [
+          "subtitleTypography"
+        ],
+        "subtitleTypography": [
+          "subtitle"
+        ]
+      }
+    },
+    "socialProofRating": {
+      "description": "A bounded, integer-only rating. value counts steps, not points: with step \"half\" and maximum 5, value 9 is four and a half out of five. Integers are used throughout so that Dart, Swift, Kotlin, and JavaScript cannot disagree about a rounded fraction.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "symbol",
+        "value",
+        "maximum",
+        "step",
+        "size",
+        "filledColor",
+        "emptyColor"
+      ],
+      "properties": {
+        "symbol": {
+          "const": "star"
+        },
+        "value": {
+          "description": "Whole number of steps earned. Must not exceed maximum multiplied by the number of steps per point; the semantic validator enforces that bound.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "maximum": {
+          "description": "Number of symbols shown, in points.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "step": {
+          "description": "\"whole\" means one step per point; \"half\" means two steps per point.",
+          "type": "string",
+          "enum": [
+            "whole",
+            "half"
+          ]
+        },
+        "size": {
+          "$ref": "#/$defs/positiveLogicalSize"
+        },
+        "filledColor": {
+          "$ref": "#/$defs/color"
+        },
+        "emptyColor": {
+          "$ref": "#/$defs/color"
+        }
+      }
+    },
+    "socialProofAvatar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assetId",
+        "size"
+      ],
+      "properties": {
+        "assetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "size": {
+          "$ref": "#/$defs/positiveLogicalSize"
+        }
+      }
+    },
+    "socialProofComponent": {
+      "description": "A testimonial: an attributed quotation, optionally rated and optionally illustrated. Passive: it has no action and no runtime state. Aggregate statistics such as \"2M+ users\" are not a variant of this component and are authored as Text; see docs/protocol/v0.3.md.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "gap",
+        "quote",
+        "quoteTypography",
+        "attribution",
+        "attributionTypography",
+        "accessibility"
+      ],
+      "properties": {
+        "type": {
+          "const": "socialProof"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "gap": {
+          "$ref": "#/$defs/logicalSize"
+        },
+        "quote": {
+          "$ref": "#/$defs/localizedText"
+        },
+        "quoteTypography": {
+          "$ref": "#/$defs/baseTypography"
+        },
+        "attribution": {
+          "description": "Who said it. Required: an unattributed testimonial is not social proof, and a renderer must never be left to invent or omit the source.",
+          "$ref": "#/$defs/localizedText"
+        },
+        "attributionTypography": {
+          "$ref": "#/$defs/baseTypography"
+        },
+        "rating": {
+          "description": "Absent means this testimonial carries no rating and no symbols are drawn. It is not a zero rating and not an unknown rating.",
+          "$ref": "#/$defs/socialProofRating"
+        },
+        "avatar": {
+          "description": "Absent means no avatar is drawn and no space is reserved for one.",
+          "$ref": "#/$defs/socialProofAvatar"
+        },
+        "appearance": {
+          "$ref": "#/$defs/boxAppearance"
+        },
+        "sizing": {
+          "$ref": "#/$defs/boxSizing"
+        },
+        "outerInsets": {
+          "$ref": "#/$defs/edgeInsets"
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "accessibility": {
+          "description": "Names the testimonial as a single group announcing, in order, the rating as \"<value> out of <maximum>\" when present, then the quote, then the attribution. The avatar is always decorative.",
+          "$ref": "#/$defs/controlAccessibility"
         }
       }
     }

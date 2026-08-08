@@ -15,7 +15,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingoperator"
@@ -24,8 +23,8 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingaccesspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingcustomerpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingoperatorpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/pgtest"
 	billingoperatorhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingoperator"
-	"github.com/Mujhtech/mosaic/apps/api/migrations"
 )
 
 // These tests cover the guarantees that only exist once a real browser-session
@@ -52,20 +51,18 @@ func testPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	if databaseURL == "" {
 		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	t.Cleanup(cancel)
 
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	goose.SetBaseFS(migrations.Files)
-	if err := goose.SetDialect("postgres"); err != nil {
+	if err := pgtest.Migrate(db, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := goose.UpContext(ctx, db, "."); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
+	// The assertion clock starts after the schema is up: a deadline
+	// created before migration is spent by migration.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	t.Cleanup(cancel)
 	_ = db.Close()
 
 	pool, err := pgxpool.New(ctx, databaseURL)
