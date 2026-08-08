@@ -82,7 +82,7 @@ failure.
   `mosaic_revenuecat` and `mosaic_native_store` packages.
 - Platforms: Flutter (iOS and Android hosts), Flutter 3.22 / Dart 3.4 minimum.
 - Symptom: the packages declare `publish_to: none` and are versioned
-  `0.2.0-dev.11` / `0.1.0-dev.1`. `flutter pub add mosaic_sdk` cannot resolve
+  `0.3.0-dev.1` / `0.1.0-dev.1`. `flutter pub add mosaic_sdk` cannot resolve
   them, because no version exists on pub.dev.
 - Workaround: install by Git pin (repository URL plus `path:` and an exact tag
   or commit `ref:`) or by local path dependency. Both forms are documented in

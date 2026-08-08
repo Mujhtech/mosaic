@@ -1267,12 +1267,12 @@ paths:
         - { in: header, name: Mosaic-SDK-Platform, required: true, schema: { type: string, enum: [flutter, ios, android] } }
         - { in: header, name: Mosaic-SDK-Version, required: true, schema: { type: string, minLength: 1, maxLength: 64, pattern: "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:[-+][A-Za-z0-9.-]+)?$" } }
         - { in: header, name: Mosaic-Configuration-Versions, required: true, schema: { type: string, pattern: "^(1|2|3)(, ?(1|2|3))*$" } }
-        - { in: header, name: Mosaic-Paywall-Protocol-Versions, required: true, schema: { type: string, const: "0.2" } }
+        - { in: header, name: Mosaic-Paywall-Protocol-Versions, required: true, schema: { type: string, const: "0.3" } }
         - in: header
           name: Mosaic-Paywall-Capabilities
           required: true
-          description: Comma-separated unique exact Protocol capability pairs (`name@0.2`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
-          schema: { type: string, minLength: 1, maxLength: 16384, example: "component.text@0.2,layout.stack@0.2" }
+          description: Comma-separated unique exact Protocol capability pairs (`name@0.3`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
+          schema: { type: string, minLength: 1, maxLength: 16384, example: "component.text@0.3,layout.stack@0.3" }
         - { in: header, name: Mosaic-Placement-Decision-Versions, required: false, schema: { type: string, pattern: "^1$" } }
         - { in: header, name: Mosaic-Decision-Features, required: false, description: Comma-separated exact Placement Decision v1 feature identifiers., schema: { type: string, maxLength: 16384 } }
         - { in: header, name: Mosaic-Bucketing-Algorithms, required: false, schema: { type: string, enum: [sha256_length_prefixed_v1] } }
@@ -7961,7 +7961,7 @@ components:
         status: { type: string, enum: [active, published, archived] }
         revision: { type: integer, minimum: 1 }
         sourceVersionId: { type: string }
-        protocolVersion: { type: string, const: "0.2" }
+        protocolVersion: { type: string, const: "0.3" }
         validationStatus: { type: string, enum: [valid, invalid] }
         validation: { $ref: "#/components/schemas/ValidationSummary" }
         createdByActorId: { type: string }
@@ -7987,7 +7987,7 @@ components:
         versionNumber: { type: integer, minimum: 1 }
         sourceDraftId: { type: string }
         sourceRevision: { type: integer, minimum: 1 }
-        protocolVersion: { type: string, const: "0.2" }
+        protocolVersion: { type: string, const: "0.3" }
         document: { type: object, additionalProperties: true }
         documentHash: { type: string, pattern: "^[0-9a-f]{64}$" }
         validation: { $ref: "#/components/schemas/ValidationSummary" }

@@ -44,7 +44,7 @@ transaction. Retrying an identical request returns the original Release. Rollbac
 selected Release's persisted payload snapshot and regenerates only the new Release ID, number,
 publication time, and content digest; mutable Product or Asset rows are never consulted.
 
-Publishing is Protocol `0.2` only. The API compiles the canonical Protocol 0.2 JSON Schema at
+Publishing is Protocol `0.3` only. The API compiles the canonical Protocol 0.3 JSON Schema at
 startup and applies both schema and semantic validation before any immutable Version is created.
 Missing, archived, or cross-Project Products block publication.
 Mock Products require explicit acknowledgement and missing provider mappings are returned as
@@ -70,7 +70,7 @@ Archiving prevents new authoring use but deliberately retains bytes referenced b
 `GET /v1/sdk/configuration` authenticates an active Environment-scoped `public_sdk` key supplied as
 a Bearer token. The Environment is derived only from the key. Required capability headers are
 documented in OpenAPI. `Mosaic-Paywall-Capabilities` reports unique comma-separated exact pairs
-such as `component.text@0.2`; the API validates the closed capability catalog and requires every
+such as `component.text@0.3`; the API validates the closed capability catalog and requires every
 capability in the selected Release. The endpoint serves only the persisted current immutable Release, supports
 representation-specific strong ETags, `If-None-Match`, `304`, deterministic standard gzip, and:
 
@@ -110,7 +110,7 @@ Asset demo. Do not distribute it with an application. The direct API remains ava
 `http://localhost:8080` for browser development; SDK configuration and immutable Asset bytes can be
 requested through the trusted local TLS edge.
 
-Every `MOSAIC_PUBLIC_ASSET_BASE_URL`, including development, must be HTTPS because Protocol `0.2`
+Every `MOSAIC_PUBLIC_ASSET_BASE_URL`, including development, must be HTTPS because Protocol `0.3`
 and PostgreSQL intentionally enforce immutable HTTPS Asset references. For hosted deployments,
 replace the documented development object-store credentials, enable the session Secure cookie,
 and configure an externally reachable HTTPS Asset origin.

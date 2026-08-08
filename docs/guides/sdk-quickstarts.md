@@ -12,7 +12,7 @@ registry** (owner decision D6; see
 [docs/known-limitations.md](../known-limitations.md)). You install them by
 pinning this repository at an exact tag or commit, or by local path:
 
-- **Flutter** (`mosaic_sdk`, `0.2.0-dev.x`): git dependency with
+- **Flutter** (`mosaic_sdk`, `0.3.0-dev.x`): git dependency with
   `path: sdk/flutter` and an exact `ref`, or a local `path:` dependency.
   Not resolvable from pub.dev.
 - **iOS** (`MosaicSDK`, `0.1.0-dev.x`): Swift Package Manager by tag,
