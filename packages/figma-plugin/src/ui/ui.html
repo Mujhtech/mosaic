@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mosaic Export</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: var(--figma-color-bg, #ffffff);
+        --fg: var(--figma-color-text, #1e1e1e);
+        --muted: var(--figma-color-text-secondary, #6b6b6b);
+        --border: var(--figma-color-border, #e6e6e6);
+        --danger: var(--figma-color-text-danger, #b3261e);
+        --warning: var(--figma-color-text-warning, #8a5a00);
+        --accent: var(--figma-color-bg-brand, #0d99ff);
+        --accent-fg: var(--figma-color-text-onbrand, #ffffff);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 12px;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          11px/1.5 "Inter",
+          system-ui,
+          sans-serif;
+      }
+      h1 {
+        font-size: 12px;
+        margin: 0 0 2px;
+      }
+      p {
+        margin: 0;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .panel {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 10px;
+        margin-top: 10px;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .stat {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px;
+      }
+      .stat b {
+        display: block;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      ul {
+        margin: 6px 0 0;
+        padding-left: 16px;
+        max-height: 150px;
+        overflow-y: auto;
+      }
+      li {
+        margin-bottom: 4px;
+      }
+      li code {
+        color: var(--muted);
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      button {
+        flex: 1;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--fg);
+        padding: 7px 10px;
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-fg);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .error {
+        color: var(--danger);
+        font-weight: 500;
+      }
+      .warn-title {
+        color: var(--warning);
+        font-weight: 600;
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Mosaic Export</h1>
+    <p class="muted">
+      Maps the selected frame into a Mosaic Paywall Protocol 0.3 document, then
+      import it in Studio with <strong>Import</strong>.
+    </p>
+
+    <section id="error" class="panel" hidden>
+      <p class="error" id="error-message"></p>
+      <p class="muted" id="error-hint"></p>
+    </section>
+
+    <section id="result" hidden>
+      <div class="stats">
+        <div class="stat"><b id="stat-nodes">0</b><span class="muted">nodes</span></div>
+        <div class="stat"><b id="stat-text">0</b><span class="muted">text layers</span></div>
+        <div class="stat"><b id="stat-strings">0</b><span class="muted">strings</span></div>
+      </div>
+
+      <div class="panel">
+        <p><strong id="doc-id"></strong></p>
+        <p class="muted" id="doc-summary"></p>
+      </div>
+
+      <div class="panel" id="warnings-panel" hidden>
+        <p class="warn-title">Warnings (<span id="warnings-count">0</span>)</p>
+        <ul id="warnings"></ul>
+      </div>
+
+      <div class="panel" id="skipped-panel" hidden>
+        <p class="warn-title">Skipped layers (<span id="skipped-count">0</span>)</p>
+        <ul id="skipped"></ul>
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="download" type="button">Download JSON</button>
+        <button id="copy" type="button">Copy to clipboard</button>
+      </div>
+    </section>
+    <script>
+      /* MOSAIC_UI_SCRIPT */
+    </script>
+  </body>
+</html>
