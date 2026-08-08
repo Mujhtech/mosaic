@@ -34,9 +34,11 @@ final class MosaicPreviewMessageCodec {
       project['fileFormatVersion'],
       'fileFormatVersion',
     );
+    // One implemented contract version, so the caller's expectation and this
+    // reader's version must both match. There is no second accepted version to
+    // fall through to.
     if (fileFormatVersion != expectedFileFormatVersion ||
-        (fileFormatVersion != mosaicLocalPreviewProtocolVersion &&
-            fileFormatVersion != mosaicLocalPreviewV02ProtocolVersion)) {
+        fileFormatVersion != mosaicLocalPreviewProtocolVersion) {
       throw const MosaicPreviewProtocolException(
         'The local project format version is unsupported.',
       );
@@ -105,8 +107,7 @@ final class MosaicPreviewMessageCodec {
       'previewProtocolVersion',
     );
     if (protocolVersion != expectedProtocolVersion ||
-        (protocolVersion != mosaicLocalPreviewProtocolVersion &&
-            protocolVersion != mosaicLocalPreviewV02ProtocolVersion)) {
+        protocolVersion != mosaicLocalPreviewProtocolVersion) {
       throw const MosaicPreviewProtocolException(
         'The preview protocol version is unsupported.',
       );
@@ -163,8 +164,7 @@ final class MosaicPreviewMessageCodec {
     required Map<String, Object?> payload,
     String protocolVersion = mosaicLocalPreviewProtocolVersion,
   }) {
-    if (protocolVersion != mosaicLocalPreviewProtocolVersion &&
-        protocolVersion != mosaicLocalPreviewV02ProtocolVersion) {
+    if (protocolVersion != mosaicLocalPreviewProtocolVersion) {
       throw const MosaicPreviewProtocolException(
         'The preview protocol version is unsupported.',
       );

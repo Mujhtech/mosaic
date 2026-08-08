@@ -96,9 +96,7 @@ extension on _MosaicPaywallState {
     for (final selector
         in widget.document.nodes.whereType<MosaicProductSelectorComponent>()) {
       final availableOptions = _availableOptions(selector);
-      final configuredInitial = selector.cards.isEmpty
-          ? selector.initiallySelectedProductReferenceId
-          : selector.initialProductCardId;
+      final configuredInitial = selector.initialProductCardId;
       final candidate = _selectedProductCardIds.containsKey(selector.id)
           ? _selectedProductCardIds[selector.id]
           : configuredInitial;
@@ -162,21 +160,6 @@ extension on _MosaicPaywallState {
   List<_AvailableProductOption> _availableOptions(
     MosaicProductSelectorComponent selector,
   ) {
-    if (selector.cards.isEmpty) {
-      return <_AvailableProductOption>[
-        for (final referenceId in selector.productReferenceIds)
-          if (widget.document.productReference(referenceId)
-              case final reference?)
-            if (_availableProducts[reference.productId] case final product?)
-              if (_hasLocalizedPrice(product))
-                (
-                  selectionId: reference.id,
-                  card: null,
-                  reference: reference,
-                  product: product,
-                ),
-      ];
-    }
     return <_AvailableProductOption>[
       for (final card in selector.cards)
         if (widget.document.productReference(card.productReferenceId)
@@ -254,12 +237,10 @@ extension on _MosaicPaywallState {
     );
     _notifyProductUnavailable(
       selector.id,
-      referenceId: selector.cards.isEmpty
-          ? selector.initiallySelectedProductReferenceId
-          : selector.cards
-              .where((card) => card.id == selector.initialProductCardId)
-              .firstOrNull
-              ?.productReferenceId,
+      referenceId: selector.cards
+          .where((card) => card.id == selector.initialProductCardId)
+          .firstOrNull
+          ?.productReferenceId,
       reportPresentationResult: false,
     );
   }
@@ -352,12 +333,10 @@ extension on _MosaicPaywallState {
     if (selectedOption == null) {
       _notifyProductUnavailable(
         selectorId,
-        referenceId: selector.cards.isEmpty
-            ? selector.initiallySelectedProductReferenceId
-            : selector.cards
-                .where((card) => card.id == selector.initialProductCardId)
-                .firstOrNull
-                ?.productReferenceId,
+        referenceId: selector.cards
+            .where((card) => card.id == selector.initialProductCardId)
+            .firstOrNull
+            ?.productReferenceId,
       );
       return;
     }

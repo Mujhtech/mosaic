@@ -1,6 +1,15 @@
-part of 'renderer_v02_test.dart';
+part of 'renderer_v03_test.dart';
 
-void _defineRendererV02ProductTests(
+/// Restricts [matching] to the canonical fixture's Product Selector subtree.
+///
+/// Several product labels are also Tabs labels, so an unscoped text finder
+/// would match copy that belongs to a different component.
+Finder _inSelector(Finder matching) => find.descendant(
+      of: find.byKey(const ValueKey<String>('mosaic-plans')),
+      matching: matching,
+    );
+
+void _defineRendererV03ProductTests(
     Directory root,
     MosaicPaywallDocument Function(String) fixture,
     List<MosaicProduct> products) {
@@ -22,7 +31,12 @@ void _defineRendererV02ProductTests(
 
     final badge = card.badge!;
     final selectedBadge = badge.styles.resolve(selected: true);
-    expect(selectedBadge.background.value, 'action.primary');
+    final selectedBadgeBackground = selectedBadge.background;
+    expect(selectedBadgeBackground, isA<MosaicColorBackground>());
+    expect(
+      (selectedBadgeBackground as MosaicColorBackground).color.value,
+      'action.primary',
+    );
     expect(
       selectedBadge.cornerRadius,
       badge.styles.defaultStyle.cornerRadius,
@@ -41,9 +55,11 @@ void _defineRendererV02ProductTests(
       onInteraction: interactions.add,
     );
 
-    expect(find.text('Monthly'), findsOneWidget);
-    expect(find.text('Yearly'), findsOneWidget);
-    expect(find.text('Lifetime Access'), findsOneWidget);
+    // 'Monthly' and 'Lifetime' also name Tabs controls in the canonical
+    // fixture, so product-card copy is asserted inside the Product Selector.
+    expect(_inSelector(find.text('Monthly')), findsOneWidget);
+    expect(_inSelector(find.text('Yearly')), findsOneWidget);
+    expect(_inSelector(find.text('Lifetime Access')), findsOneWidget);
     expect(find.text(r'$199.99'), findsOneWidget);
     expect(find.text('Best value'), findsOneWidget);
     expect(find.text('Own it forever'), findsOneWidget);
@@ -59,17 +75,14 @@ void _defineRendererV02ProductTests(
     expect(yearly.label, r'Yearly, $79.99, Best value');
     expect(find.bySemanticsLabel('Best value'), findsNothing);
 
-    await tester.tap(
-      find.byKey(
-        const ValueKey<String>('mosaic-plans-monthly-plan-card'),
-      ),
+    final monthlyCard = find.byKey(
+      const ValueKey<String>('mosaic-plans-monthly-plan-card'),
     );
+    await tester.ensureVisible(monthlyCard);
+    await tester.pumpAndSettle();
+    await tester.tap(monthlyCard);
     await tester.pump();
-    final monthly = tester.getSemantics(
-      find.byKey(
-        const ValueKey<String>('mosaic-plans-monthly-plan-card'),
-      ),
-    );
+    final monthly = tester.getSemantics(monthlyCard);
     expect(monthly.flagsCollection.isSelected, Tristate.isTrue);
     expect(interactions.last.productReferenceId, 'monthly-plan');
     semantics.dispose();
@@ -79,7 +92,7 @@ void _defineRendererV02ProductTests(
       'fallback card semantics merge visible passive labels in source order',
       (tester) async {
     final source = jsonDecode(
-      File('${root.path}/protocol/fixtures/v0.2/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     final extraText = _jsonNodeCopy(source, 'offer-page-one-title')
@@ -239,7 +252,7 @@ void _defineRendererV02ProductTests(
     );
     expect(monthly.flagsCollection.isSelected, Tristate.isTrue);
     expect(find.text('Provider Monthly'), findsOneWidget);
-    expect(find.text('Lifetime'), findsOneWidget,
+    expect(_inSelector(find.text('Lifetime')), findsOneWidget,
         reason: 'An empty provider title falls back to the reference label.');
     semantics.dispose();
   });
@@ -288,7 +301,7 @@ void _defineRendererV02ProductTests(
   testWidgets('locale changes reconcile an unavailable current card',
       (tester) async {
     final source = jsonDecode(
-      File('${root.path}/protocol/fixtures/v0.2/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     final monthlyPrice = _jsonNode(
@@ -449,11 +462,12 @@ void _defineRendererV02ProductTests(
     );
     await tester.pump();
     await tester.pump();
-    await tester.tap(
-      find.byKey(
-        const ValueKey<String>('mosaic-plans-lifetime-plan-card'),
-      ),
+    final lifetime = find.byKey(
+      const ValueKey<String>('mosaic-plans-lifetime-plan-card'),
     );
+    await tester.ensureVisible(lifetime);
+    await tester.pumpAndSettle();
+    await tester.tap(lifetime);
     await tester.pump();
     // Nothing has been substituted yet: the customer's own choice is available.
     expect(
@@ -504,7 +518,7 @@ void _defineRendererV02ProductTests(
   testWidgets('vertical selector follows source order and stretches cards',
       (tester) async {
     final source = jsonDecode(
-      File('${root.path}/protocol/fixtures/v0.2/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     _jsonNode(source, 'plans')['direction'] = 'vertical';

@@ -235,19 +235,26 @@ extension on _MosaicPaywallState {
             padding: _edgeInsets(component.appearance!.padding!),
             child: content,
           );
-    final semanticValue = busy
-        ? _buttonSemanticValue(component.inProgressChildren ?? const [])
-        : null;
+    // One control, one accessibility element. The authored name does not
+    // change when the Button becomes busy — a name that changes mid-operation
+    // is disorienting and breaks UI automation — so busy-ness is carried as
+    // the value. Neither idle nor in-progress content is announced, in both
+    // states alike, so the subtree stays excluded.
+    final announcement = _announcementFor(
+      component,
+      state: busy
+          ? MosaicButtonAnnouncementState.inProgress
+          : MosaicButtonAnnouncementState.idle,
+    );
     return Semantics(
       key: ValueKey<String>('mosaic-${component.id}'),
       button: true,
       enabled: enabled,
       liveRegion: busy,
-      label: _localization.text(component.accessibility.label),
-      hint: component.accessibility.hint == null
-          ? null
-          : _localization.text(component.accessibility.hint!),
-      value: semanticValue?.isEmpty ?? true ? null : semanticValue,
+      explicitChildNodes: true,
+      label: announcement.container.label,
+      hint: announcement.container.hint,
+      value: announcement.container.value,
       child: ExcludeSemantics(
         child: Material(
           type: MaterialType.transparency,
@@ -284,61 +291,9 @@ extension on _MosaicPaywallState {
     }
   }
 
-  String _buttonSemanticValue(Iterable<MosaicNode> nodes) {
-    final values = <String>[];
-    void visit(MosaicNode node) {
-      switch (node) {
-        case MosaicTextComponent():
-          values.add(
-            _localization.text(node.accessibility.label ?? node.value),
-          );
-        case MosaicImageComponent():
-          if (!node.accessibility.hidden) {
-            values.add(_localization.text(node.accessibility.label!));
-          }
-        case MosaicIconComponent():
-          if (!node.accessibility.hidden) {
-            values.add(_localization.text(node.accessibility.label!));
-          }
-        case MosaicFeatureListComponent():
-          values.add(_localization.text(node.accessibility.label));
-        case MosaicCountdownComponent():
-          values.add(
-            node.accessibility.label == null
-                ? _formatCountdown(
-                    node,
-                    node.endsAt.difference(widget.clock().toUtc()),
-                  )
-                : _localization.text(node.accessibility.label!),
-          );
-        case MosaicStackNode():
-          for (final child in node.children) {
-            visit(child);
-          }
-        default:
-          break;
-      }
-    }
-
-    for (final node in nodes) {
-      visit(node);
-    }
-    return values.join(', ');
-  }
-
   Widget _buildIcon(BuildContext context, MosaicIconComponent component) {
     final icon = Icon(
-      switch (component.name) {
-        MosaicIconName.checkmark => Icons.check,
-        MosaicIconName.close => Icons.close,
-        MosaicIconName.lock => Icons.lock,
-        MosaicIconName.restore => Icons.restore,
-        MosaicIconName.externalLink => Icons.open_in_new,
-        MosaicIconName.arrowBackward => Icons.arrow_back,
-        MosaicIconName.arrowForward => Icons.arrow_forward,
-        MosaicIconName.chevronBackward => Icons.chevron_left,
-        MosaicIconName.chevronForward => Icons.chevron_right,
-      },
+      _materialIcon(component.name),
       size: component.size,
       color: _color(context, component.color),
     );
@@ -353,194 +308,6 @@ extension on _MosaicPaywallState {
       image: true,
       label: _localization.text(component.accessibility.label!),
       child: ExcludeSemantics(child: icon),
-    );
-  }
-
-  Widget _buildPurchaseButton(
-    BuildContext context,
-    MosaicPurchaseButtonComponent component,
-  ) {
-    final busy = _busyActionId == component.id;
-    final selected =
-        _selectedProductCardIds[component.action.productSelectorId];
-    final targetVisible =
-        _isNodeEffectivelyVisible(component.action.productSelectorId);
-    if (!targetVisible &&
-        _notifiedHiddenPurchaseTargets
-            .add(component.action.productSelectorId)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted &&
-            !_isNodeEffectivelyVisible(component.action.productSelectorId)) {
-          widget.onDiagnostic?.call(
-            const MosaicDiagnostic(
-              code: 'purchase.hiddenProductSelector',
-              message:
-                  'Purchase is disabled because its Product Selector is hidden.',
-              severity: MosaicDiagnosticSeverity.warning,
-            ),
-          );
-        }
-      });
-    } else if (targetVisible) {
-      _notifiedHiddenPurchaseTargets.remove(
-        component.action.productSelectorId,
-      );
-    }
-    final enabled = _productsResolved &&
-        selected != null &&
-        _busyActionId == null &&
-        targetVisible;
-    final visibleLabel = _localization.text(
-      busy ? component.inProgressLabel : component.label,
-    );
-    return Semantics(
-      key: ValueKey<String>('mosaic-${component.id}'),
-      button: true,
-      enabled: enabled,
-      liveRegion: busy,
-      label: _localization.text(component.accessibility.label),
-      hint: component.accessibility.hint == null
-          ? null
-          : _localization.text(component.accessibility.hint!),
-      value: busy ? visibleLabel : null,
-      child: ExcludeSemantics(
-        child: component.typography == null
-            ? FilledButton(
-                onPressed: enabled
-                    ? () => unawaited(
-                          _purchase(component.action, component.id),
-                        )
-                    : null,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(48, 48),
-                ),
-                child: Text(visibleLabel),
-              )
-            : TextButton(
-                onPressed: enabled
-                    ? () => unawaited(
-                          _purchase(component.action, component.id),
-                        )
-                    : null,
-                style: TextButton.styleFrom(
-                  minimumSize: const Size(48, 48),
-                  foregroundColor: _color(context, component.typography!.color),
-                  textStyle: _textStyle(
-                    context,
-                    component.typography,
-                    component.typography!.style,
-                  ),
-                ),
-                child: Text(visibleLabel),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildRestoreButton(
-    BuildContext context,
-    MosaicRestoreButtonComponent component,
-  ) {
-    final busy = _busyActionId == component.id;
-    final enabled = _busyActionId == null;
-    final visibleLabel = _localization.text(
-      busy ? component.inProgressLabel : component.label,
-    );
-    return Semantics(
-      key: ValueKey<String>('mosaic-${component.id}'),
-      button: true,
-      enabled: enabled,
-      liveRegion: busy,
-      label: _localization.text(component.accessibility.label),
-      hint: component.accessibility.hint == null
-          ? null
-          : _localization.text(component.accessibility.hint!),
-      value: busy ? visibleLabel : null,
-      child: ExcludeSemantics(
-        child: component.typography == null
-            ? OutlinedButton(
-                onPressed:
-                    enabled ? () => unawaited(_restore(component.id)) : null,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(48, 48),
-                ),
-                child: Text(visibleLabel),
-              )
-            : TextButton(
-                onPressed:
-                    enabled ? () => unawaited(_restore(component.id)) : null,
-                style: TextButton.styleFrom(
-                  minimumSize: const Size(48, 48),
-                  foregroundColor: _color(context, component.typography!.color),
-                  textStyle: _textStyle(
-                    context,
-                    component.typography,
-                    component.typography!.style,
-                  ),
-                ),
-                child: Text(visibleLabel),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildCloseButton(
-    BuildContext context,
-    MosaicCloseButtonComponent component,
-  ) {
-    return Semantics(
-      key: ValueKey<String>('mosaic-${component.id}'),
-      button: true,
-      enabled: true,
-      label: _localization.text(component.accessibility.label),
-      hint: component.accessibility.hint == null
-          ? null
-          : _localization.text(component.accessibility.hint!),
-      child: ExcludeSemantics(
-        child: TextButton(
-          onPressed: _close,
-          style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-          child: Text(
-            _localization.text(component.label),
-            style: component.typography == null
-                ? null
-                : _textStyle(
-                    context,
-                    component.typography,
-                    component.typography!.style,
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLegalText(
-    BuildContext context,
-    MosaicLegalTextComponent component,
-  ) {
-    final value = _localization.text(component.value);
-    final accessibilityLabel = component.accessibility.label == null
-        ? value
-        : _localization.text(component.accessibility.label!);
-    return Semantics(
-      key: ValueKey<String>('mosaic-${component.id}'),
-      label: accessibilityLabel,
-      header:
-          component.accessibility.role == MosaicTextAccessibilityRole.heading,
-      child: ExcludeSemantics(
-        child: Text(
-          value,
-          style: component.typography == null
-              ? Theme.of(context).textTheme.bodySmall
-              : _textStyle(
-                  context,
-                  component.typography,
-                  component.typography!.style,
-                ),
-          textAlign: _textAlign(component.alignment),
-        ),
-      ),
     );
   }
 

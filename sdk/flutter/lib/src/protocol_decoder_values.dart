@@ -1,7 +1,7 @@
 part of 'protocol.dart';
 
 extension on MosaicProtocolDecoder {
-  MosaicTypography _v02Typography(
+  MosaicTypography _v03Typography(
     Object? value,
     String path, {
     required bool allowMaximumLines,
@@ -30,7 +30,7 @@ extension on MosaicProtocolDecoder {
       );
     }
     return MosaicTypography(
-      style: _v02TextStyle(object['style'], '$path.style'),
+      style: _v03TextStyle(object['style'], '$path.style'),
       fontSize: _boundedNumber(
         object['fontSize'],
         '$path.fontSize',
@@ -43,8 +43,8 @@ extension on MosaicProtocolDecoder {
         minimum: 0.8,
         maximum: 3,
       ),
-      weight: _v02FontWeight(object['weight'], '$path.weight'),
-      color: _v02Color(object['color'], '$path.color'),
+      weight: _v03FontWeight(object['weight'], '$path.weight'),
+      color: _v03Color(object['color'], '$path.color'),
       alignment: _textAlignment(object['alignment'], '$path.alignment'),
       maxLines: hasMaximum
           ? _integerInRange(
@@ -69,7 +69,7 @@ extension on MosaicProtocolDecoder {
     );
   }
 
-  MosaicTextAccessibility _v02TextAccessibility(
+  MosaicTextAccessibility _v03TextAccessibility(
     Object? value,
     String path, {
     required bool allowHeading,
@@ -114,25 +114,25 @@ extension on MosaicProtocolDecoder {
     throw MosaicProtocolException('Invalid text accessibility role at $path.');
   }
 
-  MosaicProductCardStyles _v02ProductCardStyles(
+  MosaicSelectionStyles _v03SelectionStyles(
     Object? value,
     String path,
   ) {
     final object = _object(value, path);
     _expectKeys(object, const <String>{'default', 'selected'}, path);
-    return MosaicProductCardStyles(
-      defaultStyle: _v02ProductCardDefault(
+    return MosaicSelectionStyles(
+      defaultStyle: _v03SelectionStateStyle(
         object['default'],
         '$path.default',
       ),
-      selectedOverride: _v02ProductCardOverride(
+      selectedOverride: _v03SelectionStateStyleOverride(
         object['selected'],
         '$path.selected',
       ),
     );
   }
 
-  MosaicProductCardStyle _v02ProductCardDefault(
+  MosaicSelectionStateStyle _v03SelectionStateStyle(
     Object? value,
     String path,
   ) {
@@ -149,9 +149,9 @@ extension on MosaicProtocolDecoder {
       path,
       optional: const <String>{'shadow'},
     );
-    return MosaicProductCardStyle(
-      background: _v02Background(object['background'], '$path.background'),
-      border: _v02Border(object['border'], '$path.border'),
+    return MosaicSelectionStateStyle(
+      background: _v03Background(object['background'], '$path.background'),
+      border: _v03Border(object['border'], '$path.border'),
       cornerRadius: _logicalSize(
         object['cornerRadius'],
         '$path.cornerRadius',
@@ -164,12 +164,12 @@ extension on MosaicProtocolDecoder {
         maximum: 1,
       ),
       shadow: object.containsKey('shadow')
-          ? _v02Shadow(object['shadow'], '$path.shadow')
+          ? _v03Shadow(object['shadow'], '$path.shadow')
           : null,
     );
   }
 
-  MosaicProductCardStyleOverride _v02ProductCardOverride(
+  MosaicSelectionStateStyleOverride _v03SelectionStateStyleOverride(
     Object? value,
     String path,
   ) {
@@ -199,14 +199,14 @@ extension on MosaicProtocolDecoder {
       );
     }
     final padding = object.containsKey('padding')
-        ? _v02InsetsOverride(object['padding'], '$path.padding')
+        ? _v03InsetsOverride(object['padding'], '$path.padding')
         : null;
-    return MosaicProductCardStyleOverride(
+    return MosaicSelectionStateStyleOverride(
       background: object.containsKey('background')
-          ? _v02Background(object['background'], '$path.background')
+          ? _v03Background(object['background'], '$path.background')
           : null,
       borderColor: border?.containsKey('color') ?? false
-          ? _v02Color(border!['color'], '$path.border.color')
+          ? _v03Color(border!['color'], '$path.border.color')
           : null,
       borderWidth: border?.containsKey('width') ?? false
           ? _logicalSize(border!['width'], '$path.border.width')
@@ -227,12 +227,12 @@ extension on MosaicProtocolDecoder {
             )
           : null,
       shadow: object.containsKey('shadow')
-          ? _v02Shadow(object['shadow'], '$path.shadow')
+          ? _v03Shadow(object['shadow'], '$path.shadow')
           : null,
     );
   }
 
-  Map<String, double> _v02InsetsOverride(Object? value, String path) {
+  Map<String, double> _v03InsetsOverride(Object? value, String path) {
     final object = _object(value, path);
     _expectKeys(
       object,
@@ -247,7 +247,7 @@ extension on MosaicProtocolDecoder {
     };
   }
 
-  MosaicMainAxisDistribution _v02Distribution(Object? value, String path) {
+  MosaicMainAxisDistribution _v03Distribution(Object? value, String path) {
     final source = _enumValue(
       value,
       const <String>{'start', 'center', 'end', 'spaceBetween'},
@@ -266,7 +266,7 @@ extension on MosaicProtocolDecoder {
     };
   }
 
-  MosaicTextStyle _v02TextStyle(Object? value, String path) {
+  MosaicTextStyle _v03TextStyle(Object? value, String path) {
     final source = _enumValue(
       value,
       const <String>{'display', 'title', 'heading', 'body', 'label', 'caption'},
@@ -275,7 +275,7 @@ extension on MosaicProtocolDecoder {
     return MosaicTextStyle.values.byName(source);
   }
 
-  MosaicFontWeight _v02FontWeight(Object? value, String path) {
+  MosaicFontWeight _v03FontWeight(Object? value, String path) {
     final source = _enumValue(
       value,
       const <String>{'regular', 'medium', 'semibold', 'bold'},
@@ -284,7 +284,7 @@ extension on MosaicProtocolDecoder {
     return MosaicFontWeight.values.byName(source);
   }
 
-  MosaicCountdownUnit _v02CountdownUnit(Object? value, String path) {
+  MosaicCountdownUnit _v03CountdownUnit(Object? value, String path) {
     final source = _enumValue(
       value,
       const <String>{'day', 'hour', 'minute', 'second'},
@@ -359,7 +359,7 @@ extension on MosaicProtocolDecoder {
     );
   }
 
-  MosaicDesignSystem _v02DesignSystem(Object? value) {
+  MosaicDesignSystem _v03DesignSystem(Object? value) {
     const path = r'$.designSystem';
     final object = _object(value, path);
     _expectKeys(
@@ -402,22 +402,22 @@ extension on MosaicProtocolDecoder {
     }
 
     return MosaicDesignSystem(
-      colors: decode<MosaicColorValue>('colors', _v02Color),
-      backgrounds: decode<MosaicBackground>('backgrounds', _v02Background),
-      shadows: decode<MosaicShadow>('shadows', _v02Shadow),
+      colors: decode<MosaicColorValue>('colors', _v03Color),
+      backgrounds: decode<MosaicBackground>('backgrounds', _v03Background),
+      shadows: decode<MosaicShadow>('shadows', _v03Shadow),
     );
   }
 
-  List<MosaicAsset> _v02Assets(Object? value) {
+  List<MosaicAsset> _v03Assets(Object? value) {
     const path = r'$.assets';
     final values = _list(value, path);
     return <MosaicAsset>[
       for (var index = 0; index < values.length; index += 1)
-        _v02Asset(values[index], '$path[$index]'),
+        _v03Asset(values[index], '$path[$index]'),
     ];
   }
 
-  MosaicAsset _v02Asset(Object? value, String path) {
+  MosaicAsset _v03Asset(Object? value, String path) {
     final object = _object(value, path);
     final type = _enumValue(
       object['type'],
@@ -431,7 +431,7 @@ extension on MosaicProtocolDecoder {
           : const <String>{'type', 'id', 'source'},
       path,
     );
-    final source = _v02AssetSource(object['source'], '$path.source');
+    final source = _v03AssetSource(object['source'], '$path.source');
     final id = _identifier(object['id'], '$path.id');
     if (type == 'video') return MosaicVideoAsset(id: id, source: source);
     final fallback = _object(object['fallback'], '$path.fallback');
@@ -451,7 +451,7 @@ extension on MosaicProtocolDecoder {
     );
   }
 
-  MosaicAssetSource _v02AssetSource(Object? value, String path) {
+  MosaicAssetSource _v03AssetSource(Object? value, String path) {
     final object = _object(value, path);
     final type = _enumValue(
       object['type'],
@@ -463,19 +463,19 @@ extension on MosaicProtocolDecoder {
       return MosaicBundledAssetSource(_assetKey(object['key'], '$path.key'));
     }
     _expectKeys(object, const <String>{'type', 'url'}, path);
-    return MosaicRemoteAssetSource(_v02ExternalUrl(object['url'], '$path.url'));
+    return MosaicRemoteAssetSource(_v03ExternalUrl(object['url'], '$path.url'));
   }
 
-  List<MosaicProductReference> _v02Products(Object? value) {
+  List<MosaicProductReference> _v03Products(Object? value) {
     const path = r'$.products';
     final values = _list(value, path);
     return <MosaicProductReference>[
       for (var index = 0; index < values.length; index += 1)
-        _v02ProductReference(values[index], '$path[$index]'),
+        _v03ProductReference(values[index], '$path[$index]'),
     ];
   }
 
-  MosaicProductReference _v02ProductReference(Object? value, String path) {
+  MosaicProductReference _v03ProductReference(Object? value, String path) {
     final object = _object(value, path);
     _expectKeys(
       object,

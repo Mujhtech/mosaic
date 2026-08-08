@@ -7,15 +7,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
-part 'renderer_v02_visual_tests.dart';
-part 'renderer_v02_product_tests.dart';
+part 'renderer_v03_visual_tests.dart';
+part 'renderer_v03_product_tests.dart';
 
 void main() {
   final root = Directory.current.parent.parent;
 
   MosaicPaywallDocument fixture(String name) =>
       const MosaicProtocolDecoder().decode(
-        File('${root.path}/protocol/fixtures/v0.2/$name').readAsStringSync(),
+        File('${root.path}/protocol/fixtures/v0.3/$name').readAsStringSync(),
       );
 
   const products = <MosaicProduct>[
@@ -37,8 +37,8 @@ void main() {
       localizedPrice: r'$199.99',
     ),
   ];
-  _defineRendererV02VisualTests(root, fixture, products);
-  _defineRendererV02ProductTests(root, fixture, products);
+  _defineRendererV03VisualTests(root, fixture, products);
+  _defineRendererV03ProductTests(root, fixture, products);
 }
 
 Map<String, Object?> _jsonNode(Map<String, Object?> document, String id) {

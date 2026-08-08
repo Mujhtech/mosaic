@@ -160,7 +160,7 @@ final class MosaicConfigurationCapabilityRequest {
             'version': mosaicProtocolVersion,
             'capabilities': <Map<String, String>>[
               for (final capability
-                  in mosaicProtocolV02Capabilities.toList()..sort())
+                  in mosaicProtocolV03Capabilities.toList()..sort())
                 <String, String>{
                   'name': capability,
                   'version': mosaicProtocolVersion,

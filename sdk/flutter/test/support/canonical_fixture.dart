@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 File canonicalFixtureFile() {
-  return repositoryFile('protocol/fixtures/v0.2/complete-paywall.json');
+  return repositoryFile('protocol/fixtures/v0.3/complete-paywall.json');
 }
 
 File repositoryFile(String relativePath) {
@@ -94,6 +94,18 @@ Map<String, Object?>? _findNode(Map<String, Object?> node, String type) {
   }
   if (node['type'] == 'scrollContainer') {
     return _findNode(node['content']! as Map<String, Object?>, type);
+  }
+  // Tab panels are part of the layout tree. A finder that stopped at
+  // `children` would report "no such component" for anything a panel owns,
+  // which is how an unsupported component inside a panel becomes invisible.
+  if (node['type'] == 'tabs') {
+    for (final value in node['tabs']! as List<Object?>) {
+      final tab = value! as Map<String, Object?>;
+      final result = _findNode(tab['content']! as Map<String, Object?>, type);
+      if (result != null) {
+        return result;
+      }
+    }
   }
   if (node.containsKey('children')) {
     for (final value in node['children']! as List<Object?>) {

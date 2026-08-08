@@ -16,7 +16,7 @@ final class MosaicScrollContainer extends MosaicNode {
   });
 
   final bool showsIndicators;
-  final MosaicStackNode content;
+  final MosaicStackComponent content;
   final MosaicBackground? background;
 
   @override
@@ -28,28 +28,10 @@ sealed class MosaicStackNode extends MosaicNode {
 
   List<MosaicNode> get children;
   MosaicEdgeInsets get padding;
-  double get spacing;
+  double get gap;
 }
 
-final class MosaicVerticalStack extends MosaicStackNode {
-  MosaicVerticalStack({
-    required super.id,
-    required this.spacing,
-    required this.padding,
-    required this.horizontalAlignment,
-    required Iterable<MosaicNode> children,
-  }) : children = List.unmodifiable(children);
-
-  final double spacing;
-  final MosaicEdgeInsets padding;
-  final MosaicStackHorizontalAlignment horizontalAlignment;
-  final List<MosaicNode> children;
-
-  @override
-  String get type => 'verticalStack';
-}
-
-/// Protocol 0.2 generalized Stack.
+/// Protocol 0.3 generalized Stack.
 final class MosaicStackComponent extends MosaicStackNode {
   MosaicStackComponent({
     required super.id,
@@ -66,6 +48,7 @@ final class MosaicStackComponent extends MosaicStackNode {
   }) : children = List.unmodifiable(children);
 
   final MosaicStackDirection direction;
+  @override
   final double gap;
   @override
   final MosaicEdgeInsets padding;
@@ -77,9 +60,6 @@ final class MosaicStackComponent extends MosaicStackNode {
   final MosaicSizing? sizing;
   final MosaicEdgeInsets? outerInsets;
   final MosaicVisibility visibility;
-
-  @override
-  double get spacing => gap;
 
   @override
   String get type => 'stack';
@@ -210,8 +190,8 @@ final class MosaicUnavailableProductFallback {
   final MosaicLocalizedText message;
 }
 
-final class MosaicProductCardStyle {
-  const MosaicProductCardStyle({
+final class MosaicSelectionStateStyle {
+  const MosaicSelectionStateStyle({
     required this.background,
     required this.border,
     required this.cornerRadius,
@@ -228,11 +208,14 @@ final class MosaicProductCardStyle {
   final MosaicShadow? shadow;
 }
 
-/// Presence-aware, recursive Protocol 0.2 Selected overrides.
+/// Presence-aware, recursive Protocol 0.3 Selected overrides.
+///
+/// Shared by every two-state selectable box: Product Card, Product Badge, and
+/// the Tabs tab controls.
 ///
 /// Nullable fields are absent overrides, never serialized `null` values.
-final class MosaicProductCardStyleOverride {
-  const MosaicProductCardStyleOverride({
+final class MosaicSelectionStateStyleOverride {
+  const MosaicSelectionStateStyleOverride({
     this.background,
     this.borderColor,
     this.borderWidth,
@@ -256,8 +239,8 @@ final class MosaicProductCardStyleOverride {
   final double? opacity;
   final MosaicShadow? shadow;
 
-  MosaicProductCardStyle resolve(MosaicProductCardStyle base) =>
-      MosaicProductCardStyle(
+  MosaicSelectionStateStyle resolve(MosaicSelectionStateStyle base) =>
+      MosaicSelectionStateStyle(
         background: background ?? base.background,
         border: MosaicBorderStyle(
           color: borderColor ?? base.border.color,
@@ -275,16 +258,16 @@ final class MosaicProductCardStyleOverride {
       );
 }
 
-final class MosaicProductCardStyles {
-  const MosaicProductCardStyles({
+final class MosaicSelectionStyles {
+  const MosaicSelectionStyles({
     required this.defaultStyle,
     required this.selectedOverride,
   });
 
-  final MosaicProductCardStyle defaultStyle;
-  final MosaicProductCardStyleOverride selectedOverride;
+  final MosaicSelectionStateStyle defaultStyle;
+  final MosaicSelectionStateStyleOverride selectedOverride;
 
-  MosaicProductCardStyle resolve({required bool selected}) =>
+  MosaicSelectionStateStyle resolve({required bool selected}) =>
       selected ? selectedOverride.resolve(defaultStyle) : defaultStyle;
 }
 
@@ -328,7 +311,7 @@ final class MosaicProductBadgeComponent extends MosaicComponent {
   final MosaicMainAxisDistribution mainAxisDistribution;
   final MosaicStackHorizontalAlignment crossAxisAlignment;
   final List<MosaicNode> children;
-  final MosaicProductCardStyles styles;
+  final MosaicSelectionStyles styles;
   final MosaicSizing? sizing;
 
   @override
@@ -356,7 +339,7 @@ final class MosaicProductCardComponent extends MosaicComponent {
   final MosaicMainAxisDistribution mainAxisDistribution;
   final MosaicStackHorizontalAlignment crossAxisAlignment;
   final List<MosaicNode> children;
-  final MosaicProductCardStyles styles;
+  final MosaicSelectionStyles styles;
   final MosaicLocalizedText? accessibilityLabel;
   final MosaicSizing? sizing;
 
@@ -374,8 +357,6 @@ final class MosaicProductCardComponent extends MosaicComponent {
 final class MosaicProductSelectorComponent extends MosaicComponent {
   MosaicProductSelectorComponent({
     required super.id,
-    Iterable<String> productReferenceIds = const <String>[],
-    this.initiallySelectedProductReferenceId,
     Iterable<MosaicProductCardComponent> cards =
         const <MosaicProductCardComponent>[],
     this.initialProductCardId,
@@ -388,11 +369,8 @@ final class MosaicProductSelectorComponent extends MosaicComponent {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
-  })  : productReferenceIds = List.unmodifiable(productReferenceIds),
-        cards = List.unmodifiable(cards);
+  }) : cards = List.unmodifiable(cards);
 
-  final List<String> productReferenceIds;
-  final String? initiallySelectedProductReferenceId;
   final List<MosaicProductCardComponent> cards;
   final String? initialProductCardId;
   final double itemSpacing;

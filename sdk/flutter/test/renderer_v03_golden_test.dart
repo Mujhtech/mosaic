@@ -5,14 +5,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 void main() {
-  testWidgets('canonical Protocol 0.2 paywall has a native golden baseline',
+  testWidgets('canonical Protocol 0.3 paywall has a native golden baseline',
       tags: 'golden', (tester) async {
     final root = Directory.current.parent.parent;
     final document = const MosaicProtocolDecoder().decode(
-      File('${root.path}/protocol/fixtures/v0.2/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
           .readAsStringSync(),
     );
-    tester.view.physicalSize = const Size(600, 1800);
+    // Tall enough to capture every component the canonical fixture authors,
+    // including the Tabs bar and panel at the end of the offer screen. A
+    // viewport that cut them off would leave the new components unguarded.
+    tester.view.physicalSize = const Size(600, 3000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -23,7 +26,7 @@ void main() {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         ),
         home: RepaintBoundary(
-          key: const ValueKey<String>('v02-golden'),
+          key: const ValueKey<String>('v03-golden'),
           child: Scaffold(
             body: MosaicPaywall(
               document: document,
@@ -59,8 +62,8 @@ void main() {
     await tester.pump();
 
     await expectLater(
-      find.byKey(const ValueKey<String>('v02-golden')),
-      matchesGoldenFile('goldens/complete_paywall_v02_en.png'),
+      find.byKey(const ValueKey<String>('v03-golden')),
+      matchesGoldenFile('goldens/complete_paywall_v03_en.png'),
     );
   });
 }

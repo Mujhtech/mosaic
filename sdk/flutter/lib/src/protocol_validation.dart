@@ -13,54 +13,66 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
       'feature item identifier in ${node.id}',
     );
   }
-  if (document.schemaVersion == mosaicProtocolV02Version) {
-    if (document.designSystem == null) {
-      throw const MosaicProtocolException(
-        'Protocol 0.2 requires a document design system.',
-      );
-    }
-    _requireUnique(
-      document.screens.map((screen) => screen.id),
-      'Paywall Screen identifier',
+  if (document.designSystem == null) {
+    throw const MosaicProtocolException(
+      'Protocol 0.3 requires a document design system.',
     );
-    if (document.initialScreen?.presentation !=
-        MosaicScreenPresentation.screen) {
-      throw const MosaicProtocolException(
-        'Protocol 0.2 initial screen must use Screen presentation.',
-      );
-    }
-    _validateV02DesignSystem(document);
-    for (final screen in document.screens) {
-      if (screen.layout.content is! MosaicStackComponent ||
-          (screen.layout.content as MosaicStackComponent).direction !=
-              MosaicStackDirection.vertical) {
-        throw MosaicProtocolException(
-          'Protocol 0.2 screen ${screen.id} root scroll content must be a '
-          'vertical Stack.',
-        );
-      }
-      if (screen.layout.content.children.isEmpty) {
-        throw MosaicProtocolException(
-          'Protocol 0.2 screen ${screen.id} root Stack must contain at least '
-          'one child.',
-        );
-      }
-    }
-    final pageIds = <String>[];
-    for (final carousel in nodes.whereType<MosaicCarouselComponent>()) {
-      if (carousel.initialPageIndex >= carousel.pages.length) {
-        throw MosaicProtocolException(
-          'Carousel ${carousel.id} initialPageIndex does not reference a page.',
-        );
-      }
-      pageIds.addAll(carousel.pages.map((page) => page.id));
-    }
-    _requireUnique(
-      <String>[...nodes.map((node) => node.id), ...pageIds],
-      'layout tree node or Carousel page identifier',
-    );
-    _validateV02RuntimeSemantics(document);
   }
+  _requireUnique(
+    document.screens.map((screen) => screen.id),
+    'Paywall Screen identifier',
+  );
+  if (document.initialScreen?.presentation != MosaicScreenPresentation.screen) {
+    throw const MosaicProtocolException(
+      'Protocol 0.3 initial screen must use Screen presentation.',
+    );
+  }
+  _validateV03DesignSystem(document);
+  for (final screen in document.screens) {
+    if (screen.layout.content.direction != MosaicStackDirection.vertical) {
+      throw MosaicProtocolException(
+        'Protocol 0.3 screen ${screen.id} root scroll content must be a '
+        'vertical Stack.',
+      );
+    }
+    if (screen.layout.content.children.isEmpty) {
+      throw MosaicProtocolException(
+        'Protocol 0.3 screen ${screen.id} root Stack must contain at least '
+        'one child.',
+      );
+    }
+  }
+  final pageIds = <String>[];
+  for (final carousel in nodes.whereType<MosaicCarouselComponent>()) {
+    if (carousel.initialPageIndex >= carousel.pages.length) {
+      throw MosaicProtocolException(
+        'Carousel ${carousel.id} initialPageIndex does not reference a page.',
+      );
+    }
+    pageIds.addAll(carousel.pages.map((page) => page.id));
+  }
+  // A tab id names a control, a panel, and the value a visibility condition
+  // compares against, so it joins the one global layout id namespace.
+  final tabIds = <String>[];
+  for (final tabs in nodes.whereType<MosaicTabsComponent>()) {
+    if (tabs.tab(tabs.initialTabId) == null) {
+      throw MosaicProtocolException(
+        'Tabs ${tabs.id} initialTabId must name one of its declared tabs.',
+      );
+    }
+    tabIds.addAll(tabs.tabs.map((tab) => tab.id));
+  }
+  for (final timeline in nodes.whereType<MosaicTimelineComponent>()) {
+    _requireUnique(
+      timeline.entries.map((entry) => entry.id),
+      'Timeline entry identifier in ${timeline.id}',
+    );
+  }
+  _requireUnique(
+    <String>[...nodes.map((node) => node.id), ...pageIds, ...tabIds],
+    'layout tree node, Carousel page, or Tabs entry identifier',
+  );
+  _validateV03RuntimeSemantics(document);
 
   _requireUnique(
     document.assets.map((asset) => asset.id),
@@ -87,35 +99,55 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
     }
     referencedAssets.add(image.assetId);
   }
-  if (document.schemaVersion == mosaicProtocolV02Version) {
-    for (final background in _allV02Backgrounds(document)) {
-      final resolved = document.resolveBackground(background);
-      switch (resolved) {
-        case MosaicImageBackground():
-          if (assetsById[resolved.assetId] is! MosaicImageAsset) {
-            throw MosaicProtocolException(
-              'Image background must reference image asset ${resolved.assetId}.',
-            );
-          }
-          referencedAssets.add(resolved.assetId);
-        case MosaicVideoBackground():
-          if (assetsById[resolved.assetId] is! MosaicVideoAsset) {
-            throw MosaicProtocolException(
-              'Video background must reference video asset ${resolved.assetId}.',
-            );
-          }
-          referencedAssets.add(resolved.assetId);
-          if (resolved.posterAssetId case final poster?) {
-            if (assetsById[poster] is! MosaicImageAsset) {
-              throw MosaicProtocolException(
-                'Video poster must reference image asset $poster.',
-              );
-            }
-            referencedAssets.add(poster);
-          }
-        default:
-          break;
+  for (final award in nodes.whereType<MosaicAwardComponent>()) {
+    if (award.emblem case final MosaicAwardImageEmblem emblem) {
+      if (assetsById[emblem.assetId] is! MosaicImageAsset) {
+        throw MosaicProtocolException(
+          'Award ${award.id} emblem must reference an image asset '
+          '${emblem.assetId}.',
+        );
       }
+      referencedAssets.add(emblem.assetId);
+    }
+  }
+  for (final proof in nodes.whereType<MosaicSocialProofComponent>()) {
+    if (proof.avatar case final avatar?) {
+      if (assetsById[avatar.assetId] is! MosaicImageAsset) {
+        throw MosaicProtocolException(
+          'Social Proof ${proof.id} avatar must reference an image asset '
+          '${avatar.assetId}.',
+        );
+      }
+      referencedAssets.add(avatar.assetId);
+    }
+  }
+  for (final background in _allV03Backgrounds(document)) {
+    final resolved = document.resolveBackground(background);
+    switch (resolved) {
+      case MosaicImageBackground():
+        if (assetsById[resolved.assetId] is! MosaicImageAsset) {
+          throw MosaicProtocolException(
+            'Image background must reference image asset ${resolved.assetId}.',
+          );
+        }
+        referencedAssets.add(resolved.assetId);
+      case MosaicVideoBackground():
+        if (assetsById[resolved.assetId] is! MosaicVideoAsset) {
+          throw MosaicProtocolException(
+            'Video background must reference video asset ${resolved.assetId}.',
+          );
+        }
+        referencedAssets.add(resolved.assetId);
+        if (resolved.posterAssetId case final poster?) {
+          if (assetsById[poster] is! MosaicImageAsset) {
+            throw MosaicProtocolException(
+              'Video poster must reference image asset $poster.',
+            );
+          }
+          referencedAssets.add(poster);
+        }
+      default:
+        break;
     }
   }
   for (final asset in document.assets) {
@@ -131,13 +163,10 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
   final selectors = <String, MosaicProductSelectorComponent>{};
   for (final selector in nodes.whereType<MosaicProductSelectorComponent>()) {
     selectors[selector.id] = selector;
-    final referenceIds = selector.cards.isEmpty
-        ? selector.productReferenceIds
-        : selector.cards
-            .map((card) => card.productReferenceId)
-            .toList(growable: false);
-    if (selector.cards.isNotEmpty &&
-        referenceIds.toSet().length != referenceIds.length) {
+    final referenceIds = selector.cards
+        .map((card) => card.productReferenceId)
+        .toList(growable: false);
+    if (referenceIds.toSet().length != referenceIds.length) {
       throw MosaicProtocolException(
         'Product selector ${selector.id} contains duplicate product '
         'reference bindings.',
@@ -152,39 +181,25 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
       }
       referencedProducts.add(referenceId);
     }
-    if (selector.cards.isEmpty) {
-      if (!selector.productReferenceIds
-          .contains(selector.initiallySelectedProductReferenceId)) {
-        throw MosaicProtocolException(
-          'Product selector ${selector.id} initially selects an undeclared '
-          'product.',
-        );
-      }
-    } else {
-      if (!selector.cards
-          .any((card) => card.id == selector.initialProductCardId)) {
-        throw MosaicProtocolException(
-          'Product selector ${selector.id} initially selects an undeclared '
-          'Product Card.',
-        );
-      }
-      for (final card in selector.cards) {
-        _validateProductCardStructure(card);
-      }
+    if (!selector.cards
+        .any((card) => card.id == selector.initialProductCardId)) {
+      throw MosaicProtocolException(
+        'Product selector ${selector.id} initially selects an undeclared '
+        'Product Card.',
+      );
+    }
+    for (final card in selector.cards) {
+      _validateProductCardStructure(card);
     }
   }
 
   final selectorsWithPurchaseActions = <String>{};
   final purchaseActions = <({String buttonId, MosaicPurchaseAction action})>[
-    for (final button in nodes.whereType<MosaicPurchaseButtonComponent>())
-      (buttonId: button.id, action: button.action),
     for (final button in nodes.whereType<MosaicButtonComponent>())
       if (button.action case final MosaicPurchaseAction action)
         (buttonId: button.id, action: action),
   ];
-  final screenByNodeId = document.schemaVersion == mosaicProtocolV02Version
-      ? _v02ScreenByNodeId(document)
-      : const <String, String>{};
+  final screenByNodeId = _v03ScreenByNodeId(document);
   for (final entry in purchaseActions) {
     final selectorId = entry.action.productSelectorId;
     if (!selectors.containsKey(selectorId)) {
@@ -193,8 +208,7 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
         '$selectorId.',
       );
     }
-    if (document.schemaVersion == mosaicProtocolV02Version &&
-        screenByNodeId[entry.buttonId] != screenByNodeId[selectorId]) {
+    if (screenByNodeId[entry.buttonId] != screenByNodeId[selectorId]) {
       throw MosaicProtocolException(
         'Purchase Button ${entry.buttonId} must reference a Product Selector '
         'in the same Paywall Screen.',
@@ -253,7 +267,7 @@ void _validateProductCardStructure(MosaicProductCardComponent card) {
   }
 }
 
-void _validateV02DesignSystem(MosaicPaywallDocument document) {
+void _validateV03DesignSystem(MosaicPaywallDocument document) {
   final designSystem = document.designSystem!;
   for (final category in <Iterable<({String id, String name})>>[
     designSystem.colors.map((token) => (id: token.id, name: token.name)),
@@ -265,22 +279,22 @@ void _validateV02DesignSystem(MosaicPaywallDocument document) {
     _requireUnique(category.map((token) => token.name), 'design token name');
   }
 
-  for (final color in _allV02Colors(document)) {
+  for (final color in _allV03Colors(document)) {
     document.resolveColor(color);
   }
-  for (final background in _allV02Backgrounds(document)) {
+  for (final background in _allV03Backgrounds(document)) {
     final resolved = document.resolveBackground(background);
     for (final color in _backgroundColors(resolved)) {
       document.resolveColor(color);
     }
   }
-  for (final shadow in _allV02Shadows(document)) {
+  for (final shadow in _allV03Shadows(document)) {
     final resolved = document.resolveShadow(shadow);
     document.resolveColor(resolved.color);
   }
 }
 
-Iterable<MosaicBackground> _allV02Backgrounds(
+Iterable<MosaicBackground> _allV03Backgrounds(
   MosaicPaywallDocument document,
 ) sync* {
   yield* document.designSystem!.backgrounds.map((token) => token.value);
@@ -301,11 +315,16 @@ Iterable<MosaicBackground> _allV02Backgrounds(
       if (node.styles.selectedOverride.background case final background?) {
         yield background;
       }
+    } else if (node is MosaicTabsComponent) {
+      yield node.styles.defaultStyle.background;
+      if (node.styles.selectedOverride.background case final background?) {
+        yield background;
+      }
     }
   }
 }
 
-Iterable<MosaicShadow> _allV02Shadows(MosaicPaywallDocument document) sync* {
+Iterable<MosaicShadow> _allV03Shadows(MosaicPaywallDocument document) sync* {
   yield* document.designSystem!.shadows.map((token) => token.value);
   for (final node in document.nodes) {
     if (_nodeAppearance(node)?.shadow case final shadow?) yield shadow;
@@ -313,6 +332,9 @@ Iterable<MosaicShadow> _allV02Shadows(MosaicPaywallDocument document) sync* {
       if (node.styles.defaultStyle.shadow case final shadow?) yield shadow;
       if (node.styles.selectedOverride.shadow case final shadow?) yield shadow;
     } else if (node is MosaicProductBadgeComponent) {
+      if (node.styles.defaultStyle.shadow case final shadow?) yield shadow;
+      if (node.styles.selectedOverride.shadow case final shadow?) yield shadow;
+    } else if (node is MosaicTabsComponent) {
       if (node.styles.defaultStyle.shadow case final shadow?) yield shadow;
       if (node.styles.selectedOverride.shadow case final shadow?) yield shadow;
     }
@@ -337,15 +359,17 @@ Iterable<MosaicColorValue> _backgroundColors(
   }
 }
 
-Iterable<MosaicColorValue> _allV02Colors(MosaicPaywallDocument document) sync* {
+Iterable<MosaicColorValue> _allV03Colors(MosaicPaywallDocument document) sync* {
   yield* document.designSystem!.colors.map((token) => token.value);
-  for (final background in _allV02Backgrounds(document)) {
+  for (final background in _allV03Backgrounds(document)) {
     yield* _backgroundColors(document.resolveBackground(background));
   }
   for (final node in document.nodes) {
     final appearance = _nodeAppearance(node);
     if (appearance?.border?.color case final color?) yield color;
-    if (_nodeTypography(node)?.color case final color?) yield color;
+    for (final typography in _nodeTypographies(node)) {
+      yield typography.color;
+    }
     switch (node) {
       case MosaicFeatureListComponent():
         if (node.markerColor case final color?) yield color;
@@ -365,16 +389,38 @@ Iterable<MosaicColorValue> _allV02Colors(MosaicPaywallDocument document) sync* {
         if (node.styles.selectedOverride.borderColor case final color?) {
           yield color;
         }
+      case MosaicTabsComponent():
+        yield node.selectedLabelColor;
+        yield node.styles.defaultStyle.border.color;
+        if (node.styles.selectedOverride.borderColor case final color?) {
+          yield color;
+        }
+      case MosaicTimelineComponent():
+        yield node.connector.color;
+        if (node.markerColor case final color?) yield color;
+      case MosaicAwardComponent():
+        if (node.emblem case final MosaicAwardIconEmblem emblem) {
+          yield emblem.color;
+        }
+      case MosaicSocialProofComponent():
+        if (node.rating case final rating?) {
+          yield rating.filledColor;
+          yield rating.emptyColor;
+        }
       default:
         break;
     }
   }
 }
 
-void _validateV02RuntimeSemantics(MosaicPaywallDocument document) {
-  final screenByNodeId = _v02ScreenByNodeId(document);
+void _validateV03RuntimeSemantics(MosaicPaywallDocument document) {
+  final screenByNodeId = _v03ScreenByNodeId(document);
   final switches = <String, MosaicSwitchComponent>{
     for (final node in document.nodes.whereType<MosaicSwitchComponent>())
+      node.id: node,
+  };
+  final tabsById = <String, MosaicTabsComponent>{
+    for (final node in document.nodes.whereType<MosaicTabsComponent>())
       node.id: node,
   };
 
@@ -386,7 +432,8 @@ void _validateV02RuntimeSemantics(MosaicPaywallDocument document) {
       if (child is MosaicButtonComponent ||
           child is MosaicProductSelectorComponent ||
           child is MosaicSwitchComponent ||
-          child is MosaicCarouselComponent) {
+          child is MosaicCarouselComponent ||
+          child is MosaicTabsComponent) {
         throw MosaicProtocolException(
           'Button ${button.id} cannot contain interactive descendant '
           '${child.type} ${child.id}.',
@@ -411,7 +458,11 @@ void _validateV02RuntimeSemantics(MosaicPaywallDocument document) {
     }
   }
 
-  void visit(MosaicNode node, {required bool insideCarousel}) {
+  void visit(
+    MosaicNode node, {
+    required bool insideCarousel,
+    required List<MosaicNode> ancestors,
+  }) {
     final visibility = _nodeVisibility(node);
     if (visibility is MosaicSwitchVisibility) {
       if (!switches.containsKey(visibility.switchId)) {
@@ -432,10 +483,49 @@ void _validateV02RuntimeSemantics(MosaicPaywallDocument document) {
         );
       }
     }
+    if (visibility is MosaicTabVisibility) {
+      final controller = tabsById[visibility.tabsId];
+      if (controller == null) {
+        throw MosaicProtocolException(
+          '${node.type} ${node.id} visibility references unknown tabs '
+          '${visibility.tabsId}.',
+        );
+      }
+      if (screenByNodeId[controller.id] != screenByNodeId[node.id]) {
+        throw MosaicProtocolException(
+          '${node.type} ${node.id} visibility must reference a Tabs component '
+          'in the same Paywall Screen.',
+        );
+      }
+      // Inside a panel the condition is already decided by the panel:
+      // comparing against the owning tab is vacuously true and against any
+      // other tab is unsatisfiable. Both are dead layout, and dead layout that
+      // renders is indistinguishable from working layout until someone edits
+      // it, so both reject.
+      if (identical(controller, node) ||
+          ancestors.any((ancestor) => identical(ancestor, controller))) {
+        throw MosaicProtocolException(
+          '${node.type} ${node.id} visibility cannot reference the Tabs '
+          'component it belongs to.',
+        );
+      }
+      if (controller.tab(visibility.equals) == null) {
+        throw MosaicProtocolException(
+          '${node.type} ${node.id} visibility references unknown tab '
+          '${visibility.equals} of tabs ${controller.id}.',
+        );
+      }
+    }
+    final nested = <MosaicNode>[...ancestors, node];
+    void descend(MosaicNode child, {bool carousel = false}) => visit(
+          child,
+          insideCarousel: insideCarousel || carousel,
+          ancestors: nested,
+        );
     switch (node) {
       case MosaicStackNode():
         for (final child in node.children) {
-          visit(child, insideCarousel: insideCarousel);
+          descend(child);
         }
       case MosaicCarouselComponent():
         if (insideCarousel) {
@@ -444,28 +534,32 @@ void _validateV02RuntimeSemantics(MosaicPaywallDocument document) {
           );
         }
         for (final page in node.pages) {
-          visit(page.content, insideCarousel: true);
+          descend(page.content, carousel: true);
+        }
+      case MosaicTabsComponent():
+        for (final tab in node.tabs) {
+          descend(tab.content);
         }
       case MosaicButtonComponent():
         for (final child in node.children) {
-          visit(child, insideCarousel: insideCarousel);
+          descend(child);
         }
         if (node.inProgressChildren case final inProgress?) {
           for (final child in inProgress) {
-            visit(child, insideCarousel: insideCarousel);
+            descend(child);
           }
         }
       case MosaicProductSelectorComponent():
         for (final card in node.cards) {
-          visit(card, insideCarousel: insideCarousel);
+          descend(card);
         }
       case MosaicProductCardComponent():
         for (final child in node.children) {
-          visit(child, insideCarousel: insideCarousel);
+          descend(child);
         }
       case MosaicProductBadgeComponent():
         for (final child in node.children) {
-          visit(child, insideCarousel: insideCarousel);
+          descend(child);
         }
       default:
         break;
@@ -473,7 +567,11 @@ void _validateV02RuntimeSemantics(MosaicPaywallDocument document) {
   }
 
   for (final screen in document.screens) {
-    visit(screen.layout.content, insideCarousel: false);
+    visit(
+      screen.layout.content,
+      insideCarousel: false,
+      ancestors: const <MosaicNode>[],
+    );
   }
 
   final screenIds = document.screens.map((screen) => screen.id).toSet();
@@ -503,7 +601,7 @@ void _validateV02RuntimeSemantics(MosaicPaywallDocument document) {
   void visitGraph(String screenId) {
     if (!active.add(screenId)) {
       throw const MosaicProtocolException(
-        'Protocol 0.2 navigateTo graph must be acyclic.',
+        'Protocol 0.3 navigateTo graph must be acyclic.',
       );
     }
     if (visited.add(screenId)) {
@@ -518,13 +616,13 @@ void _validateV02RuntimeSemantics(MosaicPaywallDocument document) {
   final unreachable = screenIds.difference(visited);
   if (unreachable.isNotEmpty) {
     throw MosaicProtocolException(
-      'Protocol 0.2 contains unreachable Paywall Screens: '
+      'Protocol 0.3 contains unreachable Paywall Screens: '
       '${unreachable.join(', ')}.',
     );
   }
 }
 
-Map<String, String> _v02ScreenByNodeId(MosaicPaywallDocument document) {
+Map<String, String> _v03ScreenByNodeId(MosaicPaywallDocument document) {
   final result = <String, String>{};
   for (final screen in document.screens) {
     result[screen.layout.id] = screen.id;

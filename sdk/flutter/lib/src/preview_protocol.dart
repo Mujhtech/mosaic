@@ -5,9 +5,7 @@ import 'protocol.dart';
 part 'preview_message_codec.dart';
 part 'preview_protocol_support.dart';
 
-const String mosaicLocalPreviewProtocolVersion = '0.2';
-const String mosaicLocalPreviewV02ProtocolVersion =
-    mosaicLocalPreviewProtocolVersion;
+const String mosaicLocalPreviewProtocolVersion = '0.3';
 const int mosaicFlutterPreviewMaximumDocumentBytes = 1048576;
 
 const Set<String> mosaicFlutterPreviewCapabilities = <String>{
@@ -630,7 +628,7 @@ final class MosaicPreviewDraftWithhold
   String get fallback => 'keepLastAcceptedDraft';
 }
 
-/// Applies the exact Local Preview 0.2 schema, capability, and compact UTF-8
+/// Applies the exact Local Preview 0.3 schema, capability, and compact UTF-8
 /// byte gate before a draft is sent. Malformed reports withhold safely.
 MosaicPreviewDraftDeliveryDecision decideMosaicPreviewDraftDelivery({
   required MosaicLocalPreviewNegotiation negotiation,
@@ -783,14 +781,14 @@ Map<String, Object?> mosaicFlutterCapabilityPayload(
     throw ArgumentError.value(
       previewProtocolVersion,
       'previewProtocolVersion',
-      'Must be 0.2.',
+      'Must be 0.3.',
     );
   }
   return <String, Object?>{
     'clientId': clientId,
     'supportedSchemaVersions': <String>[mosaicProtocolVersion],
     'supportedCapabilities': <Map<String, String>>[
-      for (final capability in mosaicProtocolV02Capabilities)
+      for (final capability in mosaicProtocolV03Capabilities)
         <String, String>{
           'name': capability,
           'version': mosaicProtocolVersion,

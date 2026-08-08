@@ -60,7 +60,7 @@ typedef MosaicHttpClientFactory = HttpClient Function();
 HttpClient _newHttpClient() => HttpClient();
 
 final String mosaicPaywallCapabilitiesHeaderValue =
-    mosaicProtocolV02Capabilities
+    mosaicProtocolV03Capabilities
         .map((capability) => '$capability@$mosaicProtocolVersion')
         .join(',');
 

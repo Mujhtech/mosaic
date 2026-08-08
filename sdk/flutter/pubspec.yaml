@@ -1,6 +1,6 @@
 name: mosaic_sdk
-description: Native Mosaic Protocol 0.2 renderer with Local Preview for Flutter.
-version: 0.2.0-dev.11
+description: Native Mosaic Protocol 0.3 renderer with Local Preview for Flutter.
+version: 0.3.0-dev.1
 publish_to: none
 
 # Flutter 3.22 / Dart 3.4 is the tested supported floor. It matches the

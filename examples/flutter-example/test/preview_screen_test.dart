@@ -82,12 +82,12 @@ MosaicPreviewClient _client(
         displayName: 'Flutter example preview',
         renderer: MosaicPreviewSoftwareIdentity(
           id: 'mosaic.flutter',
-          version: '0.2.0',
+          version: '0.3.0',
         ),
         application: MosaicPreviewApplicationIdentity(
           id: 'mosaic.flutter.example',
           displayName: 'Mosaic Flutter Example',
-          version: '0.2.0',
+          version: '0.3.0',
         ),
         device: MosaicPreviewDeviceIdentity(
           displayName: 'Widget test',
@@ -107,7 +107,7 @@ MosaicPreviewClient _client(
 List<Map<String, Object?>> _flow() {
   final messages = (jsonDecode(
     _repositoryFile(
-      'protocol/fixtures/local-preview/v0.2/session-flow.messages.json',
+      'protocol/fixtures/local-preview/v0.3/session-flow.messages.json',
     ).readAsStringSync(),
   ) as List<Object?>)
       .cast<Map<String, Object?>>();
@@ -172,7 +172,7 @@ final class _ExampleSocket implements MosaicNegotiatedPreviewSocket {
   final List<String> sent = <String>[];
 
   @override
-  String get selectedProtocol => mosaicLocalPreviewV02WebSocketProtocol;
+  String get selectedProtocol => mosaicLocalPreviewWebSocketProtocol;
 
   @override
   Stream<Object?> get messages => _controller.stream;

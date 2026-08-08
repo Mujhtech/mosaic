@@ -34,21 +34,62 @@ subject digests, is backup-excluded, and is atomically bounded to 256 records
 and 180 days. Trusted server and local receipt anchors are cached with Delivery
 v3 so valid schedules remain evaluable across restart.
 
-This package provides a strict reader for Mosaic Protocol 0.2
+This package provides a strict reader for Mosaic Protocol 0.3
 and renders it with native Flutter widgets. It includes hosted Configuration
 Delivery v1/v2/v3, persistent cache and bundled-release fallback, Placements,
 localization and RTL,
 bundled fallback loading, mock commerce, normalized results, diagnostics,
-accessibility semantics, native rendering, Local Preview 0.2 support, and the
+accessibility semantics, native rendering, Local Preview 0.3 support, and the
 provider-neutral Commerce Configuration v1/v2 custom-provider boundary, and
 Analytics Event Contract v1/v2 collection with a persistent bounded queue.
 
-Protocol 0.2 RC4 adds document design-system tokens, solid/linear/radial/media
-backgrounds, native shadows, uniform width and height Fit/Fill/Fixed sizing,
-remote and bundled image/video assets, and native Screen/Sheet presentation.
-It retains RC3's generalized Buttons and Stacks, authored Product Cards and
-Badges, safe product templates, navigation, Carousel, Switch, Countdown, and
-conditional visibility. The SDK never migrates a document implicitly.
+Protocol 0.3 replaces 0.2 outright. There is no migration path and no dual
+version support: a 0.2 document is an unknown version to this reader and is
+rejected atomically, resolving through last-accepted, then bundled fallback,
+then configuration unavailable.
+
+Over its predecessor, 0.3 adds four components — Tabs, Timeline, Award, and
+Social Proof — tab selection as runtime state and as a `visibility` condition,
+and the reserved accessibility strings `mosaic.a11y.rating` and
+`mosaic.a11y.in_progress`. It carries forward document design-system tokens,
+solid/linear/radial/media backgrounds, native shadows, uniform width and height
+Fit/Fill/Fixed sizing, remote and bundled image/video assets, native
+Screen/Sheet presentation, generalized Buttons and Stacks, authored Product
+Cards and Badges, safe product templates, navigation, Carousel, Switch,
+Countdown, and conditional visibility.
+
+Tabs presents two through eight labelled panels with exactly one visible. The
+initially selected tab is always authored through `initialTabId`, so reordering
+the array cannot change which panel opens, and `selectedLabelColor` is required
+so that "the label colour deliberately does not change" and "the label colour
+was never authored" cannot share an encoding. A `{"mode": "tab"}` visibility
+condition removes a node from layout, the accessibility tree, and focus order
+exactly as a false Switch condition does.
+
+Timeline draws two through twelve ordered vertical entries over one continuous
+connector, with a closed `dot`/`ordinal`/`icon` marker union. An absent marker
+means no glyph and an unbroken connector, never a substitute glyph; marker and
+description styling is required exactly when an entry consumes it and forbidden
+when none does.
+
+Award and Social Proof are passive. A Social Proof rating counts steps against
+a points maximum in integers only, and is announced by substituting the
+resolved `mosaic.a11y.rating` catalog string — the renderer composes no
+connective of its own, and the numerals are ASCII by contract so that three
+renderers produce the same bytes.
+
+Accessibility announcements are never joined. Each segment is its own element
+inside a labelled container, in protocol order, and the platform supplies
+whatever pause or punctuation its locale and screen reader use; joining with
+`". "` would be renderer-invented punctuation exactly as a hardcoded "out of"
+is a renderer-invented word. An absent optional segment produces no element,
+never an empty one, and avatars, emblems, markers, and connectors are
+decorative — drawn, never announced, never focusable. A Button is a single
+element whose authored name is unchanged while busy; the resolved
+`mosaic.a11y.in_progress` is its value, and its content is not announced in
+either state.
+
+The SDK never migrates a document implicitly.
 
 Real billing adapters remain optional sibling packages, so core applications do
 not resolve or embed RevenueCat, StoreKit, or Google Play Billing.
@@ -479,7 +520,7 @@ MosaicPlacementHost(
 )
 ```
 
-An accepted release is strict and atomic: every embedded Protocol 0.2 paywall,
+An accepted release is strict and atomic: every embedded Protocol 0.3 paywall,
 digest, Placement reference, product reference, asset binding, and capability
 set must validate before the SDK replaces memory or its cache. Requests send
 Flutter SDK capability metadata, use a short timeout, and revalidate strong
@@ -606,7 +647,7 @@ completes a Flutter frame.
 
 The client:
 
-- advertises and uses `mosaic.local-preview.v0.2` for the full connection;
+- advertises and uses `mosaic.local-preview.v0.3` for the full connection;
 - sends `previewClientConnected` then `capabilityReport`;
 - reports exact schema, renderer, and preview capability versions for the
   negotiated protocol;
@@ -629,7 +670,7 @@ document and mock-commerce state:
 ```dart
 final project = const MosaicPreviewMessageCodec().decodeLocalProject(
   projectJson,
-  expectedFileFormatVersion: mosaicLocalPreviewV02ProtocolVersion,
+  expectedFileFormatVersion: mosaicLocalPreviewProtocolVersion,
 );
 ```
 
@@ -649,7 +690,7 @@ and withhold incompatible or oversized compact UTF-8 drafts before sending.
   purchase/Switch references, passive content bounds, Carousel nesting, and
   Countdown ordering.
 - The package contains no JSON Schema or fixture copy. Conformance tests read
-  the canonical Protocol and Local Preview 0.2 fixtures directly.
+  the canonical Protocol and Local Preview 0.3 fixtures directly.
 - Configuration resolves last-known-valid cache → bundled Delivery v1/v2 release
   → `configurationUnavailable`; explicit refresh may replace it with a fully
   validated remote release.
@@ -676,9 +717,9 @@ locale" is. Hand it whatever the platform produced: `Platform.localeName` POSIX
 shapes (`en_US`, `en_US.UTF-8`), ICU region overrides (`en_US@rg=gbzzzz`), and
 BCP-47 extensions (`en-US-u-ca-buddhist`), and Java `Locale.toString` extension
 markers (`en_US_#u-rg-gbzzzz`) all resolve to `en-US`; `PT_br` resolves to
-`pt-BR`; `zh-Hans-CN` is preserved. `0.2` defines no language+region reduction,
+`pt-BR`; `zh-Hans-CN` is preserved. `0.3` defines no language+region reduction,
 so `zh-Hans-CN` reduces to `zh`, never to `zh-CN`. Conformance is bound to
-`protocol/fixtures/v0.2/locale-resolution.json`.
+`protocol/fixtures/v0.3/locale-resolution.json`.
 
 Catalog lookup — and only catalog lookup — recovers the leading language subtag
 when a tag has no canonical form, so `en-US-verylongsubtag` still reaches the
@@ -709,7 +750,7 @@ Conformance is bound to
 
 ## Results
 
-The sealed presentation union maps one-to-one to RC1:
+The sealed presentation union maps one-to-one to the protocol:
 
 - `MosaicPurchasedPresentationResult`
 - `MosaicRestoredPresentationResult`
@@ -767,7 +808,7 @@ same code for the same situation.
 - A Sheet destination uses a full-height safe-area `showModalBottomSheet` with
   its own scroll controller. Protocol Back, navigation to another destination,
   and system swipe/back dismissal reconcile the same history deterministically.
-- Protocol 0.2 Button descendants render as native Flutter content inside one
+- Protocol 0.3 Button descendants render as native Flutter content inside one
   48-point-minimum hit target and one merged semantics control. Purchase and
   restore swap to localized `inProgressChildren` and all asynchronous actions
   reject duplicate taps while busy.
@@ -798,7 +839,7 @@ same code for the same situation.
   and unresolved raw template tokens are never rendered.
 - Overlay Product Badges use `PositionedDirectional`, so logical start/end
   anchors mirror in RTL without introducing absolute protocol coordinates.
-- Heading roles map to `Semantics.header`; RC1 heading levels are validated,
+- Heading roles map to `Semantics.header`; authored heading levels are validated,
   while the supported Flutter semantics API exposes the heading role rather
   than the numeric level.
 - Busy controls expose a disabled native action plus localized live-region
@@ -834,7 +875,7 @@ flutter test --no-pub \
 ```
 
 That opt-in test verifies the negotiated WebSocket subprotocol, identity and
-capability relay, an edited Protocol 0.2 draft, and the returned
+capability relay, an edited Protocol 0.3 draft, and the returned
 `draftAccepted` acknowledgement. The normal offline suite compiles and skips
 it when no relay is running.
 

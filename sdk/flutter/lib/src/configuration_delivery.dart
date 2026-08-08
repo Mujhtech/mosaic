@@ -193,7 +193,7 @@ final class MosaicDeliveredAssetReference {
 
 /// Strict, atomic reader for Configuration Delivery Contract v1.
 ///
-/// Every included Protocol 0.2 document and every cross-release reference is
+/// Every included Protocol 0.3 document and every cross-release reference is
 /// validated before an envelope is returned.
 final class MosaicConfigurationDeliveryDecoder {
   const MosaicConfigurationDeliveryDecoder({
@@ -683,7 +683,7 @@ final class MosaicConfigurationDeliveryDecoder {
     _expectKeys(object, const <String>{'name', 'version'}, path);
     final name = _string(object['name'], '$path.name');
     final version = _string(object['version'], '$path.version');
-    if (!mosaicProtocolV02Capabilities.contains(name) ||
+    if (!mosaicProtocolV03Capabilities.contains(name) ||
         version != mosaicProtocolVersion) {
       throw const MosaicConfigurationDeliveryException(
         'The release requires an unsupported Paywall capability.',

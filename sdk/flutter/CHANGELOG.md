@@ -2,6 +2,97 @@
 
 ## Unreleased
 
+- **Adopt Paywall Protocol 0.3, which replaces 0.2 outright.** There is no
+  migration path, no dual-version code, and no compatibility shim: a 0.2
+  document is an unknown version to this reader and is rejected atomically,
+  resolving through last accepted, then bundled fallback, then configuration
+  unavailable. Every `0.2` artifact, symbol, fixture path, test, and golden has
+  been deleted or renamed rather than deprecated alongside 0.3. The Local
+  Preview contract and its WebSocket subprotocol move to `0.3` /
+  `mosaic.local-preview.v0.3` in the same step.
+- Add four components. **Tabs** presents two through eight labelled panels with
+  exactly one visible; the initially selected tab is always authored through
+  `initialTabId`, so reordering the array cannot change which panel opens, and
+  `selectedLabelColor` is required so a deliberate unchanged colour and an
+  unauthored one cannot share an encoding. **Timeline** draws two through
+  twelve ordered vertical entries over one continuous connector with a closed
+  `dot`/`ordinal`/`icon` marker union; an absent marker means no glyph and an
+  unbroken connector, and marker and description styling is required exactly
+  when an entry consumes it and forbidden when none does. **Award** and
+  **Social Proof** are passive, with closed emblem and rating shapes.
+- Add tab selection as runtime state and as a `visibility` condition. Runtime
+  state gains a `tabs` map reset from `initialTabId` on every accepted
+  revision, and `{"mode": "tab", "tabsId", "equals"}` removes a node from
+  layout, the accessibility tree, and focus order exactly as a false Switch
+  condition does. A condition naming an unknown tab, a Tabs component on
+  another screen, or the Tabs component the node belongs to rejects the
+  document.
+- **Visibility evaluation now takes `{switches, tabs}` and throws
+  `MosaicVisibilityStateException` when a condition names a controller the
+  supplied state does not carry.** Resolving it instead would read back as
+  `false`, which is a component silently disappearing rather than a caller
+  being told it has a bug. There is deliberately no fallback.
+- Rename the two-state box styles to the protocol's neutral names —
+  `MosaicSelectionStyles`, `MosaicSelectionStateStyle`, and
+  `MosaicSelectionStateStyleOverride` — because Tabs now shares the Product
+  Card overlay contract.
+- **Compose no accessibility announcement.** Each announced segment is its own
+  element inside a labelled container, in protocol order, and the platform
+  supplies whatever pause or punctuation its locale and screen reader use.
+  Joining segments with `". "` is renderer-invented punctuation exactly as a
+  hardcoded "out of" is a renderer-invented word, and it is wrong outside Latin
+  script (`。`, `،`, `।`, or no mark at all). An absent optional segment —
+  a Social Proof rating, an Award subtitle, a Timeline description — produces
+  no element, never an empty one. Social Proof avatars, Award emblems, and all
+  Timeline markers and connectors are decorative: drawn, never announced, never
+  focusable. `mosaicAccessibilityAnnouncement` is the pure contract the
+  renderer and the conformance corpus both consume, so the two cannot drift.
+- **A Button is one accessibility element.** Its authored name does not change
+  when it becomes busy — a name that changes mid-operation is disorienting and
+  breaks UI automation — so the resolved `mosaic.a11y.in_progress` is carried
+  as the control's value. Neither idle `children` nor `inProgressChildren` are
+  announced, so both states are consistent.
+- Implement the reserved accessibility strings. `mosaic.a11y.rating` and
+  `mosaic.a11y.in_progress` are declared in the default catalog exactly when
+  the document contains something that announces them, each placeholder
+  appears exactly once per translation, and no other template expression is
+  interpreted. A Social Proof rating counts steps against a points maximum, so
+  the renderer substitutes the rating **in points** rather than announcing
+  `value` against `maximum` — which would say "9 out of 5". Word order and all
+  wording travel with the catalog: the renderer composes no connective of its
+  own. Numerals are ASCII by contract — `.` separator, no grouping, one
+  fraction digit for a half step — so that three renderers produce identical
+  bytes; `package:intl` is deliberately not a dependency, and locale-aware
+  numerals are a deferred protocol change. Timeline ordinal markers follow the
+  same rule.
+- Consume both cross-SDK conformance corpora byte for byte, each with a
+  case-count floor so a truncated corpus fails rather than passing over
+  nothing: `rating-announcement.json` (10 cases) and
+  `accessibility-announcement.json` (11 cases).
+- Add capabilities `component.tabs`, `component.timeline`, `component.award`,
+  `component.socialProof`, `condition.tabVisibility`, and
+  `accessibility.reservedStrings`, each derived only when the corresponding
+  feature occurs.
+- **Remove the node types earlier protocol versions defined.** `verticalStack`,
+  `purchaseButton`, `restoreButton`, `closeButton`, and `legalText` are absent
+  from the 0.3 capability set and from the 0.3 node union, so no accepted
+  document could contain one; the model types, their renderer builders, their
+  validation arms, and the `_AvailableProductOption` legacy shape they fed have
+  all been deleted. The named rejection survives as raw-string matching in the
+  decoder rather than as a model type — a type that exists only to be rejected
+  is still a type a caller can construct, and the sealed union would then have
+  to carry arms for shapes the contract forbids.
+- Remove the legacy Product Selector shape. `cards` decodes through a
+  non-empty-list check, so `cards.isEmpty` was unreachable and
+  `productReferenceIds`, `initiallySelectedProductReferenceId`, and the legacy
+  option renderer were dead; `_AvailableProductOption.card` is now
+  non-nullable. `MosaicProductReference.badge` and the `MosaicStackNode.spacing`
+  alias were likewise never set by any 0.3 decoder and are gone.
+- Fail the example's fixture sync loudly on a missing or empty canonical
+  source instead of succeeding over it. A sync that silently passed would
+  leave the previous version — or nothing — bundled as the fallback while
+  every command reported success.
+
 - Canonicalize every host-supplied locale identifier through
   `mosaicNormalizeLocaleTag` before it reaches the analytics event context, the
   `application.locale` decision attribute, or catalog resolution, implementing

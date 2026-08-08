@@ -123,6 +123,5 @@ void _expectKeys(
 }
 
 const List<String> mosaicLocalPreviewVersionPreference = <String>[
-  mosaicLocalPreviewV02ProtocolVersion,
   mosaicLocalPreviewProtocolVersion,
 ];

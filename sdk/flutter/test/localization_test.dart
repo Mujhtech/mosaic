@@ -98,13 +98,13 @@ void main() {
     expect(resolved.textDirection, TextDirection.ltr);
   });
 
-  // The cross-SDK corpus for the 2026-08-05 Paywall Protocol 0.2 ruling that
+  // The cross-SDK corpus for the 2026-08-05 Paywall Protocol 0.3 ruling that
   // requested-locale matching is case-insensitive. It is bound here rather than
   // restated: the failure it guards is a renderer quietly disagreeing with the
   // other SDKs about which catalog a device's own locale denotes.
-  test('matches the canonical Protocol 0.2 locale-resolution corpus', () {
+  test('matches the canonical Protocol 0.3 locale-resolution corpus', () {
     final corpus = jsonDecode(
-      repositoryFile('protocol/fixtures/v0.2/locale-resolution.json')
+      repositoryFile('protocol/fixtures/v0.3/locale-resolution.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     final localization =

@@ -63,6 +63,21 @@ final class MosaicResolvedLocalization {
 
   String text(MosaicLocalizedText value) => resolve(value).value;
 
+  /// Every string the resolved candidate chain exposes, merged.
+  ///
+  /// Later candidates are overlaid first so earlier ones win, which is the same
+  /// per-key first-match order [resolve] applies. Catalogs are partial by
+  /// design, so this is a declared lookup order and not a fallback that hides
+  /// missing data.
+  Map<String, String> get catalogStrings {
+    final merged = <String, String>{};
+    for (final locale in candidates.reversed) {
+      final catalog = _localization.locales[locale];
+      if (catalog != null) merged.addAll(catalog.strings);
+    }
+    return Map.unmodifiable(merged);
+  }
+
   /// The first declared direction in the full fallback chain, or `null` when no
   /// locale in it is declared.
   static MosaicLocaleDirection? _direction(
@@ -108,10 +123,10 @@ final class MosaicLocaleResolver {
       }
     }
 
-    // The Protocol 0.2 candidate chain, in order. A requested locale with no
+    // The Protocol 0.3 candidate chain, in order. A requested locale with no
     // canonical form contributes no candidate rather than matching anything,
     // which leaves the declared fallback and default exactly as they are. There
-    // is no language-plus-region reduction step in 0.2: `zh-Hans-CN` reduces to
+    // is no language-plus-region reduction step in 0.3: `zh-Hans-CN` reduces to
     // `zh`, never to `zh-CN`.
     add(requested);
     if (requested != null) add(requested.split('-').first);

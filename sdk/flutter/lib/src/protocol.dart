@@ -8,12 +8,30 @@ part 'protocol_decoder_values.dart';
 part 'protocol_validation.dart';
 part 'protocol_validation_support.dart';
 
-const String mosaicProtocolVersion = '0.2';
-const String mosaicProtocolV02Version = mosaicProtocolVersion;
-const String mosaicFlutterSdkVersion = '0.2.0-dev.11';
+const String mosaicProtocolVersion = '0.3';
+const String mosaicFlutterSdkVersion = '0.3.0-dev.1';
 
-/// Every Protocol 0.2 capability implemented by this Flutter SDK.
-const Set<String> mosaicProtocolV02Capabilities = <String>{
+/// Localization keys the protocol itself consumes.
+///
+/// Unlike every other key, these are not referenced by a component: the
+/// renderer reads them to announce something the document has no field for. A
+/// reserved key must be declared exactly when the document contains the
+/// construct that announces it.
+const Map<String, List<String>> mosaicReservedAccessibilityKeys =
+    <String, List<String>>{
+  /// Announced for a Social Proof rating. The placeholders receive the rating
+  /// in points, never in steps.
+  'mosaic.a11y.rating': <String>[
+    '{{ rating.value }}',
+    '{{ rating.maximum }}',
+  ],
+
+  /// Announced while a Button is showing its in-progress content.
+  'mosaic.a11y.in_progress': <String>[],
+};
+
+/// Every Protocol 0.3 capability implemented by this Flutter SDK.
+const Set<String> mosaicProtocolV03Capabilities = <String>{
   'layout.scrollContainer',
   'layout.stack',
   'layout.sizing',
@@ -32,6 +50,10 @@ const Set<String> mosaicProtocolV02Capabilities = <String>{
   'component.carousel',
   'component.switch',
   'component.countdown',
+  'component.tabs',
+  'component.timeline',
+  'component.award',
+  'component.socialProof',
   'localization.catalogs',
   'localization.rtl',
   'localization.productTemplate',
@@ -47,6 +69,7 @@ const Set<String> mosaicProtocolV02Capabilities = <String>{
   'action.navigateBack',
   'action.openExternalUrl',
   'accessibility.metadata',
+  'accessibility.reservedStrings',
   'fallback.asset',
   'fallback.product',
   'outcome.normalized',
@@ -61,6 +84,7 @@ const Set<String> mosaicProtocolV02Capabilities = <String>{
   'style.productCardStates',
   'visibility.static',
   'condition.switchVisibility',
+  'condition.tabVisibility',
 };
 
 /// Machine-readable compatibility information for host diagnostics and Studio.
@@ -82,7 +106,7 @@ final MosaicCapabilityReport mosaicFlutterCapabilityReport =
   sdkVersion: mosaicFlutterSdkVersion,
   supportedSchemaVersions: const <String>{mosaicProtocolVersion},
   supportedCapabilities: <String, String>{
-    for (final capability in mosaicProtocolV02Capabilities)
+    for (final capability in mosaicProtocolV03Capabilities)
       capability: mosaicProtocolVersion,
   },
 );
@@ -127,7 +151,7 @@ enum MosaicIconName {
   chevronForward,
 }
 
-/// A frozen Protocol 0.2 semantic token or canonical literal sRGB color.
+/// A frozen Protocol 0.3 semantic token or canonical literal sRGB color.
 final class MosaicColorValue {
   const MosaicColorValue._(this.value, this.isLiteral, this.isToken);
 
@@ -184,12 +208,6 @@ final class MosaicSizing {
 
 sealed class MosaicBackground {
   const MosaicBackground();
-
-  /// Compatibility view for solid backgrounds.
-  String get value => switch (this) {
-        MosaicColorBackground(:final color) => color.value,
-        _ => '',
-      };
 }
 
 final class MosaicColorBackground extends MosaicBackground {
@@ -375,6 +393,298 @@ final class MosaicSwitchVisibility extends MosaicVisibility {
   final bool equals;
 }
 
+/// Visible only while the named Tabs component's runtime selection equals
+/// [equals]. A false condition removes the node from layout, the accessibility
+/// tree, and focus order, exactly as a false Switch condition does.
+final class MosaicTabVisibility extends MosaicVisibility {
+  const MosaicTabVisibility({required this.tabsId, required this.equals});
+
+  final String tabsId;
+  final String equals;
+}
+
+/// The runtime selection a conditional-visibility decision depends on.
+final class MosaicSelectionState {
+  MosaicSelectionState({
+    Map<String, bool> switches = const <String, bool>{},
+    Map<String, String> tabs = const <String, String>{},
+  })  : switches = Map.unmodifiable(switches),
+        tabs = Map.unmodifiable(tabs);
+
+  /// Every Switch and Tabs controller the document declares, at its authored
+  /// initial value. This is the state an accepted revision resets to.
+  factory MosaicSelectionState.initialFor(MosaicPaywallDocument document) {
+    final switches = <String, bool>{};
+    final tabs = <String, String>{};
+    for (final node in document.nodes) {
+      if (node is MosaicSwitchComponent) {
+        switches[node.id] = node.initialValue;
+      } else if (node is MosaicTabsComponent) {
+        tabs[node.id] = node.initialTabId;
+      }
+    }
+    return MosaicSelectionState(switches: switches, tabs: tabs);
+  }
+
+  final Map<String, bool> switches;
+  final Map<String, String> tabs;
+}
+
+/// A visibility condition named a controller the supplied state does not carry.
+///
+/// This is a caller bug, not a document defect, so it surfaces where it is
+/// rather than as a component that quietly vanishes.
+final class MosaicVisibilityStateException implements Exception {
+  const MosaicVisibilityStateException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'MosaicVisibilityStateException: $message';
+}
+
+/// Resolves [visibility] against [state].
+///
+/// Throws [MosaicVisibilityStateException] when the condition names a Switch or
+/// Tabs component [state] does not carry. Resolving it instead would read back
+/// as `false`, which is a component silently disappearing rather than a caller
+/// being told it has a bug — so there is deliberately no fallback here.
+bool evaluateMosaicVisibility(
+  MosaicVisibility visibility,
+  MosaicSelectionState state,
+) =>
+    switch (visibility) {
+      MosaicAlwaysVisible() => true,
+      MosaicStaticallyHidden() => false,
+      MosaicSwitchVisibility(:final switchId, :final equals) =>
+        state.switches.containsKey(switchId)
+            ? state.switches[switchId] == equals
+            : throw MosaicVisibilityStateException(
+                'Visibility depends on Switch $switchId, which the supplied '
+                'runtime state does not carry.',
+              ),
+      MosaicTabVisibility(:final tabsId, :final equals) =>
+        state.tabs.containsKey(tabsId)
+            ? state.tabs[tabsId] == equals
+            : throw MosaicVisibilityStateException(
+                'Visibility depends on Tabs $tabsId, which the supplied '
+                'runtime state does not carry.',
+              ),
+    };
+
+/// Whether a Button is showing its idle or its in-progress content.
+enum MosaicButtonAnnouncementState { idle, inProgress }
+
+/// One announced accessibility element.
+///
+/// Elements are never joined. Each is its own node inside the labelled
+/// container, in order, and the platform supplies whatever pause or
+/// punctuation its locale and screen reader use.
+final class MosaicAnnouncementElement {
+  const MosaicAnnouncementElement({
+    required this.segment,
+    required this.text,
+    this.item,
+  });
+
+  /// The Timeline entry this element belongs to, when the component has items.
+  final String? item;
+  final String segment;
+  final String text;
+}
+
+/// The announced container a component's elements live inside.
+final class MosaicAnnouncementContainer {
+  const MosaicAnnouncementContainer({
+    required this.role,
+    required this.label,
+    this.value,
+    this.hint,
+  });
+
+  /// `group`, `list`, or `button`.
+  final String role;
+  final String label;
+  final String? value;
+  final String? hint;
+}
+
+/// The accessibility announcement contract for one component.
+///
+/// [separator] is always `null` and is modelled explicitly so that "no joining
+/// happens" is a value a conformance vector can assert rather than an absence a
+/// reader has to infer. A renderer that concatenated segments with `". "` would
+/// have invented script-specific punctuation exactly the way a hardcoded "out
+/// of" invents a word — it merely looks innocuous because it is punctuation.
+final class MosaicAccessibilityAnnouncement {
+  MosaicAccessibilityAnnouncement({
+    required this.composition,
+    required this.container,
+    required Iterable<MosaicAnnouncementElement> elements,
+    required Iterable<String> decorative,
+  })  : elements = List.unmodifiable(elements),
+        decorative = List.unmodifiable(decorative);
+
+  /// `singleElement` for a Button, `separateElements` otherwise.
+  final String composition;
+
+  /// Always `null`: renderers do not join segments.
+  Null get separator => null;
+  final MosaicAnnouncementContainer container;
+  final List<MosaicAnnouncementElement> elements;
+
+  /// Ids of parts that must never be announced or focusable.
+  final List<String> decorative;
+}
+
+/// Resolves one localized string from an explicit catalog.
+///
+/// Throws rather than falling back to the inline `default`. Validation
+/// guarantees every referenced key exists in the default catalog, and the
+/// default catalog is always a declared candidate, so a miss here means a
+/// document was accepted that should not have been.
+String _catalogString(Map<String, String> strings, String key) {
+  final value = strings[key];
+  if (value == null) {
+    throw MosaicProtocolException(
+      'The resolved catalog does not declare $key.',
+    );
+  }
+  return value;
+}
+
+/// The composed accessibility announcement for [node].
+///
+/// [strings] is the resolved catalog, and [state] is required for a Button and
+/// meaningless for anything else.
+MosaicAccessibilityAnnouncement mosaicAccessibilityAnnouncement(
+  MosaicNode node, {
+  required Map<String, String> strings,
+  MosaicButtonAnnouncementState? state,
+}) {
+  String text(MosaicLocalizedText value) =>
+      _catalogString(strings, value.localizationKey);
+
+  final elements = <MosaicAnnouncementElement>[];
+  final decorative = <String>[];
+
+  if (node is MosaicButtonComponent) {
+    if (state == null) {
+      throw const MosaicProtocolException(
+        'A Button announcement requires an idle or inProgress state.',
+      );
+    }
+    // A Button is one control. Its name is authored and does not change when it
+    // becomes busy — a name that changes mid-operation is disorienting and
+    // breaks UI automation — so busy-ness is carried as the control's value.
+    // Neither idle nor in-progress content is announced, in both states alike.
+    final shown = state == MosaicButtonAnnouncementState.inProgress
+        ? (node.inProgressChildren ?? const <MosaicNode>[])
+        : node.children;
+    for (final child in shown) {
+      decorative.add(child.id);
+    }
+    return MosaicAccessibilityAnnouncement(
+      composition: 'singleElement',
+      container: MosaicAnnouncementContainer(
+        role: 'button',
+        label: text(node.accessibility.label),
+        value: state == MosaicButtonAnnouncementState.inProgress
+            ? _catalogString(strings, 'mosaic.a11y.in_progress')
+            : null,
+        hint: node.accessibility.hint == null
+            ? null
+            : text(node.accessibility.hint!),
+      ),
+      elements: elements,
+      decorative: decorative,
+    );
+  }
+
+  final String role;
+  final MosaicControlAccessibility accessibility;
+  switch (node) {
+    case MosaicSocialProofComponent():
+      role = 'group';
+      accessibility = node.accessibility;
+      // An absent rating produces no element at all: it is neither a zero
+      // rating nor an unknown one.
+      if (node.rating case final rating?) {
+        elements.add(
+          MosaicAnnouncementElement(
+            segment: 'rating',
+            text: rating.announcement(
+              _catalogString(strings, 'mosaic.a11y.rating'),
+            ),
+          ),
+        );
+      }
+      elements.add(
+        MosaicAnnouncementElement(segment: 'quote', text: text(node.quote)),
+      );
+      elements.add(
+        MosaicAnnouncementElement(
+          segment: 'attribution',
+          text: text(node.attribution),
+        ),
+      );
+      if (node.avatar != null) decorative.add('avatar');
+    case MosaicAwardComponent():
+      role = 'group';
+      accessibility = node.accessibility;
+      elements.add(
+        MosaicAnnouncementElement(segment: 'title', text: text(node.title)),
+      );
+      if (node.subtitle case final subtitle?) {
+        elements.add(
+          MosaicAnnouncementElement(
+            segment: 'subtitle',
+            text: text(subtitle),
+          ),
+        );
+      }
+      if (node.emblem != null) decorative.add('emblem');
+    case MosaicTimelineComponent():
+      role = 'list';
+      accessibility = node.accessibility;
+      for (final entry in node.entries) {
+        elements.add(
+          MosaicAnnouncementElement(
+            item: entry.id,
+            segment: 'title',
+            text: text(entry.title),
+          ),
+        );
+        if (entry.description case final description?) {
+          elements.add(
+            MosaicAnnouncementElement(
+              item: entry.id,
+              segment: 'description',
+              text: text(description),
+            ),
+          );
+        }
+        if (entry.marker != null) decorative.add('${entry.id}.marker');
+      }
+      decorative.add('connector');
+    default:
+      throw MosaicProtocolException(
+        '${node.type} has no composed announcement contract in Protocol 0.3.',
+      );
+  }
+
+  return MosaicAccessibilityAnnouncement(
+    composition: 'separateElements',
+    container: MosaicAnnouncementContainer(
+      role: role,
+      label: text(accessibility.label),
+      hint: accessibility.hint == null ? null : text(accessibility.hint!),
+    ),
+    elements: elements,
+    decorative: decorative,
+  );
+}
+
 final class MosaicPaywallDocument {
   MosaicPaywallDocument({
     required this.schemaVersion,
@@ -433,6 +743,10 @@ final class MosaicPaywallDocument {
       } else if (child is MosaicCarouselComponent) {
         for (final page in child.pages) {
           yield* _walkStack(page.content);
+        }
+      } else if (child is MosaicTabsComponent) {
+        for (final tab in child.tabs) {
+          yield* _walkStack(tab.content);
         }
       } else if (child is MosaicButtonComponent) {
         yield* _walkButtonChildren(child.children);
@@ -736,7 +1050,7 @@ final class MosaicProtocolDecoder {
         'Unsupported schemaVersion "$schemaVersion" at \$.schemaVersion.',
       );
     }
-    return _decodeV02(root);
+    return _decodeV03(root);
   }
 }
 

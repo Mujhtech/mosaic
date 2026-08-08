@@ -483,7 +483,7 @@ final class _PaywallPlaygroundState extends State<PaywallPlayground> {
           application: MosaicPreviewApplicationIdentity(
             id: 'mosaic.flutter.example',
             displayName: 'Mosaic Flutter Example',
-            version: '0.2.0',
+            version: '0.3.0',
           ),
           device: MosaicPreviewDeviceIdentity(
             displayName: 'Flutter $platformName preview',

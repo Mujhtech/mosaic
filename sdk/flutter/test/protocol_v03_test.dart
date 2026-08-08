@@ -4,14 +4,16 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
+import 'support/canonical_fixture.dart';
+
 void main() {
   final root = Directory.current.parent.parent;
 
   String fixture(String name) => File(
-        '${root.path}/protocol/fixtures/v0.2/$name',
+        '${root.path}/protocol/fixtures/v0.3/$name',
       ).readAsStringSync();
 
-  test('strictly decodes every canonical valid Protocol 0.2 fixture', () {
+  test('strictly decodes every canonical valid Protocol 0.3 fixture', () {
     for (final name in <String>[
       'complete-paywall.json',
       'edge-cases.json',
@@ -20,12 +22,13 @@ void main() {
       'navigation-only.json',
     ]) {
       final document = const MosaicProtocolDecoder().decode(fixture(name));
-      expect(document.schemaVersion, mosaicProtocolV02Version, reason: name);
+      expect(document.schemaVersion, mosaicProtocolVersion, reason: name);
       expect(document.initialScreenId, isNotNull, reason: name);
       expect(document.screens, isNotEmpty, reason: name);
       expect(
         document.screens.every(
-          (screen) => screen.layout.content is MosaicStackComponent,
+          (screen) =>
+              screen.layout.content.direction == MosaicStackDirection.vertical,
         ),
         isTrue,
         reason: name,
@@ -33,27 +36,25 @@ void main() {
     }
   });
 
-  test('rejects every canonical invalid RC3 fixture atomically', () {
-    for (final name in <String>[
-      'invalid/noncanonical-color.json',
-      'invalid/insecure-external-url.json',
-      'invalid/interactive-button-child.json',
-      'invalid/navigation-cycle.json',
-      'invalid/product-card-outside-selector.json',
-      'invalid/interactive-product-card-child.json',
-      'invalid/duplicate-product-reference.json',
-      'invalid/incomplete-product-card-default.json',
-      'invalid/unsafe-product-template.json',
-    ]) {
+  test('rejects every canonical invalid Protocol 0.3 fixture atomically', () {
+    // The corpus is enumerated from disk rather than listed here, so a fixture
+    // the protocol agent adds cannot pass by never being read. The count is
+    // asserted for the same reason: a scan over an empty or mis-resolved
+    // directory would otherwise report success having checked nothing.
+    final invalid = canonicalFixtureFiles(
+      repositoryDirectory('protocol/fixtures/v0.3/invalid'),
+    );
+    expect(invalid, hasLength(12));
+    for (final file in invalid) {
       expect(
-        () => const MosaicProtocolDecoder().decode(fixture(name)),
+        () => const MosaicProtocolDecoder().decode(file.readAsStringSync()),
         throwsA(isA<MosaicProtocolException>()),
-        reason: name,
+        reason: file.uri.pathSegments.last,
       );
     }
   });
 
-  test('0.2 reader rejects unknown fields and unknown components atomically',
+  test('0.3 reader rejects unknown fields and unknown components atomically',
       () {
     final source =
         jsonDecode(fixture('complete-paywall.json'))! as Map<String, Object?>;
@@ -80,16 +81,37 @@ void main() {
     );
   });
 
-  test('rejects legacy RC1 components and interactive Button descendants', () {
-    final legacy =
-        jsonDecode(fixture('complete-paywall.json'))! as Map<String, Object?>;
-    final close = _node(legacy, 'close');
-    close['type'] = 'closeButton';
-    expect(
-      () => const MosaicProtocolDecoder().decode(jsonEncode(legacy)),
-      throwsA(isA<MosaicProtocolException>()),
-    );
+  test('names every retired node type it rejects', () {
+    // The types are gone from the model, so the reader matches the raw string
+    // and still says which one it saw. A generic schema error would leave an
+    // author guessing which block to change.
+    for (final type in <String>[
+      'verticalStack',
+      'purchaseButton',
+      'restoreButton',
+      'closeButton',
+      'legalText',
+    ]) {
+      final legacy =
+          jsonDecode(fixture('complete-paywall.json'))! as Map<String, Object?>;
+      _node(legacy, 'close')['type'] = type;
+      expect(
+        () => const MosaicProtocolDecoder().decode(jsonEncode(legacy)),
+        throwsA(
+          isA<MosaicProtocolException>()
+              .having((error) => error.message, 'message', contains(type))
+              .having(
+                (error) => error.rejection,
+                'rejection',
+                MosaicProtocolRejection.unsupportedCapability,
+              ),
+        ),
+        reason: type,
+      );
+    }
+  });
 
+  test('rejects interactive Button descendants', () {
     final interactive =
         jsonDecode(fixture('complete-paywall.json'))! as Map<String, Object?>;
     final detailsButton = _node(interactive, 'view-details');
@@ -128,7 +150,7 @@ void main() {
         'https://xn--r8jz45g.xn--zckzah/privacy';
     expect(
       const MosaicProtocolDecoder().decode(jsonEncode(punycode)).schemaVersion,
-      mosaicProtocolV02Version,
+      mosaicProtocolVersion,
     );
 
     final cyclic =
@@ -155,27 +177,27 @@ void main() {
     );
   });
 
-  test('bundled fallback safely replaces a rejected 0.2 candidate', () async {
+  test('bundled fallback safely replaces a rejected 0.3 candidate', () async {
     final result = await const MosaicPaywallLoader().load(
       candidateDocument: fixture('invalid/noncanonical-color.json'),
       bundledFallbackLoader: () async => fixture('complete-paywall.json'),
     );
 
     expect(result, isA<MosaicPaywallLoaded>());
-    expect((result as MosaicPaywallLoaded).document.schemaVersion, '0.2');
+    expect((result as MosaicPaywallLoaded).document.schemaVersion, '0.3');
     expect(result.source, MosaicPaywallDocumentSource.bundledFallback);
   });
 
-  test('capability report is exact for Protocol 0.2 support', () {
+  test('capability report is exact for Protocol 0.3 support', () {
     final document = const MosaicProtocolDecoder().decode(
       fixture('complete-paywall.json'),
     );
     expect(
       mosaicFlutterCapabilityReport.supportedSchemaVersions,
-      <String>{'0.2'},
+      <String>{'0.3'},
     );
     expect(
-      mosaicProtocolV02Capabilities,
+      mosaicProtocolV03Capabilities,
       document.compatibility.requiredCapabilities
           .map((capability) => capability.name)
           .toSet(),
@@ -183,7 +205,7 @@ void main() {
     expect(
       document.compatibility.requiredCapabilities
           .map((capability) => capability.version),
-      everyElement('0.2'),
+      everyElement('0.3'),
     );
   });
 

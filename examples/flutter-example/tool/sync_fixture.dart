@@ -4,7 +4,7 @@ void main() {
   final exampleDirectory = File.fromUri(Platform.script).parent.parent;
   final repository = _findRepository(exampleDirectory);
   final fixtures = <String, String>{
-    'protocol/fixtures/v0.2/complete-paywall.json': 'complete-paywall.json',
+    'protocol/fixtures/v0.3/complete-paywall.json': 'complete-paywall.json',
     'protocol/fixtures/configuration-delivery/v1/valid-release.json':
         'configuration-release.json',
     'protocol/fixtures/configuration-delivery/v2/advanced-release.json':
@@ -15,8 +15,25 @@ void main() {
     final target = File(
       '${exampleDirectory.path}/assets/generated/${entry.value}',
     );
+    // A missing source is a build-stopping error, never a skipped copy. A sync
+    // that succeeds over a deleted fixture leaves the previous version — or
+    // nothing at all — bundled as the fallback, and the app then ships with no
+    // usable bundled document while every command reports success.
+    if (!source.existsSync()) {
+      stderr.writeln(
+        'Canonical fixture ${entry.key} is missing from ${repository.path}. '
+        'The example cannot bundle a fallback document without it.',
+      );
+      exitCode = 1;
+      throw StateError('Missing canonical Mosaic fixture ${entry.key}.');
+    }
     target.parent.createSync(recursive: true);
     final sourceBytes = source.readAsBytesSync();
+    if (sourceBytes.isEmpty) {
+      stderr.writeln('Canonical fixture ${entry.key} is empty.');
+      exitCode = 1;
+      throw StateError('Empty canonical Mosaic fixture ${entry.key}.');
+    }
     if (!target.existsSync() ||
         !_sameBytes(target.readAsBytesSync(), sourceBytes)) {
       target.writeAsBytesSync(sourceBytes, flush: true);
@@ -29,7 +46,7 @@ Directory _findRepository(Directory start) {
   var directory = start.absolute;
   while (true) {
     final paywall = File(
-      '${directory.path}/protocol/fixtures/v0.2/complete-paywall.json',
+      '${directory.path}/protocol/fixtures/v0.3/complete-paywall.json',
     );
     final release = File(
       '${directory.path}/protocol/fixtures/configuration-delivery/v1/valid-release.json',
