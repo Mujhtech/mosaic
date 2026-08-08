@@ -33,10 +33,10 @@ import {
   getSiblingBoundaries,
   parentEntryChildren,
 } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { capabilityByComponentType } from "@/lib/mosaic-protocol";
 import type { ComponentTreeModel } from "./component-tree-controller";
 import type { LayerActionItemsProps } from "./component-tree-support";
 import {
-  CAPABILITY_BY_TYPE,
   EMPTY_LAYER_ISSUE_SUMMARY,
   isMarked,
   isRootContentId,
@@ -213,17 +213,29 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
           const isStack = node?.type === "stack";
           const isButton = node?.type === "button";
           const isCarousel = node?.type === "carousel";
+          const isTabs = node?.type === "tabs";
           const isProductContainer =
             node?.type === "productSelector" ||
             node?.type === "productCard" ||
             node?.type === "productBadge";
           const expandable =
-            isScroll || isStack || isButton || isCarousel || isProductContainer;
+            isScroll ||
+            isStack ||
+            isButton ||
+            isCarousel ||
+            isTabs ||
+            isProductContainer;
           const expanded = (() => {
             if (isScroll) {
               return !collapsedScreenIds.has(row.screenId);
             }
-            if (isStack || isButton || isCarousel || isProductContainer) {
+            if (
+              isStack ||
+              isButton ||
+              isCarousel ||
+              isTabs ||
+              isProductContainer
+            ) {
               return expandedTreeNodes.has(row.id);
             }
           })();
@@ -241,10 +253,10 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
               EMPTY_LAYER_ISSUE_SUMMARY);
           const capability = (() => {
             if (isScroll) {
-              return CAPABILITY_BY_TYPE.scrollContainer;
+              return capabilityByComponentType.scrollContainer;
             }
             if (node) {
-              return CAPABILITY_BY_TYPE[node.type];
+              return capabilityByComponentType[node.type];
             }
           })();
           const capabilityRequirement = capability

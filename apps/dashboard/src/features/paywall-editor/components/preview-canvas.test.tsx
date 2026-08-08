@@ -35,7 +35,8 @@ type MetadataMode =
   | "name-only-missing-price"
   | "product-state-preview"
   | "fixed-product-card"
-  | "frame-position";
+  | "frame-position"
+  | "tab-panels";
 
 function InitializePreview({ mode }: { mode: MetadataMode }) {
   const editor = useEditorActions();
@@ -84,6 +85,45 @@ function InitializePreview({ mode }: { mode: MetadataMode }) {
             }
           : node
       );
+    }
+    if (mode === "tab-panels") {
+      const tabs = editor.insertComponentAt("tabs", {
+        parentId: required(document.screens[0], "document.screens[0]").layout
+          .content.id,
+        index: required(document.screens[0], "document.screens[0]").layout
+          .content.children.length,
+      });
+      if (tabs.status === "accepted") {
+        const node = editor.getSnapshot().document
+          ? flattenDocument(
+              required(editor.getSnapshot().document, "document")
+            ).find((entry) => entry.node.id === tabs.nodeId)?.node
+          : undefined;
+        if (node?.type === "tabs") {
+          for (const [index, tab] of node.tabs.entries()) {
+            editor.insertComponentAt("text", {
+              parentId: tab.content.id,
+              index: 0,
+            });
+            const inserted = flattenDocument(
+              required(editor.getSnapshot().document, "document")
+            ).find((entry) => entry.parentId === tab.content.id);
+            if (inserted) {
+              editor.updateComponent(inserted.node.id, (candidate) =>
+                candidate.type === "text"
+                  ? {
+                      ...candidate,
+                      value: {
+                        ...candidate.value,
+                        default: `Panel ${index + 1} body`,
+                      },
+                    }
+                  : candidate
+              );
+            }
+          }
+        }
+      }
     }
     if (mode === "countdown") {
       editor.insertComponentAt(
@@ -742,5 +782,30 @@ describe("Canvas geometry", () => {
         preferences: { fitMode: "fit", zoom: 1 },
       })
     ).toBe(2);
+  });
+
+  // Tabs is the first component whose runtime state is not Boolean. Without a
+  // working tab click the author can only ever see the panel that initialTabId
+  // opens, which makes every other panel unauthorable on the canvas.
+  it("switches the previewed panel when an author clicks a tab", async () => {
+    renderPreview("tab-panels");
+    const tabs = await screen.findAllByRole("tab");
+    expect(tabs).toHaveLength(2);
+    const [monthly, yearly] = tabs;
+
+    expect(monthly).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Panel 1 body")).toBeInTheDocument();
+    expect(screen.queryByText("Panel 2 body")).not.toBeInTheDocument();
+
+    fireEvent.click(required(yearly, "second tab"));
+
+    await waitFor(() => {
+      expect(required(yearly, "second tab")).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+    });
+    expect(screen.getByText("Panel 2 body")).toBeInTheDocument();
+    expect(screen.queryByText("Panel 1 body")).not.toBeInTheDocument();
   });
 });

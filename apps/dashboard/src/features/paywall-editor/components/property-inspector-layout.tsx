@@ -31,9 +31,10 @@ import type {
 } from "@/features/paywall-editor/types/editor";
 import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
 import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { eligibleTabControllers } from "@/features/paywall-editor/utils/protocol-component-rules";
 import { sizingMode } from "@/features/paywall-editor/utils/protocol-styles";
 import { fillAxisIsBounded } from "@/features/paywall-editor/utils/sizing";
-import type { MosaicPaywallV02Typography } from "@/lib/mosaic-protocol";
+import type { MosaicPaywallV03Typography } from "@/lib/mosaic-protocol";
 
 const AXIS_MODE_OPTIONS = [
   { label: "Fit", value: "fit" },
@@ -395,7 +396,7 @@ export function TypographyFields({
   typography: TypographyValue;
 }) {
   const editor = useEditorActions();
-  const extended = typography as MosaicPaywallV02Typography;
+  const extended = typography as MosaicPaywallV03Typography;
 
   function update(next: TypographyValue) {
     editor.updateComponent(node.id, (current) => onChange(current, next));
@@ -517,7 +518,7 @@ export function TypographyFields({
                   update({
                     ...extended,
                     overflow,
-                  } as MosaicPaywallV02Typography)
+                  } as MosaicPaywallV03Typography)
                 }
                 value={extended.overflow ?? "ellipsis"}
               >
@@ -564,9 +565,17 @@ export function VisibilitySection({ node }: { node: ProtocolNode }) {
       (candidate): candidate is Extract<ProtocolNode, { type: "switch" }> =>
         candidate.type === "switch"
     );
+  // Only Tabs components this node may legally name: same screen, not itself,
+  // and not one it lives inside. Offering an illegal target would let Studio
+  // author a document the protocol rejects atomically.
+  const tabControllers = eligibleTabControllers(document, node.id);
   const visibility = ("visibility" in node ? node.visibility : undefined) ?? {
     mode: "always" as const,
   };
+  const activeController =
+    visibility.mode === "tab"
+      ? tabControllers.find((candidate) => candidate.id === visibility.tabsId)
+      : undefined;
 
   function update(nextVisibility: Visibility) {
     editor.updateComponent(
@@ -579,6 +588,17 @@ export function VisibilitySection({ node }: { node: ProtocolNode }) {
     );
   }
 
+  function selectTabController(tabsId: string) {
+    const controller = tabControllers.find(
+      (candidate) => candidate.id === tabsId
+    );
+    const [firstTab] = controller?.tabs ?? [];
+    if (!firstTab) {
+      return;
+    }
+    update({ mode: "tab", tabsId, equals: firstTab.id });
+  }
+
   return (
     <InspectorSection title="Visibility">
       <SelectField
@@ -589,6 +609,8 @@ export function VisibilitySection({ node }: { node: ProtocolNode }) {
             update({ mode: "hidden" });
           } else if (mode === "switch" && switches[0]) {
             update({ mode: "switch", switchId: switches[0].id, equals: true });
+          } else if (mode === "tab" && tabControllers[0]) {
+            selectTabController(tabControllers[0].id);
           } else {
             update({ mode: "always" });
           }
@@ -599,6 +621,9 @@ export function VisibilitySection({ node }: { node: ProtocolNode }) {
         <SelectItem value="hidden">Hidden</SelectItem>
         <SelectItem disabled={switches.length === 0} value="switch">
           Controlled by switch
+        </SelectItem>
+        <SelectItem disabled={tabControllers.length === 0} value="tab">
+          Controlled by tab
         </SelectItem>
       </SelectField>
       {visibility.mode === "switch" ? (
@@ -625,6 +650,43 @@ export function VisibilitySection({ node }: { node: ProtocolNode }) {
             label="Visible when switch is on"
             onChange={(equals) => update({ ...visibility, equals })}
           />
+        </>
+      ) : null}
+      {visibility.mode === "tab" ? (
+        <>
+          <SelectField
+            address="visibility.tabsId"
+            description="Tabs on this screen that do not contain this layer. A condition inside its own panel is already decided, so it is not offered."
+            label="Tabs"
+            onChange={selectTabController}
+            value={visibility.tabsId}
+          >
+            {tabControllers.map((candidate) => (
+              <SelectItem key={candidate.id} value={candidate.id}>
+                {resolveLocalizedText(
+                  document,
+                  candidate.accessibility.label,
+                  document.localization.defaultLocale
+                )}
+              </SelectItem>
+            ))}
+          </SelectField>
+          <SelectField
+            address="visibility.equals"
+            label="Visible on tab"
+            onChange={(equals) => update({ ...visibility, equals })}
+            value={visibility.equals}
+          >
+            {(activeController?.tabs ?? []).map((tab) => (
+              <SelectItem key={tab.id} value={tab.id}>
+                {resolveLocalizedText(
+                  document,
+                  tab.label,
+                  document.localization.defaultLocale
+                )}
+              </SelectItem>
+            ))}
+          </SelectField>
         </>
       ) : null}
     </InspectorSection>

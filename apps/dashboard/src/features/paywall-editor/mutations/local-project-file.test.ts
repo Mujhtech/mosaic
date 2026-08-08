@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   LOCAL_PROJECT_STORAGE_KEY,
   MAX_LOCAL_PROJECT_BYTES,
+  RETIRED_LOCAL_PROJECT_STORAGE_KEY,
 } from "@/features/paywall-editor/constants/editor-constants";
 import {
   createLocalProjectFile,
@@ -23,7 +24,7 @@ import type {
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { required } from "@/test/required";
-import canonicalFixture from "../../../../../../protocol/fixtures/v0.2/complete-paywall.json";
+import canonicalFixture from "../../../../../../protocol/fixtures/v0.3/complete-paywall.json";
 
 const canonicalDocument = canonicalFixture as MosaicDocument;
 
@@ -161,7 +162,7 @@ describe("local project import and export", () => {
 
     window.localStorage.setItem(
       LOCAL_PROJECT_STORAGE_KEY,
-      JSON.stringify({ fileFormatVersion: "0.2", document: {} })
+      JSON.stringify({ fileFormatVersion: "0.3", document: {} })
     );
     expect(readLocalProjectResult()).toMatchObject({ status: "corrupt" });
   });
@@ -212,5 +213,45 @@ describe("local project import and export", () => {
     expect(mockCommerceState("alreadyEntitled", []).entitlement).toEqual({
       status: "none",
     });
+  });
+
+  // Protocol 0.3 replaced 0.2 outright, so a 0.2 autosave is unreadable rather
+  // than recoverable. Reporting it as empty would look like the author's work
+  // was never saved, and reporting it as recoverable would promise a resume
+  // that cannot happen; both hide a hard cutover behind a shrug.
+  it("rejects a retired Protocol 0.2 autosave by naming the version", () => {
+    window.localStorage.setItem(
+      RETIRED_LOCAL_PROJECT_STORAGE_KEY,
+      JSON.stringify({
+        fileFormatVersion: "0.2",
+        document: { schemaVersion: "0.2" },
+      })
+    );
+    const retired = readLocalProjectResult();
+    expect(retired.status).toBe("corrupt");
+    expect(retired.status === "corrupt" && retired.message).toContain("0.2");
+    expect(retired.status === "corrupt" && retired.message).toContain(
+      "no migration path"
+    );
+
+    window.localStorage.setItem(
+      LOCAL_PROJECT_STORAGE_KEY,
+      JSON.stringify({
+        fileFormatVersion: "0.2",
+        document: { schemaVersion: "0.2" },
+      })
+    );
+    const underCurrentKey = readLocalProjectResult();
+    expect(underCurrentKey.status).toBe("corrupt");
+    expect(
+      underCurrentKey.status === "corrupt" && underCurrentKey.message
+    ).toContain("Protocol 0.3 replaced 0.2");
+  });
+
+  it("rejects an imported Protocol 0.2 document by naming the version", () => {
+    const retired = { ...cloneValue(canonicalDocument), schemaVersion: "0.2" };
+    expect(() => parseImportedJson(JSON.stringify(retired))).toThrow(
+      /Protocol 0\.2/
+    );
   });
 });

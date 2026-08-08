@@ -205,7 +205,7 @@ describe("property inspector safety", () => {
     ["switch", "Switch label", "Content"],
     ["countdown", "Ends at", "Content"],
   ] as const)(
-    "provides contextual Protocol 0.2 coverage for %s",
+    "provides contextual Protocol 0.3 coverage for %s",
     async (type, fieldLabel, primarySection) => {
       const fixture = documentWithBlock(type);
       render(

@@ -137,7 +137,7 @@ function fitText(
 
 function baseDocument(id: string, children: DocumentNode[]): MosaicDocument {
   return synchronizeProtocolMetadata({
-    schemaVersion: "0.2",
+    schemaVersion: "0.3",
     id,
     revision: 1,
     compatibility: {

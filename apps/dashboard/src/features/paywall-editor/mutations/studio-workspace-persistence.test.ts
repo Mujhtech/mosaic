@@ -189,6 +189,10 @@ describe("Studio workspace preference persistence", () => {
       "featureList",
       "productSelector",
       "button",
+      "tabs",
+      "timeline",
+      "award",
+      "socialProof",
     ]);
   });
 

@@ -11,6 +11,7 @@ import {
   headingElement,
   InlineEditor,
   NodeFrame,
+  PROTOCOL_ICON_GLYPHS,
   type PreviewProductContext,
   productCardRequiresPrice,
   productPrice,
@@ -29,11 +30,17 @@ import type {
 import { getEditableCanvasText } from "@/features/paywall-editor/utils/canvas-preview-interactions";
 import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
 import {
+  announcementFor,
+  ratingPointOffsets,
+  ratingStepsPerPoint,
+  resolveNodeVisibility,
+  resolveSelectionStyle,
+} from "@/features/paywall-editor/utils/protocol-component-rules";
+import {
   resolvedBackground,
   resolvedProtocolColor,
 } from "@/features/paywall-editor/utils/protocol-styles";
 import {
-  evaluateVisibility,
   resolveProductBadgeStyle,
   resolveProductCardStyle,
 } from "@/lib/mosaic-protocol";
@@ -58,6 +65,7 @@ export interface PreviewNodeProps {
   readonly onCommitEdit: () => void;
   readonly onProductSelect: (id: string, productId: string) => void;
   readonly onSwitchChange: (id: string, value: boolean) => void;
+  readonly onTabSelect: (id: string, tabId: string) => void;
   readonly onUpdateEdit: (node: ProtocolNode, value: string) => void;
   readonly productContext?: PreviewProductContext;
   readonly productLayerPreview: {
@@ -68,6 +76,7 @@ export interface PreviewNodeProps {
   readonly selectedComponentId: string | null;
   readonly selectedProducts: Readonly<Record<string, string>>;
   readonly switchValues: Readonly<Record<string, boolean>>;
+  readonly tabSelections: Readonly<Record<string, string>>;
 }
 
 /**
@@ -221,17 +230,7 @@ function renderIcon(
   const { direction, document, locale } = context;
   const iconName =
     direction === "rtl" ? (RTL_ICON_NAMES[node.name] ?? node.name) : node.name;
-  const glyph = {
-    checkmark: "✓",
-    close: "×",
-    lock: "⌑",
-    restore: "↺",
-    externalLink: "↗",
-    arrowBackward: "←",
-    arrowForward: "→",
-    chevronBackward: "‹",
-    chevronForward: "›",
-  }[iconName];
+  const glyph = PROTOCOL_ICON_GLYPHS[iconName];
   return (
     <span
       aria-hidden={node.accessibility.hidden || undefined}
@@ -580,6 +579,15 @@ function renderButton(
         tabIndex={-1}
         type="button"
       />
+      {/*
+        A busy Button keeps its authored name and announces the resolved
+        mosaic.a11y.in_progress string as its own element. Neither `children`
+        nor `inProgressChildren` are announced in either state, so the content
+        below stays hidden from assistive technology.
+      */}
+      {previewingProgress ? (
+        <AnnouncedSegments context={context} node={node} state="inProgress" />
+      ) : null}
       <div
         aria-hidden={editingInside ? undefined : true}
         style={{
@@ -764,6 +772,454 @@ function renderCarousel(
   );
 }
 
+function renderTabs(
+  node: Extract<ProtocolNode, { type: "tabs" }>,
+  context: PreviewNodeContext
+): ReactNode {
+  const { document, locale, locked, props, tabSelections } = context;
+  const selectedTabId = tabSelections[node.id] ?? node.initialTabId;
+  const activeTab =
+    node.tabs.find((tab) => tab.id === selectedTabId) ?? node.tabs[0];
+  return (
+    <div
+      className="w-full"
+      style={{
+        ...appearanceStyle(document, node.appearance),
+        display: "flex",
+        flexDirection: "column",
+        gap: node.gap,
+      }}
+    >
+      <div
+        aria-label={resolveLocalizedText(
+          document,
+          node.accessibility.label,
+          locale
+        )}
+        aria-orientation={
+          node.tabBarDirection === "vertical" ? "vertical" : "horizontal"
+        }
+        role="tablist"
+        style={{
+          display: "flex",
+          flexDirection: node.tabBarDirection === "vertical" ? "column" : "row",
+          gap: node.tabBarGap,
+          justifyContent: distributionStyle(node.tabBarDistribution),
+        }}
+      >
+        {node.tabs.map((tab) => {
+          const selected = tab.id === activeTab?.id;
+          const style = resolveSelectionStyle(node, selected);
+          return (
+            <button
+              aria-controls={`${tab.id}-panel`}
+              aria-selected={selected}
+              disabled={locked}
+              id={`${tab.id}-tab`}
+              key={tab.id}
+              onClick={(event) => {
+                event.stopPropagation();
+                props.onTabSelect(node.id, tab.id);
+              }}
+              role="tab"
+              style={{
+                ...appearanceStyle(document, style),
+                ...typographyStyle(document, node.labelTypography),
+                ...(selected
+                  ? {
+                      color: resolvedProtocolColor(
+                        document,
+                        node.selectedLabelColor
+                      ),
+                    }
+                  : {}),
+              }}
+              type="button"
+            >
+              {resolveLocalizedText(document, tab.label, locale)}
+            </button>
+          );
+        })}
+      </div>
+      {node.tabs.map((tab) => (
+        <div
+          aria-labelledby={`${tab.id}-tab`}
+          hidden={tab.id !== activeTab?.id}
+          id={`${tab.id}-panel`}
+          key={tab.id}
+          role="tabpanel"
+        >
+          {tab.id === activeTab?.id ? (
+            <PreviewNode
+              {...props}
+              inheritedLocked={locked}
+              node={tab.content}
+            />
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface TimelineMarkerStyle {
+  readonly color: string;
+  readonly size: number;
+}
+
+function timelineMarkerContent(
+  entry: Extract<ProtocolNode, { type: "timeline" }>["entries"][number],
+  index: number,
+  marker: TimelineMarkerStyle
+): ReactNode {
+  if (!entry.marker) {
+    return null;
+  }
+  if (entry.marker.kind === "dot") {
+    return (
+      <span
+        aria-hidden
+        style={{
+          background: marker.color,
+          borderRadius: "50%",
+          display: "block",
+          height: marker.size / 2,
+          width: marker.size / 2,
+        }}
+      />
+    );
+  }
+  if (entry.marker.kind === "ordinal") {
+    return <span aria-hidden>{index + 1}</span>;
+  }
+  return <span aria-hidden>{PROTOCOL_ICON_GLYPHS[entry.marker.name]}</span>;
+}
+
+function renderTimeline(
+  node: Extract<ProtocolNode, { type: "timeline" }>,
+  context: PreviewNodeContext
+): ReactNode {
+  const { document, locale } = context;
+  // markerColor and markerSize are declared exactly when at least one entry
+  // carries a marker, so either both are authored or no glyph is drawn at all.
+  // Nothing is substituted for an absent value.
+  const markerColor = node.markerColor
+    ? resolvedProtocolColor(document, node.markerColor)
+    : undefined;
+  const marker: TimelineMarkerStyle | null =
+    markerColor !== undefined && node.markerSize !== undefined
+      ? { color: markerColor, size: node.markerSize }
+      : null;
+  const connectorColor = resolvedProtocolColor(document, node.connector.color);
+  // With no markers anywhere the gutter only has to carry the connector rule.
+  const gutterWidth = marker ? marker.size : node.connector.width;
+  return (
+    <ol
+      aria-label={resolveLocalizedText(
+        document,
+        node.accessibility.label,
+        locale
+      )}
+      className="w-full text-left"
+      style={{
+        ...appearanceStyle(document, node.appearance),
+        display: "grid",
+        gap: node.gap,
+      }}
+    >
+      {node.entries.map((entry, index) => (
+        <li className="flex items-stretch gap-3" key={entry.id}>
+          <span
+            aria-hidden
+            className="flex shrink-0 flex-col items-center"
+            style={{ width: gutterWidth }}
+          >
+            {marker ? (
+              <span
+                className="grid shrink-0 place-items-center"
+                style={{
+                  color: marker.color,
+                  fontSize: marker.size * 0.7,
+                  height: marker.size,
+                  lineHeight: 1,
+                  width: marker.size,
+                }}
+              >
+                {timelineMarkerContent(entry, index, marker)}
+              </span>
+            ) : null}
+            {index === node.entries.length - 1 ? null : (
+              <span
+                className="flex-1"
+                style={{
+                  borderInlineStartColor: connectorColor,
+                  borderInlineStartStyle: node.connector.style,
+                  borderInlineStartWidth: node.connector.width,
+                }}
+              />
+            )}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span
+              className="block"
+              style={typographyStyle(document, node.titleTypography)}
+            >
+              {resolveLocalizedText(document, entry.title, locale)}
+            </span>
+            {entry.description && node.descriptionTypography ? (
+              <span
+                className="block"
+                style={typographyStyle(document, node.descriptionTypography)}
+              >
+                {resolveLocalizedText(document, entry.description, locale)}
+              </span>
+            ) : null}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function awardEmblem(
+  node: Extract<ProtocolNode, { type: "award" }>,
+  context: PreviewNodeContext
+): ReactNode {
+  const { document } = context;
+  const { emblem } = node;
+  if (!emblem) {
+    return null;
+  }
+  if (emblem.type === "icon") {
+    return (
+      <span
+        aria-hidden
+        style={{
+          color: resolvedProtocolColor(document, emblem.color),
+          display: "inline-grid",
+          fontSize: emblem.size,
+          height: emblem.size,
+          lineHeight: 1,
+          placeItems: "center",
+          width: emblem.size,
+        }}
+      >
+        {PROTOCOL_ICON_GLYPHS[emblem.name]}
+      </span>
+    );
+  }
+  const asset = document.assets.find(
+    (entry) => entry.id === emblem.assetId && entry.type === "image"
+  );
+  return (
+    <span
+      aria-hidden
+      className="grid shrink-0 place-items-center overflow-hidden rounded bg-linear-to-br from-cyan-100 to-teal-200 text-[9px] text-teal-900"
+      style={{ height: emblem.size, width: emblem.size }}
+    >
+      {asset?.source.type === "remote" ? (
+        // biome-ignore lint/correctness/useImageSize: the span above already reserves the authored emblem box
+        <img alt="" className="size-full object-cover" src={asset.source.url} />
+      ) : (
+        emblem.assetId
+      )}
+    </span>
+  );
+}
+
+function renderAward(
+  node: Extract<ProtocolNode, { type: "award" }>,
+  context: PreviewNodeContext
+): ReactNode {
+  const { document, locale } = context;
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: an award is a labelled grouping per the ARIA authoring practices, and no HTML element carries that role
+    <div
+      aria-label={resolveLocalizedText(
+        document,
+        node.accessibility.label,
+        locale
+      )}
+      className="w-full"
+      role="group"
+      style={{
+        ...appearanceStyle(document, node.appearance),
+        alignItems: alignmentStyle(node.crossAxisAlignment),
+        display: "flex",
+        flexDirection: node.direction === "vertical" ? "column" : "row",
+        gap: node.gap,
+      }}
+    >
+      {awardEmblem(node, context)}
+      <span className="min-w-0">
+        <span
+          className="block"
+          style={typographyStyle(document, node.titleTypography)}
+        >
+          {resolveLocalizedText(document, node.title, locale)}
+        </span>
+        {node.subtitle && node.subtitleTypography ? (
+          <span
+            className="block"
+            style={typographyStyle(document, node.subtitleTypography)}
+          >
+            {resolveLocalizedText(document, node.subtitle, locale)}
+          </span>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
+function socialProofRating(
+  node: Extract<ProtocolNode, { type: "socialProof" }>,
+  context: PreviewNodeContext
+): ReactNode {
+  const { document } = context;
+  const { rating } = node;
+  if (!rating) {
+    return null;
+  }
+  const stepsPerPoint = ratingStepsPerPoint(rating.step);
+  const filled = resolvedProtocolColor(document, rating.filledColor);
+  const empty = resolvedProtocolColor(document, rating.emptyColor);
+  return (
+    <span aria-hidden className="flex items-center gap-0.5">
+      {ratingPointOffsets(rating).map((point) => {
+        const earned = rating.value - point * stepsPerPoint;
+        const proportion = Math.min(1, Math.max(0, earned / stepsPerPoint));
+        return (
+          <span
+            className="relative inline-block"
+            key={`star-of-${rating.maximum}-${point}`}
+            style={{ color: empty, fontSize: rating.size, lineHeight: 1 }}
+          >
+            ★
+            <span
+              className="absolute inset-y-0 start-0 overflow-hidden"
+              style={{ color: filled, width: `${proportion * 100}%` }}
+            >
+              ★
+            </span>
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/**
+ * The announced segments for a component, each as its own accessibility
+ * element. The protocol's `separator` is null by contract: joining segments
+ * would invent punctuation that is wrong in some scripts, so nothing here
+ * concatenates them.
+ */
+function AnnouncedSegments({
+  node,
+  context,
+  state = null,
+  skipSegments = [],
+}: {
+  node: ProtocolNode;
+  context: PreviewNodeContext;
+  state?: "idle" | "inProgress" | null;
+  skipSegments?: readonly string[];
+}) {
+  const { document, locale } = context;
+  const result = announcementFor(document, node, locale, state);
+  if (result.status === "unavailable") {
+    return (
+      <p
+        className="rounded border border-destructive/40 bg-destructive/10 p-2 text-destructive text-xs"
+        role="alert"
+      >
+        {result.message}
+      </p>
+    );
+  }
+  const skipped = new Set(skipSegments);
+  return (
+    <>
+      {result.announcement.container.value ? (
+        <span className="sr-only">{result.announcement.container.value}</span>
+      ) : null}
+      {result.announcement.elements
+        .filter((element) => !skipped.has(element.segment))
+        .map((element) => (
+          <span
+            className="sr-only"
+            key={`${element.item ?? ""}.${element.segment}`}
+          >
+            {element.text}
+          </span>
+        ))}
+    </>
+  );
+}
+
+function renderSocialProof(
+  node: Extract<ProtocolNode, { type: "socialProof" }>,
+  context: PreviewNodeContext
+): ReactNode {
+  const { document, locale } = context;
+  const avatarAsset = node.avatar
+    ? document.assets.find(
+        (entry) => entry.id === node.avatar?.assetId && entry.type === "image"
+      )
+    : undefined;
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: a testimonial is a labelled grouping per the ARIA authoring practices, and blockquote carries no accessible name
+    <div
+      aria-label={resolveLocalizedText(
+        document,
+        node.accessibility.label,
+        locale
+      )}
+      className="w-full text-left"
+      role="group"
+      style={{
+        ...appearanceStyle(document, node.appearance),
+        display: "flex",
+        flexDirection: "column",
+        gap: node.gap,
+      }}
+    >
+      <AnnouncedSegments
+        context={context}
+        node={node}
+        skipSegments={["quote", "attribution"]}
+      />
+      {socialProofRating(node, context)}
+      <span style={typographyStyle(document, node.quoteTypography)}>
+        {resolveLocalizedText(document, node.quote, locale)}
+      </span>
+      <span className="flex items-center gap-2">
+        {node.avatar ? (
+          <span
+            aria-hidden
+            className="grid shrink-0 place-items-center overflow-hidden rounded-full bg-linear-to-br from-cyan-100 to-teal-200 text-[9px] text-teal-900"
+            style={{ height: node.avatar.size, width: node.avatar.size }}
+          >
+            {avatarAsset?.source.type === "remote" ? (
+              // biome-ignore lint/correctness/useImageSize: the span above already reserves the authored avatar box
+              <img
+                alt=""
+                className="size-full object-cover"
+                src={avatarAsset.source.url}
+              />
+            ) : (
+              node.avatar.assetId
+            )}
+          </span>
+        ) : null}
+        <span style={typographyStyle(document, node.attributionTypography)}>
+          {resolveLocalizedText(document, node.attribution, locale)}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 function renderNodeContent(
   node: ProtocolNode,
   context: PreviewNodeContext
@@ -793,6 +1249,14 @@ function renderNodeContent(
       return renderCountdown(node, context);
     case "carousel":
       return renderCarousel(node, context);
+    case "tabs":
+      return renderTabs(node, context);
+    case "timeline":
+      return renderTimeline(node, context);
+    case "award":
+      return renderAward(node, context);
+    case "socialProof":
+      return renderSocialProof(node, context);
     default: {
       const unhandled: never = node;
       throw new Error(`Unhandled node.type: ${JSON.stringify(unhandled)}`);
@@ -812,10 +1276,29 @@ export function PreviewNode(props: PreviewNodeProps) {
     node,
     selectedComponentId,
     switchValues,
+    tabSelections,
   } = props;
   const editor = useEditorActions();
   const visibility = "visibility" in node ? node.visibility : undefined;
-  if (hiddenIds.has(node.id) || !evaluateVisibility(visibility, switchValues)) {
+  const resolvedVisibility = resolveNodeVisibility(visibility, {
+    switches: switchValues,
+    tabs: tabSelections,
+  });
+  if (resolvedVisibility.status === "unresolved") {
+    // The controller this node names is not declared by the document, so the
+    // preview cannot know whether the node belongs on screen. Rendering it, or
+    // dropping it, would both assert an answer nobody authored; the editor
+    // states the failure and the validation panel names the same defect.
+    return (
+      <p
+        className="w-full rounded border border-destructive/40 bg-destructive/10 p-2 text-destructive text-xs"
+        role="alert"
+      >
+        {resolvedVisibility.message}
+      </p>
+    );
+  }
+  if (hiddenIds.has(node.id) || !resolvedVisibility.visible) {
     return null;
   }
   const selected = selectedComponentId === node.id;

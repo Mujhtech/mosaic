@@ -188,7 +188,7 @@ export function PropertyInspector({
         </InspectorContext.Provider>
       ) : (
         <div className="mt-4 rounded bg-muted p-4 text-muted-foreground text-sm">
-          Select a block in Layers or the Canvas to edit its Protocol 0.2
+          Select a block in Layers or the Canvas to edit its Protocol 0.3
           properties.
         </div>
       )}

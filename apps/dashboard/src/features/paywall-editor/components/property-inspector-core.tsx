@@ -28,18 +28,18 @@ import {
   validationPropertyAddress,
 } from "@/features/paywall-editor/utils/property-inspector-navigation";
 import type {
-  MosaicPaywallV02BaseTypography,
-  MosaicPaywallV02BoxAppearance,
-  MosaicPaywallV02ContainerAppearance,
-  MosaicPaywallV02EdgeInsets,
-  MosaicPaywallV02Typography,
+  MosaicPaywallV03BaseTypography,
+  MosaicPaywallV03BoxAppearance,
+  MosaicPaywallV03ContainerAppearance,
+  MosaicPaywallV03EdgeInsets,
+  MosaicPaywallV03Typography,
 } from "@/lib/mosaic-protocol";
 
 export const CONTROL_CLASS =
   "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/30 h-8 w-full rounded border px-2 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60";
 export const TEXTAREA_CLASS =
   "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/30 min-h-24 w-full resize-y rounded border px-2 py-2 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60";
-export const ZERO_INSETS: MosaicPaywallV02EdgeInsets = {
+export const ZERO_INSETS: MosaicPaywallV03EdgeInsets = {
   top: 0,
   start: 0,
   bottom: 0,
@@ -57,15 +57,24 @@ export type InspectorNode = ProtocolNode;
 export type ControlNode = Extract<
   ProtocolNode,
   {
-    type: "featureList" | "productSelector" | "button" | "carousel" | "switch";
+    type:
+      | "featureList"
+      | "productSelector"
+      | "button"
+      | "carousel"
+      | "switch"
+      | "tabs"
+      | "timeline"
+      | "award"
+      | "socialProof";
   }
 >;
 export type TypographyValue =
-  | MosaicPaywallV02BaseTypography
-  | MosaicPaywallV02Typography;
+  | MosaicPaywallV03BaseTypography
+  | MosaicPaywallV03Typography;
 export type AppearanceValue =
-  | MosaicPaywallV02BoxAppearance
-  | MosaicPaywallV02ContainerAppearance;
+  | MosaicPaywallV03BoxAppearance
+  | MosaicPaywallV03ContainerAppearance;
 
 export function isControlNode(node: ProtocolNode): node is ControlNode {
   return (
@@ -73,7 +82,11 @@ export function isControlNode(node: ProtocolNode): node is ControlNode {
     node.type === "productSelector" ||
     node.type === "button" ||
     node.type === "carousel" ||
-    node.type === "switch"
+    node.type === "switch" ||
+    node.type === "tabs" ||
+    node.type === "timeline" ||
+    node.type === "award" ||
+    node.type === "socialProof"
   );
 }
 

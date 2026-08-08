@@ -33,15 +33,15 @@ import {
   updateGradientStopPosition,
 } from "@/features/paywall-editor/utils/style-authoring";
 import type {
-  MosaicPaywallV02BackgroundToken,
-  MosaicPaywallV02ColorToken,
-  MosaicPaywallV02ShadowToken,
+  MosaicPaywallV03BackgroundToken,
+  MosaicPaywallV03ColorToken,
+  MosaicPaywallV03ShadowToken,
 } from "@/lib/mosaic-protocol";
 
 export type DesignToken =
-  | MosaicPaywallV02ColorToken
-  | MosaicPaywallV02BackgroundToken
-  | MosaicPaywallV02ShadowToken;
+  | MosaicPaywallV03ColorToken
+  | MosaicPaywallV03BackgroundToken
+  | MosaicPaywallV03ShadowToken;
 
 export interface PendingDelete {
   readonly category: DesignCategory;

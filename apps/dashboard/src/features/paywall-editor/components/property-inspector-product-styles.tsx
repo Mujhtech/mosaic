@@ -27,14 +27,11 @@ import type {
   ProtocolNode,
 } from "@/features/paywall-editor/types/editor";
 import { updateNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { resolveSelectionStyle } from "@/features/paywall-editor/utils/protocol-component-rules";
 import type {
-  MosaicPaywallV02EdgeInsets,
-  MosaicPaywallV02ProductCardSelectedStyle,
-  MosaicPaywallV02ProductCardStyles,
-} from "@/lib/mosaic-protocol";
-import {
-  resolveProductBadgeStyle,
-  resolveProductCardStyle,
+  MosaicPaywallV03EdgeInsets,
+  MosaicPaywallV03ProductCardSelectedStyle,
+  MosaicPaywallV03ProductCardStyles,
 } from "@/lib/mosaic-protocol";
 
 export type CardState = "default" | "selected";
@@ -42,6 +39,26 @@ export type ProductLayerNode = Extract<
   ProtocolNode,
   { type: "productCard" | "productBadge" }
 >;
+/**
+ * Every node whose appearance is the neutral Default-plus-partial-Selected
+ * overlay. Protocol 0.3 renamed those definitions to `selectionStyles`, which
+ * `productCardStyles` now aliases, so Tabs authors its states through exactly
+ * the controls Product Card already had.
+ */
+export type SelectionStyledNode = Extract<
+  ProtocolNode,
+  { type: "productCard" | "productBadge" | "tabs" }
+>;
+
+export function isSelectionStyledNode(
+  node: ProtocolNode
+): node is SelectionStyledNode {
+  return (
+    node.type === "productCard" ||
+    node.type === "productBadge" ||
+    node.type === "tabs"
+  );
+}
 
 export const PRODUCT_STYLE_OVERRIDE_FIELDS = [
   { label: "fill", path: ["background"] },
@@ -57,7 +74,7 @@ export const PRODUCT_STYLE_OVERRIDE_FIELDS = [
 ] as const;
 
 export function productStyleOverrideExists(
-  style: MosaicPaywallV02ProductCardSelectedStyle,
+  style: MosaicPaywallV03ProductCardSelectedStyle,
   path: readonly string[]
 ) {
   let current: unknown = style;
@@ -71,7 +88,7 @@ export function productStyleOverrideExists(
 }
 
 export function removeProductStyleOverride(
-  style: MosaicPaywallV02ProductCardSelectedStyle,
+  style: MosaicPaywallV03ProductCardSelectedStyle,
   path: readonly string[]
 ) {
   function remove(
@@ -103,13 +120,19 @@ export function removeProductStyleOverride(
   return remove(
     style as Record<string, unknown>,
     path
-  ) as MosaicPaywallV02ProductCardSelectedStyle;
+  ) as MosaicPaywallV03ProductCardSelectedStyle;
 }
 
 // Selected/unselected product-layer styles are edited as one atomic inspector section; extracting
 // either branch would duplicate transaction, validation, and preview-state coordination.
 // oxlint-disable-next-line react-doctor/no-giant-component
-export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
+export function SelectionStyleSection({
+  node,
+  title = "Appearance",
+}: {
+  node: SelectionStyledNode;
+  title?: string;
+}) {
   const { disabled, document, issues } = useInspectorContext();
   const editor = useEditorActions();
   const [state, setState] = useState<CardState>(() =>
@@ -121,29 +144,34 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
       ? "selected"
       : "default"
   );
-  const resolved =
-    node.type === "productCard"
-      ? resolveProductCardStyle(node, state === "selected")
-      : resolveProductBadgeStyle(node, state === "selected");
+  const resolved = resolveSelectionStyle(node, state === "selected");
   const customShadow =
     resolved.shadow?.type === "shadow" ? resolved.shadow : null;
   const activeOverrides = PRODUCT_STYLE_OVERRIDE_FIELDS.filter(({ path }) =>
     productStyleOverrideExists(node.styles.selected, path)
   );
 
+  const isProductLayer = node.type !== "tabs";
+
   useEffect(() => {
+    // Product layers preview their two states from the inspector because the
+    // canvas selects a card by product availability. A Tabs control is
+    // selected by clicking it on the canvas, so it needs no preview override.
+    if (!isProductLayer) {
+      return;
+    }
     editor.setProductLayerPreview({ nodeId: node.id, state });
     return () => editor.setProductLayerPreview(null);
-  }, [editor, node.id, state]);
+  }, [editor, isProductLayer, node.id, state]);
 
   const updateStyles = useCallback(
     (
       updater: (
-        styles: MosaicPaywallV02ProductCardStyles
-      ) => MosaicPaywallV02ProductCardStyles
+        styles: MosaicPaywallV03ProductCardStyles
+      ) => MosaicPaywallV03ProductCardStyles
     ) => {
       editor.updateComponent(node.id, (current) => {
-        if (current.type !== "productCard" && current.type !== "productBadge") {
+        if (!isSelectionStyledNode(current)) {
           return current;
         }
         return { ...current, styles: updater(current.styles) } as ProtocolNode;
@@ -188,7 +216,7 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
   }
 
   function setPaddingEdge(
-    edge: keyof MosaicPaywallV02EdgeInsets,
+    edge: keyof MosaicPaywallV03EdgeInsets,
     value: number
   ) {
     updateStyles((styles) =>
@@ -218,9 +246,11 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
   }
 
   return (
-    <InspectorSection title="Appearance">
+    <InspectorSection title={title}>
       <fieldset
-        aria-label="Product layer state"
+        aria-label={
+          isProductLayer ? "Product layer state" : "Tab control state"
+        }
         className="grid min-w-0 grid-cols-2 rounded bg-muted p-0.5"
       >
         {(["default", "selected"] as const).map((candidate) => (
@@ -279,7 +309,7 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
         noneIsTransparent
         onUpdate={(currentDocument, background) =>
           updateNode(currentDocument, node.id, (current) =>
-            current.type === "productCard" || current.type === "productBadge"
+            isSelectionStyledNode(current)
               ? {
                   ...current,
                   styles: {
@@ -356,10 +386,7 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
             address={`styles.${state}.shadow.color`}
             label="Shadow colour"
             onUpdate={(current, color) => {
-              if (
-                current.type !== "productCard" &&
-                current.type !== "productBadge"
-              ) {
+              if (!isSelectionStyledNode(current)) {
                 return current;
               }
               const shadow = { ...customShadow, color };
@@ -420,7 +447,7 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
         address={`styles.${state}.border.color`}
         label="Stroke"
         onUpdate={(current, color) =>
-          current.type === "productCard" || current.type === "productBadge"
+          isSelectionStyledNode(current)
             ? ({
                 ...current,
                 styles: {
@@ -542,4 +569,8 @@ export function ProductLayerLayoutSection({
       />
     </InspectorSection>
   );
+}
+
+export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
+  return <SelectionStyleSection node={node} />;
 }

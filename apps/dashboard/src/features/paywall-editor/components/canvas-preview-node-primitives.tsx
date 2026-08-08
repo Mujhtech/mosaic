@@ -45,6 +45,19 @@ export const RTL_ICON_NAMES: Partial<Record<IconName, IconName>> = {
   chevronForward: "chevronBackward",
 };
 
+/** The shared protocol icon vocabulary, drawn the same way everywhere it appears. */
+export const PROTOCOL_ICON_GLYPHS: Readonly<Record<IconName, string>> = {
+  checkmark: "✓",
+  close: "×",
+  lock: "⌑",
+  restore: "↺",
+  externalLink: "↗",
+  arrowBackward: "←",
+  arrowForward: "→",
+  chevronBackward: "‹",
+  chevronForward: "›",
+};
+
 export function frameStyle(
   document: MosaicDocument,
   node: ProtocolNode
@@ -247,6 +260,9 @@ export function subtreeIncludesId(
   }
   if (node.type === "carousel") {
     return node.pages.some((page) => subtreeIncludesId(page.content, id));
+  }
+  if (node.type === "tabs") {
+    return node.tabs.some((tab) => subtreeIncludesId(tab.content, id));
   }
   if (node.type === "productSelector") {
     return node.cards.some((card) => subtreeIncludesId(card, id));

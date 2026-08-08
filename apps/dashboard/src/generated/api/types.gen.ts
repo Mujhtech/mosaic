@@ -4633,7 +4633,7 @@ export type Draft = {
     status: 'active' | 'published' | 'archived';
     revision: number;
     sourceVersionId?: string;
-    protocolVersion: '0.2';
+    protocolVersion: '0.3';
     validationStatus: 'valid' | 'invalid';
     validation: ValidationSummary;
     createdByActorId: string;
@@ -4657,7 +4657,7 @@ export type PaywallVersion = {
     versionNumber: number;
     sourceDraftId: string;
     sourceRevision: number;
-    protocolVersion: '0.2';
+    protocolVersion: '0.3';
     document: {
         [key: string]: unknown;
     };
@@ -8444,9 +8444,9 @@ export type GetSdkConfigurationData = {
         'Mosaic-SDK-Platform': 'flutter' | 'ios' | 'android';
         'Mosaic-SDK-Version': string;
         'Mosaic-Configuration-Versions': string;
-        'Mosaic-Paywall-Protocol-Versions': '0.2';
+        'Mosaic-Paywall-Protocol-Versions': '0.3';
         /**
-         * Comma-separated unique exact Protocol capability pairs (`name@0.2`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
+         * Comma-separated unique exact Protocol capability pairs (`name@0.3`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
          */
         'Mosaic-Paywall-Capabilities': string;
         'Mosaic-Placement-Decision-Versions'?: string;

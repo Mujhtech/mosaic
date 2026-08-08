@@ -8,6 +8,11 @@ import {
   flattenDocument,
   isPassiveProductNode,
 } from "./document-tree-traversal";
+import {
+  reconcileReservedAccessibilityStrings,
+  socialProofRatingIsInBounds,
+  timelineStyleCoPresenceHolds,
+} from "./protocol-component-rules";
 
 export function subtreeNodes(node: ProtocolNode): ProtocolNode[] {
   if (
@@ -26,6 +31,9 @@ export function subtreeNodes(node: ProtocolNode): ProtocolNode[] {
   }
   if (node.type === "carousel") {
     return [node, ...node.pages.flatMap((page) => subtreeNodes(page.content))];
+  }
+  if (node.type === "tabs") {
+    return [node, ...node.tabs.flatMap((tab) => subtreeNodes(tab.content))];
   }
   if (node.type === "productSelector") {
     return [node, ...node.cards.flatMap(subtreeNodes)];
@@ -68,6 +76,14 @@ export function subtreeIdentifiers(node: ProtocolNode): string[] {
       }
       if (candidate.type === "carousel") {
         return [candidate.id, ...candidate.pages.map((page) => page.id)];
+      }
+      // A tab id names a control, a panel, and the value a tab-visibility
+      // condition compares against, so it joins the one global ID namespace.
+      if (candidate.type === "tabs") {
+        return [candidate.id, ...candidate.tabs.map((tab) => tab.id)];
+      }
+      if (candidate.type === "timeline") {
+        return [candidate.id, ...candidate.entries.map((entry) => entry.id)];
       }
       return [candidate.id];
     })()
@@ -124,6 +140,24 @@ export function subtreeIsStructurallyValid(node: ProtocolNode): boolean {
       node.pages.every((page) => subtreeIsStructurallyValid(page.content))
     );
   }
+  if (node.type === "tabs") {
+    return (
+      node.tabs.length >= 2 &&
+      node.tabs.length <= 8 &&
+      node.tabs.some((tab) => tab.id === node.initialTabId) &&
+      node.tabs.every((tab) => subtreeIsStructurallyValid(tab.content))
+    );
+  }
+  if (node.type === "timeline") {
+    return (
+      node.entries.length >= 2 &&
+      node.entries.length <= 12 &&
+      timelineStyleCoPresenceHolds(node)
+    );
+  }
+  if (node.type === "socialProof") {
+    return !node.rating || socialProofRatingIsInBounds(node.rating);
+  }
   return true;
 }
 
@@ -147,6 +181,14 @@ export function identifierSet(document: MosaicDocument) {
     } else if (entry.node.type === "carousel") {
       for (const page of entry.node.pages) {
         identifiers.add(page.id);
+      }
+    } else if (entry.node.type === "tabs") {
+      for (const tab of entry.node.tabs) {
+        identifiers.add(tab.id);
+      }
+    } else if (entry.node.type === "timeline") {
+      for (const timelineEntry of entry.node.entries) {
+        identifiers.add(timelineEntry.id);
       }
     }
   }
@@ -277,6 +319,33 @@ export function nodeLocalizedEntries(node: ProtocolNode): LocalizedText[] {
       return node.accessibility.hidden ? [] : [node.accessibility.label];
     case "icon":
       return node.accessibility.hidden ? [] : [node.accessibility.label];
+    case "tabs":
+      return [
+        ...controlLocalizedEntries(node.accessibility),
+        ...node.tabs.flatMap((tab) => [
+          tab.label,
+          ...nodeLocalizedEntries(tab.content),
+        ]),
+      ];
+    case "timeline":
+      return [
+        ...controlLocalizedEntries(node.accessibility),
+        ...node.entries.flatMap((entry) =>
+          entry.description ? [entry.title, entry.description] : [entry.title]
+        ),
+      ];
+    case "award":
+      return [
+        ...controlLocalizedEntries(node.accessibility),
+        node.title,
+        ...(node.subtitle ? [node.subtitle] : []),
+      ];
+    case "socialProof":
+      return [
+        ...controlLocalizedEntries(node.accessibility),
+        node.quote,
+        node.attribution,
+      ];
     default: {
       const unhandled: never = node;
       throw new Error(`Unhandled node.type: ${JSON.stringify(unhandled)}`);
@@ -303,7 +372,7 @@ export function ensureLocalizationCatalogs(
   document: MosaicDocument
 ): MosaicDocument {
   const entries = referencedLocalizedEntries(document);
-  return {
+  return reconcileReservedAccessibilityStrings({
     ...document,
     localization: {
       ...document.localization,
@@ -327,7 +396,7 @@ export function ensureLocalizationCatalogs(
         )
       ),
     },
-  };
+  });
 }
 
 export function ensureNodeDependencies(

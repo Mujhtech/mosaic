@@ -493,6 +493,80 @@ export function advancedProperties(node: ProtocolNode) {
         node.accessibility.label
       );
       break;
+    case "tabs":
+      properties.push({
+        address: "initialTabId",
+        label: "Initial tab ID",
+        value: node.initialTabId,
+      });
+      node.tabs.forEach((tab, index) => {
+        properties.push(
+          {
+            address: `tabs.${index}.id`,
+            label: `Tab ${index + 1} ID`,
+            value: tab.id,
+          },
+          {
+            address: `tabs.${index}.content.id`,
+            label: `Tab ${index + 1} content ID`,
+            value: tab.content.id,
+          }
+        );
+        addLocalizationKey(
+          properties,
+          `tabs.${index}.label`,
+          `Tab ${index + 1} label`,
+          tab.label
+        );
+      });
+      addControlLocalizationKeys(properties, node);
+      break;
+    case "timeline":
+      node.entries.forEach((entry, index) => {
+        properties.push({
+          address: `entries.${index}.id`,
+          label: `Entry ${index + 1} ID`,
+          value: entry.id,
+        });
+        addLocalizationKey(
+          properties,
+          `entries.${index}.title`,
+          `Entry ${index + 1} title`,
+          entry.title
+        );
+        if (entry.description) {
+          addLocalizationKey(
+            properties,
+            `entries.${index}.description`,
+            `Entry ${index + 1} description`,
+            entry.description
+          );
+        }
+      });
+      addControlLocalizationKeys(properties, node);
+      break;
+    case "award":
+      addLocalizationKey(properties, "title", "Award title", node.title);
+      if (node.subtitle) {
+        addLocalizationKey(
+          properties,
+          "subtitle",
+          "Award subtitle",
+          node.subtitle
+        );
+      }
+      addControlLocalizationKeys(properties, node);
+      break;
+    case "socialProof":
+      addLocalizationKey(properties, "quote", "Quote", node.quote);
+      addLocalizationKey(
+        properties,
+        "attribution",
+        "Attribution",
+        node.attribution
+      );
+      addControlLocalizationKeys(properties, node);
+      break;
     default: {
       const unhandled: never = node;
       throw new Error(`Unhandled node.type: ${JSON.stringify(unhandled)}`);

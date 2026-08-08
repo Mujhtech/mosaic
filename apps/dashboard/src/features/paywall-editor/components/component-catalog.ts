@@ -38,6 +38,12 @@ export const COMPONENT_CATEGORIES = [
         description: "Present two or more swipeable Stack pages.",
         category: "Layout",
       },
+      {
+        type: "tabs",
+        label: "Tabs",
+        description: "Show two to eight labelled panels, one at a time.",
+        category: "Layout",
+      },
     ],
   },
   {
@@ -82,6 +88,24 @@ export const COMPONENT_CATEGORIES = [
         type: "featureList",
         label: "Feature List",
         description: "Present a concise localized benefit list.",
+        category: "Content",
+      },
+      {
+        type: "timeline",
+        label: "Timeline",
+        description: "Order two to twelve steps, such as a trial schedule.",
+        category: "Content",
+      },
+      {
+        type: "award",
+        label: "Award",
+        description: "Show a recognition with an optional emblem.",
+        category: "Content",
+      },
+      {
+        type: "socialProof",
+        label: "Social Proof",
+        description: "Show an attributed testimonial with optional rating.",
         category: "Content",
       },
     ],
@@ -131,4 +155,8 @@ export const LAYER_TYPE_LABELS = Object.freeze({
   productCard: "Product Card",
   productBadge: "Product Badge",
   button: "Button",
+  tabs: "Tabs",
+  timeline: "Timeline",
+  award: "Award",
+  socialProof: "Social Proof",
 }) satisfies Readonly<Record<ProtocolNode["type"], string>>;

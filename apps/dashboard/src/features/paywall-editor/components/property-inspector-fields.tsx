@@ -35,16 +35,18 @@ import type {
 } from "@/features/paywall-editor/types/editor";
 import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
 import { updateLocalizedTextByKey } from "@/features/paywall-editor/utils/editor-transforms";
-import type { MosaicPaywallV02EdgeInsets } from "@/lib/mosaic-protocol";
+import type { MosaicPaywallV03EdgeInsets } from "@/lib/mosaic-protocol";
 
 export function LocalizedField({
   address,
+  description,
   label,
   multiline = false,
   text,
   tokens,
 }: {
   address: string;
+  description?: string;
   label: string;
   multiline?: boolean;
   text: LocalizedText;
@@ -71,7 +73,12 @@ export function LocalizedField({
   return (
     <Field
       address={address}
-      description={`Editing ${locale}. Localization keys live under Advanced.`}
+      description={[
+        description,
+        `Editing ${locale}. Localization keys live under Advanced.`,
+      ]
+        .filter(Boolean)
+        .join(" ")}
       label={label}
     >
       {(fieldProps) => (
@@ -436,11 +443,13 @@ export function CheckboxField({
 
 export function ColorField({
   address,
+  description,
   label,
   onUpdate,
   value,
 }: {
   address: string;
+  description?: string;
   label: string;
   onUpdate: (node: InspectorNode, value: ProtocolColor) => InspectorNode;
   value: ProtocolColor;
@@ -458,7 +467,7 @@ export function ColorField({
   }
 
   return (
-    <Field address={address} label={label}>
+    <Field address={address} description={description} label={label}>
       {(fieldProps) => (
         <InspectorColorControl
           describedBy={fieldProps["aria-describedby"]}
@@ -541,12 +550,12 @@ export function EdgeInsetsFields({
   value,
 }: {
   address: string;
-  onChange?: (value: MosaicPaywallV02EdgeInsets) => void;
+  onChange?: (value: MosaicPaywallV03EdgeInsets) => void;
   onEdgeChange?: (
-    edge: keyof MosaicPaywallV02EdgeInsets,
+    edge: keyof MosaicPaywallV03EdgeInsets,
     value: number
   ) => void;
-  value: MosaicPaywallV02EdgeInsets;
+  value: MosaicPaywallV03EdgeInsets;
 }) {
   return (
     <TwoColumn>

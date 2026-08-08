@@ -4,15 +4,16 @@ import type {
   MosaicDocument,
 } from "@/features/paywall-editor/types/editor";
 import {
+  localPreviewContractVersion,
   localPreviewVersionPreference,
   localPreviewWebSocketProtocols,
   type previewMessageTypesByVersion,
   validatePreviewMessage,
 } from "@/lib/mosaic-protocol";
 
-export const PREVIEW_PROTOCOL_VERSION = "0.2" as const;
+export const PREVIEW_PROTOCOL_VERSION = localPreviewContractVersion;
 export const PREVIEW_WEBSOCKET_SUBPROTOCOL =
-  localPreviewWebSocketProtocols["0.2"];
+  localPreviewWebSocketProtocols[localPreviewContractVersion];
 export const PREVIEW_PROTOCOL_VERSIONS = localPreviewVersionPreference;
 export const PREVIEW_WEBSOCKET_SUBPROTOCOLS = PREVIEW_PROTOCOL_VERSIONS.map(
   (version) => localPreviewWebSocketProtocols[version]
@@ -21,7 +22,7 @@ export const PREVIEW_WEBSOCKET_SUBPROTOCOLS = PREVIEW_PROTOCOL_VERSIONS.map(
 export type PreviewProtocolVersion = (typeof PREVIEW_PROTOCOL_VERSIONS)[number];
 
 export type PreviewMessageType =
-  (typeof previewMessageTypesByVersion)["0.2"][number];
+  (typeof previewMessageTypesByVersion)["0.3"][number];
 
 export interface PreviewMessageEnvelope<TPayload = Record<string, unknown>> {
   messageId: string;

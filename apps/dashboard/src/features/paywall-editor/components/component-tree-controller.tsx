@@ -610,7 +610,7 @@ export function useComponentTreeModel({
     ) {
       return {
         title: "That component type is not supported.",
-        detail: "Drag a Protocol 0.2 component from Add content.",
+        detail: "Drag a Protocol 0.3 component from Add content.",
       };
     }
     if (
@@ -680,7 +680,7 @@ export function useComponentTreeModel({
     ) {
       const failure = block ?? {
         title: "That component type is not supported.",
-        detail: "Drag a Protocol 0.2 component from Add content.",
+        detail: "Drag a Protocol 0.3 component from Add content.",
       };
       setNotice({
         tone: "danger",
@@ -721,6 +721,7 @@ export function useComponentTreeModel({
       component?.type === "stack" ||
       component?.type === "button" ||
       component?.type === "carousel" ||
+      component?.type === "tabs" ||
       component?.type === "productSelector" ||
       component?.type === "productCard" ||
       component?.type === "productBadge";

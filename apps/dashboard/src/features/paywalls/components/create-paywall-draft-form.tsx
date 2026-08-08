@@ -257,7 +257,7 @@ export function CreatePaywallDraftForm({
             >
               <span className="block font-medium">Import Mosaic JSON</span>
               <span className="mt-1 block text-muted-foreground">
-                A valid Protocol 0.2 paywall is copied into a new hosted Draft.
+                A valid Protocol 0.3 paywall is copied into a new hosted Draft.
               </span>
               <Input
                 accept="application/json,.json"

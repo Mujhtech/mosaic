@@ -3,11 +3,15 @@ import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
 import { CursorClickIcon } from "@phosphor-icons/react/dist/ssr/CursorClick";
 import { ImageIcon } from "@phosphor-icons/react/dist/ssr/Image";
 import { ListChecksIcon } from "@phosphor-icons/react/dist/ssr/ListChecks";
+import { ListNumbersIcon } from "@phosphor-icons/react/dist/ssr/ListNumbers";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { MedalIcon } from "@phosphor-icons/react/dist/ssr/Medal";
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
+import { QuotesIcon } from "@phosphor-icons/react/dist/ssr/Quotes";
 import { ShapesIcon } from "@phosphor-icons/react/dist/ssr/Shapes";
 import { SlideshowIcon } from "@phosphor-icons/react/dist/ssr/Slideshow";
 import { StackIcon } from "@phosphor-icons/react/dist/ssr/Stack";
+import { TabsIcon } from "@phosphor-icons/react/dist/ssr/Tabs";
 import { TextTIcon } from "@phosphor-icons/react/dist/ssr/TextT";
 import { TimerIcon } from "@phosphor-icons/react/dist/ssr/Timer";
 import { ToggleRightIcon } from "@phosphor-icons/react/dist/ssr/ToggleRight";
@@ -22,6 +26,7 @@ import {
   COMPONENT_LIBRARY_DRAG_TYPE,
   type ComponentCatalogEntry,
 } from "@/features/paywall-editor/components/component-catalog";
+import { ComponentPreviewCard } from "@/features/paywall-editor/components/component-preview-card";
 import type { EditorState } from "@/features/paywall-editor/stores/editor-store";
 import {
   useEditorActions,
@@ -36,6 +41,10 @@ import type {
   InsertableBlockType,
   TreeOperationResult,
 } from "@/features/paywall-editor/types/editor";
+import {
+  type InsertionEnvironment,
+  insertionBlocker,
+} from "@/features/paywall-editor/utils/component-insertion-outcome";
 import { countdownInstantFromLocalInput } from "@/features/paywall-editor/utils/countdown";
 import { resolveLegacyInsertionLocation } from "@/features/paywall-editor/utils/document-tree-mutations";
 import {
@@ -81,6 +90,14 @@ function CatalogIcon({ type }: { type: InsertableBlockType }) {
       return <CreditCardIcon aria-hidden />;
     case "button":
       return <CursorClickIcon aria-hidden />;
+    case "tabs":
+      return <TabsIcon aria-hidden />;
+    case "timeline":
+      return <ListNumbersIcon aria-hidden />;
+    case "award":
+      return <MedalIcon aria-hidden />;
+    case "socialProof":
+      return <QuotesIcon aria-hidden />;
     default: {
       const unhandled: never = type;
       throw new Error(`Unhandled type: ${JSON.stringify(unhandled)}`);
@@ -192,6 +209,13 @@ export function ComponentLibrary() {
   );
   const countdownDeadlineReady =
     selectedType !== "countdown" || Boolean(countdownEndsAt);
+  const environment: InsertionEnvironment = {
+    countdownEndsAt,
+    document: activeDocument,
+    isDocumentTransactionActive,
+    lockedIds: layerMetadata.lockedIds,
+    selectedComponentId,
+  };
   const insertionDisabled =
     isDocumentTransactionActive ||
     !validParent ||
@@ -224,43 +248,19 @@ export function ComponentLibrary() {
     });
   }
 
+  // Resolved per requested type, because the insertion destination itself
+  // depends on the type being inserted.
   function explainBlocked(type: InsertableBlockType) {
-    if (isDocumentTransactionActive) {
-      setNotice({
-        tone: "danger",
-        title: "Finish the current edit first.",
-        detail:
-          "Commit or cancel the active text or property edit, then insert the component.",
-      });
-      return true;
+    const blocker = insertionBlocker(environment, type);
+    if (!blocker) {
+      return false;
     }
-    if (!validParent) {
-      setNotice({
-        tone: "danger",
-        title: "The insertion Stack is no longer available.",
-        detail: "Select Content Stack or another visible Stack and try again.",
-      });
-      return true;
-    }
-    if (destinationLocked) {
-      setNotice({
-        tone: "danger",
-        title: "The insertion Stack is locked.",
-        detail:
-          "Open Layers and unlock the destination Stack before adding content.",
-      });
-      return true;
-    }
-    if (type === "countdown" && !countdownEndsAt) {
-      setNotice({
-        tone: "danger",
-        title: "Countdown needs a valid deadline.",
-        detail:
-          "Enter an explicit UTC date and time before inserting or dragging Countdown.",
-      });
-      return true;
-    }
-    return false;
+    setNotice({
+      tone: "danger",
+      title: blocker.title,
+      detail: blocker.detail,
+    });
+    return true;
   }
 
   function insert(type: InsertableBlockType) {
@@ -405,43 +405,48 @@ export function ComponentLibrary() {
                     entry.type !== "countdown" || Boolean(countdownEndsAt);
                   return (
                     <li key={entry.type}>
-                      <button
-                        aria-describedby={`component-description-${entry.type}`}
-                        aria-label={entry.label}
-                        aria-pressed={selected}
-                        className={`flex w-full items-start gap-2 rounded border p-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                          selected
-                            ? "border-primary bg-primary/5"
-                            : "border-border bg-background hover:bg-muted/60"
-                        }`}
-                        draggable={
-                          countdownDragReady &&
-                          !destinationLocked &&
-                          !isDocumentTransactionActive
-                        }
-                        onClick={() => selectType(entry.type)}
-                        onDoubleClick={() => insert(entry.type)}
-                        onDragStart={(event) =>
-                          handleCardDragStart(event, entry)
-                        }
-                        onKeyDown={(event) => handleCardKeyDown(event, entry)}
-                        type="button"
+                      <ComponentPreviewCard
+                        entry={entry}
+                        environment={environment}
                       >
-                        <span className="grid size-8 shrink-0 place-items-center rounded bg-muted text-foreground">
-                          <CatalogIcon type={entry.type} />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block font-medium text-sm">
-                            {entry.label}
+                        <button
+                          aria-describedby={`component-description-${entry.type}`}
+                          aria-label={entry.label}
+                          aria-pressed={selected}
+                          className={`flex w-full items-start gap-2 rounded border p-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                            selected
+                              ? "border-primary bg-primary/5"
+                              : "border-border bg-background hover:bg-muted/60"
+                          }`}
+                          draggable={
+                            countdownDragReady &&
+                            !destinationLocked &&
+                            !isDocumentTransactionActive
+                          }
+                          onClick={() => selectType(entry.type)}
+                          onDoubleClick={() => insert(entry.type)}
+                          onDragStart={(event) =>
+                            handleCardDragStart(event, entry)
+                          }
+                          onKeyDown={(event) => handleCardKeyDown(event, entry)}
+                          type="button"
+                        >
+                          <span className="grid size-8 shrink-0 place-items-center rounded bg-muted text-foreground">
+                            <CatalogIcon type={entry.type} />
                           </span>
-                          <span
-                            className="mt-0.5 block text-muted-foreground text-xs leading-4"
-                            id={`component-description-${entry.type}`}
-                          >
-                            {entry.description}
+                          <span className="min-w-0">
+                            <span className="block font-medium text-sm">
+                              {entry.label}
+                            </span>
+                            <span
+                              className="mt-0.5 block text-muted-foreground text-xs leading-4"
+                              id={`component-description-${entry.type}`}
+                            >
+                              {entry.description}
+                            </span>
                           </span>
-                        </span>
-                      </button>
+                        </button>
+                      </ComponentPreviewCard>
                     </li>
                   );
                 })}

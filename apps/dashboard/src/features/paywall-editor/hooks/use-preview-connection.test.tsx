@@ -92,7 +92,7 @@ function envelope(
   type: string,
   payload: object,
   sequence: number,
-  previewProtocolVersion: "0.1" | "0.2" = "0.2"
+  previewProtocolVersion: "0.1" | "0.3" = "0.3"
 ) {
   return {
     previewProtocolVersion,
@@ -107,7 +107,7 @@ function envelope(
 function connected(
   clientId: string,
   sequence: number,
-  previewProtocolVersion: "0.1" | "0.2" = "0.2"
+  previewProtocolVersion: "0.1" | "0.3" = "0.3"
 ) {
   return envelope(
     "previewClientConnected",
@@ -148,14 +148,14 @@ function capability(
     "capabilityReport",
     {
       clientId,
-      supportedSchemaVersions: ["0.2"],
+      supportedSchemaVersions: ["0.3"],
       supportedCapabilities: document.compatibility.requiredCapabilities,
       previewCapabilities: [
-        { name: "preview.liveUpdate", version: "0.2" },
-        { name: "preview.mockCommerce", version: "0.2" },
-        { name: "preview.localeOverride", version: "0.2" },
-        { name: "preview.textScale", version: "0.2" },
-        { name: "preview.diagnostics", version: "0.2" },
+        { name: "preview.liveUpdate", version: "0.3" },
+        { name: "preview.mockCommerce", version: "0.3" },
+        { name: "preview.localeOverride", version: "0.3" },
+        { name: "preview.textScale", version: "0.3" },
+        { name: "preview.diagnostics", version: "0.3" },
       ],
       limits: { maxDocumentBytes },
     },
@@ -215,7 +215,7 @@ function warning(
 function heartbeat(
   clientId: string,
   sequence: number,
-  previewProtocolVersion: "0.1" | "0.2" = "0.2"
+  previewProtocolVersion: "0.1" | "0.3" = "0.3"
 ) {
   return envelope(
     "previewHeartbeat",
@@ -238,7 +238,7 @@ function client(clientId: string): PreviewClient {
       version: "0.1.0",
     },
     device: { displayName: "Device", systemName: "OS", systemVersion: "1" },
-    supportedSchemaVersions: ["0.2"],
+    supportedSchemaVersions: ["0.3"],
     supportedCapabilities: [],
     previewCapabilities: [],
     lastSeenAt: "2026-07-17T08:00:00Z",
@@ -366,7 +366,7 @@ describe("preview connection", () => {
     expect(firstSocket).toBeDefined();
     expect(firstSocket?.url).toContain(`sessionId=${SESSION_ID}`);
     expect(firstSocket?.requestedProtocol).toEqual([
-      "mosaic.local-preview.v0.2",
+      "mosaic.local-preview.v0.3",
     ]);
 
     await act(async () => firstSocket?.open());
@@ -528,7 +528,7 @@ describe("preview connection", () => {
 
     render(<Harness />);
     const [socket] = FakeWebSocket.instances;
-    expect(socket?.requestedProtocol).toEqual(["mosaic.local-preview.v0.2"]);
+    expect(socket?.requestedProtocol).toEqual(["mosaic.local-preview.v0.3"]);
     await act(async () => socket?.open("mosaic.local-preview.v0.1"));
 
     expect(socket?.readyState).toBe(FakeWebSocket.CLOSED);

@@ -699,7 +699,7 @@ export function createGeneratedHostedPublishingAdapter(
           name: product.name,
           ready: product.ready,
         })),
-        protocolVersion: "0.2",
+        protocolVersion: "0.3",
       };
     },
   };

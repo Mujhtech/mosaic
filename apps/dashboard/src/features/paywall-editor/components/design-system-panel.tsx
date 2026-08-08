@@ -41,9 +41,9 @@ import {
   tokenReferenceType,
 } from "@/features/paywall-editor/utils/style-authoring";
 import type {
-  MosaicPaywallV02BackgroundToken,
-  MosaicPaywallV02ColorToken,
-  MosaicPaywallV02ShadowToken,
+  MosaicPaywallV03BackgroundToken,
+  MosaicPaywallV03ColorToken,
+  MosaicPaywallV03ShadowToken,
 } from "@/lib/mosaic-protocol";
 
 /**
@@ -99,7 +99,7 @@ export function DesignSystemPanel() {
 
   function updateColor(
     id: string,
-    updater: (token: MosaicPaywallV02ColorToken) => MosaicPaywallV02ColorToken
+    updater: (token: MosaicPaywallV03ColorToken) => MosaicPaywallV03ColorToken
   ) {
     updateSystem((current) => ({
       ...current,
@@ -111,8 +111,8 @@ export function DesignSystemPanel() {
   function updateBackground(
     id: string,
     updater: (
-      token: MosaicPaywallV02BackgroundToken
-    ) => MosaicPaywallV02BackgroundToken
+      token: MosaicPaywallV03BackgroundToken
+    ) => MosaicPaywallV03BackgroundToken
   ) {
     updateSystem((current) => ({
       ...current,
@@ -123,7 +123,7 @@ export function DesignSystemPanel() {
   }
   function updateShadow(
     id: string,
-    updater: (token: MosaicPaywallV02ShadowToken) => MosaicPaywallV02ShadowToken
+    updater: (token: MosaicPaywallV03ShadowToken) => MosaicPaywallV03ShadowToken
   ) {
     updateSystem((current) => ({
       ...current,
