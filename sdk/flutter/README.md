@@ -807,7 +807,10 @@ same code for the same situation.
   diagnostic no-op `navigation.noBackTarget`; it never dismisses the paywall.
 - A Sheet destination uses a full-height safe-area `showModalBottomSheet` with
   its own scroll controller. Protocol Back, navigation to another destination,
-  and system swipe/back dismissal reconcile the same history deterministically.
+  system swipe/back dismissal, and an accepted revision reconcile the same
+  history deterministically; acceptance dismisses a presented Sheet, because
+  the reset history no longer contains it and a stale modal would hold the
+  reset paywall behind an inaccessible barrier.
 - Protocol 0.3 Button descendants render as native Flutter content inside one
   48-point-minimum hit target and one merged semantics control. Purchase and
   restore swap to localized `inProgressChildren` and all asynchronous actions

@@ -446,6 +446,27 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   }
 
   void _resetNavigationState() {
+    // Sheet presentation is a navigation state, so an accepted revision ends
+    // it: the reset history holds the new document's initial Screen alone, and
+    // a Sheet pushed by the superseded document names a place that history no
+    // longer contains. Leaving it up would also strand the reset paywall
+    // behind a modal barrier, where a screen reader cannot reach it at all.
+    // The dismissal waits for the end of the frame because popping a route
+    // from didUpdateWidget would rebuild the Navigator mid-build.
+    final presentedSheetId = _presentedSheetId;
+    if (presentedSheetId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // A sheet stays presented until its route finishes animating out, so a
+        // second revision accepted inside that window must not pop again: the
+        // route below the outgoing sheet belongs to the host.
+        if (!mounted ||
+            _presentedSheetId != presentedSheetId ||
+            _programmaticSheetDismissals.contains(presentedSheetId)) {
+          return;
+        }
+        _dismissPresentedSheet(programmatic: true);
+      });
+    }
     _navigationHistory
       ..clear()
       ..addAll(

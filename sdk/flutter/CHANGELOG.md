@@ -275,6 +275,13 @@
   credential of any kind. Store Notifications remain the authoritative and
   timely ingestion path; this handoff is a latency and attribution
   optimization.
+- Dismiss a presented Sheet when a new document is accepted. Navigation reset
+  rebuilt the history from the new document but left the superseded
+  revision's modal route standing, so the reset paywall sat behind a barrier
+  that reported no accessible content at all — the reset selection, Switch,
+  and Carousel state were unreachable to a screen reader even though they had
+  been applied. iOS and Compose derive the sheet from navigation state and
+  were never affected.
 
 ## 0.2.0-dev.11
 

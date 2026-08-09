@@ -641,6 +641,10 @@ void _defineRendererV03VisualTests(
       find.byKey(const ValueKey<String>('mosaic-plans-yearly-plan-card')),
     );
     await tester.pumpAndSettle();
+    // The superseded revision's Sheet is not in the reset navigation history,
+    // and a modal left standing over the paywall would hold every reset
+    // control behind a barrier no screen reader can cross.
+    expect(find.text('Purchase and policy details'), findsNothing);
     final yearly = tester.getSemantics(
       find.byKey(
         const ValueKey<String>('mosaic-plans-yearly-plan-card'),
