@@ -44,7 +44,7 @@ void _defineRendererV03VisualTests(
     expect(find.byType(PageView), findsOneWidget);
     expect(find.text('Yearly'), findsOneWidget);
 
-    await tester.tap(find.byType(Switch).first);
+    await _tapVisible(tester, find.byType(Switch).first);
     await tester.pump();
     expect(find.byType(PageView), findsNothing);
     expect(find.text('1d 0h 0m 0s'), findsOneWidget);
@@ -277,7 +277,7 @@ void _defineRendererV03VisualTests(
       onDiagnostic: diagnostics.add,
     );
 
-    await tester.tap(find.byType(Switch).first);
+    await _tapVisible(tester, find.byType(Switch).first);
     await tester.pump();
     expect(tester.widget<Switch>(find.byType(Switch).first).value, isFalse);
 
@@ -578,24 +578,42 @@ void _defineRendererV03VisualTests(
     await tester.pump();
     await tester.pump();
 
-    await tester.tap(
+    await _tapVisible(
+      tester,
       find.byKey(
         const ValueKey<String>('mosaic-plans-monthly-plan-card'),
       ),
     );
     await tester.pump();
+    // Guards the acceptance assertion below: if this selection never lands the
+    // "resets to yearly" expectation passes for the wrong reason.
+    expect(
+      tester
+          .getSemantics(
+            find.byKey(
+              const ValueKey<String>('mosaic-plans-monthly-plan-card'),
+            ),
+          )
+          .flagsCollection
+          .isSelected,
+      Tristate.isTrue,
+    );
     expect(tester.widget<PageView>(find.byType(PageView)).controller!.page, 1);
-    await tester.drag(find.byType(PageView), const Offset(700, 0));
+    await _dragVisible(
+      tester,
+      find.byType(PageView),
+      const Offset(700, 0),
+    );
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
     expect(tester.widget<PageView>(find.byType(PageView)).controller!.page, 0);
-    await tester.tap(find.byType(Switch).first);
+    await _tapVisible(tester, find.byType(Switch).first);
     await tester.pump();
     expect(tester.widget<Switch>(find.byType(Switch).first).value, isFalse);
     expect(find.byType(PageView), findsNothing);
-    await tester.tap(find.byType(Switch).first);
+    await _tapVisible(tester, find.byType(Switch).first);
     await tester.pump();
     expect(tester.widget<PageView>(find.byType(PageView)).controller!.page, 0);
-    await tester.tap(find.byType(Switch).first);
+    await _tapVisible(tester, find.byType(Switch).first);
     await tester.pump();
     expect(find.byType(PageView), findsNothing);
 

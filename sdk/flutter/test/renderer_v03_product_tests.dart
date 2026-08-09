@@ -359,7 +359,8 @@ void _defineRendererV03ProductTests(
     );
     await tester.pump();
     await tester.pump();
-    await tester.tap(
+    await _tapVisible(
+      tester,
       find.byKey(
         const ValueKey<String>('mosaic-plans-monthly-plan-card'),
       ),

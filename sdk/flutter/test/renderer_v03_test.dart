@@ -131,6 +131,30 @@ Future<void> _pump(
   await tester.pump();
 }
 
+/// Scrolls [finder] into the viewport before tapping it.
+///
+/// The v0.3 fixture is taller than the 900x1600 test viewport, so a bare
+/// `tap()` on a below-the-fold target derives an off-screen offset, misses
+/// silently, and leaves every assertion that depends on the tap vacuous.
+/// Callers keep their own settling policy after the tap.
+Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+}
+
+/// Scrolls [finder] into the viewport before dragging it, for the same reason
+/// as [_tapVisible].
+Future<void> _dragVisible(
+  WidgetTester tester,
+  Finder finder,
+  Offset offset,
+) async {
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.drag(finder, offset);
+}
+
 final class _PendingPurchaseProvider implements MosaicPurchaseProvider {
   _PendingPurchaseProvider(this.products);
 
