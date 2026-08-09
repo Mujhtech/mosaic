@@ -634,6 +634,13 @@ void _defineRendererV03VisualTests(
     expect(find.text('Unlock every Mosaic Pro feature'), findsOneWidget);
     expect(find.byType(PageView), findsOneWidget);
     expect(tester.widget<PageView>(find.byType(PageView)).controller!.page, 1);
+    // The reset leaves the card below the fold, and an off-screen semantics
+    // node does not reliably carry its flags on every platform. Reading the
+    // selection flag is only meaningful once the card is on screen.
+    await tester.ensureVisible(
+      find.byKey(const ValueKey<String>('mosaic-plans-yearly-plan-card')),
+    );
+    await tester.pumpAndSettle();
     final yearly = tester.getSemantics(
       find.byKey(
         const ValueKey<String>('mosaic-plans-yearly-plan-card'),
