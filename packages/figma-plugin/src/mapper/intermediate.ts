@@ -57,6 +57,24 @@ export type IntermediateLineHeight =
   | { readonly unit: "pixels"; readonly value: number }
   | { readonly unit: "percent"; readonly value: number };
 
+/**
+ * A node's `absoluteBoundingBox`, in canvas coordinates.
+ *
+ * Absolute rather than parent-relative on purpose: a GROUP reports its
+ * children's coordinates relative to the enclosing *frame*, not to the group,
+ * so parent-relative numbers do not compose. Every measurement the layout
+ * inference makes -- row clustering, gaps, padding -- happens in this one
+ * coordinate system, and is therefore correct at any nesting depth.
+ *
+ * Null when Figma reports no box (a node that has never been laid out).
+ */
+export type IntermediateBounds = {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+};
+
 type IntermediateBase = {
   /** The Figma node id. Diagnostics only -- never emitted into the document. */
   readonly figmaId: string;
@@ -67,6 +85,8 @@ type IntermediateBase = {
   /** Absolute-ish position, used only to order children of a non-auto-layout frame. */
   readonly x: number;
   readonly y: number;
+  /** Absolute bounding box, when Figma reports one. */
+  readonly bounds: IntermediateBounds | null;
 };
 
 export type IntermediateFrame = IntermediateBase & {
@@ -99,12 +119,32 @@ export type IntermediateText = IntermediateBase & {
   readonly lineHeight: IntermediateLineHeight;
   readonly textAlign: IntermediateTextAlign;
   readonly fills: readonly IntermediatePaint[];
+  /**
+   * Figma reported non-uniform styling across the layer's characters. When
+   * this is true and the size/weight fields are non-null they describe the
+   * *first character* only; the rest of the layer's styling is lost.
+   */
+  readonly mixedStyling: boolean;
+};
+
+/**
+ * A childless painted shape: a rectangle, an ellipse, or an empty frame whose
+ * only content is a solid fill. These carry real visual weight -- dividers,
+ * pills, colour blocks -- so they become an empty stack with a background
+ * rather than being dropped.
+ */
+export type IntermediateShape = IntermediateBase & {
+  readonly kind: "shape";
+  readonly figmaType: string;
+  /** Null when Figma reports a mixed corner radius. */
+  readonly cornerRadius: number | null;
+  readonly fills: readonly IntermediatePaint[];
 };
 
 /**
  * A node the protocol has no lossless home for from a plugin: vectors,
- * rectangles, images, booleans, slices. The mapper reports each one instead of
- * inventing an asset.
+ * image-filled layers, booleans, slices. The mapper reports each one instead
+ * of inventing an asset, and the export bundle carries its rendered pixels.
  */
 export type IntermediateUnsupported = IntermediateBase & {
   readonly kind: "unsupported";
@@ -115,4 +155,5 @@ export type IntermediateUnsupported = IntermediateBase & {
 export type IntermediateNode =
   | IntermediateFrame
   | IntermediateText
+  | IntermediateShape
   | IntermediateUnsupported;

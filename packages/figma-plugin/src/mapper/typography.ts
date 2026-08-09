@@ -29,14 +29,17 @@ export const DEFAULT_LINE_HEIGHT = 1.2;
 
 /**
  * Figma has a continuous numeric weight axis; the protocol has four names.
- * Snapping is to the nearest of 400/500/600/700, ties resolving to the lighter
- * name so a 450 does not silently read as medium-heavy.
+ *
+ * The cut points sit midway between the four canonical stops (400/500/600/700)
+ * and are inclusive, so a tie resolves to the lighter name: 450 is regular and
+ * 451 is medium. Everything below 400 -- thin, light, book -- lands on regular,
+ * and everything from extrabold up lands on bold, because the protocol has
+ * nowhere lighter or heavier to put them.
  */
-const WEIGHT_STOPS: readonly (readonly [number, FontWeight])[] = [
-  [400, "regular"],
-  [500, "medium"],
-  [600, "semibold"],
-  [700, "bold"],
+const WEIGHT_THRESHOLDS: readonly (readonly [number, FontWeight])[] = [
+  [450, "regular"],
+  [550, "medium"],
+  [650, "semibold"],
 ];
 
 /**
@@ -55,6 +58,11 @@ const WEIGHT_BY_STYLE_NAME: readonly (readonly [string, number])[] = [
   ["medium", 500],
   ["demibold", 600],
   ["semibold", 600],
+  // Bare "Semi" / "Demi" are how several families spell semibold. They sit
+  // after the compound spellings, and after "light", so "SemiLight" still
+  // reads as light rather than as semibold.
+  ["semi", 600],
+  ["demi", 600],
   ["extrabold", 800],
   ["ultrabold", 800],
   ["black", 900],
@@ -75,19 +83,14 @@ export function snapFontWeight(
   numericWeight: number | null,
   styleName: string | null = null,
 ): FontWeight {
+  // The numeric axis wins when Figma reports one; the style name is the
+  // fallback for files where it does not, which is most of them.
   const weight = numericWeight ?? numericWeightFromStyleName(styleName);
   if (weight === null || !Number.isFinite(weight)) return "regular";
-  let best: FontWeight = "regular";
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const [stop, name] of WEIGHT_STOPS) {
-    const distance = Math.abs(weight - stop);
-    // Strictly-less keeps ties on the lighter stop, since stops ascend.
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = name;
-    }
+  for (const [threshold, name] of WEIGHT_THRESHOLDS) {
+    if (weight <= threshold) return name;
   }
-  return best;
+  return "bold";
 }
 
 function round(value: number, places: number): number {

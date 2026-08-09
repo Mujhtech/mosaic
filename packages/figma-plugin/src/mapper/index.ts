@@ -13,17 +13,41 @@ export {
   slugifyIdentifier,
   slugifyKeySegment,
 } from "./identifiers.js";
+export {
+  detectProductCardGroups,
+  detectsAsButton,
+  looksLikePrice,
+  soleTextChild,
+  structureSignature,
+} from "./detect.js";
 export type {
+  IntermediateBounds,
   IntermediateFrame,
   IntermediateLineHeight,
   IntermediateNode,
   IntermediatePaint,
+  IntermediateShape,
   IntermediateText,
   IntermediateUnsupported,
 } from "./intermediate.js";
 export {
+  clusterRows,
+  horizontalExtent,
+  inferAlignment,
+  inferGap,
+  inferPadding,
+  median,
+  overlapsSubstantially,
+  unionExtent,
+  verticalExtent,
+  type Extent,
+  type InferredAlignment,
+  type InferredInsets,
+} from "./layout-inference.js";
+export {
   mapDocument,
   orderAbsoluteChildren,
+  type ImagePlacement,
   type MapOptions,
   type MapResult,
 } from "./map-document.js";

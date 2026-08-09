@@ -28,14 +28,35 @@ import type {
 const CAPABILITY_ORDER: readonly MosaicPaywallV03CapabilityName[] = [
   "layout.scrollContainer",
   "layout.stack",
+  "layout.sizing",
+  "layout.heightSizing",
   "navigation.screens",
   "component.text",
+  "component.button",
   "localization.catalogs",
+  "action.close",
+  "action.navigateTo",
   "accessibility.metadata",
+  "outcome.normalized",
   "style.colors",
   "style.box",
   "style.typography",
 ];
+
+/**
+ * The two actions the plugin emits, both placeholders.
+ *
+ * `close` needs no field the plugin would have to invent -- no product selector
+ * to bind, no URL -- so it is what a detected button gets. `navigateTo` is the
+ * one exception: a multi-frame export has to thread its screens together,
+ * because the protocol rejects a screen the first one cannot reach.
+ *
+ * Only `purchase`, `restore`, and `close` pull in `outcome.normalized`;
+ * `navigateTo` does not, and `capabilities.test.ts` holds this to the
+ * protocol's own derivation.
+ */
+const OUTCOME_ACTION_TYPES = new Set(["purchase", "restore", "close"]);
+const SUPPORTED_ACTION_TYPES = new Set(["close", "navigateTo"]);
 
 /** `colorFieldNames` from the protocol browser module, inlined. */
 const COLOR_FIELD_NAMES: readonly string[] = [
@@ -89,7 +110,7 @@ function walkNodes(document: MosaicPaywallV03Document): UnknownRecord[] {
     entries.push(record);
     if (record.type === "scrollContainer") {
       visit(record.content);
-    } else if (record.type === "stack") {
+    } else if (record.type === "stack" || record.type === "button") {
       for (const child of (record.children as unknown[]) ?? []) visit(child);
     }
   };
@@ -142,14 +163,15 @@ export function deriveCapabilityNames(
   }
 
   for (const node of walkNodes(document)) {
-    if (node.sizing || node.outerInsets || node.visibility) {
+    if (node.outerInsets || node.visibility) {
       throw new Error(
-        `Capability derivation covers no sizing, outer insets, or visibility on ${String(node.id)}.`,
+        `Capability derivation covers no outer insets or visibility on ${String(node.id)}.`,
       );
     }
     if (node.type === "scrollContainer") capabilities.add("layout.scrollContainer");
     if (node.type === "stack") capabilities.add("layout.stack");
     if (node.type === "text") capabilities.add("component.text");
+    if (node.type === "button") capabilities.add("component.button");
     if (node.accessibility) capabilities.add("accessibility.metadata");
     if (node.typography) capabilities.add("style.typography");
     if (
@@ -158,6 +180,26 @@ export function deriveCapabilityNames(
       (node.type === "scrollContainer" && node.background)
     ) {
       capabilities.add("style.box");
+    }
+    if (node.sizing) {
+      capabilities.add("layout.sizing");
+      // `boxSizing` requires both axes, so the height capability always comes
+      // along; the check is kept explicit so it stays right if that changes.
+      if (Object.hasOwn(node.sizing, "height")) {
+        capabilities.add("layout.heightSizing");
+      }
+    }
+    const action = node.action as { type?: string } | undefined;
+    if (action?.type) {
+      if (!SUPPORTED_ACTION_TYPES.has(action.type)) {
+        throw new Error(
+          `Capability derivation covers no ${action.type} action on ${String(node.id)}.`,
+        );
+      }
+      capabilities.add(`action.${action.type}` as MosaicPaywallV03CapabilityName);
+      if (OUTCOME_ACTION_TYPES.has(action.type)) {
+        capabilities.add("outcome.normalized");
+      }
     }
     if (usesColor(node)) capabilities.add("style.colors");
   }

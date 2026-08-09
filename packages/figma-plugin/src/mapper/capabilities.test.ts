@@ -6,20 +6,76 @@ import {
 import type { MosaicPaywallV03Document } from "../../../../protocol/browser/index.js";
 import { mapDocument } from "./map-document.js";
 import {
+  box,
   frame,
+  positionedPaywall,
   representativePaywall,
+  shape,
   solid,
   text,
   unsupported,
 } from "./test-support.js";
 import type { IntermediateFrame } from "./intermediate.js";
 
+const cta = (name: string) =>
+  frame({
+    name,
+    cornerRadius: 24,
+    fills: [solid("#0D99FF")],
+    children: [text({ name: `${name} Label`, characters: "Continue" })],
+  });
+
 /**
  * Every distinct shape the mapper can produce, in capability terms: text or no
- * text, appearance or no appearance, nested or flat, absolute or auto-layout.
+ * text, appearance or no appearance, nested or flat, absolute or auto-layout,
+ * plus everything the newer heuristics can emit -- a button with its
+ * placeholder action, an explicitly sized colour block, and a threaded
+ * multi-screen flow.
  */
-const CASES: readonly (readonly [string, IntermediateFrame])[] = [
+const CASES: readonly (readonly [string, IntermediateFrame | IntermediateFrame[]])[] = [
   ["a representative paywall", representativePaywall()],
+  ["a positioned paywall with inferred layout and a button", positionedPaywall()],
+  ["a frame holding only a detected button", frame({ name: "Root", children: [cta("Buy")] })],
+  ["a top-level frame that is itself a button", cta("Buy")],
+  [
+    "an explicitly sized colour block",
+    frame({
+      name: "Root",
+      bounds: box(0, 0, 300, 300),
+      layoutMode: "none",
+      children: [
+        text({ name: "Title", characters: "Hi", bounds: box(20, 20, 200, 20) }),
+        shape({ name: "Rule", bounds: box(20, 60, 100, 2) }),
+      ],
+    }),
+  ],
+  [
+    "a colour block that fills its parent's width",
+    frame({
+      name: "Root",
+      bounds: box(0, 0, 300, 300),
+      layoutMode: "none",
+      children: [
+        text({ name: "Title", characters: "Hi", bounds: box(0, 20, 300, 20) }),
+        shape({ name: "Rule", bounds: box(0, 60, 300, 1) }),
+      ],
+    }),
+  ],
+  [
+    "a threaded multi-screen flow",
+    [
+      frame({
+        name: "Welcome",
+        bounds: box(0, 0, 390, 844),
+        children: [text({ name: "Title", characters: "Hello" }), cta("Next")],
+      }),
+      frame({
+        name: "Plans",
+        bounds: box(500, 0, 390, 844),
+        children: [text({ name: "Title", characters: "Choose" }), cta("Buy")],
+      }),
+    ],
+  ],
   ["a bare frame with no children", frame({ name: "Bare" })],
   [
     "a frame whose only child was skipped",
@@ -95,6 +151,58 @@ describe("required capabilities", () => {
     for (const capability of document.compatibility.requiredCapabilities) {
       expect(capability.version).toBe("0.3");
     }
+  });
+
+  it("declares the button and its placeholder action, and what they imply", () => {
+    const { document } = mapDocument(
+      frame({ name: "Root", children: [cta("Buy")] }),
+    );
+    const names = document.compatibility.requiredCapabilities.map(
+      (capability) => capability.name,
+    );
+    expect(names).toContain("component.button");
+    expect(names).toContain("action.close");
+    // `close` is one of the actions the protocol pairs with a normalized
+    // outcome, so declaring the action alone would be under-declaring.
+    expect(names).toContain("outcome.normalized");
+    expect(names).toContain("accessibility.metadata");
+    expect(document.compatibility.requiredCapabilities).toEqual(
+      requiredCapabilitiesFor(document as MosaicPaywallV03Document),
+    );
+  });
+
+  it("declares both sizing capabilities for an explicitly sized colour block", () => {
+    const { document } = mapDocument(
+      frame({
+        name: "Root",
+        bounds: box(0, 0, 300, 300),
+        layoutMode: "none",
+        children: [
+          text({ name: "Title", characters: "Hi", bounds: box(20, 20, 200, 20) }),
+          shape({ name: "Rule", bounds: box(20, 60, 100, 2) }),
+        ],
+      }),
+    );
+    const names = document.compatibility.requiredCapabilities.map(
+      (capability) => capability.name,
+    );
+    // `#/$defs/boxSizing` requires both axes, so height sizing always comes
+    // along with sizing.
+    expect(names).toContain("layout.sizing");
+    expect(names).toContain("layout.heightSizing");
+    expect(document.compatibility.requiredCapabilities).toEqual(
+      requiredCapabilitiesFor(document as MosaicPaywallV03Document),
+    );
+  });
+
+  it("does not declare sizing for a document with no explicitly sized node", () => {
+    const { document } = mapDocument(representativePaywall());
+    const names = document.compatibility.requiredCapabilities.map(
+      (capability) => capability.name,
+    );
+    expect(names).not.toContain("layout.sizing");
+    expect(names).not.toContain("layout.heightSizing");
+    expect(names).not.toContain("component.button");
   });
 
   it("does not declare component.text or style.typography for a text-free frame", () => {
