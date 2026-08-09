@@ -321,6 +321,35 @@ export function createGeneratedHostedPublishingAdapter(
         versions: versionsResult.data.data.items.map(mapVersion),
       };
     },
+    async getPaywallPreviewDocument(input) {
+      // The published Version is preferred because it is what this Environment
+      // actually serves; the active Draft only stands in for a Paywall that has
+      // never shipped here. Showing unreleased work as though it were live
+      // would make the gallery misreport the Environment.
+      const versionsResult = await listPaywallVersions({
+        client,
+        path: { paywallId: input.paywallId, projectId: input.projectId },
+        throwOnError: true,
+      });
+      const latest = versionsResult.data.data.items
+        .filter((version) => version.environmentId === input.environmentId)
+        .reduce<PaywallVersion | null>(
+          (newest, version) =>
+            newest && newest.versionNumber >= version.versionNumber
+              ? newest
+              : version,
+          null
+        );
+      if (latest) {
+        return {
+          document: hostedDocument(latest.document),
+          source: "publishedVersion",
+          versionNumber: latest.versionNumber,
+        };
+      }
+      const draft = await this.getActiveDraft(input);
+      return draft ? { document: draft.document, source: "draft" } : null;
+    },
     async listPaywalls(projectId) {
       const result = await listPaywalls({
         client,

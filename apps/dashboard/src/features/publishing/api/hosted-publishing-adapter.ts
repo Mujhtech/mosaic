@@ -22,6 +22,19 @@ export interface HostedPaywallVersion {
   readonly versionNumber: number;
 }
 
+/**
+ * The document a Paywall preview should be drawn from, and where it came from.
+ *
+ * The two sources are not interchangeable, so the caller is told which one it
+ * received: a published Version is what the Environment currently serves, while
+ * a Draft is unreleased work that no installed app has seen.
+ */
+export interface HostedPaywallPreviewDocument {
+  readonly document: MosaicDocument;
+  readonly source: "draft" | "publishedVersion";
+  readonly versionNumber?: number;
+}
+
 export interface HostedPaywallListItem {
   readonly id: string;
   readonly key: string;
@@ -153,6 +166,15 @@ export interface HostedPublishingAdapter {
     paywallId: string;
     projectId: string;
   }) => Promise<HostedPaywallDetail>;
+  /**
+   * The document to draw a Paywall preview from, or `null` when the Paywall has
+   * nothing to show in this Environment yet.
+   */
+  getPaywallPreviewDocument: (input: {
+    environmentId: string;
+    paywallId: string;
+    projectId: string;
+  }) => Promise<HostedPaywallPreviewDocument | null>;
   listPaywalls: (
     projectId: string
   ) => Promise<readonly HostedPaywallListItem[]>;
@@ -243,6 +265,7 @@ export const CONTRACT_PENDING_HOSTED_PUBLISHING_ADAPTER: HostedPublishingAdapter
     getActiveDraft: pending,
     getDraft: pending,
     getPaywall: pending,
+    getPaywallPreviewDocument: pending,
     listPaywalls: pending,
     listPlacements: pending,
     listPublishedVersions: pending,

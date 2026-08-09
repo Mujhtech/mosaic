@@ -203,4 +203,71 @@ describe("generated hosted publishing adapter", () => {
     });
     await expect(adapter.getActiveDraft(scope)).resolves.toBeNull();
   });
+
+  it("previews the newest Version published to this Environment, and only falls back to the Draft when there is none", async () => {
+    // A gallery thumbnail claims to show what an Environment serves. Picking a
+    // Version from another Environment, an older Version, or unreleased Draft
+    // work while a release exists would each make that claim false.
+    const scope = {
+      environmentId: "env_staging",
+      paywallId: input.paywallId,
+      projectId: input.projectId,
+    };
+    const versions = (
+      items: { environmentId: string; versionNumber: number }[]
+    ) =>
+      new Response(
+        JSON.stringify({
+          data: {
+            items: items.map((item) => ({
+              createdAt: "2026-07-22T12:00:00Z",
+              createdByActorId: "actor_01",
+              document: input.document,
+              documentHash: `hash_${item.versionNumber}`,
+              environmentId: item.environmentId,
+              id: `version_0${item.versionNumber}`,
+              paywallId: input.paywallId,
+              productIds: [],
+              projectId: input.projectId,
+              protocolVersion: "0.3",
+              sourceDraftId: input.draftId,
+              sourceRevision: item.versionNumber,
+              validation: { errors: [], warnings: [] },
+              versionNumber: item.versionNumber,
+            })),
+            page: { limit: 50, total: items.length },
+          },
+        }),
+        { headers: { "Content-Type": "application/json" }, status: 200 }
+      );
+    const fetchImplementation = vi
+      .fn()
+      // Deliberately unordered, and carrying a higher-numbered Version that
+      // belongs to a different Environment.
+      .mockResolvedValueOnce(
+        versions([
+          { environmentId: "env_staging", versionNumber: 2 },
+          { environmentId: "env_production", versionNumber: 9 },
+          { environmentId: "env_staging", versionNumber: 5 },
+          { environmentId: "env_staging", versionNumber: 3 },
+        ])
+      )
+      .mockResolvedValueOnce(versions([]))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(draftEnvelope(6)), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        })
+      ) as typeof fetch;
+    const adapter = createGeneratedHostedPublishingAdapter(
+      createGeneratedDashboardClient(fetchImplementation)
+    );
+
+    await expect(
+      adapter.getPaywallPreviewDocument(scope)
+    ).resolves.toMatchObject({ source: "publishedVersion", versionNumber: 5 });
+    await expect(
+      adapter.getPaywallPreviewDocument(scope)
+    ).resolves.toMatchObject({ source: "draft" });
+  });
 });

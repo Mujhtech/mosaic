@@ -17,6 +17,7 @@ import { HostedResourceBoundary } from "@/features/auth/components/hosted-resour
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
 import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace";
 import { CreatePaywallDraftForm } from "@/features/paywalls/components/create-paywall-draft-form";
+import { PaywallCardPreview } from "@/features/paywalls/components/paywall-card-preview";
 import { listHostedDraftRecoveries } from "@/features/paywalls/mutations/hosted-draft-recovery";
 import { paywallsQueryOptions } from "@/features/paywalls/queries/paywall-queries";
 import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter";
@@ -129,9 +130,23 @@ export function PaywallsPage({
         ) : (
           <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {items.map((paywall) => (
-              <li key={paywall.id}>
+              // The card is a link with a picture beside it, not a link
+              // wrapping one: the thumbnail renders the Paywall's own
+              // controls, and an anchor may not contain them. The link is
+              // stretched across the card instead, so the whole card stays
+              // clickable while its accessible name remains the Paywall's
+              // name, status, key and update time.
+              <li
+                className="relative flex gap-4 rounded border p-5 has-[a:hover]:bg-muted/35 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring"
+                key={paywall.id}
+              >
+                <PaywallCardPreview
+                  environmentId={environmentId}
+                  paywallId={paywall.id}
+                  projectId={projectId}
+                />
                 <Link
-                  className="block rounded border p-5 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="min-w-0 flex-1 after:absolute after:inset-0 focus-visible:outline-none"
                   params={(prev) => ({
                     ...prev,
                     paywallId: paywall.id,
