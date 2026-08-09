@@ -2,16 +2,18 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/feedback/confirm-dialog";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner";
 import { EditorShell } from "@/features/paywall-editor/components/editor-shell";
+import { FigmaImportReview } from "@/features/paywall-editor/components/figma-import-review";
 import { TemplateSelection } from "@/features/paywall-editor/components/template-selection";
 import {
   DEFAULT_MOCK_PRODUCTS,
+  MAX_FIGMA_BUNDLE_BYTES,
   MAX_LOCAL_PROJECT_BYTES,
 } from "@/features/paywall-editor/constants/editor-constants";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
@@ -19,6 +21,10 @@ import {
   resolveRestoredPreviewContext,
   useWorkspacePreviewContext,
 } from "@/features/paywall-editor/hooks/use-workspace-preview-context";
+import {
+  type FigmaExportBundle,
+  readImportedFileSource,
+} from "@/features/paywall-editor/mutations/figma-import";
 import {
   type LocalProjectReadResult,
   parseImportedJson,
@@ -171,7 +177,7 @@ function WorkspaceContent({
   hostedDraft,
 }: WorkspaceContentProps) {
   const source = useStudioSource();
-  const { document, editableDocumentId } = useEditorStore();
+  const { document } = useEditorStore();
   const {
     loadTemplate,
     openHostedDraft,
@@ -186,7 +192,11 @@ function WorkspaceContent({
     status: "empty",
   });
   const [importError, setImportError] = useState<string | null>(null);
+  const [importNotices, setImportNotices] = useState<readonly string[]>([]);
   const [pendingImport, setPendingImport] = useState<MosaicDocument | null>(
+    null
+  );
+  const [pendingBundle, setPendingBundle] = useState<FigmaExportBundle | null>(
     null
   );
   const [mockProducts, setMockProducts] = useState<MockProductDefinition[]>(
@@ -223,16 +233,25 @@ function WorkspaceContent({
     return () => window.clearTimeout(timer);
   }, [source.kind]);
 
+  /**
+   * Opens each hosted Draft once.
+   *
+   * Keying this on `editableDocumentId` instead would re-open the server copy
+   * the moment anything mints a new editable id — which importing does — and
+   * so would discard the author's import on the very next render.
+   */
+  const openedDraftIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (
       source.kind !== "hosted" ||
       !hostedDraftData ||
-      editableDocumentId === hostedDraftData.id
+      openedDraftIdRef.current === hostedDraftData.id
     ) {
       return;
     }
+    openedDraftIdRef.current = hostedDraftData.id;
     openHostedDraft(hostedDraftData.document, hostedDraftData.id);
-  }, [editableDocumentId, hostedDraftData, openHostedDraft, source.kind]);
+  }, [hostedDraftData, openHostedDraft, source.kind]);
 
   const applyProject = useCallback(
     (project: LocalProjectFile) => {
@@ -281,10 +300,24 @@ function WorkspaceContent({
 
   async function importFile(file: File) {
     try {
+      // The bundle cap is checked first because the file's kind is not known
+      // until it is read, and a bundle is legitimately far larger than 1 MB.
+      if (file.size > MAX_FIGMA_BUNDLE_BYTES) {
+        throw new Error("Choose a Mosaic file under 20 MB.");
+      }
+      const contents = await file.text();
+      const detected = readImportedFileSource(contents);
+      if (detected.kind === "figma-bundle") {
+        setImportError(null);
+        setImportNotices([]);
+        setPendingBundle(detected.bundle);
+        return;
+      }
       if (file.size > MAX_LOCAL_PROJECT_BYTES) {
         throw new Error("Choose a Mosaic file under 1 MB.");
       }
-      const imported = parseImportedJson(await file.text());
+      const imported = parseImportedJson(contents);
+      setImportNotices([]);
       if (document) {
         setPendingImport(imported.document);
         return;
@@ -298,6 +331,23 @@ function WorkspaceContent({
       );
     }
   }
+
+  const bundleReview = pendingBundle ? (
+    <FigmaImportReview
+      bundle={pendingBundle}
+      onApplied={(outcome) => {
+        applyImportedDocument(outcome.document);
+        setPendingBundle(null);
+        setImportNotices([
+          ...outcome.failed.map((failure) => failure.message),
+          ...outcome.notes.map((note) => note.message),
+        ]);
+      }}
+      onClose={() => setPendingBundle(null)}
+      replacesOpenPaywall={document !== null}
+      source={source}
+    />
+  ) : null;
 
   if (!document) {
     if (source.kind === "hosted") {
@@ -328,20 +378,23 @@ function WorkspaceContent({
       );
     }
     return (
-      <TemplateSelection
-        autosave={autosave}
-        importError={importError}
-        onImport={importFile}
-        onResume={handleResume}
-        onSelectTemplate={(templateId) => {
-          const template = EDITOR_TEMPLATES.find(
-            (entry) => entry.id === templateId
-          );
-          if (template) {
-            loadTemplate(template.document);
-          }
-        }}
-      />
+      <>
+        <TemplateSelection
+          autosave={autosave}
+          importError={importError}
+          onImport={importFile}
+          onResume={handleResume}
+          onSelectTemplate={(templateId) => {
+            const template = EDITOR_TEMPLATES.find(
+              (entry) => entry.id === templateId
+            );
+            if (template) {
+              loadTemplate(template.document);
+            }
+          }}
+        />
+        {bundleReview}
+      </>
     );
   }
 
@@ -349,6 +402,7 @@ function WorkspaceContent({
     <>
       <EditorShell
         importError={importError}
+        importNotices={importNotices}
         mockProducts={activeMockProducts}
         mockPurchaseState={activeMockPurchaseState}
         onImport={importFile}
@@ -371,6 +425,7 @@ function WorkspaceContent({
         open={pendingImport !== null}
         title="Replace the open paywall"
       />
+      {bundleReview}
     </>
   );
 }

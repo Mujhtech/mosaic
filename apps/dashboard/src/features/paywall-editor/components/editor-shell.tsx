@@ -80,6 +80,12 @@ function downloadStudioDocument(name: string, contents: string) {
 
 export interface EditorShellProps {
   readonly importError: string | null;
+  /**
+   * Outcomes from an import that was applied but not wholly: an image that
+   * failed to upload, or a placement that had to move. Reporting these beside
+   * the editor keeps a partial success from reading as a clean one.
+   */
+  readonly importNotices?: readonly string[];
   readonly mockProducts: readonly MockProductDefinition[];
   readonly mockPurchaseState: MockPurchaseState;
   readonly onImport: (file: File) => void;
@@ -91,6 +97,7 @@ export function EditorShell({
   mockProducts,
   mockPurchaseState,
   importError,
+  importNotices,
   onProductsChange,
   onPurchaseStateChange,
   onImport,
@@ -436,6 +443,19 @@ export function EditorShell({
             <p className="mt-1 text-muted-foreground text-xs">
               Your open paywall is unchanged.
             </p>
+          </StatusMessage>
+        ) : null}
+        {importNotices && importNotices.length > 0 ? (
+          <StatusMessage
+            className="mb-4 rounded border border-border bg-muted/35 p-3 text-sm"
+            tone="warning"
+          >
+            <p className="font-semibold">Import applied with changes</p>
+            <ul className="mt-1 space-y-1 text-muted-foreground">
+              {importNotices.map((notice) => (
+                <li key={notice}>{notice}</li>
+              ))}
+            </ul>
           </StatusMessage>
         ) : null}
         <div className="grid items-start gap-6 xl:grid-cols-2">

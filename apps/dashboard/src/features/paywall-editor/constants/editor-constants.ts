@@ -6,6 +6,13 @@ import type {
 export const EDITOR_HISTORY_LIMIT = 50;
 export const AUTOSAVE_DELAY_MS = 500;
 export const MAX_LOCAL_PROJECT_BYTES = 1_048_576;
+/**
+ * Figma export bundles carry PNG bytes inline, so they are an order of
+ * magnitude larger than a portable paywall document. They get their own cap
+ * rather than relaxing the plain-JSON one: a 20 MB file that is *not* a bundle
+ * is still refused at 1 MB.
+ */
+export const MAX_FIGMA_BUNDLE_BYTES = 20_971_520;
 export const PREVIEW_ENDPOINT_DEFAULT = "ws://127.0.0.1:4317/preview";
 export const LOCAL_PROJECT_STORAGE_KEY = "mosaic:local-project:v0.3";
 export const LOCAL_EDITOR_UI_STORAGE_KEY = "mosaic:local-project-ui:v0.3";
