@@ -292,7 +292,7 @@ export function loadProtocolV03Artifacts() {
   };
 }
 
-function createSchemaValidators({ manifestSchema, paywallSchema }) {
+export function createSchemaValidators({ manifestSchema, paywallSchema }) {
   const ajv = new Ajv2020({ allErrors: true, strict: true });
   return {
     manifest: ajv.compile(manifestSchema),
@@ -300,14 +300,14 @@ function createSchemaValidators({ manifestSchema, paywallSchema }) {
   };
 }
 
-function formatSchemaErrors(label, validationErrors = []) {
+export function formatSchemaErrors(label, validationErrors = []) {
   return validationErrors.map((error) => {
     const location = error.instancePath || "/";
     return `${label}${location} ${error.message ?? "is invalid"}`;
   });
 }
 
-function addUniqueFieldValues(errors, entries, field, label) {
+export function addUniqueFieldValues(errors, entries, field, label) {
   const seen = new Set();
   for (const entry of entries) {
     const value = entry[field];
@@ -318,7 +318,7 @@ function addUniqueFieldValues(errors, entries, field, label) {
   }
 }
 
-function addUniqueCapabilities(errors, entries, label) {
+export function addUniqueCapabilities(errors, entries, label) {
   const seen = new Set();
   for (const entry of entries) {
     if (seen.has(entry.name)) {
@@ -373,7 +373,7 @@ export function walkV03DocumentNodes(document) {
   return entries;
 }
 
-function walkObjectValues(value, visit, path = "") {
+export function walkObjectValues(value, visit, path = "") {
   if (Array.isArray(value)) {
     value.forEach((entry, index) =>
       walkObjectValues(entry, visit, `${path}/${index}`),
@@ -672,7 +672,7 @@ function validateCapabilities(
   }
 }
 
-function validateIdentifiers(errors, document, entries) {
+export function validateIdentifiers(errors, document, entries) {
   addUniqueFieldValues(errors, document.screens, "id", "screen catalog");
   const identifiable = entries.map(({ node }) => node);
   for (const { node } of entries) {
@@ -713,7 +713,7 @@ function safeAbsoluteHttps(value) {
   );
 }
 
-function validateAssetReferences(errors, document, entries) {
+export function validateAssetReferences(errors, document, entries) {
   addUniqueFieldValues(errors, document.assets, "id", "asset catalog");
   const assets = new Map(document.assets.map((asset) => [asset.id, asset]));
   const referenced = new Set();
@@ -794,7 +794,7 @@ function validateAssetReferences(errors, document, entries) {
   }
 }
 
-function validateDesignSystem(errors, document, entries) {
+export function validateDesignSystem(errors, document, entries) {
   const catalogs = {
     colorToken: document.designSystem.colors,
     backgroundToken: document.designSystem.backgrounds,
@@ -867,7 +867,7 @@ function validateDesignSystem(errors, document, entries) {
   }
 }
 
-function validateProductReferences(errors, document, entries) {
+export function validateProductReferences(errors, document, entries) {
   addUniqueFieldValues(errors, document.products, "id", "product catalog");
   addUniqueFieldValues(errors, document.products, "productId", "product catalog");
   const products = new Map(document.products.map((product) => [product.id, product]));
@@ -951,7 +951,7 @@ function collectLocalizedText(value, path, entries, templateAllowed = new Set())
   }
 }
 
-function validateLocalization(errors, document, nodeEntries) {
+export function validateLocalization(errors, document, nodeEntries) {
   const { defaultLocale, fallbackLocale, locales } = document.localization;
   if (!Object.hasOwn(locales, defaultLocale)) {
     errors.push(`localization default locale ${defaultLocale} is not declared`);
@@ -1062,7 +1062,7 @@ function validateLocalization(errors, document, nodeEntries) {
   }
 }
 
-function validateLayoutAndRuntime(errors, document, entries) {
+export function validateLayoutAndRuntime(errors, document, entries) {
   const screens = new Map(document.screens.map((screen) => [screen.id, screen]));
   if (!screens.has(document.initialScreenId)) {
     errors.push(`initialScreenId references unknown screen ${document.initialScreenId}`);

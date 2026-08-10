@@ -21,6 +21,9 @@ Phase 9C adds Billing Migration Operations `1`, Authoritative Entitlement `2`,
 and Billing State Webhook `2` as exact, parallel drafts. V1 entitlement and
 webhook readers never interpret v2 documents.
 
+Paywall Protocol `0.4` is an eighth draft. See
+[Paywall Protocol 0.4 versioning](#paywall-protocol-04-versioning).
+
 These are independent versioned contracts. Their exact version values do not
 imply compatibility with one another and do not change the Paywall
 `schemaVersion`.
@@ -76,6 +79,41 @@ Because approved contracts are immutable, a correction to an approved contract's
 behaviour — documentation, a diagnostic message, a comment — update the
 canonical schemas, fixtures, generated browser contract, Studio, and all three
 native renderers together.
+
+## Paywall Protocol 0.4 versioning
+
+Paywall Protocol `0.4` is born `status: "draft"` per the owner decision
+recorded in ADR-0027. It carries no compatibility guarantee, nothing produces
+or consumes it in production, and it may change without a version bump. Its
+manifest deliberately carries no `releaseCandidate` label; a draft has not
+reached the state that label describes.
+
+`0.4` is a pure superset of `0.3` apart from two removals `0.3` itself named
+for it — the co-derived `style.productCardStates` capability and the
+single-constant Feature List marker. It adds a `designSystem.motions` catalog
+and three trigger-constrained motion primitives. The migration is mechanical
+and documented in [Protocol 0.4](v0.4.md#migration-from-03).
+
+Versions remain exact. A reader declaring `0.4` accepts only `0.4`, and a `0.3`
+reader never interprets a `0.4` document. When `0.4` becomes deliverable,
+publishing emits a `0.3` representation by projection at publish time — the
+established Configuration Delivery pattern — so one authored document serves
+both reader generations.
+
+`0.4` introduces the **first enhancement-fallback tier** in any Mosaic
+contract. Three capabilities — `motion.appear`, `motion.selection`,
+`motion.loop` — carry `fallback: "renderWithoutMotion"`; every other capability
+in every contract remains `rejectDocument`, and a validator asserts that
+partition. Reader policy splits into `unsupportedRequiredCapability:
+rejectDocument` and `unsupportedEnhancementCapability: renderStaticDocument`.
+The tier is lossless because every animation's terminal state is
+byte-identical to the static rendering. This is a motion-specific exception and
+not a precedent: server-side stripping of material a reader cannot understand
+remains doctrine-forbidden.
+
+Local Preview is **not** bumped by this slice and remains version-locked to
+`0.3`. What a Local Preview `0.4` needs is enumerated in
+[Protocol 0.4](v0.4.md#local-preview-is-the-named-next-chunk).
 
 ## Capability negotiation
 

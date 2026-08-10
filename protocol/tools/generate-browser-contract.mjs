@@ -40,6 +40,7 @@ const schemaPaths = Object.freeze({
     "schema/placement-decision/v1/decision.schema.json",
   ),
   paywallV03: resolve(protocolRoot, "schema/v0.3/paywall.schema.json"),
+  paywallV04: resolve(protocolRoot, "schema/v0.4/paywall.schema.json"),
   previewV03: resolve(
     protocolRoot,
     "schema/local-preview/v0.3/preview-message.schema.json",
@@ -63,6 +64,9 @@ function definitionTypeName(context, definitionName) {
   const name = pascalCase(definitionName);
   if (context === "paywallV03") {
     return `MosaicPaywallV03${name}`;
+  }
+  if (context === "paywallV04") {
+    return `MosaicPaywallV04${name}`;
   }
   if (context === "previewV03") {
     return name.startsWith("Preview")
@@ -107,6 +111,11 @@ function refType(ref, context) {
     return fragment?.startsWith("/$defs/")
       ? definitionTypeName("paywallV03", fragment.slice("/$defs/".length))
       : "MosaicPaywallV03Document";
+  }
+  if (schemaId === "urn:mosaic:protocol:schema:v0.4:paywall") {
+    return fragment?.startsWith("/$defs/")
+      ? definitionTypeName("paywallV04", fragment.slice("/$defs/".length))
+      : "MosaicPaywallV04Document";
   }
   if (
     schemaId ===
@@ -396,6 +405,7 @@ export function buildBrowserContractDeclarations() {
   const commerceProviderV1 = readJson(schemaPaths.commerceProviderV1);
   const commerceProviderV2 = readJson(schemaPaths.commerceProviderV2);
   const paywallV03 = readJson(schemaPaths.paywallV03);
+  const paywallV04 = readJson(schemaPaths.paywallV04);
   const previewV03 = readJson(schemaPaths.previewV03);
   const localProjectV03 = readJson(schemaPaths.localProjectV03);
   const placementDecisionV1 = readJson(schemaPaths.placementDecisionV1);
@@ -406,6 +416,10 @@ export function buildBrowserContractDeclarations() {
     definitionsSource(paywallV03, "paywallV03"),
     "",
     `export type MosaicPaywallV03Document = ${schemaType(paywallV03, "paywallV03")};`,
+    "",
+    definitionsSource(paywallV04, "paywallV04"),
+    "",
+    `export type MosaicPaywallV04Document = ${schemaType(paywallV04, "paywallV04")};`,
     "",
     definitionsSource(previewV03, "previewV03"),
     "",
@@ -474,6 +488,14 @@ import type {
   MosaicLocalProjectV03,
   MosaicPaywallDocument,
   MosaicPaywallV03Document,
+  MosaicPaywallV04Document,
+  MosaicPaywallV04AppearMotion,
+  MosaicPaywallV04CapabilityName,
+  MosaicPaywallV04LoopMotion,
+  MosaicPaywallV04Motion,
+  MosaicPaywallV04MotionEasing,
+  MosaicPaywallV04SelectionMotion,
+  MosaicPaywallV04SelectionStateStyle,
   MosaicPaywallV03CountdownComponent,
   MosaicPaywallV03AxisSizingValue,
   MosaicPaywallV03Background,
@@ -595,6 +617,109 @@ export declare const localPreviewWebSocketProtocols: Readonly<{
   "0.3": "mosaic.local-preview.v0.3";
 }>;
 export declare const paywallContractVersion: "0.3";
+
+/**
+ * Paywall Protocol 0.4 (draft): the motion contract.
+ *
+ * 0.4 is a draft that Studio does not author yet, so the runtime exposes the
+ * part of it that has no 0.3 equivalent rather than a second semantic
+ * validator. MosaicAnyPaywallDocument deliberately still means 0.3: widening
+ * it would tell every existing caller that a draft contract is deliverable.
+ */
+export declare const paywallV04ContractVersion: "0.4";
+export declare const paywallContractVersions: readonly ["0.3", "0.4"];
+export declare const paywallSchemasByVersion: Readonly<{
+  "0.3": Readonly<Record<string, unknown>>;
+  "0.4": Readonly<Record<string, unknown>>;
+}>;
+export declare const paywallV04CapabilityNames: readonly MosaicPaywallV04CapabilityName[];
+export declare const motionCapabilityNames: readonly [
+  "motion.appear",
+  "motion.selection",
+  "motion.loop",
+];
+/** Normative cubic-bezier control points, in [x1, y1, x2, y2] order. */
+export declare const motionEasingControlPoints: Readonly<
+  Record<MosaicPaywallV04MotionEasing, readonly [number, number, number, number]>
+>;
+export declare const motionLoopMinimumDurationMilliseconds: 500;
+
+export declare function easedMotionProgress(
+  easing: MosaicPaywallV04MotionEasing,
+  fraction: number,
+): number;
+
+export declare function resolveMotionToken(
+  document: MosaicPaywallV04Document,
+  motion: MosaicPaywallV04Motion,
+): Exclude<MosaicPaywallV04Motion, { readonly type: "motionToken" }> | null;
+
+export declare function motionCapabilitiesFor(
+  document: MosaicPaywallV04Document,
+): readonly MosaicPaywallV04CapabilityName[];
+
+export declare type MosaicPaywallAppearFrame = {
+  readonly trigger: "appear";
+  readonly reducedMotion: boolean;
+  readonly complete: boolean;
+  readonly progress: number;
+  readonly opacity: number;
+  /** Always 0 under reduced motion: the contract owns what changes. */
+  readonly translateLogicalSize: number;
+};
+export declare type MosaicPaywallSelectionFrame = {
+  readonly trigger: "selection";
+  readonly reducedMotion: boolean;
+  readonly complete: boolean;
+  readonly progress: number;
+  readonly style: MosaicPaywallV04SelectionStateStyle;
+};
+export declare type MosaicPaywallLoopFrame = {
+  readonly trigger: "loop";
+  readonly reducedMotion: boolean;
+  readonly complete: boolean;
+  readonly cycle: number;
+  readonly cyclePhase: number;
+  readonly excursion: number;
+  readonly scale: number;
+  /** A fraction of the node's resolved static opacity, never an absolute. */
+  readonly opacityMultiplier: number;
+};
+
+/**
+ * The frame a renderer must be showing at an exact elapsed time.
+ *
+ * Terminal state equals the static rendering exactly, which is what makes the
+ * renderWithoutMotion fallback lossless. Throws on a non-integer or negative
+ * elapsed time rather than resolving a plausible-looking frame from a clock
+ * that cannot be trusted.
+ */
+export declare function resolveMotionFrame(
+  motion: MosaicPaywallV04AppearMotion,
+  options: {
+    readonly trigger: "appear";
+    readonly elapsedMilliseconds: number;
+    readonly reducedMotion?: boolean;
+  },
+): MosaicPaywallAppearFrame;
+export declare function resolveMotionFrame(
+  motion: MosaicPaywallV04SelectionMotion,
+  options: {
+    readonly trigger: "selection";
+    readonly elapsedMilliseconds: number;
+    readonly reducedMotion?: boolean;
+    readonly resolvedFrom: MosaicPaywallV04SelectionStateStyle;
+    readonly resolvedTo: MosaicPaywallV04SelectionStateStyle;
+  },
+): MosaicPaywallSelectionFrame;
+export declare function resolveMotionFrame(
+  motion: MosaicPaywallV04LoopMotion,
+  options: {
+    readonly trigger: "loop";
+    readonly elapsedMilliseconds: number;
+    readonly reducedMotion?: boolean;
+  },
+): MosaicPaywallLoopFrame;
 export declare const capabilityNames: readonly MosaicPaywallV03CapabilityName[];
 export declare const capabilityByComponentType: Readonly<
   Record<string, MosaicPaywallV03CapabilityName>

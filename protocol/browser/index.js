@@ -4,6 +4,7 @@ import compatibilityManifest from "../compatibility/v0.3.json" with { type: "jso
 import localProjectSchema from "../schema/local-preview/v0.3/local-project.schema.json" with { type: "json" };
 import previewMessageSchema from "../schema/local-preview/v0.3/preview-message.schema.json" with { type: "json" };
 import paywallSchema from "../schema/v0.3/paywall.schema.json" with { type: "json" };
+import paywallV04Schema from "../schema/v0.4/paywall.schema.json" with { type: "json" };
 
 export const localPreviewContractVersion =
   previewMessageSchema.properties.previewProtocolVersion.const;
@@ -714,6 +715,315 @@ export function resolveBackgroundToken(document, background) {
 
 export function resolveShadowToken(document, shadow) {
   return resolveTokenValue(document, "shadows", "shadowToken", shadow);
+}
+
+// ---------------------------------------------------------------------------
+// Paywall Protocol 0.4 (draft): the motion contract.
+//
+// 0.4 is a draft and Studio does not author it yet, so the browser runtime
+// exposes the part of it that has no 0.3 equivalent -- the motion vocabulary,
+// its capability names, and the reference frame resolver -- rather than a
+// second copy of the semantic validator whose rules 0.4 does not change.
+// Adding full 0.4 browser validation later is additive and needs no contract
+// version, exactly as it was for the Phase 9A billing contracts.
+//
+// `resolveMotionFrame` mirrors `resolveV04MotionFrame` in
+// `tools/validation-v0.4.mjs`. A test drives every frame of every committed
+// motion vector through both and asserts they are identical, so the mirror
+// cannot drift without the protocol gate failing.
+// ---------------------------------------------------------------------------
+
+export const paywallV04ContractVersion = paywallV04Schema.$defs.version.const;
+export const paywallContractVersions = Object.freeze(["0.3", "0.4"]);
+export const paywallSchemasByVersion = Object.freeze({
+  "0.3": paywallSchema,
+  "0.4": paywallV04Schema,
+});
+export const paywallV04CapabilityNames = Object.freeze([
+  ...paywallV04Schema.$defs.capabilityName.enum,
+]);
+export const motionCapabilityNames = Object.freeze([
+  "motion.appear",
+  "motion.selection",
+  "motion.loop",
+]);
+export const motionEasingControlPoints = Object.freeze({
+  linear: Object.freeze([0, 0, 1, 1]),
+  standard: Object.freeze([0.4, 0, 0.2, 1]),
+  decelerate: Object.freeze([0, 0, 0.2, 1]),
+  accelerate: Object.freeze([0.4, 0, 1, 1]),
+});
+export const motionLoopMinimumDurationMilliseconds = 500;
+
+function roundMotionValue(value) {
+  const rounded = Math.round(value * 10000) / 10000;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function motionCubicBezierY(controlPoints, x) {
+  const [x1, y1, x2, y2] = controlPoints;
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const axis = (a, b) => (t) =>
+    3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t ** 2 * b + t ** 3;
+  const curveX = axis(x1, x2);
+  const curveY = axis(y1, y2);
+  const slopeX = (t) =>
+    3 * (1 - t) ** 2 * x1 + 6 * (1 - t) * t * (x2 - x1) + 3 * t ** 2 * (1 - x2);
+
+  let parameter = x;
+  for (let step = 0; step < 8; step += 1) {
+    const error = curveX(parameter) - x;
+    if (Math.abs(error) < 1e-12) return curveY(parameter);
+    const derivative = slopeX(parameter);
+    if (Math.abs(derivative) < 1e-9) break;
+    parameter -= error / derivative;
+  }
+  let low = 0;
+  let high = 1;
+  parameter = x;
+  for (let step = 0; step < 64; step += 1) {
+    const value = curveX(parameter);
+    if (Math.abs(value - x) < 1e-12) break;
+    if (value > x) high = parameter;
+    else low = parameter;
+    parameter = (low + high) / 2;
+  }
+  return curveY(parameter);
+}
+
+export function easedMotionProgress(easing, fraction) {
+  const controlPoints = motionEasingControlPoints[easing];
+  if (!controlPoints) {
+    throw new TypeError(`Unknown Protocol 0.4 easing preset ${easing}.`);
+  }
+  return motionCubicBezierY(controlPoints, fraction);
+}
+
+export function resolveMotionToken(document, motion) {
+  return resolveTokenValue(document, "motions", "motionToken", motion);
+}
+
+/** The motion capabilities a 0.4 document requires, in canonical order. */
+export function motionCapabilitiesFor(document) {
+  const derived = new Set();
+  for (const { node } of walkDocumentNodes(document)) {
+    if (node.motion?.appear) derived.add("motion.appear");
+    if (node.motion?.selection) derived.add("motion.selection");
+    if (node.motion?.loop) derived.add("motion.loop");
+  }
+  return motionCapabilityNames.filter((name) => derived.has(name));
+}
+
+const motionLiteralColor = /^#[0-9A-F]{8}$/;
+
+function interpolateMotionColor(from, to, progress) {
+  if (JSON.stringify(from) === JSON.stringify(to)) return structuredClone(to);
+  if (typeof from !== "string" || typeof to !== "string") {
+    return structuredClone(progress < 0.5 ? from : to);
+  }
+  if (!motionLiteralColor.test(from) || !motionLiteralColor.test(to)) {
+    return progress < 0.5 ? from : to;
+  }
+  let mixed = "#";
+  for (let offset = 1; offset < 9; offset += 2) {
+    const start = Number.parseInt(from.slice(offset, offset + 2), 16);
+    const end = Number.parseInt(to.slice(offset, offset + 2), 16);
+    const channel = Math.round(start + (end - start) * progress);
+    mixed += channel.toString(16).toUpperCase().padStart(2, "0");
+  }
+  return mixed;
+}
+
+function interpolateMotionNumber(from, to, progress) {
+  return roundMotionValue(from + (to - from) * progress);
+}
+
+function interpolateMotionBackground(from, to, progress) {
+  if (from?.type === "color" && to?.type === "color") {
+    return {
+      type: "color",
+      value: interpolateMotionColor(from.value, to.value, progress),
+    };
+  }
+  return structuredClone(progress < 0.5 ? from : to);
+}
+
+function interpolateMotionShadow(from, to, progress) {
+  if (from?.type === "shadow" && to?.type === "shadow") {
+    return {
+      type: "shadow",
+      color: interpolateMotionColor(from.color, to.color, progress),
+      offsetX: interpolateMotionNumber(from.offsetX, to.offsetX, progress),
+      offsetY: interpolateMotionNumber(from.offsetY, to.offsetY, progress),
+      blurRadius: interpolateMotionNumber(
+        from.blurRadius,
+        to.blurRadius,
+        progress,
+      ),
+    };
+  }
+  return structuredClone(progress < 0.5 ? from : to);
+}
+
+function interpolateMotionStyle(from, to, progress) {
+  const style = {
+    background: interpolateMotionBackground(
+      from.background,
+      to.background,
+      progress,
+    ),
+    border: {
+      color: interpolateMotionColor(from.border.color, to.border.color, progress),
+      width: interpolateMotionNumber(from.border.width, to.border.width, progress),
+    },
+    cornerRadius: interpolateMotionNumber(
+      from.cornerRadius,
+      to.cornerRadius,
+      progress,
+    ),
+    padding: structuredClone(progress < 0.5 ? from.padding : to.padding),
+    opacity: interpolateMotionNumber(from.opacity, to.opacity, progress),
+  };
+  if (from.shadow !== undefined || to.shadow !== undefined) {
+    style.shadow = interpolateMotionShadow(from.shadow, to.shadow, progress);
+  }
+  return style;
+}
+
+export function resolveMotionFrame(
+  motion,
+  { trigger, elapsedMilliseconds, reducedMotion = false, resolvedFrom, resolvedTo } = {},
+) {
+  if (!Number.isInteger(elapsedMilliseconds) || elapsedMilliseconds < 0) {
+    throw new TypeError(
+      "Motion frame resolution requires a whole, non-negative elapsed time in milliseconds.",
+    );
+  }
+  if (typeof reducedMotion !== "boolean") {
+    throw new TypeError(
+      "Motion frame resolution requires an explicit reduced-motion signal.",
+    );
+  }
+  if (trigger !== "appear" && trigger !== "selection" && trigger !== "loop") {
+    throw new TypeError(`Unknown Protocol 0.4 motion trigger ${trigger}.`);
+  }
+  const endpointsSupplied = resolvedFrom !== undefined || resolvedTo !== undefined;
+  if (trigger === "selection" && (!resolvedFrom || !resolvedTo)) {
+    throw new TypeError(
+      "A selection frame requires resolvedFrom and resolvedTo styles.",
+    );
+  }
+  if (trigger !== "selection" && endpointsSupplied) {
+    throw new TypeError(
+      `A ${trigger} frame does not interpolate between two styles; resolvedFrom and resolvedTo must be omitted.`,
+    );
+  }
+  const curve = motion?.curve;
+  if (curve?.type !== "motion") {
+    throw new TypeError(
+      "Motion frame resolution requires an inline curve; resolve motionToken references against the document first.",
+    );
+  }
+
+  if (trigger === "appear") {
+    if (motion.effect !== "fade" && motion.effect !== "fadeRise") {
+      throw new TypeError(`Unknown Protocol 0.4 appear effect ${motion.effect}.`);
+    }
+    const rise = motion.effect === "fadeRise" ? motion.riseLogicalSize : 0;
+    const start = motion.delayMilliseconds;
+    const end = start + curve.durationMilliseconds;
+    if (elapsedMilliseconds >= end) {
+      return {
+        trigger,
+        reducedMotion,
+        complete: true,
+        progress: 1,
+        opacity: 1,
+        translateLogicalSize: 0,
+      };
+    }
+    if (elapsedMilliseconds <= start) {
+      return {
+        trigger,
+        reducedMotion,
+        complete: false,
+        progress: 0,
+        opacity: 0,
+        translateLogicalSize: reducedMotion ? 0 : roundMotionValue(rise),
+      };
+    }
+    const progress = easedMotionProgress(
+      curve.easing,
+      (elapsedMilliseconds - start) / curve.durationMilliseconds,
+    );
+    return {
+      trigger,
+      reducedMotion,
+      complete: false,
+      progress: roundMotionValue(progress),
+      opacity: roundMotionValue(progress),
+      translateLogicalSize: reducedMotion
+        ? 0
+        : roundMotionValue(rise * (1 - progress)),
+    };
+  }
+
+  if (trigger === "selection") {
+    if (reducedMotion || elapsedMilliseconds >= curve.durationMilliseconds) {
+      return {
+        trigger,
+        reducedMotion,
+        complete: true,
+        progress: 1,
+        style: structuredClone(resolvedTo),
+      };
+    }
+    const progress = easedMotionProgress(
+      curve.easing,
+      elapsedMilliseconds / curve.durationMilliseconds,
+    );
+    return {
+      trigger,
+      reducedMotion,
+      complete: false,
+      progress: roundMotionValue(progress),
+      style: interpolateMotionStyle(resolvedFrom, resolvedTo, progress),
+    };
+  }
+
+  if (motion.effect !== "pulse") {
+    throw new TypeError(`Unknown Protocol 0.4 loop effect ${motion.effect}.`);
+  }
+  const cycleMilliseconds = curve.durationMilliseconds;
+  const totalMilliseconds = cycleMilliseconds * motion.repeat.count;
+  const atRest = {
+    trigger,
+    reducedMotion,
+    complete: true,
+    cycle: motion.repeat.count,
+    cyclePhase: 0,
+    excursion: 0,
+    scale: 1,
+    opacityMultiplier: 1,
+  };
+  if (reducedMotion) return { ...atRest, cycle: 0 };
+  if (elapsedMilliseconds >= totalMilliseconds) return atRest;
+  const cycle = Math.floor(elapsedMilliseconds / cycleMilliseconds);
+  const cyclePhase =
+    (elapsedMilliseconds - cycle * cycleMilliseconds) / cycleMilliseconds;
+  const halfPhase = cyclePhase < 0.5 ? cyclePhase * 2 : (1 - cyclePhase) * 2;
+  const excursion = easedMotionProgress(curve.easing, halfPhase);
+  return {
+    trigger,
+    reducedMotion,
+    complete: false,
+    cycle,
+    cyclePhase: roundMotionValue(cyclePhase),
+    excursion: roundMotionValue(excursion),
+    scale: roundMotionValue(1 + motion.scaleAmplitude * excursion),
+    opacityMultiplier: roundMotionValue(1 - motion.opacityAmplitude * excursion),
+  };
 }
 
 export function resolveAxisSizing(
