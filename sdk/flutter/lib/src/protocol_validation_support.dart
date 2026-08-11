@@ -323,10 +323,16 @@ void _validateCapabilities(
   }
   if (document.products.isNotEmpty) expected.add('product.references');
   final designSystem = document.designSystem!;
+  // Deliberately blind to `motions`. 0.4 inherits this derivation from 0.3
+  // unchanged, and a motion catalog already derives its own capabilities at the
+  // reference site — `motion.appear`, `motion.selection`, `motion.loop` — while
+  // the unused-token rule guarantees the catalog is non-empty only when a node
+  // reaches it. Adding `motions` here would make a motion-only document declare
+  // a style capability the protocol never derives for it, and reject a valid
+  // canonical fixture as configuration-unavailable.
   if (designSystem.colors.isNotEmpty ||
       designSystem.backgrounds.isNotEmpty ||
-      designSystem.shadows.isNotEmpty ||
-      designSystem.motions.isNotEmpty) {
+      designSystem.shadows.isNotEmpty) {
     expected.add('style.designTokens');
   }
   if (_allV03Backgrounds(document).map(document.resolveBackground).any(

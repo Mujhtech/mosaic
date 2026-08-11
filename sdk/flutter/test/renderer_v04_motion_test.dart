@@ -22,9 +22,11 @@ void main() {
   const loopScaleKey = ValueKey<String>('mosaic-loop-scale');
   const loopOpacityKey = ValueKey<String>('mosaic-loop-opacity');
 
-  MosaicPaywallDocument document() => const MosaicProtocolDecoder().decode(
-        repositoryFile('protocol/fixtures/v0.4/complete-paywall.json')
-            .readAsStringSync(),
+  MosaicPaywallDocument fixtureDocument([
+    String name = 'complete-paywall.json',
+  ]) =>
+      const MosaicProtocolDecoder().decode(
+        repositoryFile('protocol/fixtures/v0.4/$name').readAsStringSync(),
       );
 
   Future<void> pumpPaywall(
@@ -32,6 +34,7 @@ void main() {
     required bool reducedMotion,
     MosaicMotionDriver driver = const MosaicMotionDriver(),
     DateTime Function()? clock,
+    MosaicPaywallDocument? document,
   }) async {
     tester.view.physicalSize = const Size(600, 3000);
     tester.view.devicePixelRatio = 1;
@@ -41,7 +44,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: MosaicPaywall(
-            document: document(),
+            document: document ?? fixtureDocument(),
             purchaseProvider: MockMosaicPurchaseProvider(
               products: const <MosaicProduct>[
                 MosaicProduct(
@@ -396,6 +399,94 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 120));
     expect(sheetTitleOpacity(), 1);
+  });
+
+  testWidgets(
+      'a screen round trip replays the entrance and refreshes the pulse budget',
+      (tester) async {
+    // The positive half of the replay ruling, which the Sheet tests can only
+    // cover negatively: two Screen-presentation screens joined by navigateTo
+    // and navigateBack. The start screen genuinely leaves the tree, so
+    // returning to it is a fresh viewing context — its entrance plays again and
+    // its pulse is handed a new budget, because `repeat.count` is a bound per
+    // entry rather than per session.
+    await pumpPaywall(
+      tester,
+      reducedMotion: false,
+      document: fixtureDocument('screen-round-trip.json'),
+    );
+
+    double entranceOpacity() => tester
+        .widget<Opacity>(
+            within('mosaic-appear-start-content', appearOpacityKey))
+        .opacity;
+    double entranceTravel() => tester
+        .widget<Transform>(
+          within('mosaic-appear-start-content', appearTranslateKey),
+        )
+        .transform
+        .getTranslation()
+        .y;
+    double pulseScale() => tester
+        .widget<Transform>(within('mosaic-loop-view-details', loopScaleKey))
+        .transform
+        .getMaxScaleOnAxis();
+
+    // First entry: a 240ms fadeRise from 12 logical units, and three 900ms
+    // cycles of a 0.04 pulse.
+    expect(entranceOpacity(), 0);
+    expect(entranceTravel(), closeTo(12, 1e-3));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(pulseScale(), closeTo(1.04, 1e-3));
+
+    // Spend the whole first entry, then hold: the pulse is at rest and stays
+    // there, so what the round trip restarts is a bound that was fully used.
+    await tester.pump(const Duration(milliseconds: 2250));
+    expect(entranceOpacity(), 1);
+    expect(entranceTravel(), 0);
+    expect(pulseScale(), 1);
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(pulseScale(), 1);
+
+    // Leave for the details screen. This is a Screen, not a Sheet, so the start
+    // screen genuinely leaves.
+    await tester.tap(find.byKey(const ValueKey<String>('mosaic-view-details')));
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey<String>('mosaic-appear-start-content')),
+      findsNothing,
+      reason: 'the start screen must not remain mounted behind another Screen',
+    );
+
+    // Come back.
+    await tester.tap(find.byKey(const ValueKey<String>('mosaic-details-back')));
+    await tester.pump();
+    await tester.pump();
+
+    // Both clocks read from node entry again.
+    expect(entranceOpacity(), 0);
+    expect(entranceTravel(), closeTo(12, 1e-3));
+    expect(pulseScale(), closeTo(1, 1e-3));
+
+    // The entrance replays on the same curve it first played.
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(
+      entranceOpacity(),
+      closeTo(mosaicEasedProgress(MosaicMotionEasing.decelerate, 0.5), 1e-3),
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(entranceOpacity(), 1);
+    expect(entranceTravel(), 0);
+
+    // And the pulse excursions again, which it could not do on a spent budget.
+    await tester.pump(const Duration(milliseconds: 210));
+    expect(pulseScale(), closeTo(1.04, 1e-3));
+
+    // The second entry ends where the first did: three cycles, then rest.
+    await tester.pump(const Duration(milliseconds: 2250));
+    expect(entranceOpacity(), 1);
+    expect(pulseScale(), 1);
   });
 
   testWidgets('selection interpolates the authored box style to its target',

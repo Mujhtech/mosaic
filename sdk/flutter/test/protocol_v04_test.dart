@@ -48,7 +48,7 @@ void main() {
 
   test('strictly decodes every canonical valid Protocol 0.4 fixture', () {
     final directory = repositoryDirectory('protocol/fixtures/v0.4');
-    var decoded = 0;
+    final decoded = <String>{};
     for (final file in canonicalFixtureFiles(directory)) {
       final name = file.uri.pathSegments.last;
       // The frame corpus is conformance vectors, not a paywall document.
@@ -58,9 +58,43 @@ void main() {
       final document =
           const MosaicProtocolDecoder().decode(file.readAsStringSync());
       expect(document.schemaVersion, '0.4', reason: name);
-      decoded += 1;
+      decoded.add(name);
     }
-    expect(decoded, greaterThan(1));
+    // Named rather than counted. The sweep is directory-driven, so a fixture
+    // that stops being swept — renamed, moved, or newly excluded — would
+    // otherwise reduce coverage silently while the test still passed.
+    expect(
+      decoded,
+      containsAll(<String>{
+        'complete-paywall.json',
+        'edge-cases.json',
+        'expired-countdown.json',
+        'hidden-purchase-target.json',
+        'navigation-only.json',
+        'screen-round-trip.json',
+      }),
+    );
+  });
+
+  test('a motion-only design system does not derive style.designTokens', () {
+    // 0.4 inherits this derivation from 0.3 unchanged, and 0.3 knows nothing
+    // about motions. Widening it here would reject a valid canonical document
+    // as configuration-unavailable, which is the worst failure mode a reader
+    // has: the paywall is well-formed and the customer sees nothing.
+    final document = const MosaicProtocolDecoder().decode(
+      fixture('screen-round-trip.json'),
+    );
+    final designSystem = document.designSystem!;
+    expect(designSystem.motions, isNotEmpty);
+    expect(designSystem.colors, isEmpty);
+    expect(designSystem.backgrounds, isEmpty);
+    expect(designSystem.shadows, isEmpty);
+
+    final declared =
+        document.compatibility.requiredCapabilities.map((c) => c.name).toSet();
+    expect(declared, isNot(contains('style.designTokens')));
+    // The motion capabilities are derived at the reference site instead.
+    expect(declared, containsAll(<String>{'motion.appear', 'motion.loop'}));
   });
 
   test('rejects every canonical invalid Protocol 0.4 fixture atomically', () {

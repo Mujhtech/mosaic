@@ -32,6 +32,13 @@
   a second budget the author never authorised. Both Sheet-dismissal paths — the
   `navigateBack` Button and a customer-dragged dismissal — now return to the
   mounted screen without recording an entry.
+- **Fix: a motion-only design system no longer derives `style.designTokens`.**
+  0.4 inherits that derivation from 0.3 unchanged, and 0.3 knows nothing about
+  the `motions` catalog — motion derives `motion.appear`, `motion.selection`,
+  and `motion.loop` at the reference site instead. Deriving it from a non-empty
+  `motions` catalog rejected a well-formed document as configuration-
+  unavailable, which is the worst failure mode a reader has: the paywall is
+  valid and the customer sees nothing.
 - **`appear` and `loop` replay on genuine screen re-entry, and the pulse's
   authored cycle bound is spent per screen entry.** Navigating to a Paywall
   Screen and back re-enters the screen left behind, so both clocks restart from
