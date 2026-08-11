@@ -53,6 +53,7 @@ import {
   updateNode,
 } from "@/features/paywall-editor/utils/document-tree-traversal";
 import {
+  isMotionCapableDocument,
   withDocumentParts,
   withScreenParts,
 } from "@/features/paywall-editor/utils/document-version";
@@ -493,8 +494,12 @@ export function FeatureListInspector({
 }: {
   node: Extract<ProtocolNode, { type: "featureList" }>;
 }) {
-  const { disabled } = useInspectorContext();
+  const { disabled, document: editorDocument } = useInspectorContext();
   const editor = useEditorActions();
+  // markerSize is a 0.4 field; on a 0.3 document the control is absent rather
+  // than disabled, because authoring it would produce an invalid document.
+  const markerSizeAuthorable = isMotionCapableDocument(editorDocument);
+  const authoredMarkerSize = "markerSize" in node ? node.markerSize : undefined;
 
   function moveItem(index: number, direction: -1 | 1) {
     editor.updateComponent(node.id, (current) => {
@@ -657,6 +662,55 @@ export function FeatureListInspector({
           }
           value={node.markerColor}
         />
+        {markerSizeAuthorable ? (
+          <>
+            <CheckboxField
+              address="markerSize.enabled"
+              checked={authoredMarkerSize !== undefined}
+              label="Author marker size"
+              onChange={(enabled) =>
+                editor.updateComponent(node.id, (current) => {
+                  if (current.type !== "featureList") {
+                    return current;
+                  }
+                  if (enabled) {
+                    return {
+                      ...current,
+                      markerSize: current.typography.fontSize,
+                    } as typeof current;
+                  }
+                  const next = { ...current };
+                  if ("markerSize" in next) {
+                    delete next.markerSize;
+                  }
+                  return next;
+                })
+              }
+            />
+            {authoredMarkerSize === undefined ? (
+              <p className="text-[11px] text-muted-foreground leading-4">
+                Unauthored, the marker draws at the list&apos;s font size.
+              </p>
+            ) : (
+              <NumberField
+                address="markerSize"
+                exclusiveMin
+                label="Marker size"
+                max={4096}
+                min={0}
+                onChange={(markerSize) =>
+                  editor.updateComponent(node.id, (current) =>
+                    current.type === "featureList"
+                      ? ({ ...current, markerSize } as typeof current)
+                      : current
+                  )
+                }
+                unit="lu"
+                value={authoredMarkerSize}
+              />
+            )}
+          </>
+        ) : null}
       </AppearanceSection>
       <VisibilitySection node={node} />
       <ControlAccessibilitySection node={node} />

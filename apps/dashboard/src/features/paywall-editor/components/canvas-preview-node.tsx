@@ -35,6 +35,7 @@ import {
   resolveCardStyle,
 } from "@/features/paywall-editor/utils/document-version";
 import {
+  resolvedFeatureListMarkerSize,
   resolvedItemMarker,
   resolvedMarker,
 } from "@/features/paywall-editor/utils/marker";
@@ -261,17 +262,12 @@ function renderIcon(
   );
 }
 
-/**
- * The Feature List marker box. Timeline authors its own marker size; a Feature
- * List does not, so the canvas draws it at the size the templates already use.
- */
-const FEATURE_LIST_MARKER_SIZE = 20;
-
 function renderFeatureList(
   node: Extract<ProtocolNode, { type: "featureList" }>,
   context: PreviewNodeContext
 ): ReactNode {
   const { document, locale } = context;
+  const markerSize = resolvedFeatureListMarkerSize(node);
   return (
     <ul
       aria-label={resolveLocalizedText(
@@ -304,6 +300,7 @@ function renderFeatureList(
                 aria-hidden
                 className="mt-0.5 shrink-0"
                 color={markerColor}
+                size={markerSize}
                 weight="bold"
               />
             ) : (
@@ -311,12 +308,12 @@ function renderFeatureList(
                 className="mt-0.5 flex shrink-0 items-center justify-center"
                 style={{
                   color: markerColor,
-                  minWidth: FEATURE_LIST_MARKER_SIZE,
+                  minWidth: markerSize,
                 }}
               >
                 {markerGlyph(marker, index, {
                   color: markerColor,
-                  size: FEATURE_LIST_MARKER_SIZE,
+                  size: markerSize,
                 })}
               </span>
             )}

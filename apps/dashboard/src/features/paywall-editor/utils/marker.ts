@@ -43,6 +43,21 @@ export function resolvedItemMarker(
   return resolvedMarker(itemMarker ?? list.marker);
 }
 
+/**
+ * The size a Feature List marker draws at.
+ *
+ * 0.4 lets the component author `markerSize`; when it is absent — and on every
+ * 0.3 document, which cannot author it — the size is the list's own
+ * `typography.fontSize`. The contract forbids a renderer substituting a value
+ * of its own, and the canvas is a renderer for this purpose.
+ */
+export function resolvedFeatureListMarkerSize(
+  list: FeatureListComponent
+): number {
+  const authored = "markerSize" in list ? list.markerSize : undefined;
+  return authored ?? list.typography.fontSize;
+}
+
 /** The icon a marker draws, or null when the marker is not an icon. */
 export function markerIconName(marker: AuthoredMarker): IconName | null {
   const resolved = resolvedMarker(marker);

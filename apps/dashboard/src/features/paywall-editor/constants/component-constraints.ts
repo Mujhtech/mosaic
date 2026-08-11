@@ -138,7 +138,8 @@ export const COMPONENT_CONSTRAINTS: Readonly<
   featureList: {
     definition: "featureListComponent",
     requiredContent: ["marker", "markerColor"],
-    optionalContent: [],
+    // markerSize is 0.4-only; absent, the marker draws at typography.fontSize.
+    optionalContent: ["markerSize"],
     collection: {
       property: "items",
       noun: "benefit items",

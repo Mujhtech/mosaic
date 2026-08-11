@@ -15,18 +15,19 @@ import {
  * fails, instead of the dashboard quietly telling authors an old number.
  */
 const SCHEMA_RELATIVE_PATH = "protocol/schema/v0.3/paywall.schema.json";
+const SCHEMA_V04_RELATIVE_PATH = "protocol/schema/v0.4/paywall.schema.json";
 
-function locateSchema() {
+function locateSchema(relativePath: string) {
   let directory = process.cwd();
   for (;;) {
-    const candidate = resolve(directory, SCHEMA_RELATIVE_PATH);
+    const candidate = resolve(directory, relativePath);
     if (existsSync(candidate)) {
       return candidate;
     }
     const parent = dirname(directory);
     if (parent === directory) {
       throw new Error(
-        `Could not locate ${SCHEMA_RELATIVE_PATH} above ${process.cwd()}`
+        `Could not locate ${relativePath} above ${process.cwd()}`
       );
     }
     directory = parent;
@@ -38,9 +39,35 @@ interface SchemaDefinition {
   required?: string[];
 }
 
-const definitions = JSON.parse(readFileSync(locateSchema(), "utf8")).$defs as
-  | Record<string, SchemaDefinition>
-  | undefined;
+type SchemaDefinitions = Record<string, SchemaDefinition> | undefined;
+
+function loadDefinitions(relativePath: string): SchemaDefinitions {
+  return JSON.parse(readFileSync(locateSchema(relativePath), "utf8"))
+    .$defs as SchemaDefinitions;
+}
+
+// Studio authors both contract versions, so a constraint field is legitimate
+// when either schema declares it: `markerSize` on a Feature List exists only in
+// 0.4, while everything 0.3 declares carries into the 0.4 superset. Required
+// status is read from 0.3 (the baseline both versions share); a field only 0.4
+// declares is optional by construction, because 0.4 is a pure superset whose
+// additions are all optional.
+const definitionsV03 = loadDefinitions(SCHEMA_RELATIVE_PATH);
+const definitionsV04 = loadDefinitions(SCHEMA_V04_RELATIVE_PATH);
+const definitions: SchemaDefinitions =
+  definitionsV03 &&
+  Object.fromEntries(
+    Object.entries(definitionsV03).map(([name, definition]) => [
+      name,
+      {
+        ...definition,
+        properties: {
+          ...definitionsV04?.[name]?.properties,
+          ...definition.properties,
+        },
+      },
+    ])
+  );
 
 function fieldProblems(fields: SchemaFields): string[] {
   const definition = definitions?.[fields.definition];
