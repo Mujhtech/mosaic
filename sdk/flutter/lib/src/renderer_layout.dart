@@ -393,23 +393,19 @@ extension on _MosaicPaywallState {
                 color: component.markerColor == null
                     ? Theme.of(context).colorScheme.primary
                     : _color(context, component.markerColor!),
-                size: 20,
+                size: component.resolvedMarkerSize,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 _localization.text(item.text),
-                style: component.typography == null
-                    ? null
-                    : _textStyle(
-                        context,
-                        component.typography,
-                        component.typography!.style,
-                      ),
-                textAlign: component.typography == null
-                    ? null
-                    : _textAlign(component.typography!.alignment),
+                style: _textStyle(
+                  context,
+                  component.typography,
+                  component.typography.style,
+                ),
+                textAlign: _textAlign(component.typography.alignment),
               ),
             ),
           ],

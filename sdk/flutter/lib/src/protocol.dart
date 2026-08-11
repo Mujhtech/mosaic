@@ -796,9 +796,19 @@ final class MosaicPaywallDocument {
       return;
     }
     for (final screen in screens) {
-      yield screen.layout;
-      yield* _walkStack(screen.layout.content);
+      yield* nodesIn(screen);
     }
+  }
+
+  /// Every node on [screen], the screen's own Scroll Container first.
+  ///
+  /// [nodes] flattens the whole document and so cannot answer which screen a
+  /// node belongs to. A renderer needs that: motion is scoped to *screen
+  /// entry*, so a node's clock has to follow the entry count of its own
+  /// screen rather than the document's most recent navigation.
+  Iterable<MosaicNode> nodesIn(MosaicPaywallScreen screen) sync* {
+    yield screen.layout;
+    yield* _walkStack(screen.layout.content);
   }
 
   static Iterable<MosaicNode> _walkStack(MosaicStackNode stack) sync* {

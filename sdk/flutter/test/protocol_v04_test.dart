@@ -75,7 +75,7 @@ void main() {
       );
       rejected.add(name);
     }
-    // The five motion rejections are the point of this sweep: a document that
+    // The motion rejections are the point of this sweep: a document that
     // authors unsafe or incoherent motion must not reach a renderer at all.
     expect(
       rejected,
@@ -87,7 +87,40 @@ void main() {
         'rise-on-fade-appear.json',
         'unknown-motion-token.json',
         'unused-motion-token.json',
+        // A token reached only from another *unreached* token. Usage is
+        // reachability from node reference sites, so a pair of orphans cannot
+        // vouch for each other.
+        'unused-token-transitive.json',
       }),
+    );
+  });
+
+  test('motion token usage is reachability from node reference sites', () {
+    // The transitive fixture is rejected either way, because its orphaned
+    // alias has nothing pointing at it. What separates the two readings is
+    // *which* token is named, and the catalog order is what exposes it: with
+    // the target declared first, a validator that treats the catalog as its
+    // own usage root sees the alias vouch for the target and walks past it.
+    // Usage is reachability from a node, so both orphans are unused and the
+    // first one in the catalog is the one reported.
+    final source = jsonDecode(fixture('invalid/unused-token-transitive.json'))!
+        as Map<String, Object?>;
+    final motions = (source['designSystem']!
+        as Map<String, Object?>)['motions']! as List<Object?>;
+    final alias = motions.removeAt(motions.length - 2);
+    expect((alias as Map<String, Object?>)['id'], 'motion-orphan-a');
+    expect((motions.last! as Map<String, Object?>)['id'], 'motion-orphan-b');
+    motions.add(alias);
+
+    expect(
+      () => const MosaicProtocolDecoder().decode(jsonEncode(source)),
+      throwsA(
+        isA<MosaicProtocolException>().having(
+          (error) => error.message,
+          'message',
+          contains('motion-orphan-b'),
+        ),
+      ),
     );
   });
 

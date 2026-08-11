@@ -21,6 +21,7 @@ final class MosaicAppearMotionScope extends StatefulWidget {
     required this.driver,
     required this.motion,
     required this.reducedMotion,
+    required this.screenEntryCount,
     required this.child,
     super.key,
   });
@@ -32,6 +33,14 @@ final class MosaicAppearMotionScope extends StatefulWidget {
   /// inventing a duration nobody authored.
   final MosaicAppearMotion motion;
   final bool reducedMotion;
+
+  /// How many times the node's screen has been entered.
+  ///
+  /// Node entry is the contract's time origin, and a screen the customer
+  /// navigates back to is entered again. This renderer keeps the screen below
+  /// a Sheet mounted, so mounting cannot be the signal — a change in this
+  /// count is.
+  final int screenEntryCount;
   final Widget child;
 
   @override
@@ -57,6 +66,17 @@ final class _MosaicAppearMotionScopeState extends State<MosaicAppearMotionScope>
     super.initState();
     if (!widget.driver.enabled) return;
     _timeline = widget.driver.createTimeline(this)..start();
+  }
+
+  @override
+  void didUpdateWidget(MosaicAppearMotionScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The clock is restarted rather than the scope being re-keyed. Re-keying
+    // would rebuild the subtree from scratch and silently reset the state
+    // under it — a Carousel's page, a Tabs selection, a video controller —
+    // none of which a screen re-entry is supposed to touch.
+    if (oldWidget.screenEntryCount == widget.screenEntryCount) return;
+    _timeline?.start();
   }
 
   @override
@@ -109,6 +129,7 @@ final class MosaicLoopMotionScope extends StatefulWidget {
     required this.driver,
     required this.motion,
     required this.reducedMotion,
+    required this.screenEntryCount,
     required this.child,
     super.key,
   });
@@ -116,6 +137,13 @@ final class MosaicLoopMotionScope extends StatefulWidget {
   final MosaicMotionDriver driver;
   final MosaicLoopMotion motion;
   final bool reducedMotion;
+
+  /// How many times the node's screen has been entered.
+  ///
+  /// The authored cycle bound is spent **per screen entry**, not once for the
+  /// life of the paywall: a customer who leaves for a detail screen and comes
+  /// back is entering the screen again, and sees the pulse again.
+  final int screenEntryCount;
   final Widget child;
 
   @override
@@ -134,6 +162,13 @@ final class _MosaicLoopMotionScopeState extends State<MosaicLoopMotionScope>
     // wrap.
     if (!widget.driver.enabled || widget.reducedMotion) return;
     _timeline = widget.driver.createTimeline(this)..start();
+  }
+
+  @override
+  void didUpdateWidget(MosaicLoopMotionScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.screenEntryCount == widget.screenEntryCount) return;
+    _timeline?.start();
   }
 
   @override

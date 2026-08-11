@@ -76,12 +76,14 @@ extension on _MosaicPaywallState {
     if (motion == null) return child;
     final resolved = widget.document.resolveNodeMotion(motion);
     var result = child;
+    final screenEntryCount = _screenEntryCountFor(node);
     if (resolved.loop case final loop?) {
       result = MosaicLoopMotionScope(
         key: ValueKey<String>('mosaic-loop-${node.id}'),
         driver: widget.motionDriver,
         motion: loop,
         reducedMotion: _reducedMotion,
+        screenEntryCount: screenEntryCount,
         child: result,
       );
     }
@@ -93,10 +95,22 @@ extension on _MosaicPaywallState {
         driver: widget.motionDriver,
         motion: appear,
         reducedMotion: _reducedMotion,
+        screenEntryCount: screenEntryCount,
         child: result,
       );
     }
     return result;
+  }
+
+  /// How many times the screen holding [node] has been entered.
+  ///
+  /// A node outside every screen — the legacy single-layout projection — has no
+  /// screen to be entered, so it holds the paywall's own presentation as its
+  /// one entry.
+  int _screenEntryCountFor(MosaicNode node) {
+    final screenId = _screenIdByNodeId[node.id];
+    if (screenId == null) return 1;
+    return _screenEntryCounts[screenId] ?? 0;
   }
 
   Widget _applySizing(

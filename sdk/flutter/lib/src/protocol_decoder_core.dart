@@ -413,11 +413,14 @@ final class _DocumentDecoder {
         'typography',
         'accessibility',
       },
-      optional: const <String>{
+      optional: <String>{
         'appearance',
         'sizing',
         'outerInsets',
         'visibility',
+        // Authorable only from 0.4. A 0.3 Feature List that declares it is an
+        // unknown key, which is a rejection rather than a silent drop.
+        if (isV04) 'markerSize',
       },
     );
     // 0.3 has one constant glyph and cannot express a negated item; 0.4
@@ -449,6 +452,18 @@ final class _DocumentDecoder {
       ),
       marker: marker,
       markerColor: _docColor(object['markerColor'], '$path.markerColor'),
+      // Bounded exactly as Timeline's `markerSize` is: a positive logical
+      // size. Absent is kept as absent rather than folded into a value here,
+      // because the schema's default is another authored field on the same
+      // component and reading it belongs on the model, not in the decoder.
+      markerSize: object.containsKey('markerSize')
+          ? _boundedNumber(
+              object['markerSize'],
+              '$path.markerSize',
+              minimumExclusive: 0,
+              maximum: 4096,
+            )
+          : null,
       typography: typography,
       appearance: _docOptionalAppearance(object, path),
       sizing: _docOptionalSizing(object, path),

@@ -23,10 +23,47 @@
   wait for the entrance — and the two compose on the node's own values as
   `opacity = static × appearProgress × loopOpacityMultiplier`, `scale =
   loopScale`.
+- **A Sheet over a screen is not a re-entry for that screen.** `appear` and
+  `loop` replay on genuine screen re-entry, and `repeat.count` is a bound per
+  entry — but this renderer keeps the screen beneath a Sheet mounted, which is
+  why its scroll position, selection, and Carousel page survive the round trip.
+  Closing a Sheet previously counted as an entry for the screen underneath,
+  replaying an entrance the customer had already watched and handing the pulse
+  a second budget the author never authorised. Both Sheet-dismissal paths — the
+  `navigateBack` Button and a customer-dragged dismissal — now return to the
+  mounted screen without recording an entry.
+- **`appear` and `loop` replay on genuine screen re-entry, and the pulse's
+  authored cycle bound is spent per screen entry.** Navigating to a Paywall
+  Screen and back re-enters the screen left behind, so both clocks restart from
+  node entry. Mounting could not be the signal here: this renderer keeps the
+  screen beneath a Sheet mounted so its scroll position, selection, and
+  Carousel page survive the round trip. Entry is tracked as navigation state
+  and delivered to the two motion scopes, which restart their timelines rather
+  than being re-keyed — re-keying would rebuild the subtree and reset exactly
+  the state the round trip is supposed to preserve. Leaving a screen is not
+  entering it, so the screen being navigated away from does not replay, and an
+  accepted revision carries entry counts forward rather than resetting them, so
+  a designer nudging padding in Local Preview is not strobed once per keystroke.
 - Add `MosaicMotionDriver`, an injectable enabled flag plus a per-animation
   elapsed-time source, alongside the existing `MosaicClock`. Tests pin frames
   with `tester.pump(duration)` and static goldens are captured with
   `MosaicMotionDriver.disabled()`.
+- **Honour `featureListComponent.markerSize`, and drop Flutter's hardcoded
+  `20`.** The field is a `positiveLogicalSize` bounded exactly as Timeline's,
+  optional, and its absence means the list's own `typography.fontSize` — the
+  protocol's normative default, not a renderer's choice.
+  `MosaicFeatureListComponent.resolvedMarkerSize` applies it, and `typography`
+  becomes non-nullable on that component because the protocol requires it and
+  the default reads its `fontSize`. This changes what a `0.3` document draws as
+  well as a `0.4` one, which is deliberate: the migration's claim that a
+  migrated `0.3` document renders identically only holds if both versions
+  resolve the absent size the same way. Both canonical goldens are recaptured.
+- **A motion token is used when a *node* reaches it, transitively.** The
+  unused-token rule previously counted a token as referenced if any
+  `designSystem` value named it, including another unused token, so a pair of
+  orphaned aliases could vouch for each other. Reachability is now rooted at
+  node reference sites only and expands through token values, matching the
+  reference validator.
 - **The Countdown tick no longer rebuilds the whole document.** It moves onto
   the motion driver as a scoped `Listenable`, so one second advancing one line
   of text rebuilds the Countdown — and the Product Card labels that quote one —

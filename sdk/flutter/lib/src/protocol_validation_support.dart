@@ -489,7 +489,7 @@ Iterable<MosaicTypography> _nodeTypographies(MosaicNode node) sync* {
     case MosaicTextComponent():
       if (node.typography case final typography?) yield typography;
     case MosaicFeatureListComponent():
-      if (node.typography case final typography?) yield typography;
+      yield node.typography;
     case MosaicSwitchComponent():
       yield node.typography;
     case MosaicCountdownComponent():

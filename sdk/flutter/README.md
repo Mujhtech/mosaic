@@ -88,6 +88,23 @@ entirely, `selection` applies instantly, `loop` never leaves rest, and a video
 background does not play — the declared poster is rendered, and its fallback
 colour when no poster is declared.
 
+`appear` and `loop` are scoped to **screen entry**, and a Paywall Screen the
+customer navigates back to is entered again: both clocks restart from node
+entry, and the pulse's authored `1…5` cycle bound is spent per entry rather
+than once for the life of the paywall. A widget's own mount cannot be that
+signal on this platform, because this renderer keeps the screen beneath a Sheet
+mounted so its scroll position, selection, and Carousel page survive the round
+trip; entry is tracked as navigation state instead. Leaving a screen is not
+entering it, so the screen being navigated away from does not replay, and an
+accepted revision carries entry counts forward so that a Local Preview keystroke
+does not strobe the canvas.
+
+Feature List `markerSize` is honoured when authored and otherwise resolves to
+the list's own `typography.fontSize` — the protocol's normative default, which
+this renderer applies to `0.3` documents as well so that a migrated document
+renders identically in both versions. Read `resolvedMarkerSize` on
+`MosaicFeatureListComponent` for the value drawn.
+
 Pin frames in tests with `tester.pump(duration)`. Never call `pumpAndSettle` on
 a document with a running `loop`: a pulse schedules frames for as long as it
 runs.

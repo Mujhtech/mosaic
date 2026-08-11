@@ -188,9 +188,10 @@ final class MosaicFeatureListComponent extends MosaicComponent {
     required this.itemSpacing,
     required Iterable<MosaicFeatureListItem> items,
     required this.accessibility,
+    required this.typography,
     this.marker = const MosaicIconMarker(MosaicIconName.checkmark),
     this.markerColor,
-    this.typography,
+    this.markerSize,
     this.appearance,
     this.sizing,
     this.outerInsets,
@@ -209,11 +210,36 @@ final class MosaicFeatureListComponent extends MosaicComponent {
   /// colour and size stay component-level, as they are on Timeline.
   final MosaicMarker marker;
   final MosaicColorValue? markerColor;
-  final MosaicTypography? typography;
+
+  /// The authored glyph extent, from Protocol 0.4, or `null` when the list
+  /// leaves it to the default.
+  ///
+  /// Mirrors Timeline's `markerSize` — the same positive logical size, bounded
+  /// the same way — but is optional rather than conditionally required,
+  /// because a Feature List always declares a marker and so always has a size
+  /// to fall back on. Read [resolvedMarkerSize] to draw; this field stays
+  /// nullable so an authored size remains distinguishable from a defaulted
+  /// one.
+  final double? markerSize;
+
+  /// Required by the protocol on every Feature List, and so non-null here.
+  ///
+  /// [resolvedMarkerSize] reads its `fontSize`, which is what makes the
+  /// default an authored value on this same component rather than a constant
+  /// each renderer picks for itself.
+  final MosaicTypography typography;
   final MosaicBoxAppearance? appearance;
   final MosaicSizing? sizing;
   final MosaicEdgeInsets? outerInsets;
   final MosaicVisibility visibility;
+
+  /// The glyph extent to draw: the authored [markerSize], or the schema's
+  /// documented default of the list's own `typography.fontSize`.
+  ///
+  /// The fallback is deliberately not a renderer constant. Flutter drew a
+  /// hardcoded 20 before `0.4` made the field authorable, which is exactly the
+  /// per-platform divergence naming a default on the same component removes.
+  double get resolvedMarkerSize => markerSize ?? typography.fontSize;
 
   @override
   String get type => 'featureList';

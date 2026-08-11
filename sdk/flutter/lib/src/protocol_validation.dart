@@ -248,35 +248,63 @@ void _validateMotionSemantics(
   _requireUnique(motions.map((token) => token.name), 'motion token name');
 
   // Every reference resolves and the graph is acyclic, exactly as the other
-  // three catalogs require.
-  final referenced = <String>{};
-  void resolve(MosaicMotion motion) {
-    if (motion is MosaicMotionTokenReference) referenced.add(motion.id);
-    document.resolveMotion(motion);
+  // three catalogs require. Checked over the whole catalog, including tokens
+  // the reachability walk below never visits, so an unknown target or a cycle
+  // is reported as what it is rather than as a downstream unused token.
+  for (final token in motions) {
+    document.resolveMotion(token.value);
   }
 
-  for (final token in motions) {
-    resolve(token.value);
+  final tokensById = <String, MosaicDesignToken<MosaicMotion>>{
+    for (final token in motions) token.id: token,
+  };
+  // Reachability is rooted at *node* reference sites only, and expands through
+  // token values transitively.
+  //
+  // Treating the catalog as its own root would let a token be vouched for by
+  // another token that nothing reaches: an orphaned alias pair would keep each
+  // other alive, and both would sit in the catalog looking approved. Only a
+  // node draws a motion, so only a node can root reachability.
+  final reachable = <String>{};
+  void reach(MosaicMotion motion) {
+    var current = motion;
+    while (current is MosaicMotionTokenReference) {
+      if (!reachable.add(current.id)) return;
+      final token = tokensById[current.id];
+      // An unknown target is already rejected by the resolution pass above.
+      if (token == null) return;
+      current = token.value;
+    }
   }
+
   for (final node in nodes) {
     if (node.motion case final motion?) {
-      if (motion.appear case final appear?) resolve(appear.curve);
-      if (motion.selection case final selection?) resolve(selection.curve);
-      if (motion.loop case final loop?) resolve(loop.curve);
+      if (motion.appear case final appear?) {
+        document.resolveMotion(appear.curve);
+        reach(appear.curve);
+      }
+      if (motion.selection case final selection?) {
+        document.resolveMotion(selection.curve);
+        reach(selection.curve);
+      }
+      if (motion.loop case final loop?) {
+        document.resolveMotion(loop.curve);
+        reach(loop.curve);
+      }
     }
   }
 
   // Deliberately asymmetric with the colour, background, and shadow catalogs,
   // which carry no unused-token check. Those are inert values. The safety
   // constraint on a motion lives at its *reference* site — the flash-safety
-  // floor is checked where a loop names a curve — so a token nothing references
+  // floor is checked where a loop names a curve — so a token no node reaches
   // has never been checked against anything and sits in the catalog looking
   // approved. That is a latent accessibility decision, not an inert value.
   for (final token in motions) {
-    if (referenced.contains(token.id)) continue;
+    if (reachable.contains(token.id)) continue;
     throw MosaicProtocolException(
-      'Motion token ${token.id} is unused. An unreferenced motion has never '
-      'been checked against the rules that apply at a reference site.',
+      'Motion token ${token.id} is unused. No node reaches it, so it has '
+      'never been checked against the rules that apply at a reference site.',
     );
   }
 
@@ -771,13 +799,8 @@ void _validateV03RuntimeSemantics(MosaicPaywallDocument document) {
 }
 
 Map<String, String> _v03ScreenByNodeId(MosaicPaywallDocument document) {
-  final result = <String, String>{};
-  for (final screen in document.screens) {
-    result[screen.layout.id] = screen.id;
-    for (final node
-        in MosaicPaywallDocument._walkStack(screen.layout.content)) {
-      result[node.id] = screen.id;
-    }
-  }
-  return result;
+  return <String, String>{
+    for (final screen in document.screens)
+      for (final node in document.nodesIn(screen)) node.id: screen.id,
+  };
 }

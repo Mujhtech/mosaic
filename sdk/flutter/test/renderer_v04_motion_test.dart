@@ -299,6 +299,105 @@ void main() {
     expect(composedOpacity(), 1);
   });
 
+  testWidgets('a Sheet over a screen is not a re-entry for that screen',
+      (tester) async {
+    // Ruling: `appear` and `loop` replay on genuine screen re-entry, and
+    // `repeat.count` is a bound per entry. A Sheet is the case that looks like
+    // one and is not: it is presented *over* its screen, and this renderer
+    // keeps that screen mounted underneath — which is why its scroll position,
+    // selection, and Carousel page survive the round trip. Motion has to agree
+    // with the rest of the screen's state, so opening and closing a Sheet must
+    // neither replay the entrance beneath it nor hand its pulse a second
+    // budget.
+    await pumpPaywall(tester, reducedMotion: false);
+
+    double appearProgress() => tester
+        .widget<Opacity>(within('mosaic-appear-purchase', appearOpacityKey))
+        .opacity;
+    double loopScale() => tester
+        .widget<Transform>(within('mosaic-loop-purchase', loopScaleKey))
+        .transform
+        .getMaxScaleOnAxis();
+
+    // Spend the offer screen's only entry: a 240ms delayed 240ms entrance and
+    // three 900ms cycles, then permanent rest.
+    await tester.pump(const Duration(milliseconds: 3000));
+    expect(appearProgress(), 1);
+    expect(loopScale(), 1);
+
+    // Presenting the Sheet leaves the screen beneath it exactly where it was.
+    await tester.tap(find.byKey(const ValueKey<String>('mosaic-view-details')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(appearProgress(), 1);
+    expect(loopScale(), 1);
+
+    // Dismissing it does not re-enter the screen underneath. A replay here
+    // would restart an entrance the customer already watched and spend a
+    // second pulse budget the author never authorised.
+    await tester.tap(find.byKey(const ValueKey<String>('mosaic-details-back')));
+    await tester.pump();
+    expect(appearProgress(), 1);
+    expect(loopScale(), 1);
+
+    // Held across a full further cycle: the pulse is spent, not merely paused
+    // at a cycle boundary where rest and a restart look identical.
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(loopScale(), 1);
+    await tester.pump(const Duration(milliseconds: 2550));
+    expect(appearProgress(), 1);
+    expect(loopScale(), 1);
+  });
+
+  testWidgets('reopening a Sheet is a genuine entry for the Sheet itself',
+      (tester) async {
+    // The other half of the ruling: each user-initiated navigation entry is a
+    // fresh viewing context, so the Sheet's own nodes animate on every
+    // presentation rather than once ever.
+    await pumpPaywall(tester, reducedMotion: false);
+    await tester.pump(const Duration(milliseconds: 3000));
+
+    double sheetTitleOpacity() => tester
+        .widget<Opacity>(
+            within('mosaic-appear-details-title', appearOpacityKey))
+        .opacity;
+
+    Future<void> openSheet() async {
+      await tester
+          .tap(find.byKey(const ValueKey<String>('mosaic-view-details')));
+      await tester.pump();
+      await tester.pump();
+    }
+
+    Future<void> closeSheet() async {
+      await tester
+          .tap(find.byKey(const ValueKey<String>('mosaic-details-back')));
+      await tester.pump();
+      await tester.pump();
+    }
+
+    await openSheet();
+    // The Sheet's title carries a fadeRise with no delay, so it starts at zero
+    // and reaches its laid-out position 240ms later.
+    expect(sheetTitleOpacity(), 0);
+    await tester.pump(const Duration(milliseconds: 240));
+    expect(sheetTitleOpacity(), 1);
+
+    await closeSheet();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // A second presentation is a second entry, and replays.
+    await openSheet();
+    expect(sheetTitleOpacity(), 0);
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(
+      sheetTitleOpacity(),
+      closeTo(mosaicEasedProgress(MosaicMotionEasing.decelerate, 0.5), 1e-3),
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(sheetTitleOpacity(), 1);
+  });
+
   testWidgets('selection interpolates the authored box style to its target',
       (tester) async {
     await pumpPaywall(tester, reducedMotion: false);

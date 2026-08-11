@@ -275,6 +275,15 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   final Map<String, String> _tabSelections = <String, String>{};
   final Map<String, int> _carouselPages = <String, int>{};
   final Map<String, double> _screenScrollOffsets = <String, double>{};
+
+  /// How many times each Paywall Screen has been entered this presentation.
+  ///
+  /// Motion is scoped to screen entry, and this renderer keeps the screen
+  /// below a Sheet mounted, so a widget's own mount is not the entry signal.
+  final Map<String, int> _screenEntryCounts = <String, int>{};
+
+  /// The Paywall Screen each node belongs to, indexed once per document.
+  final Map<String, String> _screenIdByNodeId = <String, String>{};
   final List<String> _navigationHistory = <String>[];
   final FocusNode _screenFocusNode = FocusNode(debugLabel: 'Mosaic screen');
   final FocusNode _sheetFocusNode = FocusNode(debugLabel: 'Mosaic sheet');
@@ -499,6 +508,50 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
       );
     _screenScrollOffsets.clear();
     _currentScreenId = widget.document.initialScreenId;
+
+    _screenIdByNodeId
+      ..clear()
+      ..addEntries(<MapEntry<String, String>>[
+        for (final screen in widget.document.screens)
+          for (final node in widget.document.nodesIn(screen))
+            MapEntry<String, String>(node.id, screen.id),
+      ]);
+    // Entry counts are carried *forward* through an accepted revision, filtered
+    // through the accepted document's screens, rather than reset to zero. A
+    // reset would replay every entrance on every acceptance, which is exactly
+    // the defect the Local Preview `playedAppearScreens` rule exists to
+    // prevent: a designer nudging padding must not be strobed once per
+    // keystroke. Only a screen the new document does not contain is dropped.
+    _screenEntryCounts
+        .removeWhere((id, _) => widget.document.screen(id) == null);
+    final initialScreenId = widget.document.initialScreenId;
+    if (initialScreenId != null &&
+        (_screenEntryCounts[initialScreenId] ?? 0) == 0) {
+      _screenEntryCounts[initialScreenId] = 1;
+    }
+  }
+
+  /// Records an entry into [screenId] and makes it current.
+  ///
+  /// Every navigation funnels through here so that the entry count and the
+  /// current screen can never disagree: the count is the time origin for the
+  /// entrance and pulse of every node on that screen.
+  void _enterScreen(String? screenId) {
+    _currentScreenId = screenId;
+    if (screenId == null) return;
+    _screenEntryCounts[screenId] = (_screenEntryCounts[screenId] ?? 0) + 1;
+  }
+
+  /// Makes [screenId] current again without recording an entry.
+  ///
+  /// Closing a Sheet is the case this exists for. A Sheet is presented *over*
+  /// its screen and this renderer keeps that screen mounted underneath, so the
+  /// screen never left and coming back to it is not a re-entry: its entrances
+  /// must not replay and its pulse must not be handed a second budget. The
+  /// customer's own scroll position, selection, and Carousel page survive the
+  /// round trip for exactly the same reason, and motion has to agree with them.
+  void _returnToMountedScreen(String? screenId) {
+    _currentScreenId = screenId;
   }
 
   /// Starts the one-second Countdown tick, when the document has a Countdown
