@@ -80,13 +80,51 @@ extension on _MosaicPaywallState {
     );
   }
 
+  /// Tabs `selection` animates the tab control's style, not the panel swap.
+  ///
+  /// `0.3` visibility semantics remove a hidden node from layout, the
+  /// accessibility tree, and focus order; animating that removal would need a
+  /// "present but not focusable" third state the protocol does not have.
   Widget _buildTabControl(
     BuildContext context,
     MosaicTabsComponent component,
     MosaicTabsEntry tab,
   ) {
     final isSelected = _tabSelections[component.id] == tab.id;
-    final style = component.styles.resolve(selected: isSelected);
+    final selectionMotion = _selectionMotionFor(component);
+    if (selectionMotion == null) {
+      return _buildTabControlSurface(
+        context,
+        component,
+        tab,
+        style: component.styles.resolve(selected: isSelected),
+        isSelected: isSelected,
+      );
+    }
+    return MosaicSelectionMotionScope(
+      key: ValueKey<String>('mosaic-selection-${component.id}-${tab.id}'),
+      driver: widget.motionDriver,
+      motion: selectionMotion,
+      reducedMotion: _reducedMotion,
+      selected: isSelected,
+      styles: component.styles,
+      builder: (context, style) => _buildTabControlSurface(
+        context,
+        component,
+        tab,
+        style: style,
+        isSelected: isSelected,
+      ),
+    );
+  }
+
+  Widget _buildTabControlSurface(
+    BuildContext context,
+    MosaicTabsComponent component,
+    MosaicTabsEntry tab, {
+    required MosaicSelectionStateStyle style,
+    required bool isSelected,
+  }) {
     final label = _localization.text(tab.label);
     final baseStyle = _textStyle(
       context,
@@ -298,9 +336,30 @@ extension on _MosaicPaywallState {
     if (marker == null || markerColor == null || component.markerSize == null) {
       return const SizedBox.shrink();
     }
-    final size = component.markerSize!;
+    return ExcludeSemantics(
+      child: _markerGlyph(
+        marker,
+        ordinal: ordinal,
+        color: markerColor,
+        size: component.markerSize!,
+      ),
+    );
+  }
+
+  /// Draws one glyph of the shared marker union.
+  ///
+  /// Shared by Feature List and Timeline since `0.4` consolidated the two
+  /// vocabularies: one union, one renderer, so a negated Feature List item and
+  /// a Timeline icon entry cannot drift apart.
+  Widget _markerGlyph(
+    MosaicMarker marker, {
+    required int ordinal,
+    required Color color,
+    required double size,
+  }) {
+    final markerColor = color;
     final glyph = switch (marker) {
-      MosaicTimelineDotMarker() => DecoratedBox(
+      MosaicDotMarker() => DecoratedBox(
           decoration: BoxDecoration(
             color: markerColor,
             shape: BoxShape.circle,
@@ -312,7 +371,7 @@ extension on _MosaicPaywallState {
       // disagree across locales and OS versions. `package:intl` is
       // deliberately not a dependency. Locale-aware numerals are a deferred
       // protocol change.
-      MosaicTimelineOrdinalMarker() => SizedBox.square(
+      MosaicOrdinalMarker() => SizedBox.square(
           dimension: size,
           child: FittedBox(
             child: Text(
@@ -324,13 +383,13 @@ extension on _MosaicPaywallState {
             ),
           ),
         ),
-      MosaicTimelineIconMarker(:final name) => Icon(
+      MosaicIconMarker(:final name) => Icon(
           _materialIcon(name),
           size: size,
           color: markerColor,
         ),
     };
-    return ExcludeSemantics(child: glyph);
+    return glyph;
   }
 
   Widget _buildAward(BuildContext context, MosaicAwardComponent component) {

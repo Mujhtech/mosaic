@@ -230,7 +230,155 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
   }
 
   _validateLocalizationSemantics(document);
+  _validateMotionSemantics(document, nodes);
   _validateCapabilities(document, nodes);
+}
+
+/// Protocol 0.4 motion rules that the shape of a document cannot express.
+///
+/// A 0.3 document has no motion vocabulary at all, so every check here is a
+/// no-op for it: the decoder has already rejected a `motion` block and an
+/// unknown `motions` catalog.
+void _validateMotionSemantics(
+  MosaicPaywallDocument document,
+  List<MosaicNode> nodes,
+) {
+  final motions = document.designSystem?.motions ?? const [];
+  _requireUnique(motions.map((token) => token.id), 'motion token identifier');
+  _requireUnique(motions.map((token) => token.name), 'motion token name');
+
+  // Every reference resolves and the graph is acyclic, exactly as the other
+  // three catalogs require.
+  final referenced = <String>{};
+  void resolve(MosaicMotion motion) {
+    if (motion is MosaicMotionTokenReference) referenced.add(motion.id);
+    document.resolveMotion(motion);
+  }
+
+  for (final token in motions) {
+    resolve(token.value);
+  }
+  for (final node in nodes) {
+    if (node.motion case final motion?) {
+      if (motion.appear case final appear?) resolve(appear.curve);
+      if (motion.selection case final selection?) resolve(selection.curve);
+      if (motion.loop case final loop?) resolve(loop.curve);
+    }
+  }
+
+  // Deliberately asymmetric with the colour, background, and shadow catalogs,
+  // which carry no unused-token check. Those are inert values. The safety
+  // constraint on a motion lives at its *reference* site — the flash-safety
+  // floor is checked where a loop names a curve — so a token nothing references
+  // has never been checked against anything and sits in the catalog looking
+  // approved. That is a latent accessibility decision, not an inert value.
+  for (final token in motions) {
+    if (referenced.contains(token.id)) continue;
+    throw MosaicProtocolException(
+      'Motion token ${token.id} is unused. An unreferenced motion has never '
+      'been checked against the rules that apply at a reference site.',
+    );
+  }
+
+  final screenByNodeId = _v03ScreenByNodeId(document);
+  final loopScreens = <String, String>{};
+  for (final node in nodes) {
+    final motion = node.motion;
+    if (motion == null) continue;
+    if (motion.appear != null) {
+      final ancestor = _animatedAppearAncestor(document, node.id);
+      if (ancestor != null) {
+        // Two entrance opacities multiply, and the three renderers compose that
+        // product at different points in their pipelines. Rejecting is cheaper
+        // than pinning an arithmetic no platform agrees on; an author who wants
+        // a group to fade in puts the appear on the group.
+        throw MosaicProtocolException(
+          '${node.type} ${node.id} declares appear motion inside '
+          '${ancestor.type} ${ancestor.id}, which already declares one.',
+        );
+      }
+    }
+    if (motion.loop case final loop?) {
+      final duration = document.resolveMotion(loop.curve).durationMilliseconds;
+      if (duration < mosaicLoopMinimumDurationMilliseconds) {
+        throw MosaicProtocolException(
+          'Button ${node.id} loop motion resolves to ${duration}ms, below the '
+          '${mosaicLoopMinimumDurationMilliseconds}ms flash-safety floor.',
+        );
+      }
+      final screenId = screenByNodeId[node.id] ?? '';
+      final existing = loopScreens[screenId];
+      if (existing != null) {
+        throw MosaicProtocolException(
+          'Paywall Screen $screenId declares loop motion on both $existing and '
+          '${node.id}; at most one Button per screen may loop.',
+        );
+      }
+      loopScreens[screenId] = node.id;
+    }
+  }
+}
+
+/// The nearest ancestor of [nodeId] that itself declares an entrance, if any.
+MosaicNode? _animatedAppearAncestor(
+  MosaicPaywallDocument document,
+  String nodeId,
+) {
+  MosaicNode? search(MosaicNode node, MosaicNode? animatedAncestor) {
+    if (node.id == nodeId) return animatedAncestor;
+    final nextAncestor = node.motion?.appear != null ? node : animatedAncestor;
+    for (final child in _motionChildren(node)) {
+      final found = search(child, nextAncestor);
+      if (found != null || _containsNode(child, nodeId)) return found;
+    }
+    return null;
+  }
+
+  for (final screen in document.screens) {
+    if (!_containsNode(screen.layout.content, nodeId)) continue;
+    return search(screen.layout.content, null);
+  }
+  return null;
+}
+
+bool _containsNode(MosaicNode node, String nodeId) {
+  if (node.id == nodeId) return true;
+  for (final child in _motionChildren(node)) {
+    if (_containsNode(child, nodeId)) return true;
+  }
+  return false;
+}
+
+/// Every child a motion block can descend through.
+///
+/// Panels, pages, cards, and badges are all part of the layout tree, so an
+/// entrance authored inside one is still nested inside its ancestor's.
+Iterable<MosaicNode> _motionChildren(MosaicNode node) sync* {
+  switch (node) {
+    case MosaicScrollContainer():
+      yield node.content;
+    case MosaicStackNode():
+      yield* node.children;
+    case MosaicCarouselComponent():
+      for (final page in node.pages) {
+        yield page.content;
+      }
+    case MosaicTabsComponent():
+      for (final tab in node.tabs) {
+        yield tab.content;
+      }
+    case MosaicButtonComponent():
+      yield* node.children;
+      if (node.inProgressChildren case final inProgress?) yield* inProgress;
+    case MosaicProductSelectorComponent():
+      yield* node.cards;
+    case MosaicProductCardComponent():
+      yield* node.children;
+    case MosaicProductBadgeComponent():
+      yield* node.children;
+    default:
+      break;
+  }
 }
 
 void _validateProductCardStructure(MosaicProductCardComponent card) {

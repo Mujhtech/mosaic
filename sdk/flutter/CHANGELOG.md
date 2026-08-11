@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+- **Read Paywall Protocol 0.4 "Motion" alongside 0.3.** The decoder dispatches
+  on `schemaVersion`; versions stay exact identifiers, so a 0.3 document is
+  still read as 0.3 and gains no motion vocabulary. `0.4` adds the
+  `designSystem.motions` catalog, `motionToken`/inline motion references, and
+  per-node `motion` blocks, and applies the two cleanups `0.3` named for it:
+  `style.productCardStates` is gone from the capability vocabulary, and Feature
+  List and Timeline share one `dot`/`ordinal`/`icon` marker union with an
+  optional per-item override, so a list can finally express a negated item.
+- Add the three motion primitives, rendered with native Flutter widgets.
+  **appear** fades or fade-rises a node once when it enters a screen, travelling
+  *to* its laid-out position; **selection** interpolates the closed field list
+  between a selectable box's Default and Selected styles, switching semantic
+  colours, background kind, and padding discretely at the half-way point; and
+  **loop** pulses one Button per screen a bounded 1–5 cycles, then rests
+  permanently. Every animation's terminal frame is the static rendering, which
+  a golden asserts by comparing the finished frame against the motion-disabled
+  capture of the same document.
+- Add `MosaicMotionDriver`, an injectable enabled flag plus a per-animation
+  elapsed-time source, alongside the existing `MosaicClock`. Tests pin frames
+  with `tester.pump(duration)` and static goldens are captured with
+  `MosaicMotionDriver.disabled()`.
+- **The Countdown tick no longer rebuilds the whole document.** It moves onto
+  the motion driver as a scoped `Listenable`, so one second advancing one line
+  of text rebuilds the Countdown — and the Product Card labels that quote one —
+  rather than every node on the screen.
+- Add an injectable reduced-motion signal defaulting to
+  `MediaQuery.disableAnimationsOf`, read once per frame at the renderer
+  boundary. Under reduced motion `appear` becomes opacity-only with no
+  transform at any instant, `selection` applies instantly, `loop` is fully
+  disabled at rest, and — the 0.4 ruling — a video background does not play at
+  all: the declared poster is rendered, and its fallback colour when there is
+  none.
+- Report capabilities per schema version. `MosaicCapabilityReport` now exposes
+  `capabilitiesBySchemaVersion` and `capabilitiesFor(version)` in place of a
+  single flattened `supportedCapabilities` map, which could only have named one
+  version for a capability that exists at both. Configuration Delivery and
+  Local Preview negotiation stay pinned to `0.3`: Local Preview `0.3` `$ref`s
+  the `0.3` paywall schema directly and Delivery v3 carries exactly one paywall
+  protocol, so advertising `0.4` there would claim a contract neither has been
+  bumped to.
+
 - **Adopt Paywall Protocol 0.3, which replaces 0.2 outright.** There is no
   migration path, no dual-version code, and no compatibility shim: a 0.2
   document is an unknown version to this reader and is rejected atomically,

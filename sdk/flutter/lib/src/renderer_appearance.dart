@@ -44,6 +44,9 @@ extension on _MosaicPaywallState {
     if (outerInsets != null) {
       result = Padding(padding: _edgeInsets(outerInsets), child: result);
     }
+    // Motion sits inside visibility: a hidden node is out of layout, the
+    // accessibility tree, and focus order, and there is nothing to animate.
+    result = _applyNodeMotion(node, result);
     return Visibility(
       key: ValueKey<String>('mosaic-visibility-${node.id}'),
       visible: _visibilityIsVisible(visibility),
@@ -51,6 +54,49 @@ extension on _MosaicPaywallState {
       maintainAnimation: true,
       child: result,
     );
+  }
+
+  /// The selection transition [node] authored, with its curve resolved.
+  ///
+  /// Only Product Selector and Tabs can carry one: they are the two components
+  /// that own runtime selection state.
+  MosaicSelectionMotion? _selectionMotionFor(MosaicNode node) {
+    final selection = node.motion?.selection;
+    if (selection == null) return null;
+    return widget.document.resolveNodeMotion(node.motion!).selection;
+  }
+
+  /// Wraps [child] in the entrance and pulse a node authored, if any.
+  ///
+  /// Both scopes collapse to [child] itself once their terminal frame is
+  /// reached, so a finished animation leaves no residue in the tree to diverge
+  /// from what a motion-less renderer draws.
+  Widget _applyNodeMotion(MosaicNode node, Widget child) {
+    final motion = node.motion;
+    if (motion == null) return child;
+    final resolved = widget.document.resolveNodeMotion(motion);
+    var result = child;
+    if (resolved.loop case final loop?) {
+      result = MosaicLoopMotionScope(
+        key: ValueKey<String>('mosaic-loop-${node.id}'),
+        driver: widget.motionDriver,
+        motion: loop,
+        reducedMotion: _reducedMotion,
+        child: result,
+      );
+    }
+    // The entrance wraps the pulse: a node fades in as a whole, pulse included,
+    // rather than the pulse compounding a second entrance opacity.
+    if (resolved.appear case final appear?) {
+      result = MosaicAppearMotionScope(
+        key: ValueKey<String>('mosaic-appear-${node.id}'),
+        driver: widget.motionDriver,
+        motion: appear,
+        reducedMotion: _reducedMotion,
+        child: result,
+      );
+    }
+    return result;
   }
 
   Widget _applySizing(
@@ -230,6 +276,18 @@ extension on _MosaicPaywallState {
         'Video poster is unavailable; the fallback colour is used.',
       );
     }
+    // Protocol 0.4 ruling: under reduced motion a video background does not
+    // play. The declared poster is rendered if it is available and the declared
+    // fallback colour otherwise — the same resolution order the existing
+    // missing-media policy already uses, deliberately, so this reuses a path
+    // three renderers have implemented rather than adding a fourth outcome.
+    // No frame of the video is shown, playback is never started and paused,
+    // and no control is offered. 0.3 documents keep 0.3's behaviour: the
+    // ruling ships as specified 0.4 behaviour, not as a 0.3 defect patch.
+    if (_reducedMotion &&
+        widget.document.schemaVersion == mosaicProtocolVersionV04) {
+      return _staticVideoSubstitute(context, video, poster);
+    }
     return MosaicDecorativeVideo(
       key: ValueKey<String>('mosaic-background-video-${video.assetId}'),
       asset: widget.document.videoAsset(video.assetId)!,
@@ -253,6 +311,43 @@ extension on _MosaicPaywallState {
                 'background.imageUnavailable',
                 'Video poster is unavailable; the fallback colour is used.',
               ),
+    );
+  }
+
+  /// What a video background draws when reduced motion forbids playing it.
+  ///
+  /// A video authored with no poster degrades to its fallback colour. The
+  /// protocol does not make a poster mandatory, because a colour is a
+  /// legitimate answer and a required-but-ignorable field is worse than an
+  /// optional one.
+  Widget _staticVideoSubstitute(
+    BuildContext context,
+    MosaicVideoBackground video,
+    ImageProvider<Object>? poster,
+  ) {
+    final fallbackColor = _color(context, video.fallbackColor);
+    return ExcludeSemantics(
+      key: ValueKey<String>('mosaic-reduced-motion-video-${video.assetId}'),
+      child: ColoredBox(
+        color: fallbackColor,
+        child: poster == null
+            ? const SizedBox.expand()
+            : Image(
+                image: poster,
+                fit: video.contentMode == MosaicImageContentMode.fit
+                    ? BoxFit.contain
+                    : BoxFit.cover,
+                excludeFromSemantics: true,
+                errorBuilder: (context, error, stackTrace) {
+                  _notifyMediaFailure(
+                    video.posterAssetId ?? video.assetId,
+                    'background.imageUnavailable',
+                    'Video poster is unavailable; the fallback colour is used.',
+                  );
+                  return const SizedBox.expand();
+                },
+              ),
+      ),
     );
   }
 

@@ -70,6 +70,7 @@ final class MosaicButtonComponent extends MosaicComponent {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   })  : children = List.unmodifiable(children),
         inProgressChildren = inProgressChildren == null
             ? null
@@ -103,6 +104,7 @@ final class MosaicIconComponent extends MosaicComponent {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   });
 
   final MosaicIconName name;
@@ -150,6 +152,7 @@ final class MosaicCarouselComponent extends MosaicComponent {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   }) : pages = List.unmodifiable(pages);
 
   final int initialPageIndex;
@@ -179,6 +182,7 @@ final class MosaicSwitchComponent extends MosaicComponent {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   });
 
   final MosaicLocalizedText label;
@@ -210,6 +214,7 @@ final class MosaicCountdownComponent extends MosaicComponent {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   });
 
   final DateTime endsAt;
@@ -265,6 +270,7 @@ final class MosaicTabsComponent extends MosaicComponent {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   }) : tabs = List.unmodifiable(tabs);
 
   final MosaicStackDirection tabBarDirection;
@@ -312,29 +318,6 @@ final class MosaicTimelineConnector {
   final MosaicTimelineConnectorStyle style;
 }
 
-/// The glyph drawn at a Timeline entry's position on the connector.
-///
-/// A closed union: an unrecognised kind rejects the document rather than
-/// drawing an arbitrary substitute.
-sealed class MosaicTimelineMarker {
-  const MosaicTimelineMarker();
-}
-
-final class MosaicTimelineDotMarker extends MosaicTimelineMarker {
-  const MosaicTimelineDotMarker();
-}
-
-/// The entry's 1-based position, formatted by the platform's locale.
-final class MosaicTimelineOrdinalMarker extends MosaicTimelineMarker {
-  const MosaicTimelineOrdinalMarker();
-}
-
-final class MosaicTimelineIconMarker extends MosaicTimelineMarker {
-  const MosaicTimelineIconMarker(this.name);
-
-  final MosaicIconName name;
-}
-
 final class MosaicTimelineEntry {
   const MosaicTimelineEntry({
     required this.id,
@@ -352,7 +335,7 @@ final class MosaicTimelineEntry {
 
   /// Absent means this entry carries no glyph and the connector runs unbroken
   /// through its position. It is not a request for a default marker.
-  final MosaicTimelineMarker? marker;
+  final MosaicMarker? marker;
 }
 
 /// An ordered, vertical sequence of steps.
@@ -374,6 +357,7 @@ final class MosaicTimelineComponent extends MosaicComponent {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   }) : entries = List.unmodifiable(entries);
 
   final double gap;
@@ -441,6 +425,7 @@ final class MosaicAwardComponent extends MosaicComponent {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   });
 
   final MosaicStackDirection direction;
@@ -551,6 +536,7 @@ final class MosaicSocialProofComponent extends MosaicComponent {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   });
 
   final double gap;

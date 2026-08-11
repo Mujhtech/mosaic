@@ -77,17 +77,28 @@ void main() {
     expect(mosaicFlutterCapabilityReport.sdkVersion, mosaicFlutterSdkVersion);
     expect(
       mosaicFlutterCapabilityReport.supportedSchemaVersions,
-      <String>{'0.3'},
+      <String>{'0.3', '0.4'},
     );
     expect(
-      mosaicFlutterCapabilityReport.supportedCapabilities.keys,
+      mosaicFlutterCapabilityReport.capabilitiesFor('0.3'),
       unorderedEquals(
         <String>{
           ...mosaicProtocolV03Capabilities,
         },
       ),
     );
-    expect(mosaicFlutterCapabilityReport.supportedCapabilities, isNotEmpty);
+    expect(
+      mosaicFlutterCapabilityReport.capabilitiesFor('0.4'),
+      unorderedEquals(
+        <String>{
+          ...mosaicProtocolV04Capabilities,
+        },
+      ),
+    );
+    expect(mosaicFlutterCapabilityReport.capabilitiesFor('0.3'), isNotEmpty);
+    // A version this SDK does not implement reports nothing rather than
+    // falling back to a neighbouring version's answer.
+    expect(mosaicFlutterCapabilityReport.capabilitiesFor('0.5'), isEmpty);
   });
 
   test('canonical source remains direct JSON rather than an SDK copy', () {

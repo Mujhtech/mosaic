@@ -298,6 +298,7 @@ void _validateCapabilities(
   MosaicPaywallDocument document,
   List<MosaicNode> nodes,
 ) {
+  final isV04 = document.schemaVersion == mosaicProtocolVersionV04;
   final expected = <String>{
     'localization.catalogs',
     'navigation.screens',
@@ -324,7 +325,8 @@ void _validateCapabilities(
   final designSystem = document.designSystem!;
   if (designSystem.colors.isNotEmpty ||
       designSystem.backgrounds.isNotEmpty ||
-      designSystem.shadows.isNotEmpty) {
+      designSystem.shadows.isNotEmpty ||
+      designSystem.motions.isNotEmpty) {
     expected.add('style.designTokens');
   }
   if (_allV03Backgrounds(document).map(document.resolveBackground).any(
@@ -395,13 +397,27 @@ void _validateCapabilities(
     if (node is MosaicProductSelectorComponent) {
       expected
         ..add('fallback.product')
-        ..add('outcome.normalized')
-        ..add('style.productCardStates');
+        ..add('outcome.normalized');
     }
-    if (node is MosaicProductCardComponent ||
-        node is MosaicProductBadgeComponent ||
-        node is MosaicTabsComponent) {
+    // `style.productCardStates` was derived exactly when one of the three
+    // components that require `styles` was derived, so it could never vary
+    // independently and carried no information. 0.3 named it for removal and
+    // 0.4 removes it; deriving it there would demand a capability the 0.4
+    // vocabulary no longer contains.
+    if (!isV04 &&
+        (node is MosaicProductSelectorComponent ||
+            node is MosaicProductCardComponent ||
+            node is MosaicProductBadgeComponent ||
+            node is MosaicTabsComponent)) {
       expected.add('style.productCardStates');
+    }
+    // A motion capability is derived exactly when that motion is authored. The
+    // unused-capability check below then actively protects the enhancement
+    // tier: a document that claims motion it does not author is rejected.
+    if (node.motion case final motion?) {
+      if (motion.appear != null) expected.add('motion.appear');
+      if (motion.selection != null) expected.add('motion.selection');
+      if (motion.loop != null) expected.add('motion.loop');
     }
     switch (node) {
       case MosaicButtonComponent():
@@ -431,7 +447,8 @@ void _validateCapabilities(
   final unused = declared.difference(expected);
   if (missing.isNotEmpty || unused.isNotEmpty) {
     throw MosaicProtocolException(
-      'Capability declarations do not match Protocol 0.3 document content. '
+      'Capability declarations do not match Protocol '
+      '${document.schemaVersion} document content. '
       'Missing: ${missing.join(', ')}; unused: ${unused.join(', ')}.',
     );
   }

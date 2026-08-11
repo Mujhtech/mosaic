@@ -48,6 +48,56 @@ version support: a 0.2 document is an unknown version to this reader and is
 rejected atomically, resolving through last-accepted, then bundled fallback,
 then configuration unavailable.
 
+## Protocol 0.4 — Motion
+
+This reader also accepts Paywall Protocol `0.4`, dispatching on
+`schemaVersion`. Versions stay exact identifiers: a `0.3` document is read by
+the `0.3` rules and a `0.4` document by the `0.4` rules, and neither borrows
+from the other. `0.4` is a draft and carries no compatibility guarantee.
+
+`0.4` adds three motion primitives — `appear`, `selection`, and `loop` — and
+removes two things `0.3` named for removal: the co-derived
+`style.productCardStates` capability, and Feature List's single `"checkmark"`
+marker, which is replaced by the `dot`/`ordinal`/`icon` union Timeline already
+used, plus an optional per-item override.
+
+**Every animation's terminal frame is the static rendering.** A golden asserts
+it by comparing the finished frame against a capture of the same document with
+the driver disabled. That rule is what lets a reader without a `motion.*`
+capability render the document statically and completely, with nothing lost.
+
+Motion is driven by an injectable `MosaicMotionDriver`, alongside the existing
+`MosaicClock`:
+
+```dart
+MosaicPaywall(
+  document: document,
+  purchaseProvider: provider,
+  // Disabled renders every animation at its terminal frame. Static goldens
+  // must be captured this way.
+  motionDriver: const MosaicMotionDriver.disabled(),
+  // Defaults to MediaQuery.disableAnimationsOf, and is read once per frame at
+  // the renderer boundary so a test can pin it.
+  reducedMotion: (_) => false,
+  onResult: onResult,
+);
+```
+
+Under reduced motion `appear` keeps its opacity change and drops the transform
+entirely, `selection` applies instantly, `loop` never leaves rest, and a video
+background does not play — the declared poster is rendered, and its fallback
+colour when no poster is declared.
+
+Pin frames in tests with `tester.pump(duration)`. Never call `pumpAndSettle` on
+a document with a running `loop`: a pulse schedules frames for as long as it
+runs.
+
+Configuration Delivery and Local Preview negotiation remain pinned to `0.3`.
+Local Preview `0.3` references the `0.3` paywall schema directly and Delivery
+v3 carries exactly one paywall protocol, so this SDK does not advertise `0.4`
+on either wire. `mosaicFlutterCapabilityReport` reports both versions for host
+diagnostics and Studio.
+
 Over its predecessor, 0.3 adds four components — Tabs, Timeline, Award, and
 Social Proof — tab selection as runtime state and as a `visibility` condition,
 and the reserved accessibility strings `mosaic.a11y.rating` and

@@ -11,13 +11,23 @@ import 'analytics_event.dart';
 import 'commerce.dart';
 import 'configuration.dart';
 import 'localization.dart';
+import 'motion_driver.dart';
 import 'presentation.dart';
 import 'protocol.dart';
 import 'transaction_observation.dart';
 
+export 'motion_driver.dart'
+    show
+        MosaicMotionDriver,
+        MosaicMotionTicks,
+        MosaicMotionTimeline,
+        MosaicReducedMotionSignal,
+        mosaicPlatformReducedMotion;
+
 part 'renderer_actions.dart';
 part 'renderer_layout.dart';
 part 'renderer_components.dart';
+part 'renderer_motion.dart';
 part 'renderer_selection_components.dart';
 part 'renderer_appearance.dart';
 
@@ -207,6 +217,8 @@ final class MosaicPaywall extends StatefulWidget {
     this.transactionObservations,
     this.onPresented,
     this.clock = _mosaicSystemClock,
+    this.motionDriver = const MosaicMotionDriver(),
+    this.reducedMotion = mosaicPlatformReducedMotion,
     this.externalUrlOpener = mosaicExternalUrlOpener,
     super.key,
   });
@@ -228,6 +240,16 @@ final class MosaicPaywall extends StatefulWidget {
   final MosaicTransactionObservationSink? transactionObservations;
   final VoidCallback? onPresented;
   final MosaicClock clock;
+
+  /// Drives the Protocol 0.4 motion primitives and the Countdown tick.
+  ///
+  /// Disable it to render the document statically: the terminal state of every
+  /// animation is the static rendering, so a disabled driver is lossless
+  /// rather than a second, drifting set of values.
+  final MosaicMotionDriver motionDriver;
+
+  /// The platform's reduced-motion signal, read at the renderer boundary.
+  final MosaicReducedMotionSignal reducedMotion;
   final MosaicExternalUrlOpener externalUrlOpener;
 
   @override
@@ -265,7 +287,8 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   bool _productsResolved = false;
   String? _busyActionId;
   int _loadGeneration = 0;
-  Timer? _countdownTimer;
+  MosaicMotionTicks? _countdownTicks;
+  bool _reducedMotion = false;
   String? _currentScreenId;
   String? _productLoadAttemptId;
 
@@ -275,7 +298,7 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
     _resolveLocalization();
     _resetRuntimeState();
     _resetNavigationState();
-    _configureCountdownTimer();
+    _configureCountdownTicks();
     unawaited(_loadProducts());
     _analytics(
       MosaicAnalyticsEventName.paywallPresented,
@@ -340,7 +363,7 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
     if (documentChanged) {
       _resetRuntimeState();
       _resetNavigationState();
-      _configureCountdownTimer();
+      _configureCountdownTicks();
     }
     if (documentChanged ||
         oldWidget.purchaseProvider != widget.purchaseProvider) {
@@ -377,7 +400,7 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   @override
   void dispose() {
     _loadGeneration += 1;
-    _countdownTimer?.cancel();
+    _countdownTicks?.dispose();
     _scrollController.dispose();
     _sheetScrollController?.dispose();
     _screenFocusNode.dispose();
@@ -478,17 +501,42 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
     _currentScreenId = widget.document.initialScreenId;
   }
 
-  void _configureCountdownTimer() {
-    _countdownTimer?.cancel();
-    if (widget.document.nodes.any((node) => node is MosaicCountdownComponent)) {
-      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() {});
-      });
+  /// Starts the one-second Countdown tick, when the document has a Countdown
+  /// and the driver is running.
+  ///
+  /// The tick used to be a root-level `setState`, which rebuilt every node in
+  /// the document once a second to advance one line of text. It is now a
+  /// [Listenable] that only the Countdown text — and the Product Card labels
+  /// that quote one — subscribe to.
+  void _configureCountdownTicks() {
+    _countdownTicks?.dispose();
+    _countdownTicks = null;
+    if (!widget.motionDriver.enabled) return;
+    if (!widget.document.nodes
+        .any((node) => node is MosaicCountdownComponent)) {
+      return;
     }
+    _countdownTicks =
+        widget.motionDriver.createTicks(const Duration(seconds: 1));
+  }
+
+  /// Whether a subtree quotes a Countdown, and so has to follow its tick.
+  bool _containsCountdown(MosaicNode node) {
+    if (node is MosaicCountdownComponent) return true;
+    if (node is MosaicStackNode) {
+      return node.children.any(_containsCountdown);
+    }
+    if (node is MosaicProductBadgeComponent) {
+      return node.children.any(_containsCountdown);
+    }
+    return false;
   }
 
   @override
   Widget build(BuildContext context) {
+    // Read once per build at the renderer boundary, so every node in this frame
+    // answers the same way and a test can pin it.
+    _reducedMotion = widget.reducedMotion(context);
     final screen = _baseScreen;
     final result = _buildScreenSurface(context, screen, _scrollController);
     return Directionality(
