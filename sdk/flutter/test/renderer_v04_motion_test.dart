@@ -17,10 +17,10 @@ import 'support/canonical_fixture.dart';
 /// used: a looping node has frames scheduled for as long as it runs, so
 /// settling would either time out or silently skip the phases under test.
 void main() {
-  const appearOpacity = ValueKey<String>('mosaic-appear-opacity');
-  const appearTranslate = ValueKey<String>('mosaic-appear-translate');
-  const loopScale = ValueKey<String>('mosaic-loop-scale');
-  const loopOpacity = ValueKey<String>('mosaic-loop-opacity');
+  const appearOpacityKey = ValueKey<String>('mosaic-appear-opacity');
+  const appearTranslateKey = ValueKey<String>('mosaic-appear-translate');
+  const loopScaleKey = ValueKey<String>('mosaic-loop-scale');
+  const loopOpacityKey = ValueKey<String>('mosaic-loop-opacity');
 
   MosaicPaywallDocument document() => const MosaicProtocolDecoder().decode(
         repositoryFile('protocol/fixtures/v0.4/complete-paywall.json')
@@ -83,12 +83,13 @@ void main() {
     // The start frame: fully transparent and displaced by the authored rise.
     expect(
         tester
-            .widget<Opacity>(within('mosaic-appear-headline', appearOpacity))
+            .widget<Opacity>(within('mosaic-appear-headline', appearOpacityKey))
             .opacity,
         0);
     expect(
       tester
-          .widget<Transform>(within('mosaic-appear-headline', appearTranslate))
+          .widget<Transform>(
+              within('mosaic-appear-headline', appearTranslateKey))
           .transform
           .getTranslation()
           .y,
@@ -100,7 +101,7 @@ void main() {
     final progress = mosaicEasedProgress(MosaicMotionEasing.decelerate, 0.25);
     expect(
       tester
-          .widget<Opacity>(within('mosaic-appear-headline', appearOpacity))
+          .widget<Opacity>(within('mosaic-appear-headline', appearOpacityKey))
           .opacity,
       closeTo(progress, 1e-3),
     );
@@ -108,7 +109,8 @@ void main() {
     // travel shrinks monotonically to zero.
     expect(
       tester
-          .widget<Transform>(within('mosaic-appear-headline', appearTranslate))
+          .widget<Transform>(
+              within('mosaic-appear-headline', appearTranslateKey))
           .transform
           .getTranslation()
           .y,
@@ -121,13 +123,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 180));
     expect(
       tester
-          .widget<Opacity>(within('mosaic-appear-headline', appearOpacity))
+          .widget<Opacity>(within('mosaic-appear-headline', appearOpacityKey))
           .opacity,
       1,
     );
     expect(
       tester
-          .widget<Transform>(within('mosaic-appear-headline', appearTranslate))
+          .widget<Transform>(
+              within('mosaic-appear-headline', appearTranslateKey))
           .transform
           .getTranslation()
           .y,
@@ -142,7 +145,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
     expect(
       tester
-          .widget<Opacity>(within('mosaic-appear-subtitle', appearOpacity))
+          .widget<Opacity>(within('mosaic-appear-subtitle', appearOpacityKey))
           .opacity,
       0,
     );
@@ -150,7 +153,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 80));
     expect(
       tester
-          .widget<Opacity>(within('mosaic-appear-subtitle', appearOpacity))
+          .widget<Opacity>(within('mosaic-appear-subtitle', appearOpacityKey))
           .opacity,
       greaterThan(0),
     );
@@ -164,7 +167,7 @@ void main() {
     // rather than a near miss.
     expect(
       tester
-          .widget<Transform>(within('mosaic-loop-purchase', loopScale))
+          .widget<Transform>(within('mosaic-loop-purchase', loopScaleKey))
           .transform
           .getMaxScaleOnAxis(),
       closeTo(1, 1e-3),
@@ -174,7 +177,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 450));
     expect(
       tester
-          .widget<Transform>(within('mosaic-loop-purchase', loopScale))
+          .widget<Transform>(within('mosaic-loop-purchase', loopScaleKey))
           .transform
           .getMaxScaleOnAxis(),
       closeTo(1.04, 1e-3),
@@ -184,7 +187,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 450));
     expect(
       tester
-          .widget<Transform>(within('mosaic-loop-purchase', loopScale))
+          .widget<Transform>(within('mosaic-loop-purchase', loopScaleKey))
           .transform
           .getMaxScaleOnAxis(),
       closeTo(1, 1e-3),
@@ -194,14 +197,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1800));
     expect(
       tester
-          .widget<Transform>(within('mosaic-loop-purchase', loopScale))
+          .widget<Transform>(within('mosaic-loop-purchase', loopScaleKey))
           .transform
           .getMaxScaleOnAxis(),
       1,
     );
     expect(
       tester
-          .widget<Opacity>(within('mosaic-loop-purchase', loopOpacity))
+          .widget<Opacity>(within('mosaic-loop-purchase', loopOpacityKey))
           .opacity,
       1,
     );
@@ -210,11 +213,90 @@ void main() {
     await tester.pump(const Duration(milliseconds: 900));
     expect(
       tester
-          .widget<Transform>(within('mosaic-loop-purchase', loopScale))
+          .widget<Transform>(within('mosaic-loop-purchase', loopScaleKey))
           .transform
           .getMaxScaleOnAxis(),
       1,
     );
+  });
+
+  testWidgets(
+      "a loop's clock starts at node entry, not when the entrance finishes",
+      (tester) async {
+    // Protocol 0.4 rules the time origin explicitly: a loop's elapsed clock
+    // starts when the node enters the screen — the same origin as appear, and
+    // the same origin whether or not the node carries one. Starting the pulse
+    // when the entrance completed would make one trigger's origin a function of
+    // another trigger's delay plus its resolved curve duration, which is
+    // exactly the cross-trigger arithmetic three renderers get subtly
+    // different.
+    //
+    // The canonical purchase Button carries both: a fade entrance held for
+    // 240ms and then run over 240ms, and a 900ms pulse repeated three times.
+    await pumpPaywall(tester, reducedMotion: false);
+
+    double appearProgress() => tester
+        .widget<Opacity>(within('mosaic-appear-purchase', appearOpacityKey))
+        .opacity;
+    double loopScale() => tester
+        .widget<Transform>(within('mosaic-loop-purchase', loopScaleKey))
+        .transform
+        .getMaxScaleOnAxis();
+    double loopOpacityMultiplier() => tester
+        .widget<Opacity>(within('mosaic-loop-purchase', loopOpacityKey))
+        .opacity;
+    // Composition is asserted on what is actually painted rather than on the
+    // two factors read back individually: nested Opacity multiplies, so the
+    // product of every opacity in the Button's motion subtree is the node's
+    // effective opacity.
+    double composedOpacity() => tester
+        .widgetList<Opacity>(
+          find.descendant(
+            of: find.byKey(const ValueKey<String>('mosaic-appear-purchase')),
+            matching: find.byType(Opacity),
+          ),
+        )
+        .fold<double>(1, (product, opacity) => product * opacity.opacity);
+
+    // Still inside the entrance's authored 240ms delay: the entrance has not
+    // started, and the pulse is already a quarter of the way through its first
+    // cycle. A pulse gated on the entrance would read exactly 1 here.
+    await tester.pump(const Duration(milliseconds: 225));
+    expect(appearProgress(), 0);
+    expect(
+      loopScale(),
+      closeTo(
+        1 + 0.04 * mosaicEasedProgress(MosaicMotionEasing.standard, 0.5),
+        1e-3,
+      ),
+    );
+    expect(loopScale(), isNot(closeTo(1, 1e-3)));
+
+    // One loop half-period in, with the entrance mid-flight: the pulse is at
+    // peak excursion and the entrance is strictly between its endpoints.
+    await tester.pump(const Duration(milliseconds: 225));
+    final progress =
+        mosaicEasedProgress(MosaicMotionEasing.decelerate, (450 - 240) / 240);
+    expect(appearProgress(), closeTo(progress, 1e-3));
+    expect(appearProgress(), greaterThan(0));
+    expect(appearProgress(), lessThan(1));
+    expect(loopScale(), closeTo(1.04, 1e-3));
+    expect(loopOpacityMultiplier(), closeTo(0.88, 1e-3));
+
+    // opacity = resolvedStaticOpacity x appearProgress x loopOpacityMultiplier.
+    // The Button authors appearance.opacity 1, so the static factor is 1.
+    expect(composedOpacity(), closeTo(1 * progress * 0.88, 1e-3));
+
+    // scale = loopScale. The entrance contributes no scale, and this Button's
+    // fade entrance contributes no translation either.
+    expect(within('mosaic-appear-purchase', appearTranslateKey), findsNothing);
+
+    // Both converge on the same static rendering regardless of the overlap.
+    await tester.pump(const Duration(milliseconds: 2250));
+    expect(appearProgress(), 1);
+    expect(loopScale(), 1);
+    expect(loopOpacityMultiplier(), 1);
+    expect(composedOpacity(), 1);
   });
 
   testWidgets('selection interpolates the authored box style to its target',
@@ -270,17 +352,17 @@ void main() {
     // including the start frame — not shortened, and not zero-length.
     expect(
       tester
-          .widget<Opacity>(within('mosaic-appear-headline', appearOpacity))
+          .widget<Opacity>(within('mosaic-appear-headline', appearOpacityKey))
           .opacity,
       0,
     );
-    expect(within('mosaic-appear-headline', appearTranslate), findsNothing);
+    expect(within('mosaic-appear-headline', appearTranslateKey), findsNothing);
 
     // loop is fully disabled: the node sits at rest, which is the static
     // rendering, from the very first frame.
-    expect(within('mosaic-loop-purchase', loopScale), findsNothing);
+    expect(within('mosaic-loop-purchase', loopScaleKey), findsNothing);
     await tester.pump(const Duration(milliseconds: 450));
-    expect(within('mosaic-loop-purchase', loopScale), findsNothing);
+    expect(within('mosaic-loop-purchase', loopScaleKey), findsNothing);
   });
 
   testWidgets('reduced motion applies a selection change instantly',
@@ -361,9 +443,9 @@ void main() {
       driver: const MosaicMotionDriver.disabled(),
     );
 
-    expect(within('mosaic-appear-headline', appearOpacity), findsNothing);
-    expect(within('mosaic-appear-headline', appearTranslate), findsNothing);
-    expect(within('mosaic-loop-purchase', loopScale), findsNothing);
+    expect(within('mosaic-appear-headline', appearOpacityKey), findsNothing);
+    expect(within('mosaic-appear-headline', appearTranslateKey), findsNothing);
+    expect(within('mosaic-loop-purchase', loopScaleKey), findsNothing);
   });
 
   testWidgets('the countdown tick rebuilds the countdown, not the document',

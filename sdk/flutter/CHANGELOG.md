@@ -18,7 +18,11 @@
   **loop** pulses one Button per screen a bounded 1–5 cycles, then rests
   permanently. Every animation's terminal frame is the static rendering, which
   a golden asserts by comparing the finished frame against the motion-disabled
-  capture of the same document.
+  capture of the same document. A Button carrying both `appear` and `loop`
+  starts both clocks at node entry, in one `initState` pass — the pulse does not
+  wait for the entrance — and the two compose on the node's own values as
+  `opacity = static × appearProgress × loopOpacityMultiplier`, `scale =
+  loopScale`.
 - Add `MosaicMotionDriver`, an injectable enabled flag plus a per-animation
   elapsed-time source, alongside the existing `MosaicClock`. Tests pin frames
   with `tester.pump(duration)` and static goldens are captured with
