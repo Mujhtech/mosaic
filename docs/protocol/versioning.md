@@ -97,9 +97,22 @@ and documented in [Protocol 0.4](v0.4.md#migration-from-03).
 
 Versions remain exact. A reader declaring `0.4` accepts only `0.4`, and a `0.3`
 reader never interprets a `0.4` document. When `0.4` becomes deliverable,
-publishing emits a `0.3` representation by projection at publish time — the
-established Configuration Delivery pattern — so one authored document serves
+publishing may emit a `0.3` representation by projection at publish time — the
+established Configuration Delivery pattern — so one authored document can serve
 both reader generations.
+
+That projection is **partial, not lossless**. Motion drops losslessly, by the
+terminal-state rule. The bundled Feature List marker consolidation does not:
+`0.3`'s marker is the single `const "checkmark"` and its items carry no marker
+field, so a `0.4` document using `dot`, `ordinal`, a non-checkmark icon, or any
+per-item override has no `0.3` representation. Publishing must run a
+projectability check and **decline to emit** a representation it cannot
+construct faithfully — the `safeV1Projection` precedent — rather than emit a
+corrupt one; a negated "not included" item projected as a checkmark would tell
+a `0.3` reader the opposite of what the author wrote. A `0.3`-only reader
+requesting a release with no `0.3` representation is refused through the
+existing `rejectDocument` flow, exactly as it is for any capability it lacks.
+See [the projectability rule](v0.4.md#the-projectability-rule).
 
 `0.4` introduces the **first enhancement-fallback tier** in any Mosaic
 contract. Three capabilities — `motion.appear`, `motion.selection`,
