@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -385,43 +386,49 @@ class MosaicMotionComposeTest {
      * matters here because a genuine re-entry also resets the screen's scroll offset and a capture
      * or a bounds comparison would then be measuring an empty rectangle.
      *
-     * The stopover screen is the canonical sheet re-presented as a screen, because the canonical
-     * document has exactly one Screen: a *sheet* over the offer is deliberately not a re-entry —
-     * the screen behind it never left — so it could not stand in for one here.
+     * Driven by `screen-round-trip.json`, the canonical fixture authored for exactly this: two
+     * Screen-presentation screens that navigate to each other, each carrying an entrance and a
+     * bounded loop. The complete paywall cannot express the case — it declares one Screen, and its
+     * second surface is a sheet, which the ruling makes explicitly *not* an entry.
      */
     @Test
     fun aGenuineScreenReEntryReplaysThePulseFromNodeEntry() {
         compose.mainClock.autoAdvance = true
-        val document = protocolV04Bundle().withDetailsPresentedAsASecondScreen()
-        val state = motionState(pinnedCountdown(MosaicMotionDriver.Default), document)
+        val state = motionState(
+            pinnedCountdown(MosaicMotionDriver.Default),
+            v04Fixture("screen-round-trip.json"),
+        )
         runBlocking { state.loadProducts() }
         compose.setContent {
             MaterialTheme {
                 MosaicPaywallContent(state = state, onEvent = {}, reducedMotion = false)
             }
         }
-        // A bounded pulse stops, so the offer screen genuinely settles rather than needing a guessed
+        // A bounded pulse stops, so the start screen genuinely settles rather than needing a guessed
         // wait: `waitForIdle` here is a wait on content that has finished moving.
         compose.waitForIdle()
         compose.mainClock.autoAdvance = false
 
-        val rest = positionOf("mosaic-node-purchase")
+        val rest = positionOf("mosaic-node-view-details")
         compose.mainClock.advanceTimeBy(2_000)
         assertEquals(
             "A pulse that has played its authored cycles must stay at rest.",
             rest,
-            positionOf("mosaic-node-purchase"),
+            positionOf("mosaic-node-view-details"),
         )
 
         compose.runOnUiThread { state.navigateTo("details") }
         compose.mainClock.advanceTimeBy(16)
         compose.runOnUiThread { state.navigateBack() }
-        // 1350ms after re-entry is the peak of the second of three 900ms cycles, and past the
-        // entrance — a 240ms delay and a 240ms fade — so the pulse is the only thing still moving.
+        // 1350ms after re-entry is the peak of the second of the Button's three 900ms cycles, and
+        // past the screen's 240ms entrance, so the pulse is the only thing still moving. It is also
+        // past the *first* cycle, which is what makes this a fresh budget rather than a resumption:
+        // a renderer that carried the spent budget across the round trip would draw the Button at
+        // rest here.
         compose.mainClock.advanceTimeBy(1_350)
-        val replaying = positionOf("mosaic-node-purchase")
+        val replaying = positionOf("mosaic-node-view-details")
         compose.mainClock.advanceTimeBy(6_000)
-        val settled = positionOf("mosaic-node-purchase")
+        val settled = positionOf("mosaic-node-view-details")
 
         assertNotEquals(
             "Re-entering a screen must replay its Button's pulse from node entry.",
@@ -434,6 +441,115 @@ class MosaicMotionComposeTest {
             settled,
         )
     }
+
+    /**
+     * A sheet round trip is not a re-entry: neither presenting nor dismissing replays the screen
+     * beneath, and the pulse budget does not reset across the round trip.
+     *
+     * Presenting a Sheet does not leave the screen underneath — it is still on screen, behind the
+     * sheet — so nothing about it has been re-entered. Both halves are asserted because the failure
+     * modes are separate: a renderer can hold the screen through the presentation and still rebuild
+     * it on dismissal, and a customer who opens a details sheet and closes it would then watch the
+     * whole paywall fade in again and the call to action pulse a second three times.
+     *
+     * The purchase Button's origin is unaffected by the sheet's own slide — the sheet is a separate
+     * composition root — so a plain equality holds here.
+     */
+    @Test
+    fun aSheetRoundTripIsNotAReEntryForTheScreenBeneathIt() {
+        compose.mainClock.autoAdvance = true
+        val document = protocolV04Bundle().withInertDetailsBackground()
+        val state = motionState(pinnedCountdown(MosaicMotionDriver.Default), document)
+        runBlocking { state.loadProducts() }
+        compose.setContent {
+            MaterialTheme {
+                MosaicPaywallContent(state = state, onEvent = {}, reducedMotion = false)
+            }
+        }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        val rest = positionOf("mosaic-node-purchase")
+
+        compose.runOnUiThread { state.navigateTo("details") }
+        // Past the peak of what would be the second of three 900ms cycles, so a pulse restarted by
+        // the presentation would be at maximum excursion here rather than merely somewhere.
+        compose.mainClock.advanceTimeBy(1_350)
+        assertEquals(
+            "Presenting a sheet must not replay the motion of the screen behind it.",
+            rest,
+            positionOf("mosaic-node-purchase"),
+        )
+
+        compose.runOnUiThread { state.navigateBack() }
+        compose.mainClock.advanceTimeBy(1_350)
+        assertEquals(
+            "Dismissing a sheet must not replay the motion of the screen behind it.",
+            rest,
+            positionOf("mosaic-node-purchase"),
+        )
+    }
+
+    /**
+     * ...but the sheet's own content *is* a genuine entry, once per presentation.
+     *
+     * The other half of the same ruling, and the regression this file most needs after the screen
+     * content was hoisted to a single call site: hoisting the *sheet's* content out with it would
+     * make a second presentation reuse the first one's clocks and show a customer a sheet whose
+     * entrance never plays again.
+     *
+     * Measured as the offset between the pulsing Button and a motionless sibling on the same sheet.
+     * The sheet slides in under its own Material animation, which translates the whole composition
+     * root; a difference of two origins inside that root cancels the translation, leaving the pulse
+     * as the only thing that can move them relative to each other. Sampled across the cycle rather
+     * than pinned to one instant, because which frame the sheet settles on is a Material scheduling
+     * detail this contract says nothing about.
+     */
+    @Test
+    fun aSheetsOwnContentIsAGenuineEntryOnEveryPresentation() {
+        compose.mainClock.autoAdvance = true
+        val document = protocolV04Bundle().withInertDetailsBackground()
+        val state = motionState(pinnedCountdown(MosaicMotionDriver.Default), document)
+        runBlocking { state.loadProducts() }
+        compose.setContent {
+            MaterialTheme {
+                MosaicPaywallContent(state = state, onEvent = {}, reducedMotion = false)
+            }
+        }
+        compose.runOnUiThread { state.navigateTo("details") }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        // Its single 900ms cycle has played out, so this is the sheet at rest.
+        compose.mainClock.advanceTimeBy(2_000)
+        val rest = sheetPulseOffset()
+
+        compose.runOnUiThread { state.navigateBack() }
+        compose.mainClock.advanceTimeBy(16)
+        compose.runOnUiThread { state.navigateTo("details") }
+        val sampled = buildList {
+            repeat(60) {
+                compose.mainClock.advanceTimeBy(16)
+                add(sheetPulseOffset())
+            }
+        }
+        compose.mainClock.advanceTimeBy(6_000)
+
+        assertTrue(
+            "Presenting a sheet again must replay its own content's pulse from node entry.",
+            sampled.any { it != rest },
+        )
+        assertEquals(
+            "A replayed pulse must rest exactly where the first one rested.",
+            rest,
+            sheetPulseOffset(),
+        )
+    }
+
+    /**
+     * The pulsing Button's origin relative to a motionless sibling on the same sheet, which is what
+     * makes the measurement independent of where the sheet itself currently sits.
+     */
+    private fun sheetPulseOffset(): Offset =
+        positionOf("mosaic-node-privacy-policy") - positionOf("mosaic-node-details-back")
 
     /** A paywall whose motion driver can be swapped without a second `setContent`. */
     private class DriverSwitch {
@@ -520,25 +636,21 @@ class MosaicMotionComposeTest {
         .positionInRoot
 
     /**
-     * The canonical sheet, re-presented as a full screen.
+     * The canonical details screen with its remote video background dropped.
      *
-     * Its remote video background is dropped with it: the screen is a stopover that no assertion
-     * reads, and mounting an ExoPlayer against a network URL inside a clock-pinned test would buy
-     * nothing but a source of nondeterminism.
+     * Nothing here asserts on that background, and mounting an ExoPlayer against a network URL
+     * inside a clock-pinned test would buy nothing but a source of nondeterminism.
      */
-    private fun MosaicPaywallDocument.withDetailsPresentedAsASecondScreen(): MosaicPaywallDocument =
-        copy(
-            screens = screens.map { screen ->
-                if (screen.id != "details") {
-                    screen
-                } else {
-                    screen.copy(
-                        presentation = MosaicScreenPresentation.SCREEN,
-                        layout = screen.layout.copy(background = null),
-                    )
-                }
-            },
-        )
+    private fun MosaicPaywallDocument.withInertDetailsBackground(): MosaicPaywallDocument = copy(
+        screens = screens.map { screen ->
+            if (screen.id != "details") {
+                screen
+            } else {
+                screen.copy(layout = screen.layout.copy(background = null))
+            }
+        },
+    )
+
 
     private fun motionState(
         driver: MosaicMotionDriver,
@@ -587,9 +699,12 @@ class MosaicMotionComposeTest {
         )
     }
 
-    private fun protocolV04Bundle(): MosaicPaywallDocument {
+    private fun protocolV04Bundle(): MosaicPaywallDocument = v04Fixture("complete-paywall.json")
+
+    /** Any canonical `0.4` fixture the build copies into this suite's assets. */
+    private fun v04Fixture(name: String): MosaicPaywallDocument {
         val context = InstrumentationRegistry.getInstrumentation().context
-        val source = context.assets.open("mosaic/v0.4/complete-paywall.json")
+        val source = context.assets.open("mosaic/v0.4/$name")
             .bufferedReader().use { it.readText() }
         return MosaicProtocolDecoder.decode(source)
     }

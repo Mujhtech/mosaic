@@ -149,10 +149,24 @@ class ProtocolV04Test {
             "expired-countdown.json",
             "hidden-purchase-target.json",
             "navigation-only.json",
+            "screen-round-trip.json",
         ).forEach { name ->
             val document = v04Document(name)
             assertEquals(name, MOSAIC_PROTOCOL_V04_VERSION, document.schemaVersion)
         }
+
+        // The round trip is the one fixture whose *shape* an assertion depends on: the Compose
+        // re-entry test is only meaningful if both screens really are Screen presentations that
+        // navigate to each other, and each really does carry a bounded loop.
+        val roundTrip = v04Document("screen-round-trip.json")
+        assertEquals(
+            listOf(MosaicScreenPresentation.SCREEN, MosaicScreenPresentation.SCREEN),
+            roundTrip.screens.map(MosaicPaywallScreen::presentation),
+        )
+        val loops = roundTrip.walkNodesDepthFirst().mapNotNull { node ->
+            node.motion?.loop?.let { node.id to it.repeatCount }
+        }.toList()
+        assertEquals(listOf("view-details" to 3, "details-back" to 2), loops)
     }
 
     /**

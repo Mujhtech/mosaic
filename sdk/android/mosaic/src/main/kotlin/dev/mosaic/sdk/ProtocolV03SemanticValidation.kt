@@ -866,7 +866,17 @@ internal fun deriveCapabilities(
         }
     }
     val designSystem = root.getAsJsonObject("designSystem")
-    if (designSystem.entrySet().any { (_, value) -> value.asJsonArray.size() > 0 }) {
+    // The three *style* catalogs only. `motions` is the fourth catalog in the same object but it is
+    // not a style token: motion is covered by `motion.appear`, `motion.selection`, and `motion.loop`,
+    // which are derived from the nodes that author it. Deriving `style.designTokens` from a
+    // motions-only design system would demand a capability for a catalog that renders nothing, and
+    // would reject a document the reference validator accepts. Every fixture before the two-Screen
+    // round trip also declared colours, so a catalog-agnostic check agreed with the contract by
+    // coincidence rather than by construction.
+    if (
+        setOf("colors", "backgrounds", "shadows")
+            .any { name -> (designSystem.getAsJsonArray(name)?.size() ?: 0) > 0 }
+    ) {
         add(MosaicCapabilityName.DESIGN_TOKENS)
     }
     if (objectContainsType(root, setOf("linearGradient", "radialGradient"))) {
