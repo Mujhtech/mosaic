@@ -213,6 +213,95 @@ describe("motion authoring constraints", () => {
   });
 
   /**
+   * The regression behind these three cases: schema diagnostics addressed
+   * under `motion.*` were silently discarded as oneOf branch noise, so an
+   * invalid motion block blocked publish with an *empty* Validation panel --
+   * the author was told the document is invalid and shown nothing to fix.
+   * Each case pins that the actionable diagnostic reaches the panel model.
+   */
+  it("surfaces a selection motion missing its curve as a visible diagnostic", () => {
+    const base = v04Template();
+    const invalid = withMotion(base, "plans", { selection: {} });
+
+    const { contractValid, issues } = collectEditorValidation(invalid);
+
+    expect(contractValid).toBe(false);
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        code: "schema.required",
+        componentId: "plans",
+        property: "motion.selection.curve",
+      })
+    );
+  });
+
+  /**
+   * The appear oneOf is discriminated on `effect`. Authoring `riseLogicalSize`
+   * on a fade entrance must surface the actionable "not supported" diagnostic
+   * from the chosen fade branch, while the fadeRise branch's complaints (a
+   * const mismatch on effect) stay filtered as noise -- both halves matter,
+   * because keeping everything would bury the fix under contradictions and
+   * keeping nothing re-opens the empty-panel failure.
+   */
+  it("keeps the chosen appear branch's diagnostic and drops the other branch's noise", () => {
+    const base = v04Template();
+    const contentId = required(base.screens[0], "screens[0]").layout.content.id;
+    const invalid = withMotion(base, contentId, {
+      appear: { ...ENTRANCE, riseLogicalSize: 12 },
+    });
+
+    const { contractValid, issues } = collectEditorValidation(invalid);
+
+    expect(contractValid).toBe(false);
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        code: "schema.additionalProperties",
+        componentId: contentId,
+        property: "motion.appear.riseLogicalSize",
+      })
+    );
+    expect(issues).not.toContainEqual(
+      expect.objectContaining({
+        code: "schema.const",
+        property: "motion.appear.effect",
+      })
+    );
+  });
+
+  /**
+   * The curve oneOf is discriminated on `type`. A token reference missing its
+   * `id` must surface exactly that, not the inline branch's demand for
+   * durationMilliseconds and easing the author never chose.
+   */
+  it("surfaces a token curve missing its id without inline-branch noise", () => {
+    const base = v04Template();
+    const contentId = required(base.screens[0], "screens[0]").layout.content.id;
+    const invalid = withMotion(base, contentId, {
+      appear: {
+        effect: "fade",
+        curve: { type: "motionToken" },
+        delayMilliseconds: 0,
+      },
+    });
+
+    const { contractValid, issues } = collectEditorValidation(invalid);
+
+    expect(contractValid).toBe(false);
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        code: "schema.required",
+        componentId: contentId,
+        property: "motion.appear.curve.id",
+      })
+    );
+    expect(issues).not.toContainEqual(
+      expect.objectContaining({
+        property: "motion.appear.curve.durationMilliseconds",
+      })
+    );
+  });
+
+  /**
    * The metadata pass runs on every document change, so if it derived 0.3
    * capabilities for a 0.4 document it would rewrite a valid document into an
    * invalid one on the author's next keystroke. This drives the whole path:
