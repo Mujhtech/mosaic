@@ -16,7 +16,7 @@ const protocolFixtureRoot04 = "../../../../protocol/fixtures/v0.4"
 // stop running when the version changed.
 func TestCanonicalProtocolV04SchemaAndSemanticFixtures(t *testing.T) {
 	validator := newCanonicalProtocolValidator(t)
-	for _, name := range []string{"navigation-only.json", "edge-cases.json", "expired-countdown.json", "hidden-purchase-target.json", "complete-paywall.json"} {
+	for _, name := range []string{"navigation-only.json", "edge-cases.json", "expired-countdown.json", "hidden-purchase-target.json", "complete-paywall.json", "screen-round-trip.json"} {
 		t.Run("accepts_"+name, func(t *testing.T) {
 			root := readProtocolFixture(t, filepath.Join(protocolFixtureRoot04, name))
 			if errors := validator.Validate(root); len(errors) != 0 {
@@ -29,8 +29,8 @@ func TestCanonicalProtocolV04SchemaAndSemanticFixtures(t *testing.T) {
 	// same reason as the 0.3 corpus: a corpus emptied or renamed out from under
 	// a glob otherwise reports success over zero cases.
 	layers := readRejectionLayersIn(t, protocolFixtureRoot04)
-	if len(layers) != 19 {
-		t.Fatalf("expected 19 registered invalid 0.4 fixtures, found %d", len(layers))
+	if len(layers) != 20 {
+		t.Fatalf("expected 20 registered invalid 0.4 fixtures, found %d", len(layers))
 	}
 	for _, name := range layers {
 		t.Run("rejects_"+name, func(t *testing.T) {
