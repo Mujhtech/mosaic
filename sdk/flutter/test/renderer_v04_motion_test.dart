@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
@@ -22,6 +24,9 @@ void main() {
   const loopScaleKey = ValueKey<String>('mosaic-loop-scale');
   const loopOpacityKey = ValueKey<String>('mosaic-loop-opacity');
 
+  String fixture(String name) =>
+      repositoryFile('protocol/fixtures/v0.4/$name').readAsStringSync();
+
   MosaicPaywallDocument fixtureDocument([
     String name = 'complete-paywall.json',
   ]) =>
@@ -35,6 +40,8 @@ void main() {
     MosaicMotionDriver driver = const MosaicMotionDriver(),
     DateTime Function()? clock,
     MosaicPaywallDocument? document,
+    MosaicDiagnosticCallback? onDiagnostic,
+    MosaicBundledVideoResolver? videoResolver,
   }) async {
     tester.view.physicalSize = const Size(600, 3000);
     tester.view.devicePixelRatio = 1;
@@ -45,6 +52,8 @@ void main() {
         home: Scaffold(
           body: MosaicPaywall(
             document: document ?? fixtureDocument(),
+            onDiagnostic: onDiagnostic,
+            videoResolver: videoResolver,
             purchaseProvider: MockMosaicPurchaseProvider(
               products: const <MosaicProduct>[
                 MosaicProduct(
@@ -602,6 +611,85 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(MosaicDecorativeVideo), findsNothing);
+  });
+
+  testWidgets('a resolvable video that is not played diagnoses nothing',
+      (tester) async {
+    // The converse half of the availability ruling. A customer who asked for
+    // less motion has not encountered a broken paywall, so suppressing a video
+    // whose source resolves is not a media failure and must not be reported as
+    // one — an operator reading these diagnostics would otherwise chase a
+    // resolution problem that does not exist.
+    final diagnostics = <MosaicDiagnostic>[];
+    await pumpPaywall(
+      tester,
+      reducedMotion: true,
+      onDiagnostic: diagnostics.add,
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.byKey(const ValueKey<String>('mosaic-view-details')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.byType(MosaicDecorativeVideo), findsNothing);
+    expect(
+      diagnostics.map((diagnostic) => diagnostic.code),
+      isNot(contains('background.videoUnavailable')),
+    );
+  });
+
+  testWidgets('an unresolvable video is diagnosed even when it is not played',
+      (tester) async {
+    // Unavailability is a fact about the media, not about the customer's
+    // settings: the two answers are decided independently. An operator
+    // debugging a 0.4 paywall on a reduced-motion device must still be told the
+    // video could not be resolved, so suppression must not swallow it.
+    //
+    // The canonical document declares a bundled video asset and a background
+    // token for it, but renders the remote one. Pointing the Sheet at the
+    // bundled token — both already authored — is what puts an unresolvable
+    // source on screen, with no resolver to map its key.
+    final source =
+        jsonDecode(fixture('complete-paywall.json'))! as Map<String, Object?>;
+    final sheet = (source['screens']! as List<Object?>)
+        .cast<Map<String, Object?>>()
+        .firstWhere((screen) => screen['id'] == 'details');
+    (sheet['layout']! as Map<String, Object?>)['background'] =
+        <String, Object?>{'type': 'backgroundToken', 'id': 'ambient-video'};
+
+    final diagnostics = <MosaicDiagnostic>[];
+    await pumpPaywall(
+      tester,
+      reducedMotion: true,
+      document: const MosaicProtocolDecoder().decode(jsonEncode(source)),
+      onDiagnostic: diagnostics.add,
+      // No bundled key resolves, so the media is genuinely missing.
+      videoResolver: (_) => null,
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.byKey(const ValueKey<String>('mosaic-view-details')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // Still suppressed: the diagnostic does not buy back playback.
+    expect(find.byType(MosaicDecorativeVideo), findsNothing);
+    expect(
+      find.byKey(
+        const ValueKey<String>(
+          'mosaic-reduced-motion-video-bundled-ambient-video',
+        ),
+      ),
+      findsOneWidget,
+    );
+    // And the same diagnostic the playing path would have raised is raised.
+    final unavailable = diagnostics
+        .where((diagnostic) => diagnostic.code == 'background.videoUnavailable')
+        .toList();
+    expect(unavailable, hasLength(1));
+    expect(
+      unavailable.single.message,
+      'Video background is unavailable; its fallback colour is used.',
+    );
   });
 
   testWidgets('a video background plays when motion is not reduced',

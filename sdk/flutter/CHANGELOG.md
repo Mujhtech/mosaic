@@ -39,6 +39,17 @@
   `motions` catalog rejected a well-formed document as configuration-
   unavailable, which is the worst failure mode a reader has: the paywall is
   valid and the customer sees nothing.
+- **Fix: a missing video is still diagnosed when reduced motion suppressed it.**
+  Availability and playability are decided independently — whether the media
+  exists is a fact about the document and the host's asset resolution, whether
+  it plays is a fact about the customer's settings — so the suppressed path now
+  assesses the video's source and raises the same
+  `background.videoUnavailable` diagnostic, with the same wording, that the
+  playing path would. The converse holds and is asserted too: a resolvable
+  video that is deliberately not played is not a broken paywall and diagnoses
+  nothing. A remote source is treated as resolvable on this path, because its
+  reachability is only knowable by fetching it and fetching is the playback the
+  ruling forbids.
 - **`appear` and `loop` replay on genuine screen re-entry, and the pulse's
   authored cycle bound is spent per screen entry.** Navigating to a Paywall
   Screen and back re-enters the screen left behind, so both clocks restart from
