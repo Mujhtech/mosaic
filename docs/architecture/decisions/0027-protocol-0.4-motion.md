@@ -74,9 +74,14 @@ this version. The contract is specified in
    alternative, a per-session bound, would require renderers to carry
    cross-screen motion history that the protocol does not model and no frame
    vector can pin, which is where three renderers diverge. All three renderers
-   already behave this way. Specified in
-   [`docs/protocol/v0.4.md`](../../protocol/v0.4.md#replay-on-screen-re-entry);
-   renderer tests pinning it are a required follow-up.
+   behave this way and now pin it with tests driving
+   `protocol/fixtures/v0.4/screen-round-trip.json`, each with the sheet round
+   trip as its negative case. A **Sheet is not an entry** of the screen beneath
+   it: that screen never left, so neither presenting nor dismissing one replays
+   its entrances or resets its pulse budget — which is what stops a disclosure
+   sheet from handing the bounded pulse a fresh budget on every open. Specified
+   in
+   [`docs/protocol/v0.4.md`](../../protocol/v0.4.md#replay-on-screen-re-entry).
 
 3. **The video-background reduced-motion fix ships as specified `0.4`
    behaviour, not as a `0.3` defect patch.** The product review argued to fix it
