@@ -507,9 +507,21 @@ internal fun MosaicDecorativeVideoBackground(
      * deliberately the same resolution order the existing missing-media policy already uses, so this
      * reuses a path three renderers have implemented rather than introducing a fourth outcome. No
      * frame of the video is shown, playback is not started and paused, and no control is offered.
+     *
+     * Which version that applies to is [MosaicVideoBackgroundPresentation.resolve]'s ruling to make,
+     * and it is made there rather than here so that CI can fail on it: this composable is only
+     * reachable from an instrumentation test.
      */
     val reducedMotion = LocalMosaicReducedMotion.current
-    var failed by remember(uri) { mutableStateOf(uri == null) }
+    var playbackFailed by remember(uri) { mutableStateOf(false) }
+    val presentation = MosaicVideoBackgroundPresentation.resolve(
+        hasSource = uri != null,
+        playbackFailed = playbackFailed,
+        schemaVersion = document.schemaVersion,
+        reducedMotion = reducedMotion,
+    )
+    val recordsUnavailable =
+        (presentation as? MosaicVideoBackgroundPresentation.Still)?.recordsUnavailable == true
     Box(
         modifier = modifier
             .background(background.fallbackColor.toComposeColor())
@@ -526,7 +538,7 @@ internal fun MosaicDecorativeVideoBackground(
                 ownerId = "$ownerId-poster",
             )
         }
-        if (uri != null && !failed && !reducedMotion) {
+        if (uri != null && presentation is MosaicVideoBackgroundPresentation.Play) {
             val context = LocalContext.current
             val player = remember(uri) {
                 ExoPlayer.Builder(context).build().apply {
@@ -540,7 +552,7 @@ internal fun MosaicDecorativeVideoBackground(
             DisposableEffect(player) {
                 val listener = object : Player.Listener {
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                        failed = true
+                        playbackFailed = true
                     }
                 }
                 player.addListener(listener)
@@ -570,8 +582,8 @@ internal fun MosaicDecorativeVideoBackground(
             )
         }
     }
-    LaunchedEffect(failed, ownerId) {
-        if (failed) {
+    LaunchedEffect(recordsUnavailable, ownerId) {
+        if (recordsUnavailable) {
             diagnostics.record(
                 MosaicDiagnostic(
                     MosaicDiagnosticCode.MEDIA_BACKGROUND_UNAVAILABLE,

@@ -29,10 +29,34 @@ in behaviour to what it was before `0.4` existed.
   state, which is how every static golden is captured.
 - **Reduced motion is injected at the renderer boundary**, defaulting to
   `Settings.Global.ANIMATOR_DURATION_SCALE == 0`. `appear` drops its transform, `selection` applies
-  instantly, and `loop` is disabled at rest. **A video background does not play under reduced
+  instantly, and `loop` is disabled at rest. **A `0.4` video background does not play under reduced
   motion**: the declared poster is rendered if available and otherwise the declared `fallbackColor`,
   with no frame shown and no player created. That is handled explicitly because Compose honouring
-  the animator scale does not reach ExoPlayer playback at all.
+  the animator scale does not reach ExoPlayer playback at all. Per ADR-0027 ruling 3 the rule is
+  gated on the *document's* declared version, so **a `0.3` document still plays** — the fix ships as
+  specified `0.4` behaviour rather than as a `0.3` defect patch, and the exposure that leaves open
+  stays tracked rather than being quietly closed by a renderer. iOS and Flutter draw the same gate.
+  The decision is `MosaicVideoBackgroundPresentation.resolve`, a pure function, so the version gate
+  is covered by a JVM unit test rather than only by an instrumentation test that CI does not run.
+- **Motion replays on a genuine screen entry, and a sheet is not one.** Entrances and a Button's
+  bounded `loop` play once per *screen entry*: navigating from one Screen to another and back plays
+  them again with a fresh cycle budget, while presenting or dismissing a Sheet replays nothing,
+  because the screen underneath never left. A sheet's own content is a genuine entry on every
+  presentation. This required a renderer fix: the full-screen content was composed from two call
+  sites in two branches of an `if`, and two branches are two composition groups — so presenting a
+  sheet tore the screen behind it down and rebuilt it, resetting its scroll offset, replaying its
+  entrances, and restarting a pulse whose budget is per entry. It is now one call site.
+- **Feature List honours an authored `markerSize`.** `0.4` adds the optional field, bounded exactly
+  as Timeline's and likewise component-level: an item overrides which glyph it draws, never how
+  large. Absent, it falls back to the list's own `typography.fontSize` — the schema's documented
+  default, not a renderer-chosen constant. `0.3` has no such field and a `0.3` document declaring
+  one is still rejected as an unknown property, so `0.3` rendering is unchanged.
+- **`style.designTokens` is derived from the three *style* catalogs only.** It was derived from any
+  non-empty catalog in `designSystem`, which wrongly included `motions` — motion is covered by
+  `motion.appear`, `motion.selection`, and `motion.loop`, derived from the nodes that author it. A
+  document whose design system carries only motion tokens was rejected for failing to declare a
+  capability the reference validator does not derive. Every earlier fixture also declared colours,
+  so the two rules had agreed by coincidence rather than by construction.
 - **Flash safety is enforced, not advised.** A `loop` curve below 500 ms, a second looping Button on
   one screen, a nested `appear`, an unknown motion token, and an unreferenced motion token each
   reject the document. The unused-token rule is deliberately asymmetric with the colour, background,

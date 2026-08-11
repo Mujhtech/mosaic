@@ -259,6 +259,69 @@ class ProtocolV04Test {
     }
 
     /**
+     * Reduced motion stops a video background on `0.4` and **not** on `0.3`.
+     *
+     * ADR-0027 ruling 3 ships the fix as specified `0.4` behaviour rather than as a `0.3` defect
+     * patch, so a `0.3` document keeps playing and its exposure stays open and tracked. The
+     * discriminating pair is the whole test: a renderer that stopped playback on every version would
+     * satisfy any assertion made only about `0.4`, while silently changing what every already
+     * published `0.3` paywall does.
+     *
+     * Asserted here, at the layer CI runs, rather than only in the Compose suite — the instrumented
+     * tests do not run in CI, so an assertion made only there could not fail a build.
+     */
+    @Test
+    fun reducedMotionStopsAVideoBackgroundOnlyOnAProtocolV04Document() {
+        fun resolve(schemaVersion: String, reducedMotion: Boolean) =
+            MosaicVideoBackgroundPresentation.resolve(
+                hasSource = true,
+                playbackFailed = false,
+                schemaVersion = schemaVersion,
+                reducedMotion = reducedMotion,
+            )
+
+        assertEquals(
+            MosaicVideoBackgroundPresentation.Still(recordsUnavailable = false),
+            resolve(MOSAIC_PROTOCOL_V04_VERSION, reducedMotion = true),
+        )
+        assertEquals(
+            MosaicVideoBackgroundPresentation.Play,
+            resolve(MOSAIC_PROTOCOL_VERSION, reducedMotion = true),
+        )
+        // Neither version stops without the preference; the gate must not become an unconditional
+        // one in the other direction either.
+        assertEquals(
+            MosaicVideoBackgroundPresentation.Play,
+            resolve(MOSAIC_PROTOCOL_V04_VERSION, reducedMotion = false),
+        )
+        assertEquals(
+            MosaicVideoBackgroundPresentation.Play,
+            resolve(MOSAIC_PROTOCOL_VERSION, reducedMotion = false),
+        )
+
+        // Unavailability is a fact about the media, not about the preference: an operator debugging
+        // a 0.4 paywall on a reduced-motion device is still told the video could not be resolved.
+        assertEquals(
+            MosaicVideoBackgroundPresentation.Still(recordsUnavailable = true),
+            MosaicVideoBackgroundPresentation.resolve(
+                hasSource = false,
+                playbackFailed = false,
+                schemaVersion = MOSAIC_PROTOCOL_V04_VERSION,
+                reducedMotion = true,
+            ),
+        )
+        assertEquals(
+            MosaicVideoBackgroundPresentation.Still(recordsUnavailable = true),
+            MosaicVideoBackgroundPresentation.resolve(
+                hasSource = true,
+                playbackFailed = true,
+                schemaVersion = MOSAIC_PROTOCOL_VERSION,
+                reducedMotion = false,
+            ),
+        )
+    }
+
+    /**
      * Feature List honours an authored `markerSize`, and falls back to its own font size without one.
      *
      * Both directions are asserted because the risk is one-sided in each. The canonical list authors
