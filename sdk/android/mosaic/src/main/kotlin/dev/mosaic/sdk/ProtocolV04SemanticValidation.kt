@@ -32,6 +32,15 @@ internal fun validateMotionSemantics(
  * is checked where a `loop` names a curve — so a motion token nothing references has never been
  * checked against anything and sits in the catalog looking like an approved timing value. The next
  * author to reach for it inherits a duration no rule has ever seen.
+ *
+ * "Referenced" is **transitive reachability rooted at node reference sites**, not "named anywhere in
+ * the document". [referencedMotionTokenIds] is accumulated by `resolveMotionToken` during the screen
+ * walk alone, and marks on every hop, so a token reached only through another *reached* token counts
+ * as used while a token reached only from an *unused* token's value does not. Rooting the walk in the
+ * catalog instead would make an orphaned pair of tokens vouch for each other: the unused one's value
+ * would be the only thing keeping its target alive, and neither has ever passed a reference-site
+ * check. Depth is unbounded for the same reason — a chain of aliases is one authored reference no
+ * matter how many hops it takes, so a one-hop test would reject a legitimate three-deep alias.
  */
 private fun validateMotionCatalogUse(
     rawDesignSystem: RawDesignSystem,

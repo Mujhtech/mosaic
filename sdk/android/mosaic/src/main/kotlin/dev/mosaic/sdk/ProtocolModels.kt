@@ -654,6 +654,14 @@ data class MosaicFeatureListComponent(
     val items: List<MosaicFeatureListItem>,
     val typography: MosaicTypography,
     val accessibility: MosaicControlAccessibility,
+    /**
+     * The authored extent of every marker glyph, mirroring Timeline's field of the same name.
+     *
+     * Component-level rather than per item, exactly as marker *colour* is: an item overrides which
+     * glyph it draws, never how large it is, so a list cannot end up with a ragged glyph column.
+     * A `0.3` document has no such field, so this is always null there.
+     */
+    val markerSize: Double? = null,
     val appearance: MosaicBoxAppearance? = null,
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
@@ -662,6 +670,19 @@ data class MosaicFeatureListComponent(
 ) : MosaicNode {
     override val type: String = "featureList"
     val itemSpacing: Double get() = gap
+
+    /**
+     * The extent every marker is actually drawn at.
+     *
+     * Unlike Timeline, where a marker is optional and `markerSize` is therefore required exactly
+     * when one is declared, a Feature List always draws a glyph — `marker` is required on the
+     * component — so the field is optional and the schema documents a default instead. That default
+     * is the list's own `typography.fontSize`, following Timeline's precedent of falling back to
+     * another authored value on the same component rather than to a constant, and **renderers must
+     * not substitute a value of their own**. It is also what this renderer derived before the field
+     * existed, so a list that declares no size renders exactly as it did.
+     */
+    val resolvedMarkerSize: Double get() = markerSize ?: typography.fontSize
 }
 
 enum class MosaicUnavailableProductSelection { FIRST_AVAILABLE }

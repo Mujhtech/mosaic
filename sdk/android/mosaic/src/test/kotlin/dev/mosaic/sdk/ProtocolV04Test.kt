@@ -1,7 +1,11 @@
 package dev.mosaic.sdk
 
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -152,29 +156,141 @@ class ProtocolV04Test {
     }
 
     /**
-     * The reference validator's motion rejections, reproduced.
+     * Every document the reference validator rejects, reproduced — swept from the directory rather
+     * than listed.
      *
-     * Each of these is a document that renders — the failure it prevents is not a crash but a
-     * paywall that is unsafe or ambiguous: compounded entrance opacities no two renderers agree on,
-     * a pulse fast enough to approach the WCAG 2.3.1 flash threshold, a screen that pulses several
-     * controls at once, and a timing value nothing has ever checked sitting in the catalog looking
-     * approved.
+     * Each of these renders: the failure it prevents is not a crash but a paywall that is unsafe or
+     * ambiguous — compounded entrance opacities no two renderers agree on, a pulse fast enough to
+     * approach the WCAG 2.3.1 flash threshold, a screen that pulses several controls at once, and a
+     * timing value nothing has ever checked sitting in the catalog looking approved.
+     *
+     * Swept because a hand-maintained list silently under-tests: a rejection the protocol agent adds
+     * a fixture for is a rejection this reader is expected to make on the day it lands, and a list
+     * only covers it once somebody remembers to edit the list too.
      */
     @Test
-    fun rejectsEveryInvalidMotionDocument() {
-        listOf(
-            "nested-appear-motion.json",
-            "two-loops-on-one-screen.json",
-            "loop-motion-outside-button.json",
-            "loop-motion-below-flash-floor.json",
-            "unknown-motion-token.json",
-            "unused-motion-token.json",
-            "rise-on-fade-appear.json",
-        ).forEach { name ->
+    fun rejectsEveryInvalidCanonicalV04Fixture() {
+        val directory = repositoryFile("protocol/fixtures/v0.4/invalid")
+        val fixtures = Files.list(directory).use { paths ->
+            paths.map { it.fileName.toString() }
+                .filter { it.endsWith(".json") }
+                .sorted()
+                .toList()
+        }
+        assertTrue("The canonical invalid fixture directory is empty.", fixtures.isNotEmpty())
+        fixtures.forEach { name ->
             assertThrows(name, MosaicProtocolException::class.java) {
                 MosaicProtocolDecoder.decode(v04Source("invalid/$name"))
             }
         }
+    }
+
+    /**
+     * The unused-motion-token rule is transitive reachability rooted at *node* reference sites.
+     *
+     * The canonical fixture's two orphans reference each other, and **both** must be reported. The
+     * sweep above already proves the document is rejected, which is the weaker half: a validator
+     * that treated the catalog itself as a usage root would let the orphans vouch for one another,
+     * report only the head of the chain as unused, and still reject the document — passing the sweep
+     * while holding the wrong semantics. Naming both is also what stops an author fixing one token
+     * and re-running straight into the other.
+     */
+    @Test
+    fun namesEveryMotionTokenReachableOnlyFromAnUnusedToken() {
+        val failure = assertThrows(MosaicProtocolException::class.java) {
+            MosaicProtocolDecoder.decode(v04Source("invalid/unused-token-transitive.json"))
+        }
+        // As one sorted list rather than two substring checks, because "motion-orphan-a" and
+        // "motion-orphan-b" would each match a message naming only the other's prefix.
+        assertTrue(
+            failure.message,
+            failure.message.orEmpty().contains("motion-orphan-a, motion-orphan-b"),
+        )
+    }
+
+    /**
+     * ...and reachability has no depth limit: a node reaching a token through two aliases uses all
+     * three.
+     *
+     * The canonical fixture only ever aliases one hop deep, so a reader that resolved exactly one
+     * indirection would pass every committed fixture and reject a legitimate document the first time
+     * a design system grew a second alias layer.
+     */
+    @Test
+    fun acceptsAMotionTokenReachedThroughAChainOfAliases() {
+        val document = JsonParser.parseString(v04Source("complete-paywall.json")).asJsonObject
+        val motions = document.getAsJsonObject("designSystem").getAsJsonArray("motions")
+        // `features` names `motion-entrance-alias`, so re-pointing the alias at a new hop leaves the
+        // node's own reference untouched and puts one more indirection under it.
+        motions.first { it.asJsonObject.get("id").asString == "motion-entrance-alias" }
+            .asJsonObject
+            .add("value", tokenReference("motion-entrance-hop"))
+        motions.add(
+            motionToken("motion-entrance-hop", "Entrance Hop", tokenReference("motion-entrance")),
+        )
+
+        val decoded = MosaicProtocolDecoder.decode(document.toString())
+        // Every hop collapses to the one authored pair, so a three-deep chain still resolves to the
+        // entrance curve rather than to a second duration that could drift from it.
+        assertEquals(
+            MosaicMotion(240, MosaicMotionEasing.DECELERATE),
+            decoded.designSystem.motions.single { it.id == "motion-entrance-hop" }.value,
+        )
+        assertEquals(
+            MosaicMotion(240, MosaicMotionEasing.DECELERATE),
+            requireNotNull(
+                decoded.walkNodesDepthFirst().single { it.id == "features" }.motion?.appear,
+            ).curve,
+        )
+    }
+
+    /**
+     * Feature List honours an authored `markerSize`, and falls back to its own font size without one.
+     *
+     * Both directions are asserted because the risk is one-sided in each. The canonical list authors
+     * `18` against a `16` font size, so a renderer that kept deriving the extent from typography
+     * would still draw a plausible glyph and pass every other assertion in this suite — the two
+     * values have to differ for the authored one to be provably read. The fallback is the schema's
+     * own default (`typography.fontSize`, not a constant), and it is what keeps a list that declares
+     * no size rendering exactly as it did before the field existed.
+     */
+    @Test
+    fun featureListMarkerSizeIsAuthoredWhenDeclaredAndDerivedWhenAbsent() {
+        val authored = v04Document("complete-paywall.json")
+            .walkNodesDepthFirst()
+            .filterIsInstance<MosaicFeatureListComponent>()
+            .single { it.id == "features" }
+        assertEquals(18.0, requireNotNull(authored.markerSize), 0.0)
+        assertEquals(18.0, authored.resolvedMarkerSize, 0.0)
+        assertNotEquals(authored.typography.fontSize, authored.resolvedMarkerSize)
+
+        val undeclared = JsonParser.parseString(v04Source("complete-paywall.json")).asJsonObject
+        findNode(undeclared, "features").remove("markerSize")
+        val derived = MosaicProtocolDecoder.decode(undeclared.toString())
+            .walkNodesDepthFirst()
+            .filterIsInstance<MosaicFeatureListComponent>()
+            .single { it.id == "features" }
+        assertNull(derived.markerSize)
+        assertEquals(derived.typography.fontSize, derived.resolvedMarkerSize, 0.0)
+
+        // A non-positive extent is a glyph nothing draws, so it is rejected rather than clamped --
+        // through the same `positiveLogicalSize` reader Timeline's `markerSize` goes through.
+        val zeroed = JsonParser.parseString(v04Source("complete-paywall.json")).asJsonObject
+        findNode(zeroed, "features").addProperty("markerSize", 0)
+        assertThrows(MosaicProtocolException::class.java) {
+            MosaicProtocolDecoder.decode(zeroed.toString())
+        }
+
+        // ...and `0.3` is unchanged by the field's existence: it has no `markerSize` on a Feature
+        // List, so a `0.3` document declaring one is an unknown property exactly as before.
+        val v03 = canonicalFixtureObject()
+        findNode(v03, "features").addProperty("markerSize", 20)
+        assertEquals(
+            MosaicProtocolViolation.UNKNOWN_PROPERTY,
+            assertThrows(MosaicProtocolException::class.java) {
+                MosaicProtocolDecoder.decode(v03.toString())
+            }.violation,
+        )
     }
 
     /**
@@ -244,6 +360,18 @@ class ProtocolV04Test {
         assertTrue(canonicalDocument().designSystem.motions.isEmpty())
         assertTrue(canonicalDocument().walkNodesDepthFirst().all { it.motion == null })
     }
+}
+
+private fun motionToken(id: String, name: String, value: JsonElement): JsonObject =
+    JsonObject().apply {
+        addProperty("id", id)
+        addProperty("name", name)
+        add("value", value)
+    }
+
+private fun tokenReference(id: String): JsonObject = JsonObject().apply {
+    addProperty("type", "motionToken")
+    addProperty("id", id)
 }
 
 internal fun v04Source(relativeName: String): String =

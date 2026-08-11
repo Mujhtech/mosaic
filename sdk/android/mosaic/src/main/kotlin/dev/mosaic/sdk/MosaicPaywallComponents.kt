@@ -300,12 +300,13 @@ internal fun RenderFeatureList(
             ) {
                 // An absent item marker means the item carries the list's marker; it is never a
                 // request for no glyph. Marker colour and size stay component-level, exactly as
-                // they are on Timeline.
+                // they are on Timeline — an authored `markerSize` when there is one, and the list's
+                // own font size when there is not.
                 MosaicMarkerGlyph(
                     marker = item.marker ?: component.marker,
                     ownerId = item.id,
                     ordinal = index + 1,
-                    size = component.typography.fontSize,
+                    size = component.resolvedMarkerSize,
                     color = component.markerColor,
                     typography = component.typography,
                     localization = localization,

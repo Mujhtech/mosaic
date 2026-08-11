@@ -425,13 +425,17 @@ internal fun buttonComponent(objectValue: JsonObject, path: String): MosaicButto
 }
 
 internal fun featureListComponent(objectValue: JsonObject, path: String): MosaicFeatureListComponent {
+    // `markerSize` is a `0.4` addition that mirrors Timeline's field of the same name. It is version
+    // gated rather than merely optional so that the `0.3` reader is unchanged by its existence: a
+    // `0.3` document declaring one is rejected as an unknown property, exactly as it was before.
+    val markerSizeKey = if (decodingProtocolV04()) setOf("markerSize") else emptySet()
     objectValue.expectNodeKeys(
         setOf(
             "type", "id", "marker", "gap", "markerColor", "items", "typography",
             "appearance", "sizing", "outerInsets", "visibility", "accessibility",
-        ),
+        ) + markerSizeKey,
         path,
-        optional = setOf("appearance", "sizing", "outerInsets", "visibility"),
+        optional = setOf("appearance", "sizing", "outerInsets", "visibility") + markerSizeKey,
     )
     val items = objectValue.required("items", path).boundedArrayAt("$path.items", 1, 100)
     return MosaicFeatureListComponent(
@@ -440,6 +444,13 @@ internal fun featureListComponent(objectValue: JsonObject, path: String): Mosaic
         marker = featureListMarker(objectValue, path),
         gap = objectValue.requiredLogicalSize("gap", "$path.gap"),
         markerColor = color(objectValue.required("markerColor", path), "$path.markerColor"),
+        // Bounded exactly as Timeline's is, by the shared `positiveLogicalSize` reader: a marker of
+        // zero extent is a glyph nothing draws, and the ceiling is the protocol's own.
+        markerSize = if (objectValue.hasNonNull("markerSize")) {
+            objectValue.requiredPositiveLogicalSize("markerSize", "$path.markerSize")
+        } else {
+            null
+        },
         items = items.mapIndexed { index, item -> featureListItem(item, "$path.items[$index]") },
         typography = typography(objectValue.required("typography", path), "$path.typography", false),
         appearance = optionalBoxAppearance(objectValue, path),

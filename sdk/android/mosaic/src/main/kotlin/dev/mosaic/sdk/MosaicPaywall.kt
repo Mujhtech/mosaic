@@ -307,23 +307,30 @@ fun MosaicPaywallContent(
             Box(modifier = modifier.testTag("mosaic-rendering-failed"))
             return@CompositionLocalProvider
         }
-        if (current.presentation == MosaicScreenPresentation.SHEET) {
-            MosaicScreenContent(
-                screen = state.backgroundScreen,
-                state = state,
-                localization = localization,
-                imageResolver = imageResolver,
-                diagnostics = diagnostics,
-                onEvent = onEvent,
-                layoutDirection = layoutDirection,
-                modifier = modifier,
-            )
+        // One call site for the full-screen content, whether or not a sheet is over it. Two call
+        // sites in two branches of an `if` are two *groups*: switching branches disposes one and
+        // composes the other, so presenting a sheet would tear the screen behind it down and build
+        // it again — resetting its scroll offset, restarting its `appear` entrances, and replaying a
+        // bounded pulse whose cycle bound is per screen *entry*. The screen behind a sheet never
+        // left, so none of that is a re-entry.
+        val sheet = current.takeIf { it.presentation == MosaicScreenPresentation.SHEET }
+        MosaicScreenContent(
+            screen = if (sheet == null) current else state.backgroundScreen,
+            state = state,
+            localization = localization,
+            imageResolver = imageResolver,
+            diagnostics = diagnostics,
+            onEvent = onEvent,
+            layoutDirection = layoutDirection,
+            modifier = modifier,
+        )
+        if (sheet != null) {
             ModalBottomSheet(
                 onDismissRequest = { state.navigateBack() },
                 dragHandle = null,
             ) {
                 MosaicScreenContent(
-                    screen = current,
+                    screen = sheet,
                     state = state,
                     localization = localization,
                     imageResolver = imageResolver,
@@ -334,17 +341,6 @@ fun MosaicPaywallContent(
                     isSheet = true,
                 )
             }
-        } else {
-            MosaicScreenContent(
-                screen = current,
-                state = state,
-                localization = localization,
-                imageResolver = imageResolver,
-                diagnostics = diagnostics,
-                onEvent = onEvent,
-                layoutDirection = layoutDirection,
-                modifier = modifier,
-            )
         }
     }
 }

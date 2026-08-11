@@ -369,6 +369,72 @@ class MosaicMotionComposeTest {
         )
     }
 
+    /**
+     * A genuine screen re-entry replays the entrance and the pulse, from node entry.
+     *
+     * `repeat.count` bounds a pulse **per screen entry**, not per document lifetime: a customer who
+     * leaves the offer and comes back is arriving at the screen again, and the call to action it
+     * draws attention to is exactly as new to them as it was the first time. The opposite reading —
+     * three cycles ever — would make the pulse a property of the paywall session, which nothing in
+     * the schema expresses and which no renderer could implement without persisting per-node play
+     * counts across navigation.
+     *
+     * Measured as the Button's transformed origin rather than as pixels. A `graphicsLayer` scale
+     * about the centre moves the top-left corner, and `positionInRoot` maps through layer transforms
+     * without clipping to the viewport — so this holds for a Button laid out below the fold, which
+     * matters here because a genuine re-entry also resets the screen's scroll offset and a capture
+     * or a bounds comparison would then be measuring an empty rectangle.
+     *
+     * The stopover screen is the canonical sheet re-presented as a screen, because the canonical
+     * document has exactly one Screen: a *sheet* over the offer is deliberately not a re-entry —
+     * the screen behind it never left — so it could not stand in for one here.
+     */
+    @Test
+    fun aGenuineScreenReEntryReplaysThePulseFromNodeEntry() {
+        compose.mainClock.autoAdvance = true
+        val document = protocolV04Bundle().withDetailsPresentedAsASecondScreen()
+        val state = motionState(pinnedCountdown(MosaicMotionDriver.Default), document)
+        runBlocking { state.loadProducts() }
+        compose.setContent {
+            MaterialTheme {
+                MosaicPaywallContent(state = state, onEvent = {}, reducedMotion = false)
+            }
+        }
+        // A bounded pulse stops, so the offer screen genuinely settles rather than needing a guessed
+        // wait: `waitForIdle` here is a wait on content that has finished moving.
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+
+        val rest = positionOf("mosaic-node-purchase")
+        compose.mainClock.advanceTimeBy(2_000)
+        assertEquals(
+            "A pulse that has played its authored cycles must stay at rest.",
+            rest,
+            positionOf("mosaic-node-purchase"),
+        )
+
+        compose.runOnUiThread { state.navigateTo("details") }
+        compose.mainClock.advanceTimeBy(16)
+        compose.runOnUiThread { state.navigateBack() }
+        // 1350ms after re-entry is the peak of the second of three 900ms cycles, and past the
+        // entrance — a 240ms delay and a 240ms fade — so the pulse is the only thing still moving.
+        compose.mainClock.advanceTimeBy(1_350)
+        val replaying = positionOf("mosaic-node-purchase")
+        compose.mainClock.advanceTimeBy(6_000)
+        val settled = positionOf("mosaic-node-purchase")
+
+        assertNotEquals(
+            "Re-entering a screen must replay its Button's pulse from node entry.",
+            rest,
+            replaying,
+        )
+        assertEquals(
+            "A replayed pulse must rest exactly where the first one rested.",
+            rest,
+            settled,
+        )
+    }
+
     /** A paywall whose motion driver can be swapped without a second `setContent`. */
     private class DriverSwitch {
         var useAnimatedDriver by mutableStateOf(true)
@@ -441,6 +507,38 @@ class MosaicMotionComposeTest {
         .onNodeWithTag(tag, useUnmergedTree = true)
         .fetchSemanticsNode()
         .boundsInRoot
+
+    /**
+     * Where the node's own origin lands in root coordinates, layer transforms included.
+     *
+     * Unclipped, unlike [boundsOf] and unlike a capture, so a node laid out below the fold is still
+     * measurable — and a scale about the centre is observable there, because it moves the origin.
+     */
+    private fun positionOf(tag: String) = compose
+        .onNodeWithTag(tag, useUnmergedTree = true)
+        .fetchSemanticsNode()
+        .positionInRoot
+
+    /**
+     * The canonical sheet, re-presented as a full screen.
+     *
+     * Its remote video background is dropped with it: the screen is a stopover that no assertion
+     * reads, and mounting an ExoPlayer against a network URL inside a clock-pinned test would buy
+     * nothing but a source of nondeterminism.
+     */
+    private fun MosaicPaywallDocument.withDetailsPresentedAsASecondScreen(): MosaicPaywallDocument =
+        copy(
+            screens = screens.map { screen ->
+                if (screen.id != "details") {
+                    screen
+                } else {
+                    screen.copy(
+                        presentation = MosaicScreenPresentation.SCREEN,
+                        layout = screen.layout.copy(background = null),
+                    )
+                }
+            },
+        )
 
     private fun motionState(
         driver: MosaicMotionDriver,
