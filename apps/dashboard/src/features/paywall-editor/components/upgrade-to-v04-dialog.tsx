@@ -87,6 +87,12 @@ export function UpgradeToV04Dialog({
               0.4. Versions of this paywall already published on 0.3 keep
               serving to those apps exactly as they are.
             </p>
+            <p className="mt-1 text-muted-foreground">
+              And for now, <strong>0.4 paywalls cannot be published to any
+              app</strong>: the delivery contract that would carry them has not
+              shipped yet, so publishing a Release with this paywall is refused
+              until it does. Authoring, preview, and validation all work today.
+            </p>
           </section>
         </div>
 
