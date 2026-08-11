@@ -62,6 +62,22 @@ this version. The contract is specified in
    enabled that switch would then have no stop mechanism at all. A bounded count
    needs no stop control because it stops.
 
+   **Amendment, 2026-08-11 — the bound's scope.** The ruling did not say what
+   the count is a bound *over*, and the answer changes what it guarantees. It is
+   a bound **per screen entry**, not per session: `appear` and `loop` replay on
+   genuine screen re-entry, so a `count: 3` pulse runs three cycles each time
+   the user navigates to the screen. This does not weaken the rationale above.
+   WCAG 2.2.2's subject is content that moves outside the user's control, and
+   motion re-triggered by the user's own navigation action is user-initiated;
+   the guarantee the bound makes — that the motion stops on its own, with no
+   stop control — is a property of a viewing, and it holds in every viewing. The
+   alternative, a per-session bound, would require renderers to carry
+   cross-screen motion history that the protocol does not model and no frame
+   vector can pin, which is where three renderers diverge. All three renderers
+   already behave this way. Specified in
+   [`docs/protocol/v0.4.md`](../../protocol/v0.4.md#replay-on-screen-re-entry);
+   renderer tests pinning it are a required follow-up.
+
 3. **The video-background reduced-motion fix ships as specified `0.4`
    behaviour, not as a `0.3` defect patch.** The product review argued to fix it
    now as a defect; the protocol review argued it is a behaviour change that
@@ -128,6 +144,15 @@ guarantees a motion bug can never make a price or a disclosure unreachable.
   capability receives the release rather than a capability-missing refusal. It
   is flagged and **not modified** by the contract slice.
 - Exit animation, stagger sugar, carousel auto-advance, authored beziers.
+
+**Status, 2026-08-11.** The list above records what was deferred when the gate
+opened and is left as written. Since then the three renderers, Studio motion
+authoring, Local Preview `0.4`, and the backend capability partitioning have all
+landed; `capability_request.go` now partitions on the manifest `fallback`. What
+remains deferred is publish-time projectability, Studio's live-preview surface,
+a Configuration Delivery version that can carry a `0.4` document at all, and the
+last four items above. See
+[`docs/protocol/v0.4.md`](../../protocol/v0.4.md#what-this-slice-did-not-include-and-what-has-since-landed).
 
 ### The accepted sequencing risk
 

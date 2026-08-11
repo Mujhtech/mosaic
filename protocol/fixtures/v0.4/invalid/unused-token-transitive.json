@@ -2781,6 +2781,23 @@
           "durationMilliseconds": 900,
           "easing": "standard"
         }
+      },
+      {
+        "id": "motion-orphan-a",
+        "name": "Orphaned alias",
+        "value": {
+          "type": "motionToken",
+          "id": "motion-orphan-b"
+        }
+      },
+      {
+        "id": "motion-orphan-b",
+        "name": "Orphaned timing",
+        "value": {
+          "type": "motion",
+          "durationMilliseconds": 320,
+          "easing": "accelerate"
+        }
       }
     ]
   }

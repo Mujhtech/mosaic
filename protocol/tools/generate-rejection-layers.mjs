@@ -159,10 +159,11 @@ export const rejectionLayerTargets = Object.freeze([
     // The 12 carried forward from 0.3 plus one per rejection motion introduces:
     // an entrance inside an entrance, two pulsing buttons on one screen, a loop
     // on something that is not a Button, a pulse under the flash-safety floor,
-    // a curve naming no declared token, a token nothing references, and a rise
-    // distance on an effect that does not rise. Raise this when the corpus
-    // grows; never lower it to make a check pass.
-    minimumCases: 19,
+    // a curve naming no declared token, a token nothing references, a token
+    // referenced only by another unreferenced token, and a rise distance on an
+    // effect that does not rise. Raise this when the corpus grows; never lower
+    // it to make a check pass.
+    minimumCases: 20,
   },
   {
     contract: "Configuration Delivery v1",

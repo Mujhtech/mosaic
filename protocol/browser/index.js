@@ -1759,12 +1759,16 @@ function deriveV04DocumentCapabilities(document, nodeEntries) {
 function addV04MotionDiagnostics(diagnostics, document, nodeEntries) {
   const catalog = document.designSystem.motions;
   const declared = new Set(catalog.map((token) => token.id));
-  const referenced = new Set();
-  const roots = [document.designSystem, ...nodeEntries.map(({ node }) => node)];
-  for (const root of roots) {
-    walkObjectValues(root, (value) => {
+
+  // Only a *node* reference site makes a token used. Walking the catalog as a
+  // usage root -- which the unknown-reference check above does, and must --
+  // lets a token vouch for the token it names, so a pair of orphans that
+  // reference each other would report itself as used.
+  const nodeReferenced = new Set();
+  for (const { node } of nodeEntries) {
+    walkObjectValues(node, (value) => {
       if (value.type === "motionToken" && declared.has(value.id)) {
-        referenced.add(value.id);
+        nodeReferenced.add(value.id);
       }
     });
   }
@@ -1774,11 +1778,20 @@ function addV04MotionDiagnostics(diagnostics, document, nodeEntries) {
       if (value.type === "motionToken") graph.get(token.id).add(value.id);
     });
   }
+  // Transitive reachability from those sites: a token reached only through
+  // another *used* token is used, one reached only through an unused token is
+  // not. The visited set also terminates a cycle among unreachable tokens,
+  // which the cycle rule reports separately.
+  const reachable = new Set();
+  const pending = [...nodeReferenced];
+  while (pending.length > 0) {
+    const id = pending.pop();
+    if (reachable.has(id)) continue;
+    reachable.add(id);
+    for (const target of graph.get(id) ?? []) pending.push(target);
+  }
   for (const [index, token] of catalog.entries()) {
-    if (referenced.has(token.id)) continue;
-    // A token reached only through another token is used; an unreachable one
-    // is not.
-    if ([...referenced].some((id) => graph.get(id)?.has(token.id))) continue;
+    if (reachable.has(token.id)) continue;
     diagnostics.push(
       diagnostic({
         code: "semantic.unusedDeclaration",

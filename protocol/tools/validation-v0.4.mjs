@@ -114,6 +114,14 @@ export const protocolV04Paths = Object.freeze({
     protocolV04Root,
     "fixtures/v0.4/invalid/unused-motion-token.json",
   ),
+  // A token referenced only by another *unreferenced* token. Separate from the
+  // single-orphan fixture because the two are rejected for the same reason and
+  // diagnosed differently: a validator that walks the catalog as a usage root
+  // still rejects this document, while naming only half of what is wrong.
+  invalidTransitiveUnusedMotionTokenFixture: resolve(
+    protocolV04Root,
+    "fixtures/v0.4/invalid/unused-token-transitive.json",
+  ),
   invalidRiseWithoutFadeRiseFixture: resolve(
     protocolV04Root,
     "fixtures/v0.4/invalid/rise-on-fade-appear.json",
@@ -519,13 +527,23 @@ function validateMotionCatalog(errors, document, entries) {
   addUniqueFieldValues(errors, catalog, "name", "motion token catalog");
 
   const declared = new Set(catalog.map((token) => token.id));
-  const referenced = new Set();
-  const roots = [document.designSystem, ...entries.map(({ node }) => node)];
-  for (const root of roots) {
-    walkObjectValues(root, (value, path) => {
+
+  // Reference sites split in two, and the split is the whole point of this
+  // function. *Every* site must resolve, inside a node or inside another
+  // token's value alike. Only a *node* site makes a token used: walking the
+  // catalog as a usage root lets a token vouch for the token it names, so a
+  // pair of orphans that reference each other would report itself as used.
+  const nodeReferenced = new Set();
+  walkObjectValues(document.designSystem, (value, path) => {
+    if (value.type !== "motionToken") return;
+    if (declared.has(value.id)) return;
+    errors.push(`motionToken reference${path} targets unknown token ${value.id}`);
+  });
+  for (const { node } of entries) {
+    walkObjectValues(node, (value, path) => {
       if (value.type !== "motionToken") return;
       if (declared.has(value.id)) {
-        referenced.add(value.id);
+        nodeReferenced.add(value.id);
         return;
       }
       errors.push(`motionToken reference${path} targets unknown token ${value.id}`);
@@ -563,11 +581,22 @@ function validateMotionCatalog(errors, document, entries) {
   // is a duration that flash safety is checked against at its *reference* site,
   // so a token nothing references has never been checked against anything and
   // survives a redesign looking approved. See docs/protocol/v0.4.md.
+  //
+  // "Used" is reachability from the node reference sites, transitively: a token
+  // reached only through another *used* token is used, and one reached only
+  // through an unused token is not. The traversal is breadth-unordered and
+  // guarded by the visited set, so a cycle among unreachable tokens terminates
+  // here and is reported by the cycle rule above rather than by looping.
+  const reachable = new Set();
+  const pending = [...nodeReferenced];
+  while (pending.length > 0) {
+    const id = pending.pop();
+    if (reachable.has(id)) continue;
+    reachable.add(id);
+    for (const target of graph.get(id) ?? []) pending.push(target);
+  }
   for (const token of catalog) {
-    if (referenced.has(token.id)) continue;
-    // A token reached only by another token is used; an unreachable one is not.
-    const reachable = [...referenced].some((id) => graph.get(id)?.has(token.id));
-    if (reachable) continue;
+    if (reachable.has(token.id)) continue;
     errors.push(`motion token catalog declares unused motion ${token.id}`);
   }
 }
@@ -775,6 +804,7 @@ export function loadProtocolV04Artifacts() {
       readV04Json(protocolV04Paths.invalidFastLoopMotionFixture),
       readV04Json(protocolV04Paths.invalidUnknownMotionTokenFixture),
       readV04Json(protocolV04Paths.invalidUnusedMotionTokenFixture),
+      readV04Json(protocolV04Paths.invalidTransitiveUnusedMotionTokenFixture),
       readV04Json(protocolV04Paths.invalidRiseWithoutFadeRiseFixture),
     ],
     manifest: readV04Json(protocolV04Paths.compatibilityManifest),
@@ -879,6 +909,15 @@ export function validateCanonicalV04Coverage(document) {
     errors.push(
       "canonical fixture omits a Feature List item marker override; the negated " +
         "item is the reason the marker vocabulary was consolidated",
+    );
+  }
+  // markerSize is optional and defaults to the list's own typography.fontSize.
+  // An unexercised optional field is one every renderer implements from prose,
+  // which is how Flutter came to draw 20 and Compose the font size.
+  if (!featureLists.some((node) => node.markerSize !== undefined)) {
+    errors.push(
+      "canonical fixture omits an authored Feature List markerSize; the default " +
+        "branch is then the only one any renderer is pinned against",
     );
   }
   return errors;

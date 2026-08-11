@@ -1935,6 +1935,10 @@
         "markerColor": {
           "$ref": "#/$defs/color"
         },
+        "markerSize": {
+          "description": "The extent of every marker glyph, bounded exactly as Timeline's field of the same name. Component-level rather than per item, exactly as markerColor is: an item overrides which glyph it draws, never how large it draws it. Optional, unlike Timeline's, because a Feature List always declares a marker and so always has a size to fall back on: absent means the list's own typography.fontSize, following Timeline's precedent of falling back to another authored value on the same component rather than to a constant. Renderers must not substitute a value of their own.",
+          "$ref": "#/$defs/positiveLogicalSize"
+        },
         "items": {
           "type": "array",
           "minItems": 1,

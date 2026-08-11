@@ -185,6 +185,18 @@ decision to callers that need to branch.
 points genuinely return either. `MosaicPaywallDocument` stays `0.3` and is the
 narrow name for callers that want exactly the release candidate.
 
+**Deferred to the Studio preview wave, deliberately:** the browser runtime's
+`runtimeStateForAcceptedRevision` does not yet emit the `motion.playedAppearScreens`
+member and `paywallRuntimeDiagnostics` still refuses anything that is not a `0.3`
+document. Both are runtime-state surfaces consumed by a live preview client, and
+Studio's live-preview surface is a later wave; the reference implementation of
+the suppression rule is `runtimeStateForAcceptedV04Revision` in
+`protocol/tools/validation-v0.4.mjs`, which is what the fixture pins and what
+that wave will mirror into the browser runtime. This is an intentional gap, not
+an omission: nothing consumes those two entry points on `0.4` yet, and adding a
+motion member no client reads would be an unexercised second implementation of a
+rule the validator already owns.
+
 ## Related documents
 
 - [Protocol 0.4](v0.4.md) — the paywall contract this accompanies.

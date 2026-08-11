@@ -1197,6 +1197,7 @@ export type MosaicPaywallV04FeatureListComponent = {
   "marker": MosaicPaywallV04Marker;
   "gap": MosaicPaywallV04LogicalSize;
   "markerColor": MosaicPaywallV04Color;
+  "markerSize"?: MosaicPaywallV04PositiveLogicalSize;
   "items": Array<MosaicPaywallV04FeatureListItem>;
   "typography": MosaicPaywallV04BaseTypography;
   "appearance"?: MosaicPaywallV04BoxAppearance;

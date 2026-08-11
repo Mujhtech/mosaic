@@ -96,8 +96,8 @@ test("every invalid fixture is rejected", () => {
   assert.ok(target, "the 0.4 invalid corpus must be registered for layering");
   // The corpus and the declared floor must agree, and the floor must be the
   // number the fixtures actually justify rather than whatever they happen to be.
-  assert.equal(target.minimumCases, 19);
-  assert.equal(input.invalidDocuments.length, 19);
+  assert.equal(target.minimumCases, 20);
+  assert.equal(input.invalidDocuments.length, 20);
   for (const document of input.invalidDocuments) {
     assert.notDeepEqual(errors({ ...input, document }), []);
   }
@@ -211,6 +211,38 @@ test("a motion token nothing references is rejected, unlike an unused colour", (
     value: "#123456FF",
   });
   assert.deepEqual(errors(colours), []);
+});
+
+test("a token referenced only by an unreferenced token is unused, and both are named", () => {
+  // Usage is reachability from node reference sites. Walking designSystem as a
+  // usage root -- which every implementation of this rule did -- lets an orphan
+  // vouch for the orphan it names: the document is still rejected, but only
+  // half of what is wrong is reported, and the half that is silent is the one
+  // an author would reach for next.
+  const input = {
+    ...artifacts(),
+    document: readV04Json(protocolV04Paths.invalidTransitiveUnusedMotionTokenFixture),
+  };
+  assert.deepEqual(
+    errors(input).filter((error) => error.includes("unused motion")),
+    [
+      "motion token catalog declares unused motion motion-orphan-a",
+      "motion token catalog declares unused motion motion-orphan-b",
+    ],
+  );
+
+  // And the browser mirror reports the same pair, at addressable paths.
+  const result = validateBrowserPaywallDocument(input.document);
+  assert.equal(result.ok, false);
+  assert.deepEqual(
+    result.diagnostics
+      .filter((entry) => entry.code === "semantic.unusedDeclaration")
+      .map((entry) => [entry.location.documentPath, entry.location.componentId]),
+    [
+      ["/designSystem/motions/4", "motion-orphan-a"],
+      ["/designSystem/motions/5", "motion-orphan-b"],
+    ],
+  );
 });
 
 test("a motion token cycle is rejected", () => {
