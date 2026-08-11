@@ -269,6 +269,15 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		if errors.As(err, &mixed) {
 			apiError.Details = map[string]any{"paywallIdsByProtocolVersion": mixed.PaywallIDsByProtocolVersion}
 		}
+	case errors.Is(err, hostedpublishing.ErrReleaseProtocolUndeliverable):
+		status, code, message = http.StatusConflict, "release_protocol_undeliverable", "No Configuration Delivery contract can carry these Paywalls' protocol version yet. Keep them on protocol 0.3 until the Delivery contract extension tracked in docs/protocol/v0.4.md ships."
+		var undeliverable *hostedpublishing.ReleaseProtocolUndeliverableError
+		if errors.As(err, &undeliverable) {
+			apiError.Details = map[string]any{
+				"paywallIdsByProtocolVersion": undeliverable.PaywallIDsByProtocolVersion,
+				"deferral":                    "docs/protocol/v0.4.md#configuration-delivery-cannot-yet-carry-04",
+			}
+		}
 	case errors.Is(err, hostedpublishing.ErrProductInvalid):
 		status, code, message = http.StatusConflict, "product_invalid", "A referenced Product is missing, archived, or outside the Project."
 	case errors.Is(err, hostedpublishing.ErrProviderReadiness):

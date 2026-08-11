@@ -63,6 +63,39 @@ func TestPublishRefusesAMixedProtocolVersionRelease(t *testing.T) {
 	}
 }
 
+// Until the Delivery contract version deferred in docs/protocol/v0.4.md
+// ("Configuration Delivery cannot yet carry 0.4") ships, even a homogeneous
+// 0.4 Release has no hosted delivery representation: Delivery v1-v3 pin
+// Protocol 0.3 structurally, so emitting the payload anyway would manufacture
+// a release every frozen schema rejects and every SDK decode hard-fails.
+// Publish must refuse it with the undeliverable Paywalls named, and must keep
+// treating 0.3 (including the empty pre-authoritative version) as deliverable,
+// or the gate itself would become the outage.
+func TestPublishRefusesAProtocol04ReleaseUntilADeliveryContractCanCarryIt(t *testing.T) {
+	err := undeliverableReleaseProtocolError(map[string]PaywallVersion{
+		"version_a": {ID: "version_a", PaywallID: "paywall_motion_a", ProtocolVersion: ProtocolVersion04},
+		"version_b": {ID: "version_b", PaywallID: "paywall_motion_b", ProtocolVersion: ProtocolVersion04},
+	})
+	if !errors.Is(err, ErrReleaseProtocolUndeliverable) {
+		t.Fatalf("a homogeneous 0.4 Release must be refused with ErrReleaseProtocolUndeliverable, got %v", err)
+	}
+	var undeliverable *ReleaseProtocolUndeliverableError
+	if !errors.As(err, &undeliverable) {
+		t.Fatalf("the refusal must carry the per-version Paywall detail, got %v", err)
+	}
+	want := map[string][]string{ProtocolVersion04: {"paywall_motion_a", "paywall_motion_b"}}
+	if !reflect.DeepEqual(undeliverable.PaywallIDsByProtocolVersion, want) {
+		t.Fatalf("the refusal must name the undeliverable Paywalls:\n got %#v\nwant %#v", undeliverable.PaywallIDsByProtocolVersion, want)
+	}
+
+	if err := undeliverableReleaseProtocolError(map[string]PaywallVersion{
+		"version_c": {ID: "version_c", PaywallID: "paywall_baseline", ProtocolVersion: ProtocolVersion},
+		"version_d": {ID: "version_d", PaywallID: "paywall_legacy", ProtocolVersion: ""},
+	}); err != nil {
+		t.Fatalf("a 0.3 Release must stay publishable exactly as today, got %v", err)
+	}
+}
+
 // compileCanonicalDeliveryV1Schema compiles the actual frozen Delivery v1
 // contract file, registering the canonical Paywall 0.3 schema it references by
 // URN, so the assertion below is against the published contract and not a
@@ -104,12 +137,14 @@ func compileCanonicalDeliveryV1Schema(t *testing.T) *jsonschema.Schema {
 // the frozen contract for the Releases it does build.
 //
 // The 0.3 Release is asserted against the full schema. The canonical v1 schema
-// still pins protocolVersion, protocolCompatibility.version, and the embedded
-// document to Protocol 0.3, so a 0.4-over-v1 payload cannot pass it until the
-// protocol owner extends those constants for 0.4; the 0.4 half therefore
-// asserts the frozen cardinality directly (exactly one advertised entry, pinned
-// to 0.4) and must be widened to full schema validation once the canonical
-// schema admits 0.4.
+// pins protocolVersion, protocolCompatibility.version, and the embedded
+// document to Protocol 0.3, which is exactly why publish refuses a 0.4 Release
+// outright (TestPublishRefusesAProtocol04ReleaseUntilADeliveryContractCanCarryIt).
+// The builder itself still emits 0.4 payloads -- capability negotiation tests
+// exercise the forward path against them -- so the 0.4 half here asserts the
+// frozen cardinality directly (exactly one advertised entry, pinned to 0.4)
+// and must be widened to full schema validation once the Delivery contract
+// deferred in docs/protocol/v0.4.md admits 0.4.
 func TestSingleProtocolReleasePayloadSatisfiesTheFrozenDeliveryV1Contract(t *testing.T) {
 	schema := compileCanonicalDeliveryV1Schema(t)
 	buildPayload := func(t *testing.T, protocolVersion, fixtureRoot string) json.RawMessage {

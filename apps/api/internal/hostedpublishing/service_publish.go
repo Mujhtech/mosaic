@@ -310,6 +310,9 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 		for _, issue := range providerIssues {
 			warnings = append(warnings, providerPublicationWarning(issue))
 		}
+		if err := undeliverableReleaseProtocolError(versions); err != nil {
+			return err
+		}
 		state, ok := tx.ReleaseState(environment.ID)
 		if !ok || state.ProjectID != project.ID {
 			return ErrNotFound
@@ -1010,6 +1013,56 @@ func mixedReleaseProtocolError(members []releaseProtocolMember) error {
 		detail[version] = ids
 	}
 	return &ReleaseProtocolMixError{PaywallIDsByProtocolVersion: detail}
+}
+
+// deliverableReleaseProtocolVersions lists the Paywall Protocol versions a
+// frozen Configuration Delivery contract can express. 0.4 is deliberately
+// absent: Delivery v1, v2, and v3 all pin Protocol 0.3 structurally
+// (paywallVersion.protocolVersion and protocolCompatibility.version are
+// const "0.3", and paywallVersion.document $refs the 0.3 paywall schema), so a
+// 0.4 Release has no hosted delivery representation until the new Delivery
+// version deferred in docs/protocol/v0.4.md ("Configuration Delivery cannot
+// yet carry 0.4") ships. Add a version here only alongside that contract work.
+var deliverableReleaseProtocolVersions = map[string]bool{ProtocolVersion: true}
+
+// undeliverableReleaseProtocolError refuses publication when any Paywall
+// Version in the Release declares a protocol version outside
+// deliverableReleaseProtocolVersions. This is the publish-time policy gate for
+// the delivery deferral above: emitting the payload anyway would manufacture a
+// release every frozen Delivery schema rejects and every SDK decode hard-fails,
+// so publishing refuses with the Paywalls named instead. It runs before the
+// payload builders, so a Release that is both mixed and undeliverable reports
+// the undeliverable Paywalls -- the ones the operator cannot ship at all today.
+// An empty protocol version counts as the 0.3 baseline, matching
+// accumulateProtocolCapabilities.
+func undeliverableReleaseProtocolError(versions map[string]PaywallVersion) error {
+	paywallsByVersion := map[string]map[string]bool{}
+	for _, version := range versions {
+		protocolVersion := version.ProtocolVersion
+		if protocolVersion == "" {
+			protocolVersion = ProtocolVersion
+		}
+		if deliverableReleaseProtocolVersions[protocolVersion] {
+			continue
+		}
+		if paywallsByVersion[protocolVersion] == nil {
+			paywallsByVersion[protocolVersion] = map[string]bool{}
+		}
+		paywallsByVersion[protocolVersion][version.PaywallID] = true
+	}
+	if len(paywallsByVersion) == 0 {
+		return nil
+	}
+	detail := make(map[string][]string, len(paywallsByVersion))
+	for protocolVersion, paywalls := range paywallsByVersion {
+		ids := make([]string, 0, len(paywalls))
+		for id := range paywalls {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		detail[protocolVersion] = ids
+	}
+	return &ReleaseProtocolUndeliverableError{PaywallIDsByProtocolVersion: detail}
 }
 
 // protocolCompatibilityEntries renders the Release's single compatibility

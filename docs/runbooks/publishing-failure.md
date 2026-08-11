@@ -29,6 +29,13 @@ Publishing errors are diagnosable by code:
   `details.paywallIdsByProtocolVersion` lists which Paywalls are on which
   version; republish the outdated Paywalls so every bound Paywall's latest
   Version declares the same protocol version, then retry.
+- **`409 release_protocol_undeliverable`** — the Release's Paywalls declare a
+  Paywall Protocol version (currently 0.4) that no Configuration Delivery
+  contract can carry yet: Delivery v1–v3 structurally pin protocol 0.3, so the
+  Release would be undecodable by every SDK. `details.paywallIdsByProtocolVersion`
+  lists the affected Paywalls; keep them on protocol 0.3 until the Delivery
+  contract extension tracked in `docs/protocol/v0.4.md` ("Configuration
+  Delivery cannot yet carry 0.4") ships.
 - **`422 document_paywall_id_mismatch`** — the draft document's `id` must
   equal the Paywall id.
 - **Draft validation errors** — run
