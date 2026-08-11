@@ -119,7 +119,6 @@ internal fun Modifier.mosaicNodeMotion(
 ): Modifier {
     if (motion == null) return this
     val reducedMotion = LocalMosaicReducedMotion.current
-    var result = this
 
     // Under reduced motion the contract keeps `appear`'s opacity change and drops its transform,
     // and explicitly lets the platform decide how long the remaining opacity change takes. On
@@ -128,37 +127,35 @@ internal fun Modifier.mosaicNodeMotion(
     // What is normative is that no transform occurs and that the terminal state is unchanged; a
     // zero-duration entrance satisfies both, and it is what makes the reduced-motion rendering
     // byte-identical to the static one from the first frame.
-    motion.appear?.takeUnless { reducedMotion }?.let { appear ->
+    val appearFrame = motion.appear?.takeUnless { reducedMotion }?.let { appear ->
         val total = appear.delayMilliseconds.toLong() + appear.curve.durationMilliseconds
         val elapsed = rememberMotionElapsed("$nodeId#appear", driver, total)
-        val frame = MosaicMotionFrames.appear(appear, elapsed, reducedMotion)
-        if (!frame.complete) {
-            val translation = frame.translateLogicalSize.dp
-            result = result.graphicsLayer {
-                alpha = frame.opacity.toFloat()
-                translationY = translation.toPx()
-            }
-        }
+        MosaicMotionFrames.appear(appear, elapsed, reducedMotion).takeUnless { it.complete }
     }
 
-    // Fully disabled under reduced motion: the node sits at rest, which is the static rendering,
-    // so no layer is introduced at all.
-    motion.loop?.takeUnless { reducedMotion }?.let { loop ->
+    // The loop's clock runs from node entry, the same origin as the entrance, so the pulse is
+    // already running while the node is arriving rather than starting once it has settled. It is
+    // fully disabled under reduced motion, where the node sits at rest — the static rendering.
+    val loopFrame = motion.loop?.takeUnless { reducedMotion }?.let { loop ->
         val total = loop.curve.durationMilliseconds.toLong() * loop.repeatCount
         val elapsed = rememberMotionElapsed("$nodeId#loop", driver, total)
-        val frame = MosaicMotionFrames.loop(loop, elapsed, reducedMotion = false)
-        if (!frame.complete) {
-            result = result.graphicsLayer {
-                scaleX = frame.scale.toFloat()
-                scaleY = frame.scale.toFloat()
-                // A fraction of the node's resolved static opacity, not an absolute value: this
-                // composes on top of the authored `appearance.opacity` the presentation modifier
-                // already applied, so a node authored at 0.8 rests at 0.8 rather than at 1.0.
-                alpha = frame.opacityMultiplier.toFloat()
-            }
-        }
+        MosaicMotionFrames.loop(loop, elapsed, reducedMotion = false).takeUnless { it.complete }
     }
-    return result
+
+    // One layer from one composed formula, rather than a layer per primitive whose combined effect
+    // is whatever nesting two `graphicsLayer` modifiers happens to produce. The composition rule is
+    // normative, so it is stated in `MosaicMotionFrames.composed` and asserted there.
+    val composition = MosaicMotionFrames.composed(appearFrame, loopFrame)
+    if (composition.isStatic) return this
+    val translation = composition.translateLogicalSize.dp
+    return graphicsLayer {
+        // A multiplier over the node's resolved static opacity: the authored `appearance.opacity`
+        // is applied by the presentation modifier further in, so the two multiply.
+        alpha = composition.opacityMultiplier.toFloat()
+        scaleX = composition.scale.toFloat()
+        scaleY = composition.scale.toFloat()
+        translationY = translation.toPx()
+    }
 }
 
 /**

@@ -118,6 +118,68 @@ class MotionFrameConformanceTest {
         }
     }
 
+    /**
+     * `appear` and `loop` on one Button share a time origin: node entry.
+     *
+     * No canonical case pins two primitives on one node, so nothing else here would notice a
+     * refactor that started the pulse only once the entrance had finished — the terminal state
+     * would still be correct and every single-primitive vector would still pass. The instant that
+     * distinguishes the two readings is a frame *inside the entrance*: with a shared origin the
+     * pulse is already mid-excursion there, and with a gated one it would be exactly at rest.
+     */
+    @Test
+    fun appearAndLoopOnOneNodeShareTheNodeEntryTimeOrigin() {
+        // The canonical fixture's purchase Button: a 240ms entrance held behind a 240ms delay, and
+        // a 900ms pulse repeated three times.
+        val appear = MosaicAppearMotion(
+            effect = MosaicAppearEffect.FADE,
+            curve = MosaicMotion(240, MosaicMotionEasing.DECELERATE),
+            delayMilliseconds = 240,
+        )
+        val loop = MosaicLoopMotion(
+            scaleAmplitude = 0.04,
+            opacityAmplitude = 0.12,
+            curve = MosaicMotion(900, MosaicMotionEasing.STANDARD),
+            repeatCount = 3,
+        )
+
+        // 360ms in: the entrance is half way through its curve, and the pulse -- which started at
+        // node entry, not at the end of the entrance -- is 40% through its first cycle.
+        val midEntrance = 360L
+        val appearFrame = MosaicMotionFrames.appear(appear, midEntrance, reducedMotion = false)
+        val loopFrame = MosaicMotionFrames.loop(loop, midEntrance, reducedMotion = false)
+
+        assertTrue("The entrance must still be running.", !appearFrame.complete)
+        assertTrue("The entrance must be part way through.", appearFrame.opacity in 0.001..0.999)
+        assertEquals("The pulse must be in its first cycle.", 0, loopFrame.cycle)
+        assertEquals(0.4, loopFrame.cyclePhase, TOLERANCE)
+        // The assertion a gated pulse fails: at rest these would be exactly 1.0.
+        assertTrue("The pulse must already be scaling mid-entrance.", loopFrame.scale > 1.0)
+        assertTrue("The pulse must already be dimming mid-entrance.", loopFrame.opacityMultiplier < 1.0)
+
+        // opacity = static x appearProgress x loopOpacityMultiplier, scale = loopScale.
+        val composed = MosaicMotionFrames.composed(appearFrame, loopFrame)
+        assertEquals(
+            appearFrame.opacity * loopFrame.opacityMultiplier,
+            composed.opacityMultiplier,
+            TOLERANCE,
+        )
+        assertEquals(loopFrame.scale, composed.scale, TOLERANCE)
+        assertEquals(appearFrame.translateLogicalSize, composed.translateLogicalSize, TOLERANCE)
+        assertTrue("A composed mid-flight frame is not the static rendering.", !composed.isStatic)
+
+        // Both primitives finished: the composition is the static rendering exactly, which is what
+        // lets the renderer drop its layer rather than keep one at identity values.
+        val terminal = MosaicMotionFrames.composed(
+            MosaicMotionFrames.appear(appear, 10_000L, reducedMotion = false)
+                .takeUnless(MosaicAppearFrame::complete),
+            MosaicMotionFrames.loop(loop, 10_000L, reducedMotion = false)
+                .takeUnless(MosaicLoopFrame::complete),
+        )
+        assertEquals(MosaicMotionComposition.Static, terminal)
+        assertTrue(terminal.isStatic)
+    }
+
     private fun assertAppearFrame(
         id: String,
         motion: JsonObject,

@@ -308,6 +308,67 @@ class MosaicMotionComposeTest {
         assertTrue(driver.tickCount > 2)
     }
 
+    /**
+     * The pulse is already running while the entrance plays.
+     *
+     * The canonical purchase Button authors both `appear` (behind a 240ms delay) and `loop`, and the
+     * contract fixes their time origin as node entry. Proved by rendering the same document twice —
+     * once as authored, once with only that Button's `loop` removed — and pinning the *same*
+     * mid-entrance frame in both. A renderer that started the pulse only once the entrance had
+     * finished would draw the two identically at that instant; a conforming one cannot.
+     *
+     * The two states share one driver instance, so swapping between them preserves the remembered
+     * entrance clock: the only thing that differs between the captures is the pulse.
+     */
+    @Test
+    fun theLoopRunsDuringTheEntranceRatherThanAfterIt() {
+        compose.mainClock.autoAdvance = true
+        val driver = pinnedCountdown(MosaicMotionDriver.Default)
+        val document = protocolV04Bundle()
+        val withLoop = motionState(driver, document)
+        val withoutLoop = motionState(driver, document.withoutPurchaseLoop())
+        val settled = motionState(pinnedCountdown(MosaicMotionDriver.Disabled), document)
+        runBlocking {
+            withLoop.loadProducts()
+            withoutLoop.loadProducts()
+            settled.loadProducts()
+        }
+        var shown by mutableStateOf(0)
+        compose.setContent {
+            MaterialTheme {
+                MosaicPaywallContent(
+                    state = when (shown) {
+                        0 -> settled
+                        1 -> withLoop
+                        else -> withoutLoop
+                    },
+                    onEvent = {},
+                    reducedMotion = false,
+                )
+            }
+        }
+        // Scrolled into view with motion disabled, so settling waits on nothing that is moving.
+        compose.onNodeWithTag("mosaic-node-purchase", useUnmergedTree = true).performScrollTo()
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+
+        // Node entry for the animated tree is this frame; 360ms in, the 240ms-delayed entrance is
+        // half way through its curve and the 900ms pulse is 40% through its first cycle.
+        shown = 1
+        compose.mainClock.advanceTimeBy(360)
+        val pulsing = digestOf("mosaic-node-purchase")
+
+        shown = 2
+        compose.mainClock.advanceTimeBy(16)
+        val notPulsing = digestOf("mosaic-node-purchase")
+
+        assertNotEquals(
+            "The pulse must already be running mid-entrance, not gated on it finishing.",
+            notPulsing,
+            pulsing,
+        )
+    }
+
     /** A paywall whose motion driver can be swapped without a second `setContent`. */
     private class DriverSwitch {
         var useAnimatedDriver by mutableStateOf(true)
@@ -322,8 +383,8 @@ class MosaicMotionComposeTest {
         compose.mainClock.autoAdvance = !startAnimated
         val switch = DriverSwitch()
         switch.useAnimatedDriver = startAnimated
-        val animated = motionState(MosaicMotionDriver.Default)
-        val static = motionState(MosaicMotionDriver.Disabled)
+        val animated = motionState(pinnedCountdown(MosaicMotionDriver.Default))
+        val static = motionState(pinnedCountdown(MosaicMotionDriver.Disabled))
         runBlocking {
             animated.loadProducts()
             static.loadProducts()
@@ -381,16 +442,52 @@ class MosaicMotionComposeTest {
         .fetchSemanticsNode()
         .boundsInRoot
 
-    private fun motionState(driver: MosaicMotionDriver) = MosaicPaywallState(
-        protocolV04Bundle(),
+    private fun motionState(
+        driver: MosaicMotionDriver,
+        document: MosaicPaywallDocument = protocolV04Bundle(),
+    ) = MosaicPaywallState(
+        document,
         MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
         clock = { 1_893_455_998_000L },
-        // A tick that never completes pins the countdown at exactly one resolved frame, so a digest
-        // comparison is measuring motion rather than a clock that moved between two captures.
-        motionDriver = object : MosaicMotionDriver by driver {
-            override suspend fun awaitTick(intervalMilliseconds: Long): Unit = awaitCancellation()
-        },
+        motionDriver = driver,
     )
+
+    /**
+     * A tick that never completes pins the countdown at exactly one resolved frame, so a digest
+     * comparison is measuring motion rather than a clock that moved between two captures.
+     */
+    private fun pinnedCountdown(driver: MosaicMotionDriver): MosaicMotionDriver =
+        object : MosaicMotionDriver by driver {
+            override suspend fun awaitTick(intervalMilliseconds: Long): Unit = awaitCancellation()
+        }
+
+    /** The canonical document with only the purchase Button's pulse removed. */
+    private fun MosaicPaywallDocument.withoutPurchaseLoop(): MosaicPaywallDocument {
+        fun replace(node: MosaicNode): MosaicNode = when (node) {
+            is MosaicStack -> node.copy(children = node.children.map(::replace))
+            is MosaicButtonComponent -> if (node.id == "purchase") {
+                node.copy(motion = node.motion?.copy(loop = null))
+            } else {
+                node.copy(children = node.children.map(::replace))
+            }
+            is MosaicTabsComponent -> node.copy(
+                tabs = node.tabs.map { it.copy(content = replace(it.content) as MosaicStack) },
+            )
+            is MosaicCarouselComponent -> node.copy(
+                pages = node.pages.map { it.copy(content = replace(it.content) as MosaicStack) },
+            )
+            else -> node
+        }
+        val updated = screens.map { screen ->
+            screen.copy(
+                layout = screen.layout.copy(content = replace(screen.layout.content) as MosaicStack),
+            )
+        }
+        return copy(
+            screens = updated,
+            layout = updated.first { it.id == initialScreenId }.layout,
+        )
+    }
 
     private fun protocolV04Bundle(): MosaicPaywallDocument {
         val context = InstrumentationRegistry.getInstrumentation().context

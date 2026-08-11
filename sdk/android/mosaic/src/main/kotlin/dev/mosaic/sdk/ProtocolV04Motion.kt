@@ -133,7 +133,54 @@ data class MosaicLoopFrame(
     val opacityMultiplier: Double,
 )
 
+/**
+ * What a node carrying more than one primitive presents at a single instant.
+ *
+ * `appear` and `loop` may both be authored on one Button, and the contract fixes their **time
+ * origin as node entry** — the same origin for both, so the pulse is already running while the
+ * entrance plays rather than waiting for it to finish. [opacityMultiplier] is a multiplier over the
+ * node's *resolved static* opacity, never an absolute value, which is what keeps a node authored at
+ * `appearance.opacity: 0.8` resting at `0.8` rather than at `1.0`.
+ */
+data class MosaicMotionComposition(
+    val opacityMultiplier: Double,
+    val scale: Double,
+    val translateLogicalSize: Double,
+) {
+    /**
+     * True when this composition draws exactly the static rendering.
+     *
+     * The renderer drops its layer entirely on this, rather than keeping one at identity values: a
+     * `graphicsLayer` still present at `alpha = 1` is a compositing layer the static rendering does
+     * not have, and the SHA-256 pixel goldens are zero-tolerance.
+     */
+    val isStatic: Boolean
+        get() = opacityMultiplier == 1.0 && scale == 1.0 && translateLogicalSize == 0.0
+
+    companion object {
+        val Static = MosaicMotionComposition(1.0, 1.0, 0.0)
+    }
+}
+
 object MosaicMotionFrames {
+    /**
+     * Composes the primitives active on one node at one instant.
+     *
+     * Normative, and named rather than left to emerge from the order two `graphicsLayer` modifiers
+     * happen to sit in: `opacity = static × appearProgress × loopOpacityMultiplier` and
+     * `scale = loopScale`. A null frame is a primitive that is not authored, is complete, or is
+     * suppressed by reduced motion, and contributes identity in every case — which is why a
+     * finished animation composes to exactly [MosaicMotionComposition.Static].
+     */
+    fun composed(
+        appear: MosaicAppearFrame?,
+        loop: MosaicLoopFrame?,
+    ): MosaicMotionComposition = MosaicMotionComposition(
+        opacityMultiplier = (appear?.opacity ?: 1.0) * (loop?.opacityMultiplier ?: 1.0),
+        scale = loop?.scale ?: 1.0,
+        translateLogicalSize = appear?.translateLogicalSize ?: 0.0,
+    )
+
     /**
      * Eased progress in `0…1` for a fraction of a curve's duration.
      *
