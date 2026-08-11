@@ -262,6 +262,121 @@ final class MotionDriverTests: XCTestCase {
     }
   }
 
+  // MARK: - One origin per node
+
+  /// A Button carrying both `appear` and `loop` runs both clocks from node
+  /// entry, and the two compose on the node's own values.
+  ///
+  /// Protects the ruling the frame vectors structurally cannot: `resolveV04MotionFrame`
+  /// takes one trigger and one elapsed time, so it describes each primitive in
+  /// isolation and is silent about what `t = 0` is measured from. The tempting
+  /// alternative — start the pulse when the entrance finishes — would make one
+  /// trigger's origin a function of another trigger's delay plus its resolved
+  /// curve, which is exactly the cross-trigger arithmetic three renderers get
+  /// subtly different. Driving the controlled driver to a single instant
+  /// mid-entrance is what makes the difference observable: at that instant the
+  /// two answers differ, and only one of them is the contract's.
+  func testAppearAndLoopOnOneButtonShareTheNodeEntryOrigin() throws {
+    // The canonical purchase Button already carries both, with a non-zero
+    // entrance delay. Only its static opacity is changed, so the composition
+    // below has three distinguishable factors instead of two and a `1`.
+    let staticOpacity = 0.8
+    var object = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any])
+    try mutateV03Node(id: "purchase", in: &object) { node in
+      var appearance = (node["appearance"] as? [String: Any]) ?? [:]
+      appearance["opacity"] = staticOpacity
+      node["appearance"] = appearance
+    }
+    let document = try MosaicProtocolDecoder.decode(
+      JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
+
+    guard case .button(let button)? = document.allNodes.first(where: { $0.id == "purchase" })
+    else { return XCTFail("Expected the canonical purchase button.") }
+    let appear = try XCTUnwrap(button.motion?.appear)
+    let loop = try XCTUnwrap(button.motion?.loop)
+    let appearCurve = try XCTUnwrap(document.resolvedMotionCurve(appear.curve))
+    let loopCurve = try XCTUnwrap(document.resolvedMotionCurve(loop.curve))
+    XCTAssertEqual(button.appearance?.opacity, staticOpacity)
+    // The entrance is held for 240 ms and then runs for 240 ms.
+    XCTAssertEqual(appear.delayMilliseconds, 240)
+    XCTAssertEqual(appearCurve.durationMilliseconds, 240)
+    XCTAssertEqual(loopCurve.durationMilliseconds, 900)
+
+    // One driver, one origin: node entry. This is what the renderer reads for
+    // both primitives in controlled mode.
+    let driver = MosaicMotionDriver.controlled()
+    driver.advance(to: 360)
+    let elapsed = try XCTUnwrap(driver.elapsedMilliseconds)
+
+    let appearFrame = try MosaicMotionResolver.appearFrame(
+      appear, curve: appearCurve, elapsedMilliseconds: elapsed, reducedMotion: false)
+    let loopFrame = try MosaicMotionResolver.loopFrame(
+      loop, curve: loopCurve, elapsedMilliseconds: elapsed, reducedMotion: false)
+
+    // Mid-entrance: started, not finished.
+    XCTAssertFalse(appearFrame.isStatic)
+    XCTAssertGreaterThan(appearFrame.progress, 0)
+    XCTAssertLessThan(appearFrame.progress, 1)
+
+    // And the pulse has been running the whole time, measured from node entry:
+    // 360 of a 900 ms cycle is four tenths of the way through the first one.
+    XCTAssertFalse(loopFrame.isStatic)
+    XCTAssertGreaterThan(loopFrame.scale, 1)
+    XCTAssertLessThan(loopFrame.opacityMultiplier, 1)
+    XCTAssertEqual(loopFrame.cycle, 0)
+    XCTAssertEqual(loopFrame.cyclePhase, 0.4, accuracy: 1e-9)
+
+    // Had the pulse waited for the entrance to finish, it would not have started
+    // at all by this instant — the entrance ends at 480 ms and it is now 360 ms.
+    // Its clock would still be at its origin: at rest, indistinguishable from a
+    // node carrying no loop.
+    let entranceEnd = appear.delayMilliseconds + appearCurve.durationMilliseconds
+    XCTAssertGreaterThan(entranceEnd, elapsed)
+    let hadItWaited = try MosaicMotionResolver.loopFrame(
+      loop,
+      curve: loopCurve,
+      elapsedMilliseconds: max(0, elapsed - entranceEnd),
+      reducedMotion: false
+    )
+    XCTAssertTrue(hadItWaited.isStatic)
+    XCTAssertNotEqual(loopFrame.scale, hadItWaited.scale)
+
+    // opacity = resolvedStaticOpacity × appearProgress × loopOpacityMultiplier.
+    // The renderer composes exactly this product: the entrance's opacity is
+    // applied to the node, the pulse's multiplier inside it, and the authored
+    // appearance opacity inside that — one node's own values, at one place.
+    let composed = staticOpacity * appearFrame.opacity * loopFrame.opacityMultiplier
+    XCTAssertLessThan(composed, staticOpacity * appearFrame.opacity)
+    XCTAssertLessThan(composed, staticOpacity * loopFrame.opacityMultiplier)
+    // Recomputed from the published excursion, which is itself rounded to four
+    // decimals, so this agrees to the contract's stated tolerance rather than to
+    // the last bit — the resolver rounds the product, this rounds a factor.
+    XCTAssertEqual(
+      composed,
+      staticOpacity * appearFrame.opacity * (1 - loop.opacityAmplitude * loopFrame.excursion),
+      accuracy: 1e-3
+    )
+    // scale = loopScale. The entrance contributes a translation and the pulse a
+    // scale, and neither reads the other; this entrance is a `fade`, so it
+    // contributes no translation either.
+    XCTAssertEqual(appearFrame.translateLogicalSize, 0)
+    XCTAssertEqual(loopFrame.scale, 1 + loop.scaleAmplitude * loopFrame.excursion, accuracy: 1e-3)
+
+    // Both converge on the static rendering, so the composition ends there too.
+    driver.advance(to: loopCurve.durationMilliseconds * loop.repeatCount)
+    let endElapsed = try XCTUnwrap(driver.elapsedMilliseconds)
+    let appearEnd = try MosaicMotionResolver.appearFrame(
+      appear, curve: appearCurve, elapsedMilliseconds: endElapsed, reducedMotion: false)
+    let loopEnd = try MosaicMotionResolver.loopFrame(
+      loop, curve: loopCurve, elapsedMilliseconds: endElapsed, reducedMotion: false)
+    XCTAssertTrue(appearEnd.isStatic)
+    XCTAssertTrue(loopEnd.isStatic)
+    XCTAssertEqual(
+      staticOpacity * appearEnd.opacity * loopEnd.opacityMultiplier, staticOpacity)
+    XCTAssertEqual(loopEnd.scale, 1)
+  }
+
   // MARK: - Terminal state
 
   /// Every motion the canonical document authors ends at the static rendering.
