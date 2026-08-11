@@ -424,6 +424,9 @@ enum MosaicProtocolV03Semantics {
         capabilities.formUnion([.featureList, .typography, .colors, .accessibilityMetadata])
         try logicalSize(component.gap)
         try color(component.markerColor)
+        // Bounded exactly as Timeline's field of the same name. Absent is the
+        // typography fallback rather than an unbounded value.
+        if let markerSize = component.markerSize { try positiveSize(markerSize) }
         try typography(component.typography, allowsTruncation: false)
         guard !component.items.isEmpty else { throw violation("protocol_empty_feature_list") }
         var itemIDs = Set<String>()

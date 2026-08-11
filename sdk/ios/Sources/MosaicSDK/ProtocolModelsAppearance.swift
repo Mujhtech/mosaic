@@ -408,6 +408,14 @@ public struct MosaicFeatureListComponent: Decodable, Sendable, Equatable, Identi
   public let marker: MosaicMarker
   public let gap: Double
   public let markerColor: MosaicColor
+  /// The extent of every marker glyph, component-level exactly as `markerColor`
+  /// is: an item overrides *which* glyph it draws, never how large.
+  ///
+  /// Optional, unlike Timeline's, because a Feature List always declares a
+  /// marker and so always has a size to fall back on. Read through
+  /// ``markerExtent``, never directly, so the fallback cannot be forgotten at one
+  /// call site.
+  public let markerSize: Double?
   public let items: [MosaicFeatureListItem]
   public let typography: MosaicTypography
   public let appearance: MosaicBoxAppearance?
@@ -424,9 +432,17 @@ public struct MosaicFeatureListComponent: Decodable, Sendable, Equatable, Identi
     item.marker ?? marker
   }
 
+  /// The extent every marker glyph is drawn at: the authored `markerSize`, or
+  /// the list's own `typography.fontSize`.
+  ///
+  /// The fallback is another authored value on the same component, following
+  /// Timeline's precedent. It is deliberately not a renderer constant — that is
+  /// how Flutter came to draw 20 while Compose drew the font size.
+  public var markerExtent: Double { markerSize ?? typography.fontSize }
+
   private enum CodingKeys: String, CodingKey {
-    case type, id, marker, gap, itemSpacing, markerColor, items, typography, appearance, sizing
-    case outerInsets, motion, visibility, accessibility
+    case type, id, marker, gap, itemSpacing, markerColor, markerSize, items, typography
+    case appearance, sizing, outerInsets, motion, visibility, accessibility
   }
 
   public init(from decoder: any Decoder) throws {
@@ -440,6 +456,7 @@ public struct MosaicFeatureListComponent: Decodable, Sendable, Equatable, Identi
     markerColor =
       try container.decodeIfPresent(MosaicColor.self, forKey: .markerColor)
       ?? .semantic(.actionPrimary)
+    markerSize = try container.decodeIfPresent(Double.self, forKey: .markerSize)
     items = try container.decode([MosaicFeatureListItem].self, forKey: .items)
     typography =
       try container.decodeIfPresent(MosaicTypography.self, forKey: .typography)

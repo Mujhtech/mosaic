@@ -377,6 +377,275 @@ final class MotionDriverTests: XCTestCase {
     XCTAssertEqual(loopEnd.scale, 1)
   }
 
+  // MARK: - Screen re-entry
+
+  /// A screen the customer left and returned to plays its entrances again, and
+  /// the bounded pulse spends its cycles again, both measured from the new entry.
+  ///
+  /// Protects the node-entry origin across navigation, which the existing
+  /// coverage could not reach: every other motion test starts at the driver's
+  /// origin, where "since node entry" and "since the driver started" are the same
+  /// number. They diverge only after a re-entry, and the closing assertions pin
+  /// that divergence — at the instant checked, a renderer that kept measuring
+  /// from the driver's origin would show the static rendering, so dropping the
+  /// entry origin fails this test rather than merely making it redundant.
+  ///
+  /// The canonical fixture's second screen is a sheet, which is presented *over*
+  /// the offer screen and leaves its nodes in place. Promoting it to a full
+  /// screen is the smallest change that makes the purchase button genuinely
+  /// leave; the sheet case is the counterpart test below.
+  func testEntranceAndPulseReplayFromNodeEntryWhenAScreenIsReEntered() throws {
+    let document = try v04DocumentWithDetailsAsAFullScreen()
+    let model = MosaicPaywallModel(
+      document: document,
+      purchaseProvider: MockMosaicPurchaseProvider(products: MosaicProduct.phase1MockProducts),
+      onResult: { _ in }
+    )
+    guard case .button(let button)? = document.allNodes.first(where: { $0.id == "purchase" })
+    else { return XCTFail("Expected the canonical purchase button.") }
+    let appear = try XCTUnwrap(button.motion?.appear)
+    let loop = try XCTUnwrap(button.motion?.loop)
+    let appearCurve = try XCTUnwrap(document.resolvedMotionCurve(appear.curve))
+    let loopCurve = try XCTUnwrap(document.resolvedMotionCurve(loop.curve))
+
+    let driver = MosaicMotionDriver.controlled()
+    // Exactly what the two controlled-mode motion views read.
+    func frames(at driverTime: Int) throws -> (MosaicAppearFrame, MosaicLoopFrame) {
+      driver.advance(to: driverTime)
+      let elapsed = driver.nodeElapsedMilliseconds(at: try XCTUnwrap(driver.elapsedMilliseconds))
+      return (
+        try MosaicMotionResolver.appearFrame(
+          appear, curve: appearCurve, elapsedMilliseconds: elapsed, reducedMotion: false),
+        try MosaicMotionResolver.loopFrame(
+          loop, curve: loopCurve, elapsedMilliseconds: elapsed, reducedMotion: false)
+      )
+    }
+
+    driver.enterScreen(model.baseScreen?.id)
+    XCTAssertEqual(model.baseScreen?.id, "offer")
+    XCTAssertEqual(driver.screenEntryCount, 1)
+
+    let (entering, pulsing) = try frames(at: 360)
+    XCTAssertFalse(entering.isStatic)
+    XCTAssertFalse(pulsing.isStatic)
+    XCTAssertEqual(pulsing.cycle, 0)
+
+    // Both settle, and the pulse spends its authored cycles.
+    let exhausted =
+      appear.delayMilliseconds + appearCurve.durationMilliseconds
+      + loopCurve.durationMilliseconds * loop.repeatCount
+    let (settled, rested) = try frames(at: exhausted)
+    XCTAssertTrue(settled.isStatic)
+    XCTAssertTrue(rested.isStatic)
+
+    // Re-rendering the screen already on show is not an entry. Only a change is.
+    driver.enterScreen(model.baseScreen?.id)
+    XCTAssertEqual(driver.screenEntryCount, 1)
+
+    model.navigate(to: "details")
+    driver.advance(to: 4_000)
+    driver.enterScreen(model.baseScreen?.id)
+    XCTAssertEqual(model.baseScreen?.id, "details")
+
+    model.navigateBack()
+    driver.advance(to: 5_000)
+    driver.enterScreen(model.baseScreen?.id)
+    XCTAssertEqual(model.baseScreen?.id, "offer")
+    XCTAssertEqual(driver.screenEntryCount, 3)
+    XCTAssertEqual(driver.screenEntryElapsedMilliseconds, 5_000)
+
+    // The same offset into the new entry is the same frame as the first time.
+    let (replayedEntrance, replayedPulse) = try frames(at: 5_360)
+    XCTAssertEqual(replayedEntrance.opacity, entering.opacity)
+    XCTAssertEqual(replayedEntrance.translateLogicalSize, entering.translateLogicalSize)
+    XCTAssertEqual(replayedPulse.scale, pulsing.scale)
+    XCTAssertEqual(replayedPulse.opacityMultiplier, pulsing.opacityMultiplier)
+    // The bound is per screen entry, not per session: the pulse is in its first
+    // cycle again rather than permanently spent.
+    XCTAssertEqual(replayedPulse.cycle, 0)
+
+    // Measured from the driver's origin instead, both would be static — which is
+    // what makes the assertions above a test of the entry origin.
+    XCTAssertTrue(
+      try MosaicMotionResolver.appearFrame(
+        appear, curve: appearCurve, elapsedMilliseconds: 5_360, reducedMotion: false
+      ).isStatic)
+    XCTAssertTrue(
+      try MosaicMotionResolver.loopFrame(
+        loop, curve: loopCurve, elapsedMilliseconds: 5_360, reducedMotion: false
+      ).isStatic)
+  }
+
+  /// Presenting and dismissing a sheet is not a screen entry: the screen behind
+  /// it keeps its motion state, so its entrances do not replay and its pulse
+  /// budget does not reset.
+  ///
+  /// Protects the other half of "genuine", in two places it can be lost. The
+  /// obvious *wiring* mistake is keying the origin on the current screen, which
+  /// replays the whole paywall every time a details sheet closes. The subtler one
+  /// is structural, and Compose shipped it: building the background screen from
+  /// two call sites in two branches gives it two identities, so presenting the
+  /// sheet tears the first down and rebuilds the second with fresh state — the
+  /// entrance replays and the bounded pulse starts its cycles over, with the
+  /// origin wired perfectly correctly. SwiftUI builds the base surface from one
+  /// unconditional call site and presents the sheet's own surface beside it, so
+  /// the background screen is never rebuilt; these assertions hold it there.
+  func testPresentingAndDismissingASheetIsNotAScreenReEntry() throws {
+    let document = try v04Document()
+    let model = MosaicPaywallModel(
+      document: document,
+      purchaseProvider: MockMosaicPurchaseProvider(products: MosaicProduct.phase1MockProducts),
+      onResult: { _ in }
+    )
+    guard case .button(let button)? = document.allNodes.first(where: { $0.id == "purchase" })
+    else { return XCTFail("Expected the canonical purchase button.") }
+    let appear = try XCTUnwrap(button.motion?.appear)
+    let loop = try XCTUnwrap(button.motion?.loop)
+    let appearCurve = try XCTUnwrap(document.resolvedMotionCurve(appear.curve))
+    let loopCurve = try XCTUnwrap(document.resolvedMotionCurve(loop.curve))
+
+    let driver = MosaicMotionDriver.controlled()
+    func frames(at driverTime: Int) throws -> (MosaicAppearFrame, MosaicLoopFrame) {
+      driver.advance(to: driverTime)
+      let elapsed = driver.nodeElapsedMilliseconds(at: try XCTUnwrap(driver.elapsedMilliseconds))
+      return (
+        try MosaicMotionResolver.appearFrame(
+          appear, curve: appearCurve, elapsedMilliseconds: elapsed, reducedMotion: false),
+        try MosaicMotionResolver.loopFrame(
+          loop, curve: loopCurve, elapsedMilliseconds: elapsed, reducedMotion: false)
+      )
+    }
+
+    driver.enterScreen(model.baseScreen?.id)
+    // Let the offer screen finish entering and spend the pulse's authored cycles.
+    let exhausted =
+      appear.delayMilliseconds + appearCurve.durationMilliseconds
+      + loopCurve.durationMilliseconds * loop.repeatCount
+    let (settled, rested) = try frames(at: exhausted)
+    XCTAssertTrue(settled.isStatic)
+    XCTAssertTrue(rested.isStatic)
+
+    model.navigate(to: "details")
+    driver.enterScreen(model.baseScreen?.id)
+    XCTAssertEqual(model.currentScreenID, "details")
+    XCTAssertNotNil(model.presentedSheet)
+    // The sheet is presented *over* the offer screen, which is still the base.
+    XCTAssertEqual(model.baseScreen?.id, "offer")
+
+    model.dismissPresentedSheet()
+    driver.enterScreen(model.baseScreen?.id)
+    XCTAssertNil(model.presentedSheet)
+    XCTAssertEqual(driver.screenEntryCount, 1)
+    XCTAssertEqual(driver.screenEntryElapsedMilliseconds, 0)
+
+    // And the screen underneath is exactly where it was left: still settled, and
+    // still out of pulse cycles. A rebuild would have put both back at zero.
+    let (afterSheet, afterSheetPulse) = try frames(at: exhausted + 360)
+    XCTAssertTrue(afterSheet.isStatic)
+    XCTAssertTrue(afterSheetPulse.isStatic)
+    XCTAssertEqual(afterSheetPulse.scale, 1)
+  }
+
+  // MARK: - Video backgrounds
+
+  /// A video background stops for reduced motion on a `0.4` document and only on
+  /// a `0.4` document.
+  ///
+  /// Protects ADR-0027 ruling 3, which is a scope ruling as much as a behaviour
+  /// one: the fix ships as specified `0.4` behaviour rather than as a `0.3` defect
+  /// patch, so the live `0.3` exposure stays open and visible until `0.4` is
+  /// accepted. An implementation that "helpfully" applied it to `0.3` as well
+  /// would close that exposure silently and diverge from Flutter and Compose.
+  ///
+  /// It also pins the two things a diagnostics assertion cannot say: that the
+  /// stopped case renders the declared poster, and that it is a preference rather
+  /// than a media failure and so records nothing.
+  func testVideoBackgroundStopsUnderReducedMotionOnlyForV04Documents() throws {
+    let url = try XCTUnwrap(URL(string: "https://cdn.mosaic.dev/video/ambient.mp4"))
+    let reducedMotionOnly = MosaicMotionAccessibility(
+      prefersReducedMotion: true, allowsVideoAutoplay: true)
+
+    func resolve(
+      _ schemaVersion: String,
+      _ accessibility: MosaicMotionAccessibility,
+      poster: String? = "poster"
+    ) -> MosaicVideoBackgroundPresentation {
+      MosaicVideoBackgroundPresentation.resolve(
+        url: url,
+        posterID: poster,
+        schemaVersion: schemaVersion,
+        accessibility: accessibility
+      )
+    }
+
+    // `0.4` under reduced motion: the poster, and no player.
+    XCTAssertEqual(
+      resolve(mosaicMotionProtocolVersion, reducedMotionOnly),
+      .still(posterID: "poster", recordsUnavailable: false)
+    )
+    // With no poster declared it is the declared fallback colour, still with no
+    // player and still without diagnosing.
+    XCTAssertEqual(
+      resolve(mosaicMotionProtocolVersion, reducedMotionOnly, poster: nil),
+      .still(posterID: nil, recordsUnavailable: false)
+    )
+    // `0.3` keeps `0.3`'s behaviour.
+    XCTAssertEqual(resolve(mosaicProtocolVersion, reducedMotionOnly), .play(url: url))
+    // And an unstated version is not treated as `0.4`.
+    XCTAssertEqual(
+      MosaicVideoBackgroundPresentation.resolve(
+        url: url, posterID: "poster", schemaVersion: nil, accessibility: reducedMotionOnly),
+      .play(url: url)
+    )
+    // Without the preference, `0.4` plays like everything else.
+    XCTAssertEqual(
+      resolve(mosaicMotionProtocolVersion, .unrestricted), .play(url: url))
+
+    // Apple's own Video Autoplay switch is not a protocol rule and is honoured on
+    // every version: a user who turned it off meant it.
+    let autoplayOff = MosaicMotionAccessibility(
+      prefersReducedMotion: false, allowsVideoAutoplay: false)
+    XCTAssertEqual(
+      resolve(mosaicProtocolVersion, autoplayOff),
+      .still(posterID: "poster", recordsUnavailable: false)
+    )
+
+    // An unresolvable asset is a media failure rather than a preference, and is
+    // the one still frame that diagnoses.
+    XCTAssertEqual(
+      MosaicVideoBackgroundPresentation.resolve(
+        url: nil, posterID: "poster", schemaVersion: mosaicMotionProtocolVersion,
+        accessibility: .unrestricted),
+      .still(posterID: "poster", recordsUnavailable: true)
+    )
+  }
+
+  /// The canonical `0.4` document with its second screen promoted from a sheet to
+  /// a full screen, so navigating to it genuinely removes the offer screen's
+  /// nodes.
+  ///
+  /// The declared capabilities are trimmed with it: a document that keeps
+  /// `navigation.sheets` after its only sheet became a screen declares a
+  /// capability nothing consumes, which the validator rejects — correctly.
+  private func v04DocumentWithDetailsAsAFullScreen() throws -> MosaicPaywallDocument {
+    var object = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any])
+    var screens = try XCTUnwrap(object["screens"] as? [[String: Any]])
+    let index = try XCTUnwrap(screens.firstIndex { $0["id"] as? String == "details" })
+    screens[index]["presentation"] = ["type": "screen"]
+    object["screens"] = screens
+
+    var compatibility = try XCTUnwrap(object["compatibility"] as? [String: Any])
+    let capabilities = try XCTUnwrap(compatibility["requiredCapabilities"] as? [[String: Any]])
+    compatibility["requiredCapabilities"] = capabilities.filter {
+      $0["name"] as? String != MosaicCapabilityName.sheets.rawValue
+    }
+    object["compatibility"] = compatibility
+
+    return try MosaicProtocolDecoder.decode(
+      JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
+  }
+
   // MARK: - Terminal state
 
   /// Every motion the canonical document authors ends at the static rendering.

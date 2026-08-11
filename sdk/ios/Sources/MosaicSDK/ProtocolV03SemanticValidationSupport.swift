@@ -110,10 +110,12 @@ extension MosaicProtocolV03Semantics {
       }
     }
 
+    // Seeded only from node reference sites. A token's own value is followed
+    // afterwards, from those roots, so reachability is transitive rather than
+    // one hop: a token referenced only from another *unused* token's value is
+    // itself unused, and seeding the catalog's edges here would have called it
+    // used.
     var referenced = Set<String>()
-    for token in catalog {
-      if let id = token.value.tokenID { referenced.insert(id) }
-    }
     var loopsByScreen: [String: [String]] = [:]
 
     for entry in entries {
@@ -144,9 +146,19 @@ extension MosaicProtocolV03Semantics {
     // Deliberately asymmetric with the colour, background, and shadow catalogs,
     // which carry no unused-token check. Those are inert values. A motion token
     // is a duration whose flash safety is checked at its *reference* site, so a
-    // token nothing references has never been checked against anything and sits
-    // in the catalog looking approved.
-    guard ids.subtracting(referenced).isEmpty else {
+    // token nothing reaches has never been checked against anything and sits in
+    // the catalog looking approved. An alias chain hanging off nothing is the
+    // same hazard wearing one more hop.
+    // Ids are already proven unique above, so a plain assignment loses nothing.
+    var valuesByID: [String: MosaicMotionCurve] = [:]
+    for token in catalog { valuesByID[token.id] = token.value }
+    var reachable = Set<String>()
+    var pending = Array(referenced)
+    while let id = pending.popLast() {
+      guard reachable.insert(id).inserted else { continue }
+      if let next = valuesByID[id]?.tokenID { pending.append(next) }
+    }
+    guard ids.subtracting(reachable).isEmpty else {
       throw violation("protocol_unused_motion_token")
     }
   }

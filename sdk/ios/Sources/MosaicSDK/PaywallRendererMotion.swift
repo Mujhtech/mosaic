@@ -83,7 +83,10 @@ struct MosaicAppearMotionView<Content: View>: View {
     if !driver.isEnabled {
       content()
     } else if let elapsed = driver.elapsedMilliseconds {
-      content().mosaicAppearFrame(controlledFrame(at: elapsed))
+      // Measured from screen entry rather than from the driver's origin. The
+      // platform path gets the same origin from the view lifecycle: a node that
+      // left the screen is rebuilt with `progress` back at zero.
+      content().mosaicAppearFrame(controlledFrame(at: driver.nodeElapsedMilliseconds(at: elapsed)))
     } else {
       content()
         .modifier(
@@ -251,7 +254,9 @@ struct MosaicLoopMotionView<Content: View>: View {
       // is the static rendering.
       content()
     } else if let elapsed = driver.elapsedMilliseconds {
-      content().mosaicLoopFrame(frame(at: elapsed))
+      // Same origin as the entrance, and the cycle bound is counted from it, so
+      // the pulse is bounded per screen entry rather than per session.
+      content().mosaicLoopFrame(frame(at: driver.nodeElapsedMilliseconds(at: elapsed)))
     } else {
       TimelineView(.animation(paused: hasFinished)) { context in
         let frame = frame(at: elapsedMilliseconds(at: context.date))

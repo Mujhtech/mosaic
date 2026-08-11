@@ -618,6 +618,50 @@ extension EnvironmentValues {
   }
 }
 
+/// What a declared video background resolves to, decided before any view exists.
+///
+/// Extracted from the view because "no player is constructed" is a claim about
+/// this decision and nothing else can state it: the absence of a diagnostic is
+/// equally true of a video that plays, so a test asserting only that passes with
+/// the reduced-motion guard deleted.
+enum MosaicVideoBackgroundPresentation: Equatable {
+  /// A player is constructed and plays `url`.
+  case play(url: URL)
+  /// No player is constructed. The declared poster is drawn when one is
+  /// declared, and the declared fallback colour otherwise.
+  ///
+  /// `recordsUnavailable` separates the two reasons for arriving here: a media
+  /// failure, which diagnoses, and a user preference, which does not.
+  case still(posterID: String?, recordsUnavailable: Bool)
+
+  static func resolve(
+    url: URL?,
+    posterID: String?,
+    schemaVersion: String?,
+    accessibility: MosaicMotionAccessibility
+  ) -> MosaicVideoBackgroundPresentation {
+    // ADR-0027 ruling 3: the reduced-motion fix ships as specified `0.4`
+    // behaviour, not as a `0.3` defect patch. A `0.3` document therefore keeps
+    // `0.3`'s behaviour — the live exposure stays open until `0.4` lands and is
+    // accepted, and is tracked as such rather than closed here. Flutter draws
+    // the same version gate.
+    let reducedMotionStops =
+      accessibility.prefersReducedMotion && schemaVersion == mosaicMotionProtocolVersion
+    // Video Autoplay is Apple's own, narrower switch rather than a protocol
+    // rule, so it is honoured on every document version: a user who turned it
+    // off meant it, and a `0.3` document is not a licence to ignore it.
+    let autoplayStops = !accessibility.allowsVideoAutoplay
+    guard !reducedMotionStops, !autoplayStops else {
+      // A preference, not a failure. The poster-then-fallback order is the one
+      // the existing missing-media policy already uses, reused deliberately
+      // rather than introducing a fourth outcome.
+      return .still(posterID: posterID, recordsUnavailable: false)
+    }
+    guard let url else { return .still(posterID: posterID, recordsUnavailable: true) }
+    return .play(url: url)
+  }
+}
+
 @MainActor
 struct MosaicBackgroundView: View {
   @Environment(\.mosaicDocument) private var document
@@ -749,25 +793,25 @@ struct MosaicBackgroundView: View {
       case .remote(let url): url
       }
     }
-    if !motionAccessibility.permitsVideoPlayback {
-      // The `0.4` ruling: under reduced motion a video background does not play.
-      // No frame of it is shown, playback is not started and paused, and no
-      // control is offered. The declared poster is rendered, and otherwise the
-      // declared fallback colour — the same resolution order the existing
-      // missing-media policy already uses, reused deliberately rather than
-      // introducing a fourth outcome. This is a user preference, not a failure,
-      // so it records no diagnostic.
-      posterOrFallback(posterID: posterID, mode: mode, fallback: fallback)
-    } else if let url {
+    // No frame of a stopped video is shown, playback is not started and paused,
+    // and no control is offered: the `still` arm constructs no player at all.
+    switch MosaicVideoBackgroundPresentation.resolve(
+      url: url,
+      posterID: posterID,
+      schemaVersion: document?.schemaVersion,
+      accessibility: motionAccessibility
+    ) {
+    case .play(let url):
       MosaicDecorativeVideoView(url: url, contentMode: mode) {
         model.recordRenderingDiagnosticOnce(
           "media_video_background_unavailable", subjectID: assetID)
       } fallback: {
         posterOrFallback(posterID: posterID, mode: mode, fallback: fallback)
       }
-    } else {
+    case .still(let posterID, let recordsUnavailable):
       posterOrFallback(posterID: posterID, mode: mode, fallback: fallback)
         .task {
+          guard recordsUnavailable else { return }
           model.recordRenderingDiagnosticOnce(
             "media_video_background_unavailable", subjectID: assetID)
         }

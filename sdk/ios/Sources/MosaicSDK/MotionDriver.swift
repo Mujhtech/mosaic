@@ -88,6 +88,46 @@ public final class MosaicMotionDriver: ObservableObject {
   /// controlled driver can force a redraw.
   public func tick() { tickCount += 1 }
 
+  // MARK: - Screen entry
+
+  /// The driver time at which the screen now on show was entered.
+  ///
+  /// `appear` and `loop` both measure from node entry, and for a node authored
+  /// on a screen that is the moment the screen was entered. A platform-driven
+  /// renderer gets this from the view lifecycle for free — a screen the user
+  /// leaves discards its nodes, and returning builds them again with fresh state
+  /// — but a controlled driver has no lifecycle to read, so the origin has to be
+  /// recorded.
+  @Published public private(set) var screenEntryElapsedMilliseconds = 0
+
+  /// How many genuine screen entries have happened, starting at zero before the
+  /// first.
+  @Published public private(set) var screenEntryCount = 0
+
+  private var enteredScreenID: String?
+
+  /// Records entry into `screenID`, if that is a genuine entry.
+  ///
+  /// A genuine entry is a *change* of screen. Returning to a screen you left is
+  /// one, so its entrances and its bounded pulse run again. Re-evaluating the
+  /// body of the screen you are already on is not, and neither is presenting a
+  /// sheet over it: the screen underneath keeps its nodes, so replaying its
+  /// entrances when the sheet closed would animate content that never left.
+  ///
+  /// The renderer passes the base screen for exactly that reason.
+  public func enterScreen(_ screenID: String?) {
+    guard screenEntryCount == 0 || screenID != enteredScreenID else { return }
+    enteredScreenID = screenID
+    screenEntryElapsedMilliseconds = elapsedMilliseconds ?? 0
+    screenEntryCount += 1
+  }
+
+  /// `elapsed` re-expressed against the current screen entry, which is the
+  /// origin the contract measures `appear` and `loop` from.
+  public func nodeElapsedMilliseconds(at elapsed: Int) -> Int {
+    max(0, elapsed - screenEntryElapsedMilliseconds)
+  }
+
   /// The one-second cadence a Countdown redraws on.
   ///
   /// It runs only for a platform-driven driver: a controlled driver's caller

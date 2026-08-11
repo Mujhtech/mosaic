@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import XCTest
 
 @testable import MosaicSDK
@@ -73,7 +74,7 @@ final class ProtocolV04Tests: XCTestCase {
         with: v04FixtureData(named: "invalid/rejection-layers.json")) as? [String: Any],
       let expected = layers["layers"] as? [String: String]
     else { throw CanonicalFixtureLookupError.invalidShape }
-    XCTAssertEqual(expected.count, 19)
+    XCTAssertEqual(expected.count, 20)
 
     for (name, layer) in expected {
       let data = try v04FixtureData(named: "invalid/\(name)")
@@ -124,6 +125,59 @@ final class ProtocolV04Tests: XCTestCase {
     // no glyph.
     XCTAssertEqual(features.marker(for: features.items[0]), .icon(name: .checkmark))
     XCTAssertEqual(features.marker(for: features.items[2]), .icon(name: .close))
+  }
+
+  /// The renderer draws the marker each item resolves to, not a constant.
+  ///
+  /// The test above proves the model decodes the union; this one proves the view
+  /// reads it. They are separate risks and the second is the one that shipped
+  /// broken: the Feature List decoded all three markers correctly and then drew a
+  /// hardcoded checkmark for every row, so the fixture's ordinal came out as a
+  /// tick and its "not included" row, authored as `icon: close`, came out
+  /// claiming the opposite of what it said.
+  ///
+  /// Asserted on the resolution `body` reads rather than on pixels, because the
+  /// failure is a wrong glyph rather than a wrong layout, and because the golden
+  /// that would have caught it can only run on a Simulator.
+  @MainActor
+  func testFeatureListRendersTheMarkerEachItemResolvesTo() throws {
+    let document = try v04Document()
+    guard case .featureList(let component) = document.allNodes.first(where: { $0.id == "features" })
+    else { return XCTFail("Expected the canonical feature list.") }
+    let view = MosaicFeatureListView(
+      component: component,
+      localization: MosaicLocalizationResolver(
+        localization: document.localization, requestedLocale: "en")
+    )
+    XCTAssertEqual(
+      (0..<component.items.count).map(view.marker(at:)),
+      [.icon(name: .checkmark), .ordinal, .icon(name: .close)]
+    )
+
+    // Every glyph is drawn at the component's size, never per item: an item
+    // overrides which glyph it draws, not how large.
+    XCTAssertEqual(component.markerSize, 18)
+    XCTAssertEqual(component.markerExtent, 18)
+    // Absent, it falls back to the list's own typography rather than to a
+    // renderer constant — the fallback that let Flutter draw 20 while Compose
+    // drew the font size.
+    XCTAssertEqual(component.typography.fontSize, 16)
+    XCTAssertEqual(try featureListWithoutMarkerSize().markerExtent, 16)
+  }
+
+  /// The canonical feature list with its authored `markerSize` removed, so the
+  /// optional field's default branch is exercised rather than described.
+  private func featureListWithoutMarkerSize() throws -> MosaicFeatureListComponent {
+    var object = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any])
+    try mutateV03Node(id: "features", in: &object) { node in
+      node.removeValue(forKey: "markerSize")
+    }
+    let document = try MosaicProtocolDecoder.decode(
+      JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
+    guard case .featureList(let component) = document.allNodes.first(where: { $0.id == "features" })
+    else { throw CanonicalFixtureLookupError.invalidShape }
+    return component
   }
 
   /// Versions are exact identifiers, in both directions.

@@ -109,6 +109,13 @@ public struct MosaicPaywall: View {
       .environment(\.mosaicMotionAccessibility, resolvedMotionAccessibility)
       .environment(\.layoutDirection, swiftUILayoutDirection)
       .environment(\.locale, Locale(identifier: model.localization.resolvedLocale.effectiveLocale))
+      // `appear` and `loop` both measure from node entry, and the base screen is
+      // what actually swaps a screen's nodes. A sheet is presented over it and
+      // leaves its nodes in place, so it is deliberately not an entry: replaying
+      // the screen underneath when a sheet closed would animate content that
+      // never left.
+      .onAppear { motionDriver.enterScreen(model.baseScreen?.id) }
+      .onChange(of: model.baseScreen?.id) { motionDriver.enterScreen($0) }
       .task { await model.prepare() }
   }
 
@@ -534,14 +541,31 @@ struct MosaicFeatureListView: View {
   let component: MosaicFeatureListComponent
   let localization: MosaicLocalizationResolver
 
+  /// The glyph drawn beside the item at `index`: the item's own marker, or the
+  /// list's when it declares none. An absent item marker is never a request for
+  /// no glyph.
+  ///
+  /// `body` reads this and nothing else, so the rendered glyph and the one a
+  /// test asks for cannot diverge.
+  func marker(at index: Int) -> MosaicMarker {
+    component.marker(for: component.items[index])
+  }
+
   var body: some View {
-    let marker = component.markerColor.rendered(in: document, role: .content)
+    let markerStyle = component.markerColor.rendered(in: document, role: .content)
     return VStack(alignment: .leading, spacing: component.gap) {
-      ForEach(component.items) { item in
+      ForEach(Array(component.items.enumerated()), id: \.element.id) { index, item in
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-          Image(systemName: "checkmark")
-            .foregroundStyle(marker.color)
-            .accessibilityHidden(true)
+          MosaicMarkerGlyph(
+            marker: marker(at: index),
+            ordinal: index + 1,
+            color: markerStyle.color,
+            // Marker colour and size stay component-level, exactly as they are
+            // on Timeline. An unauthored size falls back to the list's own
+            // typography rather than to a renderer constant.
+            extent: component.markerExtent
+          )
+          .accessibilityHidden(true)
           MosaicStyledText(
             value: localization.resolve(item.text), typography: component.typography
           )
@@ -553,7 +577,7 @@ struct MosaicFeatureListView: View {
     .accessibilityElement(children: .contain)
     .accessibilityLabel(Text(localization.resolve(component.accessibility.label)))
     .mosaicAccessibilityHint(component.accessibility.hint.map(localization.resolve))
-    .mosaicStyleDiagnostics(marker.failure)
+    .mosaicStyleDiagnostics(markerStyle.failure)
     .mosaicPresentation(
       appearance: component.appearance,
       sizing: component.sizing,

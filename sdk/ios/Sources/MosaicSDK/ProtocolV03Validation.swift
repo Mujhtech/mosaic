@@ -305,7 +305,11 @@ struct MosaicProtocolShape {
           "type", "id", "marker", "gap", "markerColor", "items", "typography",
           "accessibility",
         ],
-        optional: ["appearance", "sizing", "outerInsets", "visibility"],
+        // `markerSize` is a `0.4` addition: `0.3` sizes the single checkmark it
+        // admits from the list's typography and has no field to override it.
+        optional: version.supportsMotion
+          ? ["markerSize", "appearance", "sizing", "outerInsets", "visibility"]
+          : ["appearance", "sizing", "outerInsets", "visibility"],
         at: path
       )
       try color(node["markerColor"], at: "\(path).markerColor")

@@ -956,8 +956,17 @@ from drifting; it is not an SDK-owned schema or fixture fork.
 - Protocol heading levels are preserved in the accessibility projection. On
   iOS 15, SwiftUI exposes the native header trait but not a public per-level
   heading API.
-- The feature-list checkmark is a decorative SF Symbol; spoken labels remain
-  the protocol text.
+- Feature List and Timeline draw the same marker glyphs from one renderer. A
+  Feature List item's own `marker` overrides the list's; an absent one carries
+  the list's and is never a request for no glyph. `markerSize` is
+  component-level and falls back to the list's own `typography.fontSize`.
+- Marker glyphs are decorative in both components; spoken labels remain the
+  protocol text. An `ordinal` marker is therefore not announced — position is
+  conveyed by list order, not by reading the digit twice.
+- A `0.4` video background does not play under reduced motion: the declared
+  poster renders, then the declared fallback colour, and no player is built.
+  `0.3` documents keep `0.3`'s behaviour, per ADR-0027 ruling 3. Apple's
+  separate Video Autoplay switch is honoured on every document version.
 
 ## Validation
 

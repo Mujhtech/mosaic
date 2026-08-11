@@ -279,6 +279,46 @@ private struct MosaicTimelineRailExtent: ViewModifier {
   }
 }
 
+/// The glyph a Feature List item or a Timeline entry draws for its marker.
+///
+/// One view for both components, because `0.4` consolidated the two vocabularies
+/// onto one `MosaicMarker` union. Keeping a second, component-local glyph is how
+/// a Feature List went on drawing a checkmark for every row: an ordinal came out
+/// as a tick, and a "not included" row authored as an `icon: close` came out
+/// claiming the opposite of what it said.
+///
+/// `extent` is the marker's box. Timeline passes the authored `markerSize`;
+/// Feature List has no authored size and passes the item text's font size, so
+/// the glyph tracks the type it sits beside — the same choice Compose makes.
+struct MosaicMarkerGlyph: View {
+  let marker: MosaicMarker
+  /// The 1-based position, read only by `.ordinal`.
+  let ordinal: Int
+  let color: Color
+  let extent: Double
+
+  var body: some View {
+    switch marker {
+    case .dot:
+      Circle().fill(color).frame(width: extent, height: extent)
+    case .ordinal:
+      // The position formatted by the platform's locale number formatting,
+      // through the renderer's `\.locale` environment, so an Arabic catalog
+      // renders Arabic-Indic digits without the protocol carrying a second
+      // numeral vocabulary.
+      Text(ordinal, format: .number)
+        .font(.system(size: extent * 0.8, weight: .semibold))
+        .foregroundStyle(color)
+        .frame(width: extent, height: extent)
+    case .icon(let name):
+      Image(systemName: name.systemName)
+        .font(.system(size: extent * 0.9))
+        .foregroundStyle(color)
+        .frame(width: extent, height: extent)
+    }
+  }
+}
+
 /// The connector segment drawn through one entry's marker column.
 private struct MosaicTimelineRail: Shape {
   func path(in rect: CGRect) -> Path {
@@ -430,35 +470,13 @@ struct MosaicTimelineView: View {
       // either, a document that somehow reached the renderer without them draws
       // no glyph and diagnoses.
       if let color, let extent = markerExtent {
-        glyph(marker, index: index, color: color, extent: extent)
+        MosaicMarkerGlyph(marker: marker, ordinal: index + 1, color: color, extent: extent)
       } else {
         EmptyView()
           .mosaicStyleDiagnostics(
             MosaicStyleResolutionFailure(
               code: "timeline_marker_style_missing", subjectID: component.id))
       }
-    }
-  }
-
-  @ViewBuilder
-  private func glyph(
-    _ marker: MosaicTimelineMarker, index: Int, color: Color, extent: Double
-  ) -> some View {
-    switch marker {
-    case .dot:
-      Circle().fill(color).frame(width: extent, height: extent)
-    case .ordinal:
-      // The 1-based position, formatted by the platform's locale number
-      // formatting through the renderer's `\.locale` environment.
-      Text(index + 1, format: .number)
-        .font(.system(size: extent * 0.8, weight: .semibold))
-        .foregroundStyle(color)
-        .frame(width: extent, height: extent)
-    case .icon(let name):
-      Image(systemName: name.systemName)
-        .font(.system(size: extent * 0.9))
-        .foregroundStyle(color)
-        .frame(width: extent, height: extent)
     }
   }
 }
