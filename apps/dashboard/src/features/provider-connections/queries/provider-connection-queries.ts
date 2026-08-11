@@ -13,6 +13,7 @@ import {
   listProviderConnections,
   listProviderMappings,
   listProviderSyncRuns,
+  type ProviderKind,
   previewProviderCatalog,
 } from "@/generated/api";
 import { ApiError } from "@/lib/api/errors";
@@ -138,7 +139,7 @@ export function providerAssignmentImpactQueryOptions(input: {
   assignmentKey: string;
   connectionId?: string;
   environmentId: string;
-  provider: "app_store" | "custom" | "google_play" | "revenuecat";
+  provider: ProviderKind;
   projectId: string;
 }) {
   return queryOptions({
@@ -195,7 +196,12 @@ export function providerAssignmentImpactQueryOptions(input: {
         signal,
         throwOnError: true,
       });
-      const paywalls = await mapWithConcurrency(
+      // A Paywall with no active Draft in this Environment cannot be inspected
+      // for Product references — but it is not thereby unaffected: its
+      // published version may well cite one of these Products. Dropping it
+      // silently under-reported the blast radius of a provider reassignment,
+      // so it is counted as unchecked and named in the confirmation instead.
+      const probes = await mapWithConcurrency(
         paywallsResult.data.data.items,
         6,
         async (paywall) => {
@@ -211,11 +217,11 @@ export function providerAssignmentImpactQueryOptions(input: {
               draft.data.data.document,
               affectedProductIds
             )
-              ? paywall
-              : null;
+              ? ({ kind: "references", paywall } as const)
+              : ({ kind: "clear" } as const);
           } catch (error) {
             if (error instanceof ApiError && error.status === 404) {
-              return null;
+              return { kind: "unchecked", paywall } as const;
             }
             throw error;
           }
@@ -223,8 +229,13 @@ export function providerAssignmentImpactQueryOptions(input: {
       );
 
       return {
-        paywalls: paywalls.filter((paywall) => paywall !== null),
+        paywalls: probes
+          .filter((probe) => probe.kind === "references")
+          .map((probe) => probe.paywall),
         products: affectedProducts,
+        uncheckedPaywalls: probes
+          .filter((probe) => probe.kind === "unchecked")
+          .map((probe) => probe.paywall),
       };
     },
   });

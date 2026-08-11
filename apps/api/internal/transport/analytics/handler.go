@@ -63,6 +63,7 @@ func RegisterProjectRoutes(router chi.Router, service *analytics.Service, export
 		a.Get("/settings", h.settings)
 		a.Put("/settings", h.updateSettings)
 		a.Get("/overview", h.overview)
+		a.Get("/series", h.series)
 		a.Get("/funnels/{funnel}", h.funnel)
 		a.Get("/paywall-version-comparison", h.paywallComparison)
 		a.Get("/provider-errors", h.providerErrors)
@@ -227,6 +228,64 @@ func (h *Handler) breakdown(w http.ResponseWriter, r *http.Request) {
 	}
 	h.runQuery(w, r, []string{"__" + dimension})
 }
+
+// series answers the daily-series variant of the analytics query.
+//
+// It takes the same filters, basis, and timezone rules as the summed reads, so
+// a dashboard surface can chart exactly what its tiles report, and replaces the
+// from/to window with a clamped day count: the points are UTC calendar days, so
+// an arbitrary instant range would have to be silently rounded to serve them.
+// `days` is clamped rather than rejected, matching the overview series — the
+// length of a chart is a presentation choice — while a value that is not a
+// whole number means the caller asked for something Mosaic cannot interpret and
+// is refused.
+func (h *Handler) series(w http.ResponseWriter, r *http.Request) {
+	values := r.URL.Query()
+	metrics := splitMetrics(values.Get("metrics"))
+	if len(metrics) == 0 {
+		response.Error(w, r, response.ValidationFailed(map[string][]string{
+			"metrics": {"At least one metric identifier is required."},
+		}))
+		return
+	}
+	days := 0
+	if raw := strings.TrimSpace(values.Get("days")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			response.Error(w, r, response.ValidationFailed(map[string][]string{
+				"days": {"Days must be a whole number."},
+			}))
+			return
+		}
+		days = parsed
+	}
+	query := analytics.Query{
+		ProjectID:          chi.URLParam(r, "projectId"),
+		EnvironmentID:      chi.URLParam(r, "environmentId"),
+		Timezone:           values.Get("timezone"),
+		Basis:              values.Get("metricBasis"),
+		Platform:           values.Get("platform"),
+		Locale:             values.Get("locale"),
+		ApplicationVersion: values.Get("applicationVersion"),
+	}
+	value, err := h.service.Series(r.Context(), actor(r), query, metrics, days)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	response.OK(w, r, value)
+}
+
+func splitMetrics(raw string) []string {
+	metrics := []string{}
+	for _, part := range strings.Split(raw, ",") {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			metrics = append(metrics, trimmed)
+		}
+	}
+	return metrics
+}
+
 func (h *Handler) runQuery(w http.ResponseWriter, r *http.Request, ids []string) {
 	query, err := parseQuery(r)
 	if err != nil {
@@ -384,6 +443,24 @@ func decode(w http.ResponseWriter, r *http.Request, target any) bool {
 }
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	status, code, message := http.StatusInternalServerError, "internal_error", "An unexpected error occurred."
+	// A filter the daily aggregates cannot honour is named rather than dropped:
+	// a chart drawn from unfiltered totals under a filtered heading looks exactly
+	// like a correct one, so the caller is told which filter and which metrics
+	// disagree and can drop one of them itself.
+	var unsupported *analytics.UnsupportedDimensionError
+	if errors.As(err, &unsupported) {
+		response.Error(w, r, &response.APIError{
+			Status:  http.StatusUnprocessableEntity,
+			Code:    "analytics_dimension_unsupported",
+			Message: "The requested filter cannot be applied to a daily series for these metrics.",
+			Fields: map[string][]string{
+				unsupported.Dimension: {"Not carried by the daily aggregate for " +
+					strings.Join(unsupported.MetricIDs, ", ") + "."},
+			},
+			Cause: err,
+		})
+		return
+	}
 	switch {
 	case errors.Is(err, analytics.ErrUnauthenticated):
 		status, code, message = http.StatusUnauthorized, "unauthenticated", "Authentication is required."

@@ -571,16 +571,77 @@ function validateFailClosedVocabulary(artifacts) {
     );
   }
 
-  const policy = artifacts.compatibilityManifest.readerPolicy ?? {};
+  // The manifest must *declare* a reader policy. Defaulting an absent or renamed
+  // key to `{}` would let the invariant below pass over nothing at all, which is
+  // the one failure mode a guard like this cannot afford.
+  const policy = artifacts.compatibilityManifest.readerPolicy;
+  if (
+    policy === null ||
+    typeof policy !== "object" ||
+    Array.isArray(policy) ||
+    Object.keys(policy).length === 0
+  ) {
+    errors.push(
+      "The compatibility manifest must declare a non-empty readerPolicy object; without one the never-inactive invariant would hold vacuously",
+    );
+    return errors;
+  }
   for (const [key, value] of Object.entries(policy)) {
-    // `...NeverInactive` is the rule being stated, not broken.
-    if (typeof value === "string" && /(?<!never)inactive/i.test(value)) {
-      errors.push(
-        `Reader policy ${key} resolves to "${value}"; no failure, rejection, or expiry may ever resolve to inactive`,
-      );
+    for (const { path, value: resolution } of policyResolutions(key, value)) {
+      if (resolvesToInactive(resolution)) {
+        errors.push(
+          `Reader policy ${path} resolves to "${resolution}"; no failure, rejection, or expiry may ever resolve to inactive`,
+        );
+      }
     }
   }
   return errors;
+}
+
+/** Every string a reader policy entry resolves to, including nested ones. */
+function* policyResolutions(path, value) {
+  if (typeof value === "string") {
+    yield { path, value };
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const [index, member] of value.entries()) {
+      yield* policyResolutions(`${path}[${index}]`, member);
+    }
+    return;
+  }
+  if (value !== null && typeof value === "object") {
+    for (const [key, member] of Object.entries(value)) {
+      yield* policyResolutions(`${path}.${key}`, member);
+    }
+  }
+}
+
+/**
+ * True when a policy string says a reader may land on `inactive`.
+ *
+ * `...NeverInactive` is the rule being stated, not broken, and is the only
+ * admissible spelling. A bare `(?<!never)inactive` lookbehind is not enough on
+ * its own: it also excuses any word *ending* in "never", so an adversarial
+ * `resolveWheneverInactive` would read as compliant. Splitting on camel-case and
+ * word boundaries first makes the qualifier an exact preceding word.
+ */
+function resolvesToInactive(value) {
+  if (/(?<!never)inactive/i.test(value)) return true;
+  const words = value
+    .split(/[^A-Za-z0-9]+/u)
+    .flatMap((segment) => segment.split(/(?<=[a-z0-9])(?=[A-Z])/u))
+    .filter(Boolean)
+    .map((word) => word.toLowerCase());
+  return words.some((word, index) => {
+    let cursor = word.indexOf("inactive");
+    while (cursor !== -1) {
+      const qualifier = cursor === 0 ? (words[index - 1] ?? "") : word.slice(0, cursor);
+      if (qualifier !== "never") return true;
+      cursor = word.indexOf("inactive", cursor + 1);
+    }
+    return false;
+  });
 }
 
 function validateCompatibility(artifacts) {

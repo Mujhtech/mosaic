@@ -59,6 +59,72 @@ void main() {
     expect(updates, hasLength(1));
   });
 
+  test('an unrecognised billing term is omitted rather than guessed', () async {
+    // A guessed unit or payment mode misstates what the customer pays. The
+    // previous defaults turned any unknown unit into "year" and any unknown
+    // payment mode into pay-up-front, which is a wrong price on a paywall.
+    final channel = _FakeChannel(
+      productMetadata: <String, Object?>{
+        'localizedDisplayName': 'Pro monthly',
+        'localizedPrice': r'$4.99',
+        'billingPeriod': <String, Object?>{'unit': 'fortnight', 'value': 1},
+        'introductoryOffer': <String, Object?>{
+          'localizedPrice': r'$0.99',
+          'period': <String, Object?>{'unit': 'month', 'value': 1},
+          'cycles': 1,
+          'paymentMode': 'payUpFrontLater',
+        },
+      },
+    );
+    final provider = MosaicGooglePlayProviderFactory(
+      acceptUpdate: _accept,
+      channel: channel,
+    ).create(
+      commerceConfiguration: _configuration(),
+      configurationRelease: _release(),
+    ) as MosaicNativeStorePurchaseProvider;
+
+    final result = await provider.loadProducts(<String>['product_pro_monthly']);
+
+    final product = (result as MosaicProductsLoaded).products.single;
+    expect(product.billingPeriod, isNull);
+    expect(product.introductoryOffer, isNull);
+    expect(
+      provider.diagnostics.map((item) => item.code),
+      contains('commerce.product.unknownTerm'),
+    );
+  });
+
+  test('an omitted entitlement list stays unknown, not local-config truth',
+      () async {
+    // `activeEntitlementKeys` is optional in the commerce-provider contract and
+    // `entitlementLookupFailure: neverInferInactive` also forbids inferring
+    // active. Filling the gap from the local commerce configuration would grant
+    // access the store never confirmed.
+    final channel = _FakeChannel(
+      purchasePayload: <String, Object?>{
+        'outcome': 'purchased',
+        'transactionReference': 'safe_digest',
+      },
+    );
+    final provider = MosaicGooglePlayProviderFactory(
+      acceptUpdate: _accept,
+      channel: channel,
+    ).create(
+      commerceConfiguration: _configuration(),
+      configurationRelease: _release(),
+    ) as MosaicNativeStorePurchaseProvider;
+
+    final result = await provider.purchase('product_pro_monthly');
+
+    expect(result, isA<MosaicPurchased>());
+    expect((result as MosaicPurchased).activeEntitlements, isEmpty);
+    expect(
+      provider.diagnostics.map((item) => item.code),
+      contains('commerce.entitlements.unreported'),
+    );
+  });
+
   test('missing plugin becomes a stable provider-unavailable outcome',
       () async {
     final provider = MosaicStoreKitProviderFactory(
@@ -181,6 +247,16 @@ Map<String, Object?> _update(String revision) => <String, Object?>{
     };
 
 final class _FakeChannel implements MosaicNativeStoreChannel {
+  _FakeChannel({this.productMetadata, this.purchasePayload});
+
+  /// Replaces the product metadata the native side reports, so a test can send
+  /// a term this Dart bridge does not recognise.
+  final Map<String, Object?>? productMetadata;
+
+  /// Replaces the purchase payload, so a test can omit optional contract
+  /// fields such as `activeEntitlementKeys`.
+  final Map<String, Object?>? purchasePayload;
+
   final List<(String, Map<String, Object?>)> calls =
       <(String, Map<String, Object?>)>[];
   Future<Object?> Function(String, Object?)? handler;
@@ -214,18 +290,20 @@ final class _FakeChannel implements MosaicNativeStoreChannel {
               'productType': 'subscription',
               'entitlementKeys': <String>['pro'],
               'availability': 'available',
-              'metadata': <String, Object?>{
-                'localizedDisplayName': 'Pro monthly',
-                'localizedPrice': r'$4.99',
-                'currencyCode': 'USD',
-                'billingPeriod': <String, Object?>{
-                  'unit': 'month',
-                  'value': 1,
-                },
-              },
+              'metadata': productMetadata ??
+                  <String, Object?>{
+                    'localizedDisplayName': 'Pro monthly',
+                    'localizedPrice': r'$4.99',
+                    'currencyCode': 'USD',
+                    'billingPeriod': <String, Object?>{
+                      'unit': 'month',
+                      'value': 1,
+                    },
+                  },
             },
           ],
         },
+      'purchase' => purchasePayload ?? <String, Object?>{'outcome': 'failed'},
       _ => <String, Object?>{'outcome': 'failed'},
     };
   }

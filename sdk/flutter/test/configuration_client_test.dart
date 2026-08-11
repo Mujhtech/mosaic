@@ -101,6 +101,36 @@ void main() {
     expect(secondTransport.fetches, 0);
   });
 
+  test('an absent server time leaves no trusted clock and is reported',
+      () async {
+    // Publish time is an authoring fact, not an observation of the server
+    // clock. Substituting it anchored countdowns, freshness, and QA override
+    // windows to a moment that could be days old while calling it trusted.
+    final diagnostics = <MosaicDiagnostic>[];
+    final cache = _Cache();
+    final transport = _Transport(<MosaicConfigurationResponse>[
+      MosaicConfigurationUpdatedResponse(
+        source: deliveryFixtureSource(),
+        etag: '"release-1"',
+      ),
+    ]);
+    final mosaic = _mosaic(
+      transport: transport,
+      cache: cache,
+      onDiagnostic: diagnostics.add,
+    );
+
+    expect(
+        await mosaic.refreshConfiguration(), isA<MosaicConfigurationUpdated>());
+
+    expect(mosaic.acceptedConfiguration!.trustedServerTime, isNull);
+    expect(cache.entry!.trustedServerTime, isNull);
+    expect(
+      diagnostics.map((item) => item.code),
+      contains('configuration.serverTime.absent'),
+    );
+  });
+
   test('concurrent manual refreshes coalesce', () async {
     final response = Completer<MosaicConfigurationResponse>();
     final transport = _DelayedTransport(response.future);
@@ -272,8 +302,10 @@ Mosaic _mosaic({
   MosaicStorePlatform? storePlatform,
   MosaicCommerceConfigurationLoader? commerceConfigurationLoader,
   MosaicCommerceConfigurationTransport? commerceConfigurationTransport,
+  MosaicDiagnosticCallback? onDiagnostic,
 }) =>
     Mosaic.configure(
+      onDiagnostic: onDiagnostic,
       publicSdkKey: 'mos_public_sdk_test.secret',
       baseUrl: Uri.parse('https://mosaic.example'),
       applicationVersion: '1.0.0',

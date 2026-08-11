@@ -6,7 +6,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { releaseMaterialDigest } from "./delivery-v1-common.mjs";
 import { loadDeliveryV1Artifacts, validateDeliveryV1Release } from "./delivery-validation-v1.mjs";
 import { decisionV1Root, loadDecisionV1Artifacts, validateDecisionV1 } from "./placement-decision-validation-v1.mjs";
-import { loadProtocolV02Artifacts } from "./validation-v0.2.mjs";
+import { loadProtocolV03Artifacts } from "./validation-v0.3.mjs";
 
 export const deliveryV2Paths = Object.freeze({
   releaseSchema: resolve(decisionV1Root, "schema/configuration-delivery/v2/release.schema.json"),
@@ -25,7 +25,7 @@ export function loadDeliveryV2Artifacts() {
 }
 
 function validators(artifacts) {
-  const protocol = loadProtocolV02Artifacts(); const decision = loadDecisionV1Artifacts(); const deliveryV1 = loadDeliveryV1Artifacts();
+  const protocol = loadProtocolV03Artifacts(); const decision = loadDecisionV1Artifacts(); const deliveryV1 = loadDeliveryV1Artifacts();
   const ajv = new Ajv2020({ allErrors: true, strict: true });
   for (const schema of [protocol.paywallSchema, decision.schema, deliveryV1.releaseSchema, deliveryV1.capabilityRequestSchema]) ajv.addSchema(schema);
   return { release: ajv.compile(artifacts.releaseSchema), capabilityRequest: ajv.compile(artifacts.capabilityRequestSchema), manifest: ajv.compile(artifacts.manifestSchema) };

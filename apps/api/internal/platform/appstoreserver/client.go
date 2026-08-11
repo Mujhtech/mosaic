@@ -41,11 +41,13 @@ const (
 	ProductionBaseURL = "https://api.storekit.apple.com"
 	SandboxBaseURL    = "https://api.storekit-sandbox.apple.com"
 
-	// jwtAudience and jwtLifetime come from Apple's JWT requirements. Apple caps
-	// `exp` at `iat + 3600s`; 20 minutes leaves generous room for clock skew
-	// while keeping a leaked token short-lived.
-	jwtAudience = "appstoreconnect-v1"
-	jwtLifetime = 20 * time.Minute
+	// JWTAudience and JWTLifetime come from Apple's JWT requirements and are
+	// shared by every Apple API Mosaic calls: the App Store Server API and the
+	// App Store Connect API both require the same `aud`. Apple caps `exp` at
+	// `iat + 3600s`; 20 minutes leaves generous room for clock skew while
+	// keeping a leaked token short-lived.
+	JWTAudience = "appstoreconnect-v1"
+	JWTLifetime = 20 * time.Minute
 
 	defaultBodyLimit = int64(2 << 20)
 )
@@ -386,28 +388,46 @@ func (c *Client) do(ctx context.Context, credential Credential, method, path str
 // signJWT mints a fresh ES256 assertion per request. Tokens are never cached:
 // they are cheap to produce and a cached token outlives the credential
 // revocation that should have invalidated it.
+//
+// The App Store Server API requires `bid` on every token, so an incomplete
+// credential is rejected here rather than inside the shared signer.
 func (c *Client) signJWT(credential Credential) (string, error) {
-	if credential.PrivateKey == nil || credential.IssuerID == "" || credential.KeyID == "" || credential.BundleID == "" {
+	if credential.BundleID == "" {
 		return "", errors.New("Apple credential is incomplete")
 	}
-	issuedAt := c.now()
-	header, err := json.Marshal(map[string]string{"alg": "ES256", "kid": credential.KeyID, "typ": "JWT"})
+	return SignJWT(credential.PrivateKey, credential.KeyID, credential.IssuerID, credential.BundleID, c.now())
+}
+
+// SignJWT mints an ES256 assertion for an Apple API.
+//
+// bundleID becomes the `bid` claim. It is required by the App Store Server API
+// and must be empty for App Store Connect API tokens: the App Store Connect API
+// rejects a token that carries `bid`, so the claim is omitted rather than sent
+// blank when no bundle identifier is supplied.
+func SignJWT(key *ecdsa.PrivateKey, keyID, issuerID, bundleID string, issuedAt time.Time) (string, error) {
+	if key == nil || issuerID == "" || keyID == "" {
+		return "", errors.New("Apple credential is incomplete")
+	}
+	header, err := json.Marshal(map[string]string{"alg": "ES256", "kid": keyID, "typ": "JWT"})
 	if err != nil {
 		return "", err
 	}
-	claims, err := json.Marshal(map[string]any{
-		"iss": credential.IssuerID,
+	claimSet := map[string]any{
+		"iss": issuerID,
 		"iat": issuedAt.Unix(),
-		"exp": issuedAt.Add(jwtLifetime).Unix(),
-		"aud": jwtAudience,
-		"bid": credential.BundleID,
-	})
+		"exp": issuedAt.Add(JWTLifetime).Unix(),
+		"aud": JWTAudience,
+	}
+	if bundleID != "" {
+		claimSet["bid"] = bundleID
+	}
+	claims, err := json.Marshal(claimSet)
 	if err != nil {
 		return "", err
 	}
 	signingInput := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(claims)
 	digest := sha256.Sum256([]byte(signingInput))
-	r, s, err := ecdsa.Sign(rand.Reader, credential.PrivateKey, digest[:])
+	r, s, err := ecdsa.Sign(rand.Reader, key, digest[:])
 	if err != nil {
 		return "", err
 	}

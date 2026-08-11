@@ -25,6 +25,12 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  ConnectionScopeField,
+  type ConnectionScopeReads,
+  UNREADABLE_APPLICATION_SCOPES,
+  UNREADABLE_ENVIRONMENT_SCOPES,
+} from "@/features/provider-connections/components/connection-scope-field";
 import { ProviderConnectionCreatedButTestFailed } from "@/features/provider-connections/mutations/provider-connection-mutations";
 import {
   type CreateRevenueCatConnectionInput,
@@ -35,7 +41,7 @@ import type { Application, Environment } from "@/generated/api";
 
 const PROVIDERS_SUFFIX = /\/catalog\/providers$/;
 
-interface ConnectRevenueCatSheetProps {
+interface ConnectRevenueCatSheetProps extends ConnectionScopeReads {
   applications: readonly Application[];
   environments: readonly Environment[];
   onConnect: (input: CreateRevenueCatConnectionInput) => Promise<void>;
@@ -49,8 +55,11 @@ const CONNECTION_MODE_OPTIONS = [
 
 export function ConnectRevenueCatSheet({
   applications,
+  applicationsUnreadable,
   environments,
+  environmentsUnreadable,
   onConnect,
+  onRetryScopes,
   providerBaseHref,
 }: ConnectRevenueCatSheetProps) {
   const [open, setOpen] = useState(false);
@@ -311,7 +320,8 @@ export function ConnectRevenueCatSheet({
               }}
             >
               {(field) => (
-                <CheckboxScope
+                <ConnectionScopeField
+                  emptyDescription="Create this scope before connecting RevenueCat."
                   emptyHref={providerBaseHref.replace(
                     PROVIDERS_SUFFIX,
                     "/settings/environments"
@@ -331,7 +341,13 @@ export function ConnectRevenueCatSheet({
                     }))}
                   label="Environment scopes"
                   onChange={field.handleChange}
+                  onRetry={onRetryScopes}
                   selected={field.state.value}
+                  unreadableDescription={
+                    environmentsUnreadable
+                      ? UNREADABLE_ENVIRONMENT_SCOPES
+                      : undefined
+                  }
                 />
               )}
             </form.Field>
@@ -346,7 +362,8 @@ export function ConnectRevenueCatSheet({
               }}
             >
               {(field) => (
-                <CheckboxScope
+                <ConnectionScopeField
+                  emptyDescription="Create this scope before connecting RevenueCat."
                   emptyHref={providerBaseHref.replace(
                     PROVIDERS_SUFFIX,
                     "/apps"
@@ -359,7 +376,13 @@ export function ConnectRevenueCatSheet({
                   }))}
                   label="Application scopes"
                   onChange={field.handleChange}
+                  onRetry={onRetryScopes}
                   selected={field.state.value}
+                  unreadableDescription={
+                    applicationsUnreadable
+                      ? UNREADABLE_APPLICATION_SCOPES
+                      : undefined
+                  }
                 />
               )}
             </form.Field>
@@ -405,73 +428,5 @@ export function ConnectRevenueCatSheet({
         </form>
       </SheetContent>
     </Sheet>
-  );
-}
-
-function CheckboxScope({
-  error,
-  emptyHref,
-  items,
-  label,
-  onChange,
-  selected,
-}: {
-  error?: string;
-  emptyHref: string;
-  items: readonly { description: string; id: string; label: string }[];
-  label: string;
-  onChange: (value: string[]) => void;
-  selected: readonly string[];
-}) {
-  return (
-    <fieldset className="space-y-2">
-      <legend className="font-medium text-sm">{label}</legend>
-      {items.length === 0 ? (
-        <div className="rounded border border-dashed p-3 text-xs">
-          <p className="text-muted-foreground">
-            Create this scope before connecting RevenueCat.
-          </p>
-          <a
-            className="mt-2 inline-flex font-semibold text-primary"
-            href={emptyHref}
-          >
-            Create scope
-          </a>
-        </div>
-      ) : (
-        <div className="grid gap-2">
-          {items.map((item) => (
-            <label
-              className="flex items-start gap-3 rounded border p-3 text-sm"
-              key={item.id}
-            >
-              <input
-                checked={selected.includes(item.id)}
-                className="mt-0.5 size-4 accent-primary"
-                onChange={(event) =>
-                  onChange(
-                    event.currentTarget.checked
-                      ? [...selected, item.id]
-                      : selected.filter((id) => id !== item.id)
-                  )
-                }
-                type="checkbox"
-              />
-              <span>
-                <span className="block font-medium">{item.label}</span>
-                <span className="mt-0.5 block text-muted-foreground text-xs">
-                  {item.description}
-                </span>
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
-      {error ? (
-        <p className="text-destructive text-sm" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </fieldset>
   );
 }

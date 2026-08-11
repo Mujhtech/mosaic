@@ -116,6 +116,11 @@
   --border: oklch(1 0 0 / 13%);
   --card: oklch(0.21 0.012 80);
   --card-foreground: oklch(0.96 0.006 95);
+  /* Lightened the way --primary is, so a destructive control stays legible on
+     the dark surface instead of inheriting the light-mode red. Foreground goes
+     dark for the same reason --primary-foreground does. */
+  --destructive: oklch(0.7 0.19 28);
+  --destructive-foreground: oklch(0.18 0.02 28);
   --foreground: oklch(0.96 0.006 95);
   --input: oklch(1 0 0 / 15%);
   --muted: oklch(0.26 0.012 80);

@@ -125,7 +125,7 @@ private enum MosaicCanonicalPaywallResource {
       let url = MosaicResourceBundle.bundle.url(
         forResource: "complete-paywall",
         withExtension: "json",
-        subdirectory: "v0.2"
+        subdirectory: "v0.3"
       )
         ?? MosaicResourceBundle.bundle.url(
           forResource: "complete-paywall",

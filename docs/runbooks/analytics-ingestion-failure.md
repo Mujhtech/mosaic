@@ -17,8 +17,9 @@ not double-count.
 The batch response names each event's outcome; permanent rejection codes are
 contract-stable. Drill-observed causes:
 
-- **`409 analytics_collection_disabled`** — collection is **off by default**
-  for every new Environment. Enable it:
+- **`409 analytics_collection_disabled`** — collection is on by default, so
+  this means it was turned off for this Environment (check the analytics
+  privacy audit trail for who did it and when). Re-enable it:
 
   ```bash
   PUT .../environments/{environmentId}/analytics/settings

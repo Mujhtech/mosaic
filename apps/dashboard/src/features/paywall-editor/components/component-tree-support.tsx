@@ -44,22 +44,6 @@ export function hasCatalogPayload(event: DragEvent<HTMLDivElement>) {
 
 export const LAYER_DRAG_TYPE = "application/x-mosaic-layer-id";
 
-export const CAPABILITY_BY_TYPE = {
-  scrollContainer: "layout.scrollContainer",
-  stack: "layout.stack",
-  text: "component.text",
-  image: "component.image",
-  icon: "component.icon",
-  featureList: "component.featureList",
-  productSelector: "component.productSelector",
-  productCard: "component.productCard",
-  productBadge: "component.productBadge",
-  button: "component.button",
-  carousel: "component.carousel",
-  switch: "component.switch",
-  countdown: "component.countdown",
-} as const;
-
 export const selectTreeState = (state: EditorState) => ({
   document: state.document,
   expandedTreeNodes: state.expandedTreeNodes,
@@ -433,6 +417,12 @@ export function visibleRows(
     if (node.type === "carousel") {
       for (const page of node.pages) {
         visit(page.content, depth, node.id, progress);
+      }
+      return;
+    }
+    if (node.type === "tabs") {
+      for (const tab of node.tabs) {
+        visit(tab.content, depth, node.id, progress);
       }
     }
   }

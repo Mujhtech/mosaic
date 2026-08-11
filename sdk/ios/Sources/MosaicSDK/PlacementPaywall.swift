@@ -12,6 +12,31 @@ struct MosaicPresentationAcknowledgementGate: Sendable {
   mutating func reset() { presentationID = nil }
 }
 
+/// Host-supplied copy for the placeholder shown when a Placement has no safe
+/// configuration.
+///
+/// The SDK ships English defaults because it has no access to the host's
+/// localization catalogs. Applications shipping in other languages should pass
+/// their own localized strings.
+public struct MosaicPlacementUnavailableCopy: Sendable, Equatable {
+  public let title: String
+  public let message: String
+  /// Prefixes the diagnostic code in the accessibility hint.
+  public let diagnosticHintPrefix: String
+
+  public init(
+    title: String = "Paywall unavailable",
+    message: String = "The requested placement has no safe configuration.",
+    diagnosticHintPrefix: String = "Diagnostic code:"
+  ) {
+    self.title = title
+    self.message = message
+    self.diagnosticHintPrefix = diagnosticHintPrefix
+  }
+
+  public static let english = MosaicPlacementUnavailableCopy()
+}
+
 /// Resolves an already-accepted hosted Configuration Release and renders its
 /// named Placement. Resolution never performs a network request.
 @MainActor
@@ -24,6 +49,8 @@ public struct MosaicPlacementPaywall: View {
     let selection: MosaicExperimentSelection?
     let fallbackReason: String?
     let releaseID: String?
+    /// Diagnostic codes the renderer records for this presentation.
+    let diagnostics: [String]
   }
 
   private enum LoadState {
@@ -38,6 +65,7 @@ public struct MosaicPlacementPaywall: View {
   private let requestedLocale: String?
   private let imageResolver: MosaicImageResolver
   private let videoResolver: MosaicVideoResolver
+  private let unavailableCopy: MosaicPlacementUnavailableCopy
   private let onInteraction: @MainActor (MosaicInteractionOutcome) -> Void
   private let onResult: @MainActor (MosaicPresentationResult) -> Void
   @State private var state: LoadState = .loading
@@ -54,6 +82,7 @@ public struct MosaicPlacementPaywall: View {
     requestedLocale: String? = nil,
     imageResolver: MosaicImageResolver = .missing,
     videoResolver: MosaicVideoResolver = .missing,
+    unavailableCopy: MosaicPlacementUnavailableCopy = .english,
     onInteraction: @escaping @MainActor (MosaicInteractionOutcome) -> Void = { _ in },
     onResult: @escaping @MainActor (MosaicPresentationResult) -> Void
   ) {
@@ -62,6 +91,7 @@ public struct MosaicPlacementPaywall: View {
     self.requestedLocale = requestedLocale
     self.imageResolver = imageResolver
     self.videoResolver = videoResolver
+    self.unavailableCopy = unavailableCopy
     self.onInteraction = onInteraction
     self.onResult = onResult
   }
@@ -81,6 +111,7 @@ public struct MosaicPlacementPaywall: View {
           imageResolver: imageResolver,
           videoResolver: videoResolver,
           analytics: resolved.analytics,
+          presentationDiagnostics: resolved.diagnostics,
           onInteraction: onInteraction,
           onResult: onResult
         )
@@ -94,16 +125,16 @@ public struct MosaicPlacementPaywall: View {
             .font(.largeTitle)
             .foregroundStyle(.secondary)
             .accessibilityHidden(true)
-          Text("Paywall unavailable")
+          Text(unavailableCopy.title)
             .font(.headline)
-          Text("The requested placement has no safe configuration.")
+          Text(unavailableCopy.message)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
         .accessibilityElement(children: .combine)
-        .accessibilityHint("Diagnostic code: \(diagnosticCode)")
+        .accessibilityHint("\(unavailableCopy.diagnosticHintPrefix) \(diagnosticCode)")
       }
     }
     .task(id: "\(placement):\(generation)") {
@@ -180,14 +211,20 @@ public struct MosaicPlacementPaywall: View {
               attribution: attribution, experimentAttribution: experiment,
               selection: evaluation.experimentSelection,
               fallbackReason: evaluation.experimentFallbackReason,
-              releaseID: analytics.releaseID))
+              releaseID: analytics.releaseID,
+              diagnostics: []))
         } else {
+          // The paywall still renders, because a document that cannot be
+          // attributed is better than no paywall. It renders untracked though:
+          // no presentation, purchase, or conversion event carries attribution,
+          // so the presentation says so instead of looking healthy.
           state = .resolved(
             .init(
               document: document, analytics: nil, attribution: nil,
               experimentAttribution: nil,
               selection: evaluation.experimentSelection,
-              fallbackReason: evaluation.experimentFallbackReason, releaseID: nil))
+              fallbackReason: evaluation.experimentFallbackReason, releaseID: nil,
+              diagnostics: ["placement_analytics_metadata_unavailable"]))
         }
       case .noPaywall(let matchedRuleID, _, _, let trace):
         state = .noPaywall

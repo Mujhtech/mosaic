@@ -1,8 +1,8 @@
 import {
+  analyticsCollectionSettingsHref,
   assetsHref,
   billingQuarantineHref,
   catalogProductsHref,
-  environmentSettingsHref,
   placementsHref,
   providersHref,
   storeConnectionsHref,
@@ -268,7 +268,7 @@ const CODE_DESCRIPTORS: Record<string, CodeDescriptor> = {
   analytics_collection_disabled: {
     description:
       "Analytics collection is turned off for this Environment, so no events are being recorded. Turn it on in Environment settings to populate this view.",
-    href: environmentSettingsHref,
+    href: analyticsCollectionSettingsHref,
     label: "Open Environment settings",
   },
   asset_object_missing: {
@@ -372,6 +372,34 @@ const CODE_DESCRIPTORS: Record<string, CodeDescriptor> = {
  * and details are unchanged and only the link is omitted, so callers outside a
  * project context still get the specific explanation.
  */
+export interface ApiCodeDescription {
+  description: string;
+  /** The next step's label. The caller owns the destination. */
+  recoveryLabel?: string;
+}
+
+/**
+ * The same Mosaic-owned copy, for a code that arrives outside an error
+ * response.
+ *
+ * Not every coded condition is a failure: a tri-state overview metric reports
+ * `analytics_collection_disabled` or `billing_disabled` inside a 200. The
+ * explanation an operator needs is identical to the one the error path gives,
+ * so it is read from the same table rather than written twice and drifting.
+ * Only the destination is left to the caller, because these surfaces link with
+ * typed routing rather than a constructed href.
+ */
+export function describeApiCode(code: string): ApiCodeDescription | undefined {
+  const descriptor = CODE_DESCRIPTORS[code];
+  if (!descriptor) {
+    return;
+  }
+  return {
+    description: descriptor.description,
+    ...(descriptor.label ? { recoveryLabel: descriptor.label } : {}),
+  };
+}
+
 export function describeApiError(
   error: unknown,
   scope: WorkspaceScope = {}

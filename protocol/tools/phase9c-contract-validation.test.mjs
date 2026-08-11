@@ -18,6 +18,35 @@ for (const name of ["authoritativeEntitlementV2", "billingMigrationOperationsV1"
   });
 }
 
+test("webhook v2 consumer tolerance is pinned to the re-read requirement", () => {
+  const artifacts = loadPhase9CArtifacts("billingStateWebhookV2");
+  // The tolerant arms exist only because the consumer re-reads authoritative
+  // state. Pin both the manifest text and the validator that enforces it.
+  assert.equal(artifacts.manifest.consumerPolicy.unknownField, "ignore");
+  assert.equal(artifacts.manifest.consumerPolicy.unknownEventType, "ignore");
+  assert.equal(artifacts.manifest.consumerPolicy.unknownEnumeration, "ignore");
+  assert.equal(
+    artifacts.manifest.consumerPolicy.authoritativeState,
+    "reReadAuthoritativeEntitlementV2",
+  );
+
+  for (const mutate of [
+    (manifest) => delete manifest.consumerPolicy.authoritativeState,
+    (manifest) => {
+      manifest.consumerPolicy.authoritativeState = "projectFromEvent";
+    },
+    (manifest) => delete manifest.consumerPolicy,
+  ]) {
+    const broken = { ...artifacts, manifest: structuredClone(artifacts.manifest) };
+    mutate(broken.manifest);
+    const errors = validatePhase9CArtifacts(broken);
+    assert.ok(
+      errors.some((error) => error.includes("consumerPolicy")),
+      `expected a consumerPolicy error, got: ${errors.join("; ")}`,
+    );
+  }
+});
+
 test("authority epoch outranks snapshot version", () => {
   assert.equal(authorityCacheDecision({ authorityEpoch: 5, snapshotVersion: 10 }, { authorityEpoch: 4, snapshotVersion: 999 }), "reject_older_authority_epoch");
   assert.equal(authorityCacheDecision({ authorityEpoch: 5, snapshotVersion: 999 }, { authorityEpoch: 6, snapshotVersion: 1 }), "replace_for_newer_authority_epoch");

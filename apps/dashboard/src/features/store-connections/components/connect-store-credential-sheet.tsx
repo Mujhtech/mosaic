@@ -26,6 +26,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { providerLabel } from "@/features/billing-ledger/types/billing-vocabulary";
+import { SecretKeyField } from "@/features/store-connections/components/secret-key-field";
 import {
   buildCreateStoreCredentialRequest,
   readGoogleServiceAccount,
@@ -600,70 +601,45 @@ export function ConnectStoreCredentialSheet({
               }}
             >
               {(field) => (
-                <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel htmlFor="store-credential-secret">
-                    {provider === "app_store"
+                <SecretKeyField
+                  accept={
+                    provider === "app_store"
+                      ? ".p8,.pem"
+                      : ".json,application/json"
+                  }
+                  description="Read in this browser, sent once over TLS, encrypted by the API, cleared from this form after the attempt, and never returned or shown again. Mosaic checks only the file format here; the store decides whether the key works."
+                  errors={field.state.meta.errors.filter(
+                    (message): message is string => typeof message === "string"
+                  )}
+                  extra={
+                    googleSummary && "summary" in googleSummary ? (
+                      <p
+                        className="text-muted-foreground text-xs"
+                        role="status"
+                      >
+                        Service account:{" "}
+                        <strong>{googleSummary.summary.clientEmail}</strong>
+                        {googleSummary.summary.projectId
+                          ? ` · project ${googleSummary.summary.projectId}`
+                          : ""}
+                      </p>
+                    ) : null
+                  }
+                  fileKindLabel={
+                    provider === "app_store"
+                      ? ".p8 key file"
+                      : "service-account JSON file"
+                  }
+                  id="store-credential-secret"
+                  label={
+                    provider === "app_store"
                       ? "In-App Purchase key (.p8)"
-                      : "Service-account JSON key"}
-                  </FieldLabel>
-                  {/*
-                    A multi-line key cannot use type="password", so the field is
-                    labelled explicitly instead: entered once, never shown again.
-                  */}
-                  <textarea
-                    aria-describedby="store-credential-secret-help"
-                    aria-invalid={field.state.meta.errors.length > 0}
-                    autoComplete="off"
-                    className="min-h-32 w-full rounded border border-input bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40"
-                    id="store-credential-secret"
-                    onBlur={field.handleBlur}
-                    onChange={(event) =>
-                      field.handleChange(event.currentTarget.value)
-                    }
-                    spellCheck={false}
-                    value={field.state.value}
-                  />
-                  <div>
-                    <input
-                      accept={
-                        provider === "app_store"
-                          ? ".p8,.pem"
-                          : ".json,application/json"
-                      }
-                      aria-label="Read the key file into the field above"
-                      className="text-muted-foreground text-xs"
-                      onChange={(event) => {
-                        const file = event.currentTarget.files?.[0];
-                        // Read entirely in the browser into form state. The file
-                        // is never uploaded as a file and never touches storage.
-                        if (file) {
-                          file.text().then((text) => field.handleChange(text));
-                        }
-                      }}
-                      type="file"
-                    />
-                  </div>
-                  <FieldDescription id="store-credential-secret-help">
-                    Entered once over TLS, encrypted by the API, cleared from
-                    this form after the attempt, and never returned or shown
-                    again. Mosaic checks only the file format here; the store
-                    decides whether the key works.
-                  </FieldDescription>
-                  {googleSummary && "summary" in googleSummary ? (
-                    <p className="text-muted-foreground text-xs" role="status">
-                      Service account:{" "}
-                      <strong>{googleSummary.summary.clientEmail}</strong>
-                      {googleSummary.summary.projectId
-                        ? ` · project ${googleSummary.summary.projectId}`
-                        : ""}
-                    </p>
-                  ) : null}
-                  <FieldError
-                    errors={field.state.meta.errors.map((message) => ({
-                      message,
-                    }))}
-                  />
-                </Field>
+                      : "Service-account JSON key"
+                  }
+                  onBlur={field.handleBlur}
+                  onChange={field.handleChange}
+                  value={field.state.value}
+                />
               )}
             </form.Field>
 
@@ -674,7 +650,7 @@ export function ConnectStoreCredentialSheet({
               >
                 <p className="text-destructive text-sm">{submitError}</p>
                 <p className="mt-1 text-muted-foreground text-xs">
-                  The key field was cleared. Paste it again to retry safely.
+                  The key was cleared. Choose the file again to retry safely.
                 </p>
               </div>
             ) : null}

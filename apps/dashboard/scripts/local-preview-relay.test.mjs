@@ -13,7 +13,7 @@ import {
 
 function heartbeat(sessionId, sequence = 1, clientId = "client_relay_test") {
   return {
-    previewProtocolVersion: "0.2",
+    previewProtocolVersion: "0.3",
     messageId: `msg_${sessionId}_${sequence}`,
     sessionId,
     sentAt: new Date().toISOString(),
@@ -56,7 +56,7 @@ async function waitForMessages(messages, count) {
   assert.equal(messages.length, count);
 }
 
-test("negotiates Local Preview 0.2 and relays a canonical Protocol 0.2 draft", async () => {
+test("negotiates Local Preview 0.3 and relays a canonical Protocol 0.3 draft", async () => {
   const relay = createPreviewRelay({ port: 0 });
   await relay.ready;
   const url = relay.address();
@@ -64,7 +64,7 @@ test("negotiates Local Preview 0.2 and relays a canonical Protocol 0.2 draft", a
   const fixture = JSON.parse(
     await readFile(
       new URL(
-        "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
+        "../../../protocol/fixtures/local-preview/v0.3/session-flow.messages.json",
         import.meta.url
       ),
       "utf8"
@@ -96,13 +96,13 @@ test("negotiates Local Preview 0.2 and relays a canonical Protocol 0.2 draft", a
   nativeClient.send(JSON.stringify(capability));
   await waitForMessages(studioMessages, 2);
   assert.ok(
-    studioMessages.every((message) => message.previewProtocolVersion === "0.2")
+    studioMessages.every((message) => message.previewProtocolVersion === "0.3")
   );
 
   studio.send(JSON.stringify(draft));
   await waitForMessages(clientMessages, 1);
   assert.equal(clientMessages[0].type, "draftUpdated");
-  assert.equal(clientMessages[0].payload.document.schemaVersion, "0.2");
+  assert.equal(clientMessages[0].payload.document.schemaVersion, "0.3");
 
   studio.close();
   nativeClient.close();
@@ -118,7 +118,7 @@ test("relays canonical messages only within the same local preview session", asy
   const fixture = JSON.parse(
     await readFile(
       new URL(
-        "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
+        "../../../protocol/fixtures/local-preview/v0.3/session-flow.messages.json",
         import.meta.url
       ),
       "utf8"
@@ -168,7 +168,7 @@ test("replays cached identity then capabilities when Studio joins after a native
   const fixture = JSON.parse(
     await readFile(
       new URL(
-        "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
+        "../../../protocol/fixtures/local-preview/v0.3/session-flow.messages.json",
         import.meta.url
       ),
       "utf8"
@@ -209,7 +209,7 @@ test("notifies Studio when a connected native client closes", async () => {
   const fixture = JSON.parse(
     await readFile(
       new URL(
-        "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
+        "../../../protocol/fixtures/local-preview/v0.3/session-flow.messages.json",
         import.meta.url
       ),
       "utf8"
@@ -275,7 +275,7 @@ test("enforces client handshake order, message direction, and connected identity
   const fixture = JSON.parse(
     await readFile(
       new URL(
-        "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
+        "../../../protocol/fixtures/local-preview/v0.3/session-flow.messages.json",
         import.meta.url
       ),
       "utf8"
@@ -334,7 +334,7 @@ test("keeps the replacement socket active when a stable client identity reconnec
   const fixture = JSON.parse(
     await readFile(
       new URL(
-        "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
+        "../../../protocol/fixtures/local-preview/v0.3/session-flow.messages.json",
         import.meta.url
       ),
       "utf8"

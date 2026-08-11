@@ -18,14 +18,14 @@ final class MosaicPackageExample extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(title: const Text('Mosaic Flutter Protocol 0.2')),
+        appBar: AppBar(title: const Text('Mosaic Flutter Protocol 0.3')),
         body: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
             'Configured ${mosaic.configuration.apiKey}. '
             'Strict readers: '
             '${mosaicFlutterCapabilityReport.supportedSchemaVersions.join(', ')}. '
-            'Protocol 0.2 supports ${mosaicProtocolV02Capabilities.length} '
+            'Protocol 0.3 supports ${mosaicProtocolV03Capabilities.length} '
             'capabilities and Local Preview negotiates the highest mutual '
             'version. Run examples/flutter-example for the complete native '
             'paywall.',

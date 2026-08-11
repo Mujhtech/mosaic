@@ -82,7 +82,7 @@ failure.
   `mosaic_revenuecat` and `mosaic_native_store` packages.
 - Platforms: Flutter (iOS and Android hosts), Flutter 3.22 / Dart 3.4 minimum.
 - Symptom: the packages declare `publish_to: none` and are versioned
-  `0.2.0-dev.11` / `0.1.0-dev.1`. `flutter pub add mosaic_sdk` cannot resolve
+  `0.3.0-dev.1` / `0.1.0-dev.1`. `flutter pub add mosaic_sdk` cannot resolve
   them, because no version exists on pub.dev.
 - Workaround: install by Git pin (repository URL plus `path:` and an exact tag
   or commit `ref:`) or by local path dependency. Both forms are documented in
@@ -376,6 +376,39 @@ failure.
   accepting one the server never emits; both fail closed onto last-known-valid
   or bundled configuration rather than rendering wrong material.
 
+### A locale with a script subtag resolves to its base language, never to language+region
+
+- Surface: `localization.locales` keys in
+  `protocol/schema/v0.2/paywall.schema.json` (`localeTag`), the candidate chain
+  documented in [`docs/protocol/v0.2.md`](protocol/v0.2.md), and its reference
+  implementation `protocol/tools/locale-resolution-v0.2.mjs`.
+- Platforms: Flutter, iOS, Android.
+- Symptom: catalog keys are `language[-REGION]`; the grammar admits no script
+  subtag. A device reporting `zh-Hans-CN` or `zh-Hant-TW` therefore walks
+  requested tag (never a key) → base language `zh` → `fallbackLocale` →
+  `defaultLocale`. A `zh-CN` catalog declared in the same document is not a
+  candidate and cannot be reached by a Simplified-Chinese device, and Simplified
+  and Traditional readers collapse onto the same `zh` catalog.
+- Workaround: author the base-language catalog (`zh`) as the one Chinese
+  audiences receive, and use it for the variant with the larger audience.
+  A region-specific catalog is still reachable by any device that reports
+  `zh-CN` without a script subtag.
+- Planned resolution: deferred to the next Paywall Protocol version, where it
+  belongs with script-aware catalog keys rather than alone. Inserting a
+  language+region reduction step (`zh-Hans-CN` → try `zh-CN` before `zh`) into
+  `0.2` was considered and **rejected**: unlike the case-insensitivity and
+  extension-truncation clarifications made alongside it, it changes a step the
+  contract already defines, so a document declaring both `zh` and `zh-CN` would
+  silently serve already-shipped devices a different catalog than before, with
+  no negotiation handle and no way for an author to opt out. It also only proxies
+  script through region, so it does not fix the Hans/Hant collapse that is the
+  real defect. `0.2` is approved and immutable; this is a version-bump change.
+- GA safety: resolution stays inside the author's own declared catalogs and can
+  never fail to produce text — the chain always terminates at the default
+  catalog and then the component's inline default. The consequence is a
+  less-specific translation, not a wrong price, a wrong Product, or a render
+  failure.
+
 ### Three Experiment guardrail metrics always report zero
 
 - Surface: seeded `experiment_metric_definitions` (`product_unavailable`,
@@ -529,6 +562,86 @@ failure.
   post-GA.
 - GA safety: a named, actionable 409 that fails closed before anything is
   written. No Release is created and delivery is unchanged.
+
+### Overview metrics carry no revenue, and its purchase tiles are client-observed
+
+- Surface: `GET .../environments/{environmentId}/overview-metrics`.
+- Platforms: all (API consumers, dashboard).
+- Symptom: two gaps a reader will notice against a commercial analogue.
+  1. There are no monetary metrics — no revenue, no MRR, no ARPU. Mosaic's
+     Billing Transaction Facts record no price and no currency at all, so these
+     are not derivable from anything Mosaic stores rather than merely unwired.
+  2. `purchases` and `conversionRate` report client-observed purchase
+     completions, marked `authority: "client_observed"`. Mosaic declares
+     provider-confirmed purchase metrics but does not compute them yet, so
+     reporting these tiles from provider-confirmed data would leave them
+     permanently unavailable.
+- Workaround: for provider-validated purchase volume use
+  `subscriptions.newToday` / `newYesterday`, which are derived from validated
+  Transaction Facts (`authority: "provider_validated"`). There is no workaround
+  for revenue.
+- Planned resolution: monetary metrics require capturing price and currency on
+  the Fact, which is a Phase 9 schema decision. The response's `metrics` object
+  is closed, so adding a `revenue` group later is additive and breaks no
+  existing consumer.
+- GA safety: nothing is fabricated. Every metric states its `authority`, and no
+  monetary field is offered as an always-unavailable placeholder that would be
+  indistinguishable from a broken one.
+
+### Overview customer counts exclude customers with no projected purchase
+
+- Surface: `GET .../environments/{environmentId}/overview-metrics`.
+- Platforms: all (API consumers, dashboard).
+- Symptom: `customers.total` and the `new*` counts include only Billing
+  Customers holding a committed entitlement pointer in the Environment. A
+  customer created by a trusted-server identify call whose purchase has never
+  projected — or whose lineage is frozen by an open identity conflict — is not
+  counted, so the overview can report fewer customers than the operator console
+  lists for the Project.
+- Workaround: use the operator customer list
+  (`GET .../environments/{environmentId}/billing/customers`) for the full
+  population; it is Project-scoped identity with per-Environment state.
+- Planned resolution: a Billing Customer row is Project-scoped by design (a
+  customer is one identity across sandbox and production), and the entitlement
+  pointer is the only per-Environment record that a customer exists there.
+  Reporting a Project-wide count on an Environment-scoped page would show the
+  sandbox population on the production overview, which is the worse error.
+- GA safety: an under-count with a stated definition, never an over-count, and
+  never presented as a Project total.
+
+### The overview series withdraws all four funnel lines when either read fails
+
+- Surface: `GET .../environments/{environmentId}/overview-metrics/series`.
+- Platforms: all (API consumers, dashboard).
+- Symptom: the analytics half of the chart is composed from two reads — the
+  completed days from the daily aggregates, today from raw events — and if
+  either fails, all four analytics series report `available: false` with
+  `metric_unavailable` rather than drawing the days that did answer. The billing
+  series are unaffected, and vice versa.
+- Workaround: retry, or read the same measures per window through
+  `.../analytics/overview`, which is a separate query path.
+- Planned resolution: none intended. A line drawn with its most recent day or an
+  interior week missing reads as a collapse in the product, not as missing data,
+  and a chart that lies is worse than a chart that is absent.
+- GA safety: fails visibly and per series, with a code the dashboard already
+  maps. Nothing is fabricated and no missing day is drawn as a zero.
+
+### Overview series points can change after the fact for up to seven days
+
+- Surface: `GET .../environments/{environmentId}/overview-metrics/series`.
+- Platforms: all (API consumers, dashboard).
+- Symptom: Mosaic accepts analytics events for seven days after they occur and
+  rebuilds the UTC day they belong to, so a completed day's point can rise on a
+  later read. Today's point additionally moves throughout the day; it is the
+  only one marked `partial: true`. The billing series carry the same caveats the
+  scalar overview does — no revenue, and `purchases`/`conversionRate` are
+  client-observed rather than provider-confirmed.
+- Workaround: read `analyticsFreshness` alongside the series; it publishes the
+  same watermark and the late-event policy the analytics endpoints do.
+- Planned resolution: none intended. Refusing late events would lose data from
+  offline devices, which is the worse trade for a mobile SDK.
+- GA safety: the restatement direction is upward and bounded to seven days, the
+  in-progress day is labelled, and the freshness surface states the policy.
 
 ### Analytics query 422s do not name the missing parameter
 

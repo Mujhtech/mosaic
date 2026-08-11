@@ -69,6 +69,9 @@ final class MosaicCommerceConfigurationV2Decoder {
       '$path.productMappings',
       provider.identity.id,
     );
+    final diagnostics = <MosaicCommerceDiagnostic>[
+      ..._diagnostics(raw['diagnostics'], '$path.diagnostics'),
+    ];
     final configuration = MosaicCommerceConfiguration(
       version: '2',
       id: _identifier(raw['id'], '$path.id'),
@@ -90,8 +93,9 @@ final class MosaicCommerceConfigurationV2Decoder {
         raw['freshness'],
         '$path.freshness',
         provider.activation.source,
+        diagnostics,
       ),
-      diagnostics: _diagnostics(raw['diagnostics'], '$path.diagnostics'),
+      diagnostics: diagnostics,
     );
     final material = Map<String, Object?>.of(raw)..remove('contentDigest');
     final digest =
@@ -481,6 +485,7 @@ final class MosaicCommerceConfigurationV2Decoder {
     Object? value,
     String path,
     String activationSource,
+    List<MosaicCommerceDiagnostic> diagnostics,
   ) {
     final object = _object(value, path);
     final source = _string(object['source'], '$path.source');
@@ -587,6 +592,18 @@ final class MosaicCommerceConfigurationV2Decoder {
           'Native commerce freshness timestamps are inconsistent.',
         );
       }
+    } else {
+      diagnostics.add(
+        MosaicCommerceDiagnostic(
+          code: 'commerce.freshness.unobserved',
+          safeMessage: 'The native store configuration carries no Provider '
+              'observation, so its freshness is unknown.',
+          severity: MosaicCommerceDiagnosticSeverity.warning,
+          retryable: false,
+          correlationId: 'commerce_freshness_unobserved',
+          recoveryAction: MosaicCommerceRecoveryAction.none,
+        ),
+      );
     }
     return MosaicCommerceFreshness(
       source: MosaicCommerceFreshnessSource.nativeStoreConfiguration,
@@ -596,9 +613,13 @@ final class MosaicCommerceConfigurationV2Decoder {
         MosaicCommerceFreshnessStatus.values,
         (value) => value.name,
       ),
-      providerObservedAt: observed ?? configured,
+      // A native-store configuration without an observation says nothing about
+      // when the Provider last looked. Reporting the configuration time as the
+      // observation, and as the staleness horizon, would make never-observed
+      // state read as freshly observed, so absence is propagated as absence.
+      providerObservedAt: observed,
       synchronizedAt: configured,
-      staleAt: expires ?? observed ?? configured,
+      staleAt: expires ?? observed,
       expiresAt: expires,
       configuredAt: configured,
       observationEnvironment: environment,

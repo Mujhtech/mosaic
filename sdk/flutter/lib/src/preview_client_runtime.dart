@@ -363,9 +363,12 @@ extension on MosaicPreviewClient {
     Map<String, Object?> source,
   ) {
     final message = error.message;
-    final unsupportedSchema = message.contains('Unsupported schemaVersion');
-    final unsupportedCapability = message.contains('Unsupported capability') ||
-        message.contains('Unsupported component');
+    // Classified from the typed rejection the decoder raised. Message text is
+    // used only to locate the offending property, never to decide the code.
+    final unsupportedSchema =
+        error.rejection == MosaicProtocolRejection.unsupportedSchemaVersion;
+    final unsupportedCapability =
+        error.rejection == MosaicProtocolRejection.unsupportedCapability;
     final location = _protocolLocation(message, source);
     if (unsupportedSchema) {
       return _ProtocolRejection(

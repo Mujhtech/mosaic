@@ -188,3 +188,15 @@ func utcOrNil(value *time.Time) *time.Time {
 	utc := value.UTC()
 	return &utc
 }
+
+// lastProjectedFrom is the best instant available for a projection status that
+// could not be read: the snapshot's own computed-at, or the zero instant when
+// there is no snapshot either. It is deliberately not "now" — the last
+// projection did not happen at read time, and stating that it did is the same
+// class of fabrication as reporting the status as current.
+func lastProjectedFrom(snapshot *SnapshotView) time.Time {
+	if snapshot == nil {
+		return time.Time{}
+	}
+	return snapshot.ComputedAt
+}

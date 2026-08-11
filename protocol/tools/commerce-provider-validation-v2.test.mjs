@@ -200,3 +200,22 @@ test("failed Entitlement lookup never becomes authoritative empty access", () =>
     ),
   );
 });
+
+test("a shrunken Commerce Provider 2 corpus fails instead of conforming over nothing", () => {
+  // Regression: the fixture loop reported no errors over an empty array, so a
+  // corpus that failed to load read as perfect conformance. Found by
+  // tools/check-guard-vacuity.mjs.
+  const artifacts = loadCommerceProviderV2Artifacts();
+  assert.deepEqual(validateCommerceProviderV2Artifacts(artifacts), []);
+  assert.ok(artifacts.fixtures.length > 0);
+  for (const shrunken of [[], artifacts.fixtures.slice(0, 1), undefined]) {
+    const errors = validateCommerceProviderV2Artifacts({
+      ...artifacts,
+      fixtures: shrunken,
+    });
+    assert.ok(
+      errors.some((error) => error.includes("below the floor of")),
+      `expected a corpus-floor error, got: ${errors.join("; ")}`,
+    );
+  }
+});

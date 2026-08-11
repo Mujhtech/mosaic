@@ -27,6 +27,24 @@ after verifying the signature, deduplicate by `eventId`, and re-read the
 snapshot. Signing continues to cover the exact raw request body with the v1
 HMAC signing string; contract version `2` does not mean signing version `2`.
 
+## Conformance requirements for a consumer implementation
+
+V2 inherits v1's consumer contract unchanged, with the snapshot re-read pointed
+at Authoritative Entitlement `2`. The requirements are normative and pinned by
+`consumerPolicyErrors` in `protocol/tools/phase9c-contract-validation.mjs`, which
+fails validation if `consumerPolicy.authoritativeState` is dropped or reworded
+from `reReadAuthoritativeEntitlementV2`.
+
+A conforming consumer **MUST** verify the signature before parsing, **MUST**
+re-read the authoritative snapshot before acting, and **MUST NOT** project,
+cache, or persist entitlement state from a webhook payload — including
+`changedEntitlements`, `stateSummary`, and every authority field the event
+carries. `authorityEpoch`, `transitionState`, and `snapshotAuthorityDigest` are
+notifications that the authority moved, not a licence to change which authority
+the consumer believes is current; that too comes from the snapshot read. See
+[v1 conformance requirements](billing-state-webhook-v1.md#conformance-requirements-for-a-consumer-implementation)
+for the full list and the failure it prevents.
+
 Destinations configured for Webhook `1` remain supported and receive only v1
 events. They cannot satisfy the authority-aware production-readiness gate.
 Redelivery retries an existing signed logical event with the same event ID; it

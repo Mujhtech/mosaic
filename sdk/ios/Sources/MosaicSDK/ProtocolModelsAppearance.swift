@@ -93,9 +93,14 @@ public enum MosaicVisibility: Decodable, Sendable, Equatable {
   case always
   case hidden
   case switchValue(switchId: String, equals: Bool)
+  /// Visible only while the named Tabs component's runtime selection equals
+  /// this tab. A false condition removes the node from layout, the
+  /// accessibility tree, and focus order, exactly as a false Switch condition
+  /// does.
+  case tabValue(tabsId: String, equals: String)
 
-  private enum CodingKeys: String, CodingKey { case mode, switchId, equals }
-  private enum Mode: String, Decodable { case always, hidden, `switch` }
+  private enum CodingKeys: String, CodingKey { case mode, switchId, tabsId, equals }
+  private enum Mode: String, Decodable { case always, hidden, `switch`, tab }
 
   public init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -106,6 +111,11 @@ public enum MosaicVisibility: Decodable, Sendable, Equatable {
       self = .switchValue(
         switchId: try container.decode(String.self, forKey: .switchId),
         equals: try container.decode(Bool.self, forKey: .equals)
+      )
+    case .tab:
+      self = .tabValue(
+        tabsId: try container.decode(String.self, forKey: .tabsId),
+        equals: try container.decode(String.self, forKey: .equals)
       )
     }
   }
@@ -544,8 +554,14 @@ public struct MosaicProductCardStyles: Decodable, Sendable, Equatable {
   )
 }
 
-/// The complete visual state authored for a Protocol 0.2 Product Card or Product Badge.
-public struct MosaicAuthoredProductBoxStyle: Decodable, Sendable, Equatable {
+/// The complete authored appearance of a two-state selectable box in its
+/// unselected state.
+///
+/// `0.3` expresses this through the neutral `selectionStateStyle` definition
+/// that `productCardDefaultStyle` now aliases, so Product Card, Product Badge,
+/// and Tabs resolve their Default/Selected states through one implementation
+/// rather than three that can drift.
+public struct MosaicSelectionStateStyle: Decodable, Sendable, Equatable {
   public let background: MosaicBackground
   public let border: MosaicBorder
   public let cornerRadius: Double
@@ -555,7 +571,7 @@ public struct MosaicAuthoredProductBoxStyle: Decodable, Sendable, Equatable {
 }
 
 /// A recursively partial Selected-state override. Missing leaves inherit from Default.
-public struct MosaicAuthoredProductBoxStyleOverride: Decodable, Sendable, Equatable {
+public struct MosaicSelectionStateStyleOverride: Decodable, Sendable, Equatable {
   public let background: MosaicBackground?
   public let border: MosaicBorderOverride?
   public let cornerRadius: Double?
@@ -563,8 +579,8 @@ public struct MosaicAuthoredProductBoxStyleOverride: Decodable, Sendable, Equata
   public let opacity: Double?
   public let shadow: MosaicShadow?
 
-  public func resolving(_ base: MosaicAuthoredProductBoxStyle) -> MosaicAuthoredProductBoxStyle {
-    MosaicAuthoredProductBoxStyle(
+  public func resolving(_ base: MosaicSelectionStateStyle) -> MosaicSelectionStateStyle {
+    MosaicSelectionStateStyle(
       background: background ?? base.background,
       border: border?.resolving(base.border) ?? base.border,
       cornerRadius: cornerRadius ?? base.cornerRadius,
@@ -575,19 +591,25 @@ public struct MosaicAuthoredProductBoxStyleOverride: Decodable, Sendable, Equata
   }
 }
 
-public struct MosaicAuthoredProductStyles: Decodable, Sendable, Equatable {
-  public let defaultStyle: MosaicAuthoredProductBoxStyle
-  public let selected: MosaicAuthoredProductBoxStyleOverride
+public struct MosaicSelectionStyles: Decodable, Sendable, Equatable {
+  public let defaultStyle: MosaicSelectionStateStyle
+  public let selected: MosaicSelectionStateStyleOverride
 
   private enum CodingKeys: String, CodingKey {
     case defaultStyle = "default"
     case selected
   }
 
-  public func resolving(selected isSelected: Bool) -> MosaicAuthoredProductBoxStyle {
+  public func resolving(selected isSelected: Bool) -> MosaicSelectionStateStyle {
     isSelected ? selected.resolving(defaultStyle) : defaultStyle
   }
 }
+
+/// `productCardStyles` is an alias of `selectionStyles` in the `0.3` schema, so
+/// it is an alias here too rather than a second declaration that could drift.
+public typealias MosaicAuthoredProductStyles = MosaicSelectionStyles
+public typealias MosaicAuthoredProductBoxStyle = MosaicSelectionStateStyle
+public typealias MosaicAuthoredProductBoxStyleOverride = MosaicSelectionStateStyleOverride
 
 public struct MosaicProductCardAccessibility: Decodable, Sendable, Equatable {
   public let label: MosaicLocalizedText
@@ -626,7 +648,7 @@ public struct MosaicProductBadgeComponent: Decodable, Sendable, Equatable, Ident
   public let mainAxisDistribution: MosaicMainAxisDistribution
   public let crossAxisAlignment: MosaicHorizontalAlignment
   public let children: [MosaicNode]
-  public let styles: MosaicAuthoredProductStyles
+  public let styles: MosaicSelectionStyles
   public let sizing: MosaicBoxSizing?
 
   private enum CodingKeys: String, CodingKey {
@@ -650,7 +672,7 @@ public struct MosaicProductBadgeComponent: Decodable, Sendable, Equatable, Ident
     crossAxisAlignment = try container.decode(
       MosaicHorizontalAlignment.self, forKey: .crossAxisAlignment)
     children = try container.decode([MosaicNode].self, forKey: .children)
-    styles = try container.decode(MosaicAuthoredProductStyles.self, forKey: .styles)
+    styles = try container.decode(MosaicSelectionStyles.self, forKey: .styles)
     sizing = try container.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
   }
 }

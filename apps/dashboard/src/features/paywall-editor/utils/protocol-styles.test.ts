@@ -6,7 +6,7 @@ import {
 } from "@/features/paywall-editor/utils/protocol-styles";
 import { required } from "@/test/required";
 
-describe("Protocol 0.2 preview styles", () => {
+describe("Protocol 0.3 preview styles", () => {
   it.each([
     [0, 90],
     [90, 180],

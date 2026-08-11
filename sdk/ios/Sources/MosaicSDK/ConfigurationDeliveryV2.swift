@@ -596,7 +596,12 @@ enum MosaicConfigurationDeliveryV2Decoder {
           guard versionOperator(op), existence || validSemanticVersionOperand(operand)
           else { throw invalid("decision_operator_source_type_mismatch") }
         case .applicationLocale:
-          guard localeOperator(op), existence || validLocaleOperand(operand, operator: op)
+          // Only a `locale_matches` range is bound by the authored grammar. An
+          // operand with no canonical form under the direct operators is a
+          // runtime unknown, not an invalid document, so rejecting the release
+          // would discard rules the contract says are valid.
+          guard localeOperator(op), existence || stringOperand(operand, operator: op),
+            op != .localeMatches || validLocaleOperand(operand, operator: op)
           else { throw invalid("decision_operator_source_type_mismatch") }
         case .country:
           guard equalityOrMembershipOrExistenceOperator(op),

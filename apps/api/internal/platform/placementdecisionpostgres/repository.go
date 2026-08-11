@@ -267,6 +267,29 @@ type transaction struct {
 	tx pgx.Tx
 }
 
+// marshalJSON encodes a value destined for a JSON column and routes a failure
+// into the transaction's error rather than writing what a discarded error left
+// behind.
+//
+// `_ = json.Marshal` wrote a nil slice into the column, which reads back as an
+// absent structure: a rule with no condition tree, a published version with no
+// validation record, a QA override with no outcome, an audit event with no
+// metadata. Every one of those is evaluated later as if the author had authored
+// nothing — the failure mode is a wrong decision, not a failed write. Setting
+// t.err makes the enclosing transaction roll back, so the write either records
+// what the caller meant or does not happen.
+func (t *transaction) marshalJSON(value any) []byte {
+	if t.err != nil {
+		return nil
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.fail(err)
+		return nil
+	}
+	return encoded
+}
+
 func (t *transaction) exec(query string, args ...any) {
 	if t.err != nil {
 		return
@@ -299,18 +322,18 @@ func (t *transaction) SaveDraft(value placementdecision.Draft) {
 	t.exec(`INSERT INTO placement_rule_set_drafts(id,rule_set_id,project_id,environment_id,status,current_revision,source_version_id,created_by_actor_id,updated_by_actor_id,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(id) DO UPDATE SET status=excluded.status,current_revision=excluded.current_revision,updated_by_actor_id=excluded.updated_by_actor_id,updated_at=excluded.updated_at`, value.ID, value.RuleSetID, value.ProjectID, value.EnvironmentID, value.Status, value.CurrentRevision, nullable(value.SourceVersionID), value.CreatedByActorID, value.UpdatedByActorID, value.CreatedAt, value.UpdatedAt)
 }
 func (t *transaction) SaveDraftRevision(value placementdecision.DraftRevision) {
-	validationBytes, _ := json.Marshal(value.Validation)
+	validationBytes := t.marshalJSON(value.Validation)
 	t.exec(`INSERT INTO placement_rule_set_draft_revisions(draft_id,rule_set_id,project_id,environment_id,revision,document,document_bytes,document_hash,validation,mutation_key_hash,request_hash,actor_id,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, value.DraftID, value.RuleSetID, value.ProjectID, value.EnvironmentID, value.Revision, string(value.Document), []byte(value.Document), value.DocumentHash, string(validationBytes), value.MutationHash, value.RequestHash, value.ActorID, value.CreatedAt)
 }
 func (t *transaction) SaveVersion(value placementdecision.Version, rules []placementdecision.Rule) {
-	validationBytes, _ := json.Marshal(value.Validation)
+	validationBytes := t.marshalJSON(value.Validation)
 	t.exec(`INSERT INTO placement_rule_set_versions(id,rule_set_id,project_id,environment_id,placement_id,version_number,source_draft_id,source_revision,contract_version,document,document_bytes,document_hash,validation,published_by_actor_id,published_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, value.ID, value.RuleSetID, value.ProjectID, value.EnvironmentID, value.PlacementID, value.VersionNumber, value.SourceDraftID, value.SourceRevision, value.ContractVersion, string(value.Document), []byte(value.Document), value.DocumentHash, string(validationBytes), value.PublishedByActorID, value.PublishedAt)
 	for _, rule := range rules {
-		condition, _ := json.Marshal(rule.Condition)
-		outcome, _ := json.Marshal(rule.Outcome)
+		condition := t.marshalJSON(rule.Condition)
+		outcome := t.marshalJSON(rule.Outcome)
 		var rollout any
 		if rule.Rollout != nil {
-			rollout, _ = json.Marshal(rule.Rollout)
+			rollout = t.marshalJSON(rule.Rollout)
 		}
 		t.exec(`INSERT INTO placement_rule_version_rules(rule_set_version_id,project_id,environment_id,rule_id,priority,enabled,condition_tree,outcome,rollout) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, value.ID, value.ProjectID, value.EnvironmentID, rule.ID, rule.Priority, rule.Enabled, string(condition), string(outcome), rollout)
 	}
@@ -339,7 +362,7 @@ func (t *transaction) ArchivePlacement(id, actor string, at time.Time) {
 	t.exec(`UPDATE placements SET status='archived',archived_at=$2,updated_at=$2 WHERE id=$1 AND status='active'`, id, at)
 }
 func (t *transaction) SaveOverride(value placementdecision.QAOverride, selectorDigest, tokenDigest []byte) {
-	outcome, _ := json.Marshal(value.Outcome)
+	outcome := t.marshalJSON(value.Outcome)
 	t.exec(`INSERT INTO placement_qa_overrides(id,project_id,environment_id,placement_id,selector_digest,token_digest,safe_label,outcome,status,created_by_actor_id,created_at,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, value.ID, value.ProjectID, value.EnvironmentID, value.PlacementID, selectorDigest, tokenDigest, value.SafeLabel, outcome, value.Status, value.CreatedByActorID, value.CreatedAt, value.ExpiresAt)
 }
 func (t *transaction) RevokeOverride(id, projectID, environmentID, placementID, actor string, at time.Time) bool {
@@ -348,7 +371,7 @@ func (t *transaction) RevokeOverride(id, projectID, environmentID, placementID, 
 	return err == nil && tag.RowsAffected() == 1
 }
 func (t *transaction) SaveAudit(value placementdecision.AuditEvent) {
-	metadata, _ := json.Marshal(value.Metadata)
+	metadata := t.marshalJSON(value.Metadata)
 	t.exec(`INSERT INTO audit_events(id,actor_id,organization_id,project_id,environment_id,action,resource_type,resource_id,metadata,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, value.ID, value.ActorID, value.OrganizationID, nullable(value.ProjectID), nullable(value.EnvironmentID), value.Action, value.ResourceType, value.ResourceID, metadata, value.CreatedAt)
 }
 

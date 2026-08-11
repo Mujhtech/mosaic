@@ -14,9 +14,7 @@ void _validateLocalizationSemantics(MosaicPaywallDocument document) {
     );
   }
 
-  if (document.schemaVersion == mosaicProtocolV02Version) {
-    _validateV02ProductTemplates(document);
-  }
+  _validateV03ProductTemplates(document);
 
   final localizedTexts = _localizedTexts(document);
   final referencedKeys = <String>{};
@@ -36,9 +34,14 @@ void _validateLocalizationSemantics(MosaicPaywallDocument document) {
     }
   }
 
-  final unusedKeys = defaultCatalog.strings.keys.toSet().difference(
-        referencedKeys,
-      );
+  _validateReservedAccessibilityKeys(document, defaultCatalog);
+
+  final unusedKeys = defaultCatalog.strings.keys
+      .toSet()
+      // Reserved keys are consumed by the protocol rather than referenced by a
+      // component, so the unused sweep would flag every one of them.
+      .difference(mosaicReservedAccessibilityKeys.keys.toSet())
+      .difference(referencedKeys);
   if (unusedKeys.isNotEmpty) {
     throw MosaicProtocolException(
       'Default localization catalog contains unused keys: '
@@ -62,21 +65,81 @@ void _validateLocalizationSemantics(MosaicPaywallDocument document) {
   }
 }
 
+/// Enforces the reserved-key contract in both directions.
+///
+/// Missing where it is announced leaves the renderer inventing copy; declared
+/// where nothing announces it is a string nobody reads, which is how a stale
+/// translation survives a redesign.
+void _validateReservedAccessibilityKeys(
+  MosaicPaywallDocument document,
+  MosaicLocaleCatalog defaultCatalog,
+) {
+  final nodes = document.nodes.toList(growable: false);
+  final consumers = <String, bool>{
+    'mosaic.a11y.rating': nodes
+        .whereType<MosaicSocialProofComponent>()
+        .any((node) => node.rating != null),
+    'mosaic.a11y.in_progress': nodes
+        .whereType<MosaicButtonComponent>()
+        .any((node) => node.inProgressChildren != null),
+  };
+  for (final entry in mosaicReservedAccessibilityKeys.entries) {
+    final key = entry.key;
+    final consumed = consumers[key];
+    if (consumed == null) {
+      // A reserved key with no consumer rule would silently never be required.
+      throw MosaicProtocolException(
+        'Reserved localization key $key has no declared consumer in this SDK.',
+      );
+    }
+    final declared = defaultCatalog.strings.containsKey(key);
+    if (consumed && !declared) {
+      throw MosaicProtocolException(
+        'Default localization catalog must declare reserved key $key.',
+      );
+    }
+    if (!consumed && declared) {
+      throw MosaicProtocolException(
+        'Default localization catalog declares reserved key $key but the '
+        'document contains nothing that announces it.',
+      );
+    }
+    if (!declared) continue;
+    for (final catalogEntry in document.localization.locales.entries) {
+      final value = catalogEntry.value.strings[key];
+      if (value == null) continue;
+      for (final placeholder in entry.value) {
+        if (value.split(placeholder).length - 1 != 1) {
+          throw MosaicProtocolException(
+            'Localization catalog ${catalogEntry.key} key $key must contain '
+            '$placeholder exactly once.',
+          );
+        }
+      }
+      final residue = entry.value.fold(
+        value,
+        (text, placeholder) => text.replaceAll(placeholder, ''),
+      );
+      if (residue.contains('{{') || residue.contains('}}')) {
+        throw MosaicProtocolException(
+          'Localization catalog ${catalogEntry.key} key $key contains an '
+          'unsupported template expression.',
+        );
+      }
+    }
+  }
+}
+
 final RegExp _productTemplatePattern =
     RegExp(r'\{\{\s*product\.(name|price)\s*\}\}');
 
-void _validateV02ProductTemplates(MosaicPaywallDocument document) {
+void _validateV03ProductTemplates(MosaicPaywallDocument document) {
   final allowed = Set<MosaicLocalizedText>.identity();
   void visitCardNode(MosaicNode node) {
     if (node case final MosaicTextComponent text) {
       allowed.add(text.value);
     }
-    final children = switch (node) {
-      MosaicStackNode() => node.children,
-      MosaicProductBadgeComponent() => node.children,
-      _ => const <MosaicNode>[],
-    };
-    for (final child in children) {
+    for (final child in _productCardChildren(node)) {
       visitCardNode(child);
     }
   }
@@ -130,9 +193,6 @@ Iterable<MosaicLocalizedText> _localizedTexts(
   }
   for (final product in document.products) {
     yield product.label;
-    if (product.badge case final badge?) {
-      yield badge;
-    }
   }
   for (final node in document.nodes) {
     switch (node) {
@@ -165,31 +225,6 @@ Iterable<MosaicLocalizedText> _localizedTexts(
         }
       case MosaicProductBadgeComponent():
         break;
-      case MosaicPurchaseButtonComponent():
-        yield node.label;
-        yield node.inProgressLabel;
-        yield node.accessibility.label;
-        if (node.accessibility.hint case final hint?) {
-          yield hint;
-        }
-      case MosaicRestoreButtonComponent():
-        yield node.label;
-        yield node.inProgressLabel;
-        yield node.accessibility.label;
-        if (node.accessibility.hint case final hint?) {
-          yield hint;
-        }
-      case MosaicCloseButtonComponent():
-        yield node.label;
-        yield node.accessibility.label;
-        if (node.accessibility.hint case final hint?) {
-          yield hint;
-        }
-      case MosaicLegalTextComponent():
-        yield node.value;
-        if (node.accessibility.label case final label?) {
-          yield label;
-        }
       case MosaicCarouselComponent():
         yield node.accessibility.label;
         if (node.accessibility.hint case final hint?) {
@@ -218,83 +253,48 @@ Iterable<MosaicLocalizedText> _localizedTexts(
         if (node.accessibility.label case final label?) {
           yield label;
         }
-      case MosaicScrollContainer() ||
-            MosaicVerticalStack() ||
-            MosaicStackComponent():
+      case MosaicTabsComponent():
+        yield node.accessibility.label;
+        if (node.accessibility.hint case final hint?) {
+          yield hint;
+        }
+        for (final tab in node.tabs) {
+          yield tab.label;
+        }
+      case MosaicTimelineComponent():
+        yield node.accessibility.label;
+        if (node.accessibility.hint case final hint?) {
+          yield hint;
+        }
+        for (final entry in node.entries) {
+          yield entry.title;
+          if (entry.description case final description?) {
+            yield description;
+          }
+        }
+      case MosaicAwardComponent():
+        yield node.accessibility.label;
+        if (node.accessibility.hint case final hint?) {
+          yield hint;
+        }
+        yield node.title;
+        if (node.subtitle case final subtitle?) {
+          yield subtitle;
+        }
+      case MosaicSocialProofComponent():
+        yield node.accessibility.label;
+        if (node.accessibility.hint case final hint?) {
+          yield hint;
+        }
+        yield node.quote;
+        yield node.attribution;
+      case MosaicScrollContainer() || MosaicStackComponent():
         break;
     }
   }
 }
 
 void _validateCapabilities(
-  MosaicPaywallDocument document,
-  List<MosaicNode> nodes,
-) {
-  if (document.schemaVersion == mosaicProtocolV02Version) {
-    _validateV02Capabilities(document, nodes);
-    return;
-  }
-  final expected = <String>{'localization.catalogs'};
-  if (document.localization.locales.values.any(
-    (catalog) => catalog.direction == MosaicLocaleDirection.rtl,
-  )) {
-    expected.add('localization.rtl');
-  }
-  if (document.products.isNotEmpty) {
-    expected.add('product.references');
-  }
-  if (document.assets.isNotEmpty) {
-    expected
-      ..add('asset.bundledImage')
-      ..add('fallback.asset');
-  }
-
-  for (final node in nodes) {
-    expected.add(switch (node.type) {
-      'scrollContainer' => 'layout.scrollContainer',
-      'verticalStack' => 'layout.verticalStack',
-      _ => 'component.${node.type}',
-    });
-    if (node is MosaicComponent) {
-      expected.add('accessibility.metadata');
-    }
-    if (node is MosaicProductSelectorComponent) {
-      expected
-        ..add('fallback.product')
-        ..add('outcome.normalized');
-    }
-    switch (node) {
-      case MosaicPurchaseButtonComponent():
-        expected
-          ..add('action.purchase')
-          ..add('outcome.normalized');
-      case MosaicRestoreButtonComponent():
-        expected
-          ..add('action.restore')
-          ..add('outcome.normalized');
-      case MosaicCloseButtonComponent():
-        expected
-          ..add('action.close')
-          ..add('outcome.normalized');
-      default:
-        break;
-    }
-  }
-
-  final declared = document.compatibility.requiredCapabilities
-      .map((capability) => capability.name)
-      .toSet();
-  final missing = expected.difference(declared);
-  final unused = declared.difference(expected);
-  if (missing.isNotEmpty || unused.isNotEmpty) {
-    throw MosaicProtocolException(
-      'Capability declarations do not match document content. Missing: '
-      '${missing.join(', ')}; unused: ${unused.join(', ')}.',
-    );
-  }
-}
-
-void _validateV02Capabilities(
   MosaicPaywallDocument document,
   List<MosaicNode> nodes,
 ) {
@@ -310,6 +310,11 @@ void _validateV02Capabilities(
   if (_documentUsesProductTemplates(document)) {
     expected.add('localization.productTemplate');
   }
+  if (document
+      .localization.locales[document.localization.defaultLocale]!.strings.keys
+      .any(mosaicReservedAccessibilityKeys.containsKey)) {
+    expected.add('accessibility.reservedStrings');
+  }
   if (document.localization.locales.values.any(
     (catalog) => catalog.direction == MosaicLocaleDirection.rtl,
   )) {
@@ -322,22 +327,22 @@ void _validateV02Capabilities(
       designSystem.shadows.isNotEmpty) {
     expected.add('style.designTokens');
   }
-  if (_allV02Backgrounds(document).map(document.resolveBackground).any(
+  if (_allV03Backgrounds(document).map(document.resolveBackground).any(
         (background) =>
             background is MosaicLinearGradientBackground ||
             background is MosaicRadialGradientBackground,
       )) {
     expected.add('style.gradientBackground');
   }
-  if (_allV02Backgrounds(document).map(document.resolveBackground).any(
+  if (_allV03Backgrounds(document).map(document.resolveBackground).any(
         (background) =>
             background is MosaicImageBackground ||
             background is MosaicVideoBackground,
       )) {
     expected.add('style.mediaBackground');
   }
-  if (_allV02Shadows(document).isNotEmpty) expected.add('style.shadow');
-  if (_allV02Colors(document).isNotEmpty) expected.add('style.colors');
+  if (_allV03Shadows(document).isNotEmpty) expected.add('style.shadow');
+  if (_allV03Colors(document).isNotEmpty) expected.add('style.colors');
   for (final asset in document.assets) {
     final remote = asset.source is MosaicRemoteAssetSource;
     if (asset is MosaicImageAsset) {
@@ -357,20 +362,18 @@ void _validateV02Capabilities(
     expected.add(switch (node) {
       MosaicScrollContainer() => 'layout.scrollContainer',
       MosaicStackComponent() => 'layout.stack',
-      MosaicVerticalStack() => throw const MosaicProtocolException(
-          'Protocol 0.2 cannot contain verticalStack.',
-        ),
       _ => 'component.${node.type}',
     });
     if (node is MosaicComponent || node is MosaicCarouselComponent) {
       expected.add('accessibility.metadata');
     }
-    if (_nodeTypography(node) != null) expected.add('style.typography');
+    if (_nodeTypographies(node).isNotEmpty) expected.add('style.typography');
     final appearance = _nodeAppearance(node);
     if (appearance != null ||
         node is MosaicStackComponent && node.padding != _zeroInsets ||
         node is MosaicProductCardComponent ||
-        node is MosaicProductBadgeComponent) {
+        node is MosaicProductBadgeComponent ||
+        node is MosaicTabsComponent) {
       expected.add('style.box');
     }
     if (_nodeSizing(node) != null) {
@@ -382,6 +385,8 @@ void _validateV02Capabilities(
     final visibility = _nodeVisibility(node);
     if (visibility is MosaicSwitchVisibility) {
       expected.add('condition.switchVisibility');
+    } else if (visibility is MosaicTabVisibility) {
+      expected.add('condition.tabVisibility');
     } else if (visibility is! MosaicAlwaysVisible ||
         _nodeHasExplicitAlwaysVisibility(node)) {
       expected.add('visibility.static');
@@ -394,7 +399,8 @@ void _validateV02Capabilities(
         ..add('style.productCardStates');
     }
     if (node is MosaicProductCardComponent ||
-        node is MosaicProductBadgeComponent) {
+        node is MosaicProductBadgeComponent ||
+        node is MosaicTabsComponent) {
       expected.add('style.productCardStates');
     }
     switch (node) {
@@ -413,18 +419,6 @@ void _validateV02Capabilities(
             node.action is MosaicCloseAction) {
           expected.add('outcome.normalized');
         }
-      case MosaicPurchaseButtonComponent():
-        expected
-          ..add('action.purchase')
-          ..add('outcome.normalized');
-      case MosaicRestoreButtonComponent():
-        expected
-          ..add('action.restore')
-          ..add('outcome.normalized');
-      case MosaicCloseButtonComponent():
-        expected
-          ..add('action.close')
-          ..add('outcome.normalized');
       default:
         break;
     }
@@ -437,7 +431,7 @@ void _validateV02Capabilities(
   final unused = declared.difference(expected);
   if (missing.isNotEmpty || unused.isNotEmpty) {
     throw MosaicProtocolException(
-      'Capability declarations do not match Protocol 0.2 document content. '
+      'Capability declarations do not match Protocol 0.3 document content. '
       'Missing: ${missing.join(', ')}; unused: ${unused.join(', ')}.',
     );
   }
@@ -456,30 +450,59 @@ MosaicVisibility _nodeVisibility(MosaicNode node) => switch (node) {
       MosaicImageComponent() => node.visibility,
       MosaicFeatureListComponent() => node.visibility,
       MosaicProductSelectorComponent() => node.visibility,
-      MosaicPurchaseButtonComponent() => node.visibility,
-      MosaicRestoreButtonComponent() => node.visibility,
-      MosaicCloseButtonComponent() => node.visibility,
-      MosaicLegalTextComponent() => node.visibility,
       MosaicCarouselComponent() => node.visibility,
       MosaicSwitchComponent() => node.visibility,
       MosaicCountdownComponent() => node.visibility,
       MosaicButtonComponent() => node.visibility,
       MosaicIconComponent() => node.visibility,
+      MosaicTabsComponent() => node.visibility,
+      MosaicTimelineComponent() => node.visibility,
+      MosaicAwardComponent() => node.visibility,
+      MosaicSocialProofComponent() => node.visibility,
       _ => const MosaicAlwaysVisible(),
     };
 
-MosaicTypography? _nodeTypography(MosaicNode node) => switch (node) {
-      MosaicTextComponent() => node.typography,
-      MosaicFeatureListComponent() => node.typography,
-      MosaicPurchaseButtonComponent() => node.typography,
-      MosaicRestoreButtonComponent() => node.typography,
-      MosaicCloseButtonComponent() => node.typography,
-      MosaicLegalTextComponent() => node.typography,
-      MosaicSwitchComponent() => node.typography,
-      MosaicCountdownComponent() => node.typography,
-      MosaicButtonComponent() || MosaicIconComponent() => null,
-      _ => null,
-    };
+/// Every authored typography a node carries.
+///
+/// Components with more than one authored text role contribute each of them, so
+/// a colour or a capability derived from typography cannot go missing because
+/// only the first role was inspected.
+Iterable<MosaicTypography> _nodeTypographies(MosaicNode node) sync* {
+  switch (node) {
+    case MosaicTextComponent():
+      if (node.typography case final typography?) yield typography;
+    case MosaicFeatureListComponent():
+      if (node.typography case final typography?) yield typography;
+    case MosaicSwitchComponent():
+      yield node.typography;
+    case MosaicCountdownComponent():
+      yield node.typography;
+    case MosaicTabsComponent():
+      yield node.labelTypography;
+    case MosaicTimelineComponent():
+      yield node.titleTypography;
+      if (node.descriptionTypography case final typography?) yield typography;
+    case MosaicAwardComponent():
+      yield node.titleTypography;
+      if (node.subtitleTypography case final typography?) yield typography;
+    case MosaicSocialProofComponent():
+      yield node.quoteTypography;
+      yield node.attributionTypography;
+    case MosaicButtonComponent():
+    case MosaicIconComponent():
+    case MosaicImageComponent():
+    case MosaicProductSelectorComponent():
+    case MosaicProductCardComponent():
+    case MosaicProductBadgeComponent():
+    case MosaicCarouselComponent():
+    case MosaicScrollContainer():
+    case MosaicStackComponent():
+      break;
+  }
+}
+
+MosaicTypography? _nodeTypography(MosaicNode node) =>
+    _nodeTypographies(node).firstOrNull;
 
 MosaicBoxAppearance? _nodeAppearance(MosaicNode node) => switch (node) {
       MosaicStackComponent() => node.appearance,
@@ -487,15 +510,15 @@ MosaicBoxAppearance? _nodeAppearance(MosaicNode node) => switch (node) {
       MosaicImageComponent() => node.appearance,
       MosaicFeatureListComponent() => node.appearance,
       MosaicProductSelectorComponent() => node.appearance,
-      MosaicPurchaseButtonComponent() => node.appearance,
-      MosaicRestoreButtonComponent() => node.appearance,
-      MosaicCloseButtonComponent() => node.appearance,
-      MosaicLegalTextComponent() => node.appearance,
       MosaicCarouselComponent() => node.appearance,
       MosaicSwitchComponent() => node.appearance,
       MosaicCountdownComponent() => node.appearance,
       MosaicButtonComponent() => node.appearance,
       MosaicIconComponent() => node.appearance,
+      MosaicTabsComponent() => node.appearance,
+      MosaicTimelineComponent() => node.appearance,
+      MosaicAwardComponent() => node.appearance,
+      MosaicSocialProofComponent() => node.appearance,
       _ => null,
     };
 
@@ -507,15 +530,15 @@ MosaicSizing? _nodeSizing(MosaicNode node) => switch (node) {
       MosaicProductSelectorComponent() => node.sizing,
       MosaicProductCardComponent() => node.sizing,
       MosaicProductBadgeComponent() => node.sizing,
-      MosaicPurchaseButtonComponent() => node.sizing,
-      MosaicRestoreButtonComponent() => node.sizing,
-      MosaicCloseButtonComponent() => node.sizing,
-      MosaicLegalTextComponent() => node.sizing,
       MosaicCarouselComponent() => node.sizing,
       MosaicSwitchComponent() => node.sizing,
       MosaicCountdownComponent() => node.sizing,
       MosaicButtonComponent() => node.sizing,
       MosaicIconComponent() => node.sizing,
+      MosaicTabsComponent() => node.sizing,
+      MosaicTimelineComponent() => node.sizing,
+      MosaicAwardComponent() => node.sizing,
+      MosaicSocialProofComponent() => node.sizing,
       _ => null,
     };
 
@@ -525,15 +548,15 @@ MosaicEdgeInsets? _nodeOuterInsets(MosaicNode node) => switch (node) {
       MosaicImageComponent() => node.outerInsets,
       MosaicFeatureListComponent() => node.outerInsets,
       MosaicProductSelectorComponent() => node.outerInsets,
-      MosaicPurchaseButtonComponent() => node.outerInsets,
-      MosaicRestoreButtonComponent() => node.outerInsets,
-      MosaicCloseButtonComponent() => node.outerInsets,
-      MosaicLegalTextComponent() => node.outerInsets,
       MosaicCarouselComponent() => node.outerInsets,
       MosaicSwitchComponent() => node.outerInsets,
       MosaicCountdownComponent() => node.outerInsets,
       MosaicButtonComponent() => node.outerInsets,
       MosaicIconComponent() => node.outerInsets,
+      MosaicTabsComponent() => node.outerInsets,
+      MosaicTimelineComponent() => node.outerInsets,
+      MosaicAwardComponent() => node.outerInsets,
+      MosaicSocialProofComponent() => node.outerInsets,
       _ => null,
     };
 
@@ -544,7 +567,11 @@ bool _nodeUsesColor(MosaicNode node) =>
     node is MosaicProductCardComponent ||
     node is MosaicProductBadgeComponent ||
     node is MosaicSwitchComponent ||
-    node is MosaicIconComponent;
+    node is MosaicIconComponent ||
+    node is MosaicTabsComponent ||
+    node is MosaicTimelineComponent ||
+    node is MosaicAwardComponent && node.emblem is MosaicAwardIconEmblem ||
+    node is MosaicSocialProofComponent && node.rating != null;
 
 bool _documentUsesProductTemplates(MosaicPaywallDocument document) {
   for (final selector
@@ -564,15 +591,31 @@ bool _documentUsesProductTemplates(MosaicPaywallDocument document) {
   return false;
 }
 
+/// Children of one Product Card descendant.
+///
+/// Product Card content is restricted to passive nodes at decode time, so every
+/// shape that can legitimately appear here is enumerated. An unenumerated node
+/// means the decoder accepted something this traversal would silently skip —
+/// letting a whole subtree escape validation — so it fails loudly instead.
+List<MosaicNode> _productCardChildren(MosaicNode node) => switch (node) {
+      MosaicStackNode() => node.children,
+      MosaicProductBadgeComponent() => node.children,
+      MosaicTextComponent() ||
+      MosaicImageComponent() ||
+      MosaicIconComponent() ||
+      MosaicFeatureListComponent() ||
+      MosaicCountdownComponent() =>
+        const <MosaicNode>[],
+      _ => throw MosaicProtocolException(
+          'Product Card content contains an unsupported ${node.type} node '
+          '${node.id}.',
+        ),
+    };
+
 Iterable<MosaicNode> _cardDescendants(MosaicProductCardComponent card) sync* {
   Iterable<MosaicNode> visit(MosaicNode node) sync* {
     yield node;
-    final children = switch (node) {
-      MosaicStackNode() => node.children,
-      MosaicProductBadgeComponent() => node.children,
-      _ => const <MosaicNode>[],
-    };
-    for (final child in children) {
+    for (final child in _productCardChildren(node)) {
       yield* visit(child);
     }
   }
@@ -805,7 +848,9 @@ MosaicStackHorizontalAlignment _stackAlignment(
     'start' => MosaicStackHorizontalAlignment.start,
     'center' => MosaicStackHorizontalAlignment.center,
     'end' => MosaicStackHorizontalAlignment.end,
-    _ => MosaicStackHorizontalAlignment.stretch,
+    'stretch' => MosaicStackHorizontalAlignment.stretch,
+    final unreachable =>
+      throw StateError('Unhandled stack alignment "$unreachable".'),
   };
 }
 
@@ -818,7 +863,9 @@ MosaicTextAlignment _textAlignment(Object? value, String path) {
   return switch (alignment) {
     'start' => MosaicTextAlignment.start,
     'center' => MosaicTextAlignment.center,
-    _ => MosaicTextAlignment.end,
+    'end' => MosaicTextAlignment.end,
+    final unreachable =>
+      throw StateError('Unhandled text alignment "$unreachable".'),
   };
 }
 

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The single protocol contract supported during pre-release iteration.
-public let mosaicProtocolVersion = "0.2"
+public let mosaicProtocolVersion = "0.3"
 public let mosaicLatestProtocolVersion = mosaicProtocolVersion
 public let mosaicSupportedProtocolVersions = [mosaicProtocolVersion]
 /// The exact published artifact version. It must stay identical to
@@ -11,7 +11,6 @@ public let mosaicSDKVersion = "0.1.0-dev.6"
 
 public enum MosaicCapabilityName: String, Codable, CaseIterable, Sendable {
   case scrollContainer = "layout.scrollContainer"
-  case verticalStack = "layout.verticalStack"
   case stack = "layout.stack"
   case sizing = "layout.sizing"
   case heightSizing = "layout.heightSizing"
@@ -26,13 +25,13 @@ public enum MosaicCapabilityName: String, Codable, CaseIterable, Sendable {
   case productCard = "component.productCard"
   case productBadge = "component.productBadge"
   case button = "component.button"
-  case purchaseButton = "component.purchaseButton"
-  case restoreButton = "component.restoreButton"
-  case closeButton = "component.closeButton"
-  case legalText = "component.legalText"
   case carousel = "component.carousel"
   case switchControl = "component.switch"
   case countdown = "component.countdown"
+  case tabs = "component.tabs"
+  case timeline = "component.timeline"
+  case award = "component.award"
+  case socialProof = "component.socialProof"
   case localizationCatalogs = "localization.catalogs"
   case localizationRTL = "localization.rtl"
   case productTemplate = "localization.productTemplate"
@@ -48,6 +47,7 @@ public enum MosaicCapabilityName: String, Codable, CaseIterable, Sendable {
   case navigateBackAction = "action.navigateBack"
   case openExternalURLAction = "action.openExternalUrl"
   case accessibilityMetadata = "accessibility.metadata"
+  case reservedStrings = "accessibility.reservedStrings"
   case assetFallback = "fallback.asset"
   case productFallback = "fallback.product"
   case normalizedOutcome = "outcome.normalized"
@@ -62,10 +62,11 @@ public enum MosaicCapabilityName: String, Codable, CaseIterable, Sendable {
   case productCardStates = "style.productCardStates"
   case staticVisibility = "visibility.static"
   case switchVisibility = "condition.switchVisibility"
+  case tabVisibility = "condition.tabVisibility"
 }
 
 public enum MosaicCapabilityCatalog {
-  public static let v02: [MosaicCapabilityName] = [
+  public static let v03: [MosaicCapabilityName] = [
     .scrollContainer, .stack, .sizing, .heightSizing, .outerInsets, .screens, .sheets,
     .text, .image, .icon,
     .featureList, .productSelector, .productCard, .productBadge, .button, .carousel,
@@ -76,6 +77,7 @@ public enum MosaicCapabilityCatalog {
     .normalizedOutcome, .colors, .designTokens, .gradientBackground, .mediaBackground,
     .shadow, .boxStyle, .clipping, .typography, .productCardStates,
     .staticVisibility, .switchVisibility,
+    .tabs, .timeline, .award, .socialProof, .tabVisibility, .reservedStrings,
   ]
 }
 
@@ -87,7 +89,7 @@ public struct MosaicSDKCapabilityReport: Sendable, Equatable {
   public init(
     sdkVersion: String = mosaicSDKVersion,
     supportedSchemaVersions: [String] = mosaicSupportedProtocolVersions,
-    capabilities: [MosaicRequiredCapability] = MosaicCapabilityCatalog.v02.map {
+    capabilities: [MosaicRequiredCapability] = MosaicCapabilityCatalog.v03.map {
       MosaicRequiredCapability(name: $0, version: mosaicProtocolVersion)
     }
   ) {
@@ -133,16 +135,29 @@ public struct MosaicPaywallDocument: Decodable, Sendable, Equatable {
     if schemaVersion == mosaicProtocolVersion {
       let decodedScreens = try container.decode([MosaicScreen].self, forKey: .screens)
       let decodedInitialScreenID = try container.decode(String.self, forKey: .initialScreenId)
-      guard let fallbackLayout = decodedScreens.first?.layout else {
+      guard !decodedScreens.isEmpty else {
         throw DecodingError.dataCorruptedError(
           forKey: .screens,
           in: container,
-          debugDescription: "Protocol 0.2 requires at least one screen."
+          debugDescription: "Protocol 0.3 requires at least one screen."
+        )
+      }
+      // `invalidReference` is `rejectDocument` in the 0.3 reader policy. A
+      // declared initial screen that no screen defines is a non-conforming
+      // document, so it is rejected here rather than silently rendering the
+      // first screen, which would present a paywall nobody authored.
+      guard
+        let initialLayout = decodedScreens.first(where: { $0.id == decodedInitialScreenID })?.layout
+      else {
+        throw DecodingError.dataCorruptedError(
+          forKey: .initialScreenId,
+          in: container,
+          debugDescription: "initialScreenId does not reference a declared screen."
         )
       }
       screens = decodedScreens
       initialScreenId = decodedInitialScreenID
-      layout = decodedScreens.first { $0.id == decodedInitialScreenID }?.layout ?? fallbackLayout
+      layout = initialLayout
     } else {
       layout = try container.decode(MosaicScrollContainer.self, forKey: .layout)
       initialScreenId = nil
@@ -324,12 +339,9 @@ public struct MosaicStack: Decodable, Sendable, Equatable, Identifiable {
   public let visibility: MosaicVisibility
   public let children: [MosaicNode]
 
-  public var spacing: Double { gap }
-  public var horizontalAlignment: MosaicHorizontalAlignment { crossAxisAlignment }
-
   private enum CodingKeys: String, CodingKey {
-    case type, id, direction, gap, spacing, padding, mainAxisDistribution
-    case crossAxisAlignment, horizontalAlignment, appearance, sizing, outerInsets, visibility
+    case type, id, direction, gap, padding, mainAxisDistribution
+    case crossAxisAlignment, appearance, sizing, outerInsets, visibility
     case children
   }
 
@@ -344,28 +356,17 @@ public struct MosaicStack: Decodable, Sendable, Equatable, Identifiable {
     visibility =
       try container.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
     children = try container.decode([MosaicNode].self, forKey: .children)
-    if type == .verticalStack {
-      direction = .vertical
-      gap = try container.decode(Double.self, forKey: .spacing)
-      mainAxisDistribution = .start
-      crossAxisAlignment = try container.decode(
-        MosaicHorizontalAlignment.self, forKey: .horizontalAlignment)
-    } else {
-      direction = try container.decode(MosaicStackDirection.self, forKey: .direction)
-      gap = try container.decode(Double.self, forKey: .gap)
-      mainAxisDistribution = try container.decode(
-        MosaicMainAxisDistribution.self, forKey: .mainAxisDistribution)
-      crossAxisAlignment = try container.decode(
-        MosaicHorizontalAlignment.self, forKey: .crossAxisAlignment)
-    }
+    direction = try container.decode(MosaicStackDirection.self, forKey: .direction)
+    gap = try container.decode(Double.self, forKey: .gap)
+    mainAxisDistribution = try container.decode(
+      MosaicMainAxisDistribution.self, forKey: .mainAxisDistribution)
+    crossAxisAlignment = try container.decode(
+      MosaicHorizontalAlignment.self, forKey: .crossAxisAlignment)
   }
 }
 
-public typealias MosaicVerticalStack = MosaicStack
-
 public enum MosaicLayoutNodeKind: String, Decodable, Sendable {
   case scrollContainer
-  case verticalStack
   case stack
   case text
   case image
@@ -373,17 +374,16 @@ public enum MosaicLayoutNodeKind: String, Decodable, Sendable {
   case featureList
   case productSelector
   case button
-  case purchaseButton
-  case restoreButton
-  case closeButton
-  case legalText
   case carousel
   case switchControl = "switch"
   case countdown
+  case tabs
+  case timeline
+  case award
+  case socialProof
 }
 
 public indirect enum MosaicNode: Decodable, Sendable, Equatable, Identifiable {
-  case verticalStack(MosaicStack)
   case stack(MosaicStack)
   case text(MosaicTextComponent)
   case image(MosaicImageComponent)
@@ -391,36 +391,35 @@ public indirect enum MosaicNode: Decodable, Sendable, Equatable, Identifiable {
   case featureList(MosaicFeatureListComponent)
   case productSelector(MosaicProductSelectorComponent)
   case button(MosaicButtonComponent)
-  case purchaseButton(MosaicPurchaseButtonComponent)
-  case restoreButton(MosaicRestoreButtonComponent)
-  case closeButton(MosaicCloseButtonComponent)
-  case legalText(MosaicLegalTextComponent)
   case carousel(MosaicCarouselComponent)
   case switchControl(MosaicSwitchComponent)
   case countdown(MosaicCountdownComponent)
+  case tabs(MosaicTabsComponent)
+  case timeline(MosaicTimelineComponent)
+  case award(MosaicAwardComponent)
+  case socialProof(MosaicSocialProofComponent)
 
   public var id: String {
     switch self {
-    case .verticalStack(let value), .stack(let value): value.id
+    case .stack(let value): value.id
     case .text(let value): value.id
     case .image(let value): value.id
     case .icon(let value): value.id
     case .featureList(let value): value.id
     case .productSelector(let value): value.id
     case .button(let value): value.id
-    case .purchaseButton(let value): value.id
-    case .restoreButton(let value): value.id
-    case .closeButton(let value): value.id
-    case .legalText(let value): value.id
     case .carousel(let value): value.id
     case .switchControl(let value): value.id
     case .countdown(let value): value.id
+    case .tabs(let value): value.id
+    case .timeline(let value): value.id
+    case .award(let value): value.id
+    case .socialProof(let value): value.id
     }
   }
 
   public var kind: MosaicLayoutNodeKind {
     switch self {
-    case .verticalStack: .verticalStack
     case .stack: .stack
     case .text: .text
     case .image: .image
@@ -428,13 +427,13 @@ public indirect enum MosaicNode: Decodable, Sendable, Equatable, Identifiable {
     case .featureList: .featureList
     case .productSelector: .productSelector
     case .button: .button
-    case .purchaseButton: .purchaseButton
-    case .restoreButton: .restoreButton
-    case .closeButton: .closeButton
-    case .legalText: .legalText
     case .carousel: .carousel
     case .switchControl: .switchControl
     case .countdown: .countdown
+    case .tabs: .tabs
+    case .timeline: .timeline
+    case .award: .award
+    case .socialProof: .socialProof
     }
   }
 
@@ -444,7 +443,6 @@ public indirect enum MosaicNode: Decodable, Sendable, Equatable, Identifiable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     let type = try container.decode(MosaicLayoutNodeKind.self, forKey: .type)
     switch type {
-    case .verticalStack: self = .verticalStack(try MosaicStack(from: decoder))
     case .stack: self = .stack(try MosaicStack(from: decoder))
     case .text: self = .text(try MosaicTextComponent(from: decoder))
     case .image: self = .image(try MosaicImageComponent(from: decoder))
@@ -453,15 +451,13 @@ public indirect enum MosaicNode: Decodable, Sendable, Equatable, Identifiable {
     case .productSelector:
       self = .productSelector(try MosaicProductSelectorComponent(from: decoder))
     case .button: self = .button(try MosaicButtonComponent(from: decoder))
-    case .purchaseButton:
-      self = .purchaseButton(try MosaicPurchaseButtonComponent(from: decoder))
-    case .restoreButton:
-      self = .restoreButton(try MosaicRestoreButtonComponent(from: decoder))
-    case .closeButton: self = .closeButton(try MosaicCloseButtonComponent(from: decoder))
-    case .legalText: self = .legalText(try MosaicLegalTextComponent(from: decoder))
     case .carousel: self = .carousel(try MosaicCarouselComponent(from: decoder))
     case .switchControl: self = .switchControl(try MosaicSwitchComponent(from: decoder))
     case .countdown: self = .countdown(try MosaicCountdownComponent(from: decoder))
+    case .tabs: self = .tabs(try MosaicTabsComponent(from: decoder))
+    case .timeline: self = .timeline(try MosaicTimelineComponent(from: decoder))
+    case .award: self = .award(try MosaicAwardComponent(from: decoder))
+    case .socialProof: self = .socialProof(try MosaicSocialProofComponent(from: decoder))
     case .scrollContainer:
       throw DecodingError.dataCorruptedError(
         forKey: .type, in: container,
@@ -631,6 +627,56 @@ public struct MosaicDesignSystem: Decodable, Sendable, Equatable {
   public let shadows: [MosaicShadowToken]
 }
 
+/// A style reference the renderer could not resolve to an authored value.
+///
+/// Every value carries the diagnostic code the renderer records and the subject
+/// it is recorded against, so one malformed token diagnoses once rather than
+/// once per frame.
+public struct MosaicStyleResolutionFailure: Sendable, Equatable, Hashable {
+  public let code: String
+  public let subjectID: String
+
+  public init(code: String, subjectID: String) {
+    self.code = code
+    self.subjectID = subjectID
+  }
+
+  public static func unresolvedColorToken(_ id: String) -> Self {
+    .init(code: "style_color_token_unresolved", subjectID: id)
+  }
+
+  public static func malformedColorLiteral(_ raw: String) -> Self {
+    .init(code: "style_color_literal_malformed", subjectID: raw)
+  }
+
+  public static func unresolvedBackgroundToken(_ id: String) -> Self {
+    .init(code: "style_background_token_unresolved", subjectID: id)
+  }
+
+  public static func unresolvedGradientStop(_ id: String) -> Self {
+    .init(code: "style_gradient_stop_unresolved", subjectID: id)
+  }
+
+  public static func unresolvedShadowToken(_ id: String) -> Self {
+    .init(code: "style_shadow_token_unresolved", subjectID: id)
+  }
+}
+
+/// A background prepared for rendering together with everything about it that
+/// could not be resolved.
+public struct MosaicResolvedBackground: Sendable, Equatable {
+  public let background: MosaicBackground?
+  public let failures: [MosaicStyleResolutionFailure]
+}
+
+extension MosaicColor {
+  /// The design-token identifier this color references, if any.
+  public var tokenID: String? {
+    guard case .token(let id) = self else { return nil }
+    return id
+  }
+}
+
 extension MosaicPaywallDocument {
   public func resolvedColor(_ color: MosaicColor) -> MosaicColor? {
     resolveColor(color, visiting: [])
@@ -642,6 +688,67 @@ extension MosaicPaywallDocument {
 
   public func resolvedShadow(_ shadow: MosaicShadow) -> MosaicShadow? {
     resolveShadow(shadow, visiting: [])
+  }
+
+  /// Background resolution for the renderer.
+  ///
+  /// `resolvedBackground(_:)` is all-or-nothing because the semantic validator
+  /// uses it to reject non-conforming documents. The renderer must not erase an
+  /// authored background because one part of it failed, so this variant
+  /// degrades: unresolvable gradient stops are dropped, unresolvable colors are
+  /// handed back unresolved for the renderer to recover per role, and
+  /// everything that failed is reported so it can be diagnosed once.
+  public func renderableBackground(_ background: MosaicBackground) -> MosaicResolvedBackground {
+    var failures: [MosaicStyleResolutionFailure] = []
+    let resolved = renderBackground(background, visiting: [], failures: &failures)
+    return MosaicResolvedBackground(background: resolved, failures: failures)
+  }
+
+  private func renderBackground(
+    _ background: MosaicBackground,
+    visiting: Set<String>,
+    failures: inout [MosaicStyleResolutionFailure]
+  ) -> MosaicBackground? {
+    switch background {
+    case .token(let id):
+      guard !visiting.contains(id),
+        let token = designSystem?.backgrounds.first(where: { $0.id == id })
+      else {
+        failures.append(.unresolvedBackgroundToken(id))
+        return nil
+      }
+      return renderBackground(token.value, visiting: visiting.union([id]), failures: &failures)
+    case .color(let color):
+      return .color(resolvedColor(color) ?? color)
+    case .linearGradient(let angle, let stops):
+      let resolved = renderStops(stops, failures: &failures)
+      guard !resolved.isEmpty else { return nil }
+      return .linearGradient(angle: angle, stops: resolved)
+    case .radialGradient(let center, let radius, let stops):
+      let resolved = renderStops(stops, failures: &failures)
+      guard !resolved.isEmpty else { return nil }
+      return .radialGradient(center: center, radius: radius, stops: resolved)
+    case .image(let assetID, let mode, let fallback):
+      return .image(
+        assetId: assetID, contentMode: mode, fallbackColor: resolvedColor(fallback) ?? fallback)
+    case .video(let assetID, let posterID, let mode, let fallback):
+      return .video(
+        assetId: assetID, posterAssetId: posterID, contentMode: mode,
+        fallbackColor: resolvedColor(fallback) ?? fallback)
+    }
+  }
+
+  private func renderStops(
+    _ stops: [MosaicGradientStop],
+    failures: inout [MosaicStyleResolutionFailure]
+  ) -> [MosaicGradientStop] {
+    stops.compactMap { stop in
+      guard let color = resolvedColor(stop.color) else {
+        failures.append(.unresolvedGradientStop(stop.color.tokenID ?? stop.color.rawValue))
+        return nil
+      }
+      return MosaicGradientStop(position: stop.position, color: color)
+    }
   }
 
   private func resolveColor(_ color: MosaicColor, visiting: Set<String>) -> MosaicColor? {

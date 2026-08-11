@@ -282,13 +282,15 @@ extension on _MosaicPaywallState {
     return sizing;
   }
 
+  /// Resolves [visibility] against the runtime selection this renderer holds.
+  ///
+  /// `_resetRuntimeState` seeds every Switch and Tabs controller the document
+  /// declares, so the throwing contract of [evaluateMosaicVisibility] cannot
+  /// fire for a validated document. It is deliberately not caught here: a
+  /// controller missing from the state is an SDK bug, and swallowing it would
+  /// turn that bug into a component that quietly vanishes.
   bool _visibilityIsVisible(MosaicVisibility visibility) =>
-      switch (visibility) {
-        MosaicAlwaysVisible() => true,
-        MosaicStaticallyHidden() => false,
-        MosaicSwitchVisibility() =>
-          _switchValues[visibility.switchId] == visibility.equals,
-      };
+      evaluateMosaicVisibility(visibility, _selectionState);
 
   bool _isNodeEffectivelyVisible(String targetId) {
     bool? visit(MosaicNode node, bool ancestorsVisible) {
@@ -299,15 +301,15 @@ extension on _MosaicPaywallState {
             MosaicImageComponent() => node.visibility,
             MosaicFeatureListComponent() => node.visibility,
             MosaicProductSelectorComponent() => node.visibility,
-            MosaicPurchaseButtonComponent() => node.visibility,
-            MosaicRestoreButtonComponent() => node.visibility,
-            MosaicCloseButtonComponent() => node.visibility,
-            MosaicLegalTextComponent() => node.visibility,
             MosaicCarouselComponent() => node.visibility,
             MosaicSwitchComponent() => node.visibility,
             MosaicCountdownComponent() => node.visibility,
             MosaicButtonComponent() => node.visibility,
             MosaicIconComponent() => node.visibility,
+            MosaicTabsComponent() => node.visibility,
+            MosaicTimelineComponent() => node.visibility,
+            MosaicAwardComponent() => node.visibility,
+            MosaicSocialProofComponent() => node.visibility,
             _ => const MosaicAlwaysVisible(),
           });
       if (node.id == targetId) return nodeVisible;
@@ -319,6 +321,16 @@ extension on _MosaicPaywallState {
       } else if (node is MosaicCarouselComponent) {
         for (final page in node.pages) {
           final result = visit(page.content, nodeVisible);
+          if (result != null) return result;
+        }
+      } else if (node is MosaicTabsComponent) {
+        // Only the selected panel is in the layout, the accessibility tree,
+        // and focus order, so a target inside any other panel is not visible.
+        for (final tab in node.tabs) {
+          final result = visit(
+            tab.content,
+            nodeVisible && _tabSelections[node.id] == tab.id,
+          );
           if (result != null) return result;
         }
       }
@@ -345,7 +357,10 @@ extension on _MosaicPaywallState {
       MosaicTextStyle.caption => theme.bodySmall,
     };
     if (typography == null) return base;
-    return base?.copyWith(
+    // Authored typography is never dropped because the Material theme happens
+    // to leave the mapped style null: fall back to an empty base so every
+    // authored value below still reaches the Text widget.
+    return (base ?? const TextStyle()).copyWith(
       fontSize: typography.fontSize,
       height: typography.lineHeightMultiplier,
       fontWeight: switch (typography.weight) {
@@ -375,8 +390,47 @@ extension on _MosaicPaywallState {
       'action.onPrimary' => colors.onPrimary,
       'border.default' => colors.outlineVariant,
       'transparent' => Colors.transparent,
-      _ => Colors.transparent,
+      // Unreachable while the decoder rejects unknown semantic colours, so a
+      // value arriving here means the semantic palette grew without this map.
+      // Transparent stays as the last resort, but it is never silent: an
+      // invisible surface must be attributable to a named token.
+      _ => _unknownSemanticColor(value.value),
     };
+  }
+
+  Color _unknownSemanticColor(String token) {
+    _notifyUnknownColorToken(token);
+    return Colors.transparent;
+  }
+
+  /// The composed announcement contract for [node].
+  ///
+  /// Segments are never joined here: the contract returns each as its own
+  /// element and the platform supplies whatever pause or punctuation its locale
+  /// and screen reader use.
+  MosaicAccessibilityAnnouncement _announcementFor(
+    MosaicNode node, {
+    MosaicButtonAnnouncementState? state,
+  }) =>
+      mosaicAccessibilityAnnouncement(
+        node,
+        strings: _localization.catalogStrings,
+        state: state,
+      );
+
+  void _notifyUnknownColorToken(String token) {
+    if (!_notifiedUnknownColorTokens.add(token)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onDiagnostic?.call(
+        MosaicDiagnostic(
+          code: 'style.unknownColorToken',
+          message: 'Colour "$token" is not supported by this renderer; a '
+              'transparent last resort is used.',
+          severity: MosaicDiagnosticSeverity.error,
+        ),
+      );
+    });
   }
 
   EdgeInsetsDirectional _edgeInsets(MosaicEdgeInsets value) =>

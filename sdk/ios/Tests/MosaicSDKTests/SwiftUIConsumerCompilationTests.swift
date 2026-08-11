@@ -21,8 +21,8 @@ final class SwiftUIConsumerCompilationTests: XCTestCase {
     XCTAssertNotNil(view.body)
   }
 
-  func testProtocolV02CompleteFixtureBuildsPublicSwiftUIViewAPI() throws {
-    let document = try v02Document()
+  func testProtocolV03CompleteFixtureBuildsPublicSwiftUIViewAPI() throws {
+    let document = try v03Document()
     let view = MosaicPaywall(
       document: document,
       requestedLocale: "ar-EG",

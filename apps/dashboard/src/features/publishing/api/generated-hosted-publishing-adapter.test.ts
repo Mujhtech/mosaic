@@ -33,7 +33,7 @@ function draftEnvelope(revision: number) {
         id: input.draftId,
         paywallId: input.paywallId,
         projectId: input.projectId,
-        protocolVersion: "0.2",
+        protocolVersion: "0.3",
         revision,
         status: "active",
         updatedAt: "2026-07-22T12:05:00Z",

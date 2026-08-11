@@ -127,7 +127,7 @@ they meet.
 
 ## Local Preview is development-only
 
-Local Preview `0.2` declares `audience: "developmentOnly"`. No shipped
+Local Preview `0.3` declares `audience: "developmentOnly"`. No shipped
 application reads it: it is the Studio-to-preview-client authoring transport.
 Its runway is bounded by tooling releases rather than by installed applications,
 so the 6+12-month schedule does not apply. It may be deprecated and retired

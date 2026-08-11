@@ -102,7 +102,7 @@ describe("property inspector safety", () => {
     ).toBeVisible();
   });
 
-  it("exposes production Protocol 0.2 text controls progressively", async () => {
+  it("exposes production Protocol 0.3 text controls progressively", async () => {
     renderInspector("headline");
     await screen.findByRole("textbox", { name: "Text" });
 
@@ -378,7 +378,7 @@ describe("property inspector safety", () => {
     ["restore", 0, "action.type"],
     ["close", 0, "accessibility.label"],
   ] as const)(
-    "renders a stable Protocol 0.2 field for %s",
+    "renders a stable Protocol 0.3 field for %s",
     async (selection, templateIndex, address) => {
       render(
         <StudioWorkspaceStoreProvider storage={null}>

@@ -25,8 +25,28 @@ type Service struct {
 	random              io.Reader
 	tracer              trace.Tracer
 	credentialCipher    providercredential.CredentialCipher
-	providerCatalog     providercatalog.Client
+	providerCatalogs    ProviderCatalogClients
 	providerSnapshotTTL time.Duration
+}
+
+// ProviderCatalogClients resolves the catalog adapter for one server-connected
+// provider kind. A provider with no registered adapter is unsupported rather
+// than silently served by another provider's client.
+type ProviderCatalogClients map[ProviderKind]providercatalog.Client
+
+// catalogClient returns the adapter for provider, or ErrProviderUnsupported.
+func (s *Service) catalogClient(provider ProviderKind) (providercatalog.Client, error) {
+	client, ok := s.providerCatalogs[provider]
+	if !ok || client == nil {
+		return nil, ErrProviderUnsupported
+	}
+	return client, nil
+}
+
+// hasCatalogClient reports whether a server-connected adapter is registered.
+func (s *Service) hasCatalogClient(provider ProviderKind) bool {
+	client, ok := s.providerCatalogs[provider]
+	return ok && client != nil
 }
 
 type ServiceOption func(*Service)
@@ -39,10 +59,12 @@ func WithRandom(random io.Reader) ServiceOption {
 	return func(service *Service) { service.random = random }
 }
 
-func WithProviderOperations(cipher providercredential.CredentialCipher, catalog providercatalog.Client, snapshotTTL time.Duration) ServiceOption {
+// WithProviderOperations enables server-connected provider operations with one
+// catalog adapter per supported provider kind.
+func WithProviderOperations(cipher providercredential.CredentialCipher, catalogs ProviderCatalogClients, snapshotTTL time.Duration) ServiceOption {
 	return func(service *Service) {
 		service.credentialCipher = cipher
-		service.providerCatalog = catalog
+		service.providerCatalogs = catalogs
 		service.providerSnapshotTTL = snapshotTTL
 	}
 }

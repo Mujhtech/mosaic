@@ -137,7 +137,7 @@ function fitText(
 
 function baseDocument(id: string, children: DocumentNode[]): MosaicDocument {
   return synchronizeProtocolMetadata({
-    schemaVersion: "0.2",
+    schemaVersion: "0.3",
     id,
     revision: 1,
     compatibility: {
@@ -332,7 +332,7 @@ const PRODUCT_SELECTOR: DocumentNode = {
           mainAxisDistribution: "center",
           crossAxisAlignment: "center",
           children: [
-            text(
+            fitText(
               "yearly-badge-label",
               "paywall.products.yearly.badge",
               "Best value",
@@ -396,7 +396,7 @@ const PURCHASE_BUTTON: DocumentNode = {
   crossAxisAlignment: "center",
   children: [
     {
-      ...text("purchase-label", "paywall.purchase", "Continue"),
+      ...fitText("purchase-label", "paywall.purchase", "Continue"),
       typography: {
         ...text("purchase-label", "paywall.purchase", "Continue").typography,
         color: "action.onPrimary",
@@ -404,11 +404,21 @@ const PURCHASE_BUTTON: DocumentNode = {
     },
   ],
   inProgressChildren: [
-    text(
-      "purchase-progress",
-      "paywall.purchase.progress",
-      "Processing purchase…"
-    ),
+    {
+      ...fitText(
+        "purchase-progress",
+        "paywall.purchase.progress",
+        "Processing purchase…"
+      ),
+      typography: {
+        ...text(
+          "purchase-progress",
+          "paywall.purchase.progress",
+          "Processing purchase…"
+        ).typography,
+        color: "action.onPrimary",
+      },
+    },
   ],
   appearance: {
     background: { type: "color", value: "action.primary" },
@@ -434,7 +444,7 @@ const RESTORE_BUTTON: DocumentNode = {
   crossAxisAlignment: "center",
   children: [fitText("restore-label", "paywall.restore", "Restore purchases")],
   inProgressChildren: [
-    text(
+    fitText(
       "restore-progress",
       "paywall.restore.progress",
       "Restoring purchases…"

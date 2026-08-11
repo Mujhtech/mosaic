@@ -725,7 +725,7 @@ void _customerTokenBindingTests() {
         observedAt: DateTime.utc(2026, 7, 28, 12),
         context: const MosaicTransactionObservationContext(
           platform: 'ios',
-          sdkVersion: '0.2.0',
+          sdkVersion: '0.3.0',
         ),
       );
 
@@ -832,7 +832,7 @@ void _customerTokenBindingTests() {
       storePlatform: MosaicStorePlatform.ios,
       context: const MosaicTransactionObservationContext(
         platform: 'ios',
-        sdkVersion: '0.2.0',
+        sdkVersion: '0.3.0',
       ),
       storage: storage,
     );

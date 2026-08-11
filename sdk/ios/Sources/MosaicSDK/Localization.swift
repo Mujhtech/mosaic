@@ -5,6 +5,23 @@ public struct MosaicResolvedLocale: Sendable, Equatable {
   public let candidateLocales: [String]
   public let effectiveLocale: String
   public let direction: MosaicLayoutDirection
+  /// Diagnostic codes the presentation records for this resolution. Empty when
+  /// the direction came from a declared catalog.
+  public let diagnostics: [String]
+
+  public init(
+    requestedLocale: String?,
+    candidateLocales: [String],
+    effectiveLocale: String,
+    direction: MosaicLayoutDirection,
+    diagnostics: [String] = []
+  ) {
+    self.requestedLocale = requestedLocale
+    self.candidateLocales = candidateLocales
+    self.effectiveLocale = effectiveLocale
+    self.direction = direction
+    self.diagnostics = diagnostics
+  }
 }
 
 /// Resolves protocol strings and layout direction using the exact RC1 chain:
@@ -27,9 +44,17 @@ public struct MosaicLocalizationResolver: Sendable, Equatable {
     }
 
     if let requestedLocale, !requestedLocale.isEmpty {
-      appendDeclared(requestedLocale)
-      if let base = requestedLocale.split(separator: "-", maxSplits: 1).first {
-        appendDeclared(String(base))
+      // Hosts pass what the platform hands them, which is an ICU identifier
+      // (`en_US`, `PT_br`, `en-US-u-rg-gbzzzz`), while catalog keys are authored
+      // in one canonical spelling. Protocol 0.3 canonicalizes the requested tag
+      // before an exact lookup; matching raw would miss the only catalog that
+      // exists. A tag that canonicalizes to nothing contributes no candidate
+      // rather than matching anything.
+      if let tag = MosaicDeviceLocale.catalogTag(requestedLocale) {
+        appendDeclared(tag)
+        if let base = tag.split(separator: "-", maxSplits: 1).first {
+          appendDeclared(String(base))
+        }
       }
       appendDeclared(localization.fallbackLocale)
       appendDeclared(localization.defaultLocale)
@@ -39,12 +64,21 @@ public struct MosaicLocalizationResolver: Sendable, Equatable {
     }
 
     let effectiveLocale = candidates.first ?? localization.defaultLocale
-    let direction = localization.locales[effectiveLocale]?.direction ?? .leftToRight
+    // Direction follows the same chain as strings do. Defaulting an RTL
+    // document to LTR because its effective locale has no catalog mirrors the
+    // layout, so the chain is exhausted first and the shortfall is diagnosed
+    // rather than silently assumed.
+    let directionChain =
+      candidates + [effectiveLocale, localization.fallbackLocale, localization.defaultLocale]
+    let declaredDirection = directionChain.lazy
+      .compactMap { localization.locales[$0]?.direction }
+      .first
     resolvedLocale = MosaicResolvedLocale(
       requestedLocale: requestedLocale,
       candidateLocales: candidates,
       effectiveLocale: effectiveLocale,
-      direction: direction
+      direction: declaredDirection ?? .leftToRight,
+      diagnostics: declaredDirection == nil ? ["localization_direction_unresolved"] : []
     )
   }
 
@@ -55,6 +89,21 @@ public struct MosaicLocalizationResolver: Sendable, Equatable {
       }
     }
     return value.defaultValue
+  }
+
+  /// Resolves a key the protocol reads directly.
+  ///
+  /// Reserved keys carry no inline `default`, because no component references
+  /// them. An absent key returns `nil` so the caller announces nothing rather
+  /// than substituting a literal in a language it cannot know; the semantic
+  /// validator already rejects a document that omits a key it consumes.
+  public func resolve(reserved key: MosaicReservedAccessibilityKey) -> String? {
+    for locale in resolvedLocale.candidateLocales {
+      if let resolved = localization.locales[locale]?.strings[key.rawValue] {
+        return resolved
+      }
+    }
+    return nil
   }
 
   public func resolve(

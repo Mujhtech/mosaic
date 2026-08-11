@@ -187,13 +187,26 @@ func wireChangeReason(stored string, previousVersion int64) string {
 }
 
 // wireStorePlatform maps Mosaic's provider identifier onto the contract's
-// storePlatform vocabulary.
-func wireStorePlatform(provider string) string {
+// storePlatform vocabulary. The second result is false when the provider is not
+// one the contract can name.
+//
+// The vocabulary is a closed two-value enum, and the previous mapping reported
+// everything that was not Apple — including an empty or unrecognised provider —
+// as `google_play`. That is a statement about where a customer bought
+// something, made on no evidence: a support agent, a refund tool, or an SDK
+// branching on storePlatform would have been told a purchase came from a store
+// Mosaic never saw. There is no third enum member to widen into, so an
+// unmappable provider is reported as unmappable and each call site decides
+// whether the field can be omitted (it is optional on a source summary) or the
+// payload cannot be built at all (it is required on a subscription snapshot).
+func wireStorePlatform(provider string) (string, bool) {
 	switch provider {
 	case "app_store", "apple_app_store":
-		return "apple_app_store"
+		return "apple_app_store", true
+	case "google_play", "play_store":
+		return "google_play", true
 	default:
-		return "google_play"
+		return "", false
 	}
 }
 
@@ -309,8 +322,12 @@ func sourceRecord(source SnapshotSource, asOf time.Time) map[string]any {
 	} else {
 		record["subscriptionInstanceId"] = source.SubscriptionInstanceID
 	}
-	if source.StorePlatform != "" {
-		record["storePlatform"] = wireStorePlatform(source.StorePlatform)
+	// storePlatform is optional on a source summary, so an unmappable provider
+	// — including the empty string a lineage-less source carries — omits the
+	// member. "Mosaic is not saying" is representable here; "google_play" would
+	// have been a claim.
+	if platform, ok := wireStorePlatform(source.StorePlatform); ok {
+		record["storePlatform"] = platform
 	}
 	if source.SourceStart != nil {
 		record["start"] = ContractTimestamp(*source.SourceStart)
@@ -622,6 +639,15 @@ func CheckResultRecord(customerID, projectID, environmentID string, view *Snapsh
 
 // SubscriptionRecord builds the subscriptionSnapshot payload.
 func SubscriptionRecord(view SubscriptionView, correlationID string) (map[string]any, error) {
+	// storePlatform is required on a subscription snapshot and its vocabulary is
+	// closed, so there is no honest payload for a provider Mosaic cannot name.
+	// Refusing to build one is the fail-closed answer: the caller reports the
+	// snapshot as unavailable instead of publishing a fabricated store.
+	storePlatform, mappable := wireStorePlatform(view.StorePlatform)
+	if !mappable {
+		return nil, fmt.Errorf("%w: subscription snapshot %q names store platform %q, which the contract cannot express",
+			ErrUnrepresentable, view.SnapshotID, view.StorePlatform)
+	}
 	payload := map[string]any{
 		"subscriptionSnapshotId": view.SnapshotID,
 		"subscriptionInstanceId": view.SubscriptionInstanceID,
@@ -632,7 +658,7 @@ func SubscriptionRecord(view SubscriptionView, correlationID string) (map[string
 		"projectionRuleVersion":  view.RuleVersion,
 		"computedAt":             ContractTimestamp(view.ComputedAt),
 		"asOf":                   ContractTimestamp(view.AsOf),
-		"storePlatform":          wireStorePlatform(view.StorePlatform),
+		"storePlatform":          storePlatform,
 		"mosaicProductId":        view.ProductID,
 		"accessState":            view.AccessState,
 		"lifecycleState":         view.LifecycleState,

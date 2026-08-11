@@ -530,9 +530,32 @@ export function validateCommerceProviderV2Record(record, contractSchema) {
   return errors;
 }
 
+/**
+ * The size the canonical corpus had when these rules were approved.
+ *
+ * Found by `tools/check-guard-vacuity.mjs`: the fixture loop below reports no
+ * errors over an empty array, so a corpus that failed to load, or a manifest
+ * that stopped declaring fixtures, read as perfect conformance.
+ */
+const COMMERCE_PROVIDER_V2_FIXTURE_FLOOR = 8;
+
 export function validateCommerceProviderV2Artifacts(artifacts) {
   const checks = validators(artifacts);
   const errors = [];
+  if (
+    !Array.isArray(artifacts.fixtures) ||
+    artifacts.fixtures.length < COMMERCE_PROVIDER_V2_FIXTURE_FLOOR
+  ) {
+    errors.push(
+      `Commerce Provider 2 canonical corpus holds ${
+        Array.isArray(artifacts.fixtures) ? artifacts.fixtures.length : "no array"
+      }, below the floor of ${COMMERCE_PROVIDER_V2_FIXTURE_FLOOR}; a conformance loop over a shrunken corpus passes vacuously`,
+    );
+    // A corpus that is not an array cannot be walked at all. Continuing would
+    // throw from inside the loop, which reads as a tool crash rather than as
+    // the missing corpus it is.
+    if (!Array.isArray(artifacts.fixtures)) return errors;
+  }
   if (!checks.compatibilityManifest(artifacts.compatibilityManifest)) {
     errors.push(
       ...schemaErrors(

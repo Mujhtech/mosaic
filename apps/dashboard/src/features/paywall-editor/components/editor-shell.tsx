@@ -144,7 +144,11 @@ export function EditorShell({
   const autosave = source.kind === "local" ? localAutosave : hostedAutosave;
   const recovery = useHostedDraftRecovery({
     document,
-    expectedRevision: hostedSession?.draft.revision ?? 0,
+    // A recovery record is restored *against* the revision it diverged from.
+    // Without a hosted session there is no such revision, and `0` is a real one
+    // — the revision a never-saved Draft has — so the hook is told the truth and
+    // writes nothing rather than storing a record bound to the wrong state.
+    expectedRevision: hostedSession?.draft.revision ?? null,
     scope:
       source.kind === "hosted"
         ? {
@@ -320,6 +324,35 @@ export function EditorShell({
               }}
             />
           </div>
+        ) : null}
+        {/* Non-blocking, and deliberately not tied to the conflict branch: the
+            operator's assumption that unsaved work is safe locally is wrong
+            from this moment on, whatever else is happening. */}
+        {source.kind === "hosted" && recovery.persistenceFailed ? (
+          <StatusMessage
+            className="mb-4 rounded border border-border bg-muted/35 p-3 text-sm"
+            tone="warning"
+          >
+            <p className="font-semibold">
+              Unsaved changes could not be backed up in this browser
+            </p>
+            <p className="mt-1 text-muted-foreground leading-6">
+              Browser storage refused the recovery copy — it may be full,
+              disabled, or this document may be too large for it. Your edits are
+              still on the canvas and Mosaic keeps trying to save them to the
+              server. Download a copy before closing this tab.
+            </p>
+            <div className="mt-3">
+              <Button
+                onClick={exportRecoveryDocument}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Download a copy now
+              </Button>
+            </div>
+          </StatusMessage>
         ) : null}
         {source.kind === "hosted" &&
         recoveryRecord &&

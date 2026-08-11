@@ -31,6 +31,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/placementdecision"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreconnect"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
@@ -60,10 +61,12 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/logging"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/objectstoreminio"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/placementdecisionpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/projectoverviewpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/protocolschema"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/ratelimit"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/revenuecat"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/telemetry"
+	"github.com/Mujhtech/mosaic/apps/api/internal/projectoverview"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/transport/health"
@@ -86,7 +89,7 @@ func main() {
 // embedded in the binary; a configured path is an explicit operator override.
 func openSchemas(cfg config.Config) (map[protocolschema.Schema]io.ReadCloser, error) {
 	overrides := map[protocolschema.Schema]string{
-		protocolschema.PaywallV02:              cfg.Protocol.V02SchemaPath,
+		protocolschema.PaywallV03:              cfg.Protocol.V03SchemaPath,
 		protocolschema.CommerceProviderV1:      cfg.Protocol.CommerceProviderSchemaPath,
 		protocolschema.CommerceProviderV2:      cfg.Protocol.CommerceProviderV2SchemaPath,
 		protocolschema.CommerceConfigurationV1: cfg.Protocol.CommerceConfigurationSchemaPath,
@@ -228,7 +231,7 @@ func run() (runErr error) {
 	if err != nil {
 		return err
 	}
-	protocolValidator, err := hostedpublishing.CompileProtocolValidator(schemas[protocolschema.PaywallV02])
+	protocolValidator, err := hostedpublishing.CompileProtocolValidator(schemas[protocolschema.PaywallV03])
 	if err != nil {
 		closeSchemas(schemas)
 		return err
@@ -279,8 +282,22 @@ func run() (runErr error) {
 		if err != nil {
 			return fmt.Errorf("configure RevenueCat adapter: %w", err)
 		}
+		appStoreConnectClient, err := appstoreconnect.New(appstoreconnect.Config{
+			BaseURL:          cfg.Providers.AppStoreConnectBaseURL,
+			RequestTimeout:   cfg.Providers.RequestTimeout,
+			OperationTimeout: cfg.Providers.OperationTimeout,
+			ConnectTimeout:   cfg.Providers.ConnectTimeout,
+			MaxResponseBytes: cfg.Providers.MaxResponseBytes,
+			MaxAttempts:      cfg.Providers.MaxAttempts,
+		})
+		if err != nil {
+			return fmt.Errorf("configure App Store Connect adapter: %w", err)
+		}
 		workspaceOptions = append(workspaceOptions,
-			cloudworkspace.WithProviderOperations(credentialCipher, revenueCatClient, cfg.Providers.SnapshotTTL),
+			cloudworkspace.WithProviderOperations(credentialCipher, cloudworkspace.ProviderCatalogClients{
+				cloudworkspace.ProviderRevenueCat:      revenueCatClient,
+				cloudworkspace.ProviderAppStoreConnect: appStoreConnectClient,
+			}, cfg.Providers.SnapshotTTL),
 		)
 	}
 	workspaceService := cloudworkspace.NewService(workspaceRepository, workspaceOptions...)
@@ -293,6 +310,12 @@ func run() (runErr error) {
 	)
 	placementDecisionService := placementdecision.NewService(placementdecisionpostgres.New(databasePool))
 	analyticsService := analytics.NewService(analyticspostgres.New(databasePool), objectStore, analyticsValidator)
+	// The overview summary is composed of billing and analytics reads, and is
+	// wired unconditionally: it is the dashboard's landing page and must answer
+	// for a Project that has enabled neither, reporting each unavailable metric
+	// with the reason rather than refusing.
+	projectOverviewService := projectoverview.NewService(
+		projectoverviewpostgres.New(databasePool), analyticsService)
 	experimentService := experiment.NewService(experimentpostgres.New(databasePool))
 	deliveryLimiter := ratelimit.New(cfg.Delivery.RequestsPerMinute, cfg.Delivery.Burst, cfg.Delivery.LimiterEntries)
 	authenticationLimiter := ratelimit.New(cfg.BrowserAuth.RequestsPerMinute, cfg.BrowserAuth.Burst, cfg.BrowserAuth.LimiterEntries)
@@ -478,6 +501,7 @@ func run() (runErr error) {
 		AnalyticsKeyLimiter:               analyticsKeyLimiter,
 		AnalyticsEventLimiter:             analyticsEventLimiter,
 		Experiment:                        experimentService,
+		ProjectOverview:                   projectOverviewService,
 		Billing:                           billingService,
 		BillingAccess:                     billingAccessService,
 		BillingDiagnostics:                billingDiagnosticsService,

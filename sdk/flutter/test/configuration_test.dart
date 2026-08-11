@@ -52,6 +52,89 @@ void main() {
     );
   });
 
+  group('analytics collection default', () {
+    // Analytics is opt-out. A host that configures nothing beyond a base URL
+    // must get a wired, collecting runtime; a silent regression here would
+    // lose every product event without any signal.
+    test('a default-configured client wires a collecting analytics runtime',
+        () async {
+      final diagnostics = <MosaicDiagnostic>[];
+      final mosaic = Mosaic.configure(
+        publicSdkKey: 'public_analytics_default',
+        baseUrl: Uri.parse('https://api.mosaic.test'),
+        purchaseProvider: MockMosaicPurchaseProvider(),
+        identityStorage: MosaicMemoryIdentityStorage(),
+        analyticsStorage: MosaicMemoryAnalyticsStorage(),
+        onDiagnostic: diagnostics.add,
+      );
+
+      expect(mosaic.analytics, isNotNull);
+      expect((await mosaic.analyticsDiagnostics()).collectionEnabled, isTrue);
+      // The auto-wiring diagnostic must stay reserved for genuine
+      // unavailability, not fire on every default configure.
+      expect(
+        diagnostics.map((diagnostic) => diagnostic.code),
+        isNot(contains('analytics.subsystem.disabled')),
+      );
+      mosaic.dispose();
+    });
+
+    test('no transport still reports the analytics subsystem as disabled', () {
+      final diagnostics = <MosaicDiagnostic>[];
+      final mosaic = Mosaic.configure(
+        publicSdkKey: 'public_analytics_untransported',
+        purchaseProvider: MockMosaicPurchaseProvider(),
+        identityStorage: MosaicMemoryIdentityStorage(),
+        onDiagnostic: diagnostics.add,
+      );
+
+      expect(mosaic.analytics, isNull);
+      expect(
+        diagnostics.map((diagnostic) => diagnostic.code),
+        contains('analytics.subsystem.disabled'),
+      );
+      mosaic.dispose();
+    });
+
+    // `context.platform` names only ios and android, so a Flutter host on any
+    // other target has its events filed under android. With collection on by
+    // default that substitution is now continuous, so it must be reported —
+    // otherwise desktop traffic is indistinguishable from Android traffic.
+    Mosaic configureOn(TargetPlatform platform, List<MosaicDiagnostic> sink) {
+      debugDefaultTargetPlatformOverride = platform;
+      try {
+        return Mosaic.configure(
+          publicSdkKey: 'public_analytics_platform',
+          baseUrl: Uri.parse('https://api.mosaic.test'),
+          purchaseProvider: MockMosaicPurchaseProvider(),
+          identityStorage: MosaicMemoryIdentityStorage(),
+          analyticsStorage: MosaicMemoryAnalyticsStorage(),
+          onDiagnostic: sink.add,
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    }
+
+    test('an unnameable target reports the substituted analytics platform', () {
+      final diagnostics = <MosaicDiagnostic>[];
+      configureOn(TargetPlatform.macOS, diagnostics).dispose();
+      expect(
+        diagnostics.map((diagnostic) => diagnostic.code),
+        contains(mosaicAnalyticsPlatformSubstitutedCode),
+      );
+    });
+
+    test('a nameable target reports no platform substitution', () {
+      final diagnostics = <MosaicDiagnostic>[];
+      configureOn(TargetPlatform.android, diagnostics).dispose();
+      expect(
+        diagnostics.map((diagnostic) => diagnostic.code),
+        isNot(contains(mosaicAnalyticsPlatformSubstitutedCode)),
+      );
+    });
+  });
+
   group('authoritative entitlements through the client', () {
     final snapshot = wrapCustomerSnapshotV2(repositoryFile(
       'protocol/fixtures/authoritative-entitlement/v1/snapshots/'

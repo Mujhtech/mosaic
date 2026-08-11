@@ -19,6 +19,11 @@ import {
   TextInspector,
 } from "@/features/paywall-editor/components/property-inspector-basic-nodes";
 import {
+  AwardInspector,
+  SocialProofInspector,
+  TimelineInspector,
+} from "@/features/paywall-editor/components/property-inspector-content-blocks";
+import {
   CONTROL_CLASS,
   CompactOptionField,
   Field,
@@ -50,11 +55,12 @@ import {
   ProductCardInspector,
   ProductSelectorInspector,
 } from "@/features/paywall-editor/components/property-inspector-products";
+import { TabsInspector } from "@/features/paywall-editor/components/property-inspector-tabs";
 import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
 import type { ProtocolNode } from "@/features/paywall-editor/types/editor";
 import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
 import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
-import type { MosaicPaywallV02BaseTypography } from "@/lib/mosaic-protocol";
+import type { MosaicPaywallV03BaseTypography } from "@/lib/mosaic-protocol";
 
 const SCREEN_INDEX = /^\/screens\/(\d+)/;
 
@@ -424,7 +430,7 @@ export function SwitchInspector({
             current.type === "switch"
               ? {
                   ...current,
-                  typography: typography as MosaicPaywallV02BaseTypography,
+                  typography: typography as MosaicPaywallV03BaseTypography,
                 }
               : current
           }
@@ -510,7 +516,7 @@ export function CountdownInspector({
           current.type === "countdown"
             ? {
                 ...current,
-                typography: typography as MosaicPaywallV02BaseTypography,
+                typography: typography as MosaicPaywallV03BaseTypography,
               }
             : current
         }
@@ -554,6 +560,14 @@ export function InspectorForNode({ node }: { node: ProtocolNode }) {
       return <SwitchInspector node={node} />;
     case "countdown":
       return <CountdownInspector node={node} />;
+    case "tabs":
+      return <TabsInspector node={node} />;
+    case "timeline":
+      return <TimelineInspector node={node} />;
+    case "award":
+      return <AwardInspector node={node} />;
+    case "socialProof":
+      return <SocialProofInspector node={node} />;
     default: {
       const unhandled: never = node;
       throw new Error(`Unhandled node.type: ${JSON.stringify(unhandled)}`);

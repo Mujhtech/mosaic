@@ -4,6 +4,7 @@ import type {
   MosaicDocument,
   ProtocolNode,
   Screen,
+  SelectionStyles,
   StackComponent,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
@@ -86,6 +87,27 @@ export function productCardStyles() {
         value: "surface.elevated" as const,
       },
       border: { color: "action.primary" as const, width: 2 },
+    },
+  };
+}
+
+/**
+ * Tabs reuses the neutral selection-style contract that `productCardStyles`
+ * aliases, so a tab control and a Product Card describe Default/Selected the
+ * same way.
+ */
+export function tabSelectionStyles(): SelectionStyles {
+  return {
+    default: {
+      background: { type: "color", value: "surface.default" },
+      border: { color: "border.default", width: 1 },
+      cornerRadius: 999,
+      padding: { top: 8, start: 14, bottom: 8, end: 14 },
+      opacity: 1,
+    },
+    selected: {
+      background: { type: "color", value: "action.primary" },
+      border: { color: "action.primary", width: 1 },
     },
   };
 }
@@ -473,6 +495,142 @@ export function createBlock(
         accessibility: { role: "text" },
       };
     }
+    case "tabs": {
+      const tabs = ["Monthly", "Yearly"].map((label) => {
+        const slug = label.toLowerCase();
+        const tabId = allocateIdentifier(identifiers, `${id}-${slug}`);
+        return {
+          id: tabId,
+          label: localized(
+            label,
+            allocateLocalizationKey(keys, `${key}.${slug}.label`)
+          ),
+          content: emptyStack(
+            allocateIdentifier(identifiers, `${tabId}-content`)
+          ),
+        };
+      });
+      const [firstTab] = tabs;
+      if (!firstTab) {
+        throw new Error("Tabs creation requires at least two authored tabs.");
+      }
+      return {
+        type,
+        id,
+        tabBarDirection: "horizontal",
+        tabBarGap: 8,
+        tabBarDistribution: "start",
+        gap: 16,
+        // No positional default: the opening panel is authored so that
+        // reordering the tabs array never changes which panel opens.
+        initialTabId: firstTab.id,
+        tabs,
+        styles: tabSelectionStyles(),
+        labelTypography: typography("label", "center"),
+        selectedLabelColor: "action.onPrimary",
+        sizing: { width: "fill", height: "fit" },
+        accessibility: {
+          label: localized(
+            "Choose a billing period",
+            allocateLocalizationKey(keys, `${key}.label`)
+          ),
+        },
+      };
+    }
+    case "timeline": {
+      const entries = [
+        { slug: "today", title: "Today", body: "Full access starts now." },
+        {
+          slug: "reminder",
+          title: "Day 5",
+          body: "We email you before the trial ends.",
+        },
+        {
+          slug: "charge",
+          title: "Day 7",
+          body: "Your subscription begins unless you cancel.",
+        },
+      ].map(({ slug, title, body }) => ({
+        id: allocateIdentifier(identifiers, `${id}-${slug}`),
+        marker: { kind: "ordinal" as const },
+        title: localized(
+          title,
+          allocateLocalizationKey(keys, `${key}.${slug}.title`)
+        ),
+        description: localized(
+          body,
+          allocateLocalizationKey(keys, `${key}.${slug}.description`)
+        ),
+      }));
+      return {
+        type,
+        id,
+        orientation: "vertical",
+        gap: 16,
+        connector: { color: "border.default", width: 2, style: "solid" },
+        entries,
+        // Every starting entry carries a marker and a description, so all three
+        // co-present style fields are required and therefore declared.
+        markerColor: "action.primary",
+        markerSize: 20,
+        titleTypography: typography("label", "start"),
+        descriptionTypography: typography("caption", "start"),
+        sizing: { width: "fill", height: "fit" },
+        accessibility: {
+          label: localized(
+            "How your free trial works",
+            allocateLocalizationKey(keys, `${key}.label`)
+          ),
+        },
+      };
+    }
+    case "award":
+      return {
+        type,
+        id,
+        direction: "vertical",
+        gap: 8,
+        crossAxisAlignment: "center",
+        title: localized("Editor's Choice", key),
+        titleTypography: typography("label", "center"),
+        sizing: { width: "fill", height: "fit" },
+        accessibility: {
+          label: localized(
+            "Press recognition",
+            allocateLocalizationKey(keys, `${key}.label`)
+          ),
+        },
+      };
+    case "socialProof":
+      return {
+        type,
+        id,
+        gap: 8,
+        quote: localized("This app is worth every penny.", key),
+        quoteTypography: typography("body", "start"),
+        attribution: localized(
+          "Priya N., verified subscriber",
+          allocateLocalizationKey(keys, `${key}.attribution`)
+        ),
+        attributionTypography: typography("caption", "start"),
+        // value counts steps, not points: 9 half-steps is 4.5 out of 5.
+        rating: {
+          symbol: "star",
+          value: 9,
+          maximum: 5,
+          step: "half",
+          size: 16,
+          filledColor: "action.primary",
+          emptyColor: "border.default",
+        },
+        sizing: { width: "fill", height: "fit" },
+        accessibility: {
+          label: localized(
+            "Customer review",
+            allocateLocalizationKey(keys, `${key}.label`)
+          ),
+        },
+      };
     default: {
       const unhandled: never = type;
       throw new Error(`Unhandled type: ${JSON.stringify(unhandled)}`);

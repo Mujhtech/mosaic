@@ -255,7 +255,14 @@ final class MosaicNativeStorePurchaseProvider
           continue;
         }
         final metadata = _map(product['metadata'], r'$.product.metadata');
-        products.add(_decodeProduct(id, metadata, product));
+        products.add(
+          _decodeProduct(
+            id,
+            metadata,
+            product,
+            (field, consequence) => _unknownTerm(field, consequence, id),
+          ),
+        );
       }
       if (products.isEmpty && unavailable.isNotEmpty) {
         return MosaicProductsUnavailable(
@@ -287,17 +294,23 @@ final class MosaicNativeStorePurchaseProvider
         r'$.purchase',
       );
       final outcome = _string(payload['outcome'], r'$.purchase.outcome');
-      final decodedEntitlements =
-          _entitlements(payload['activeEntitlementKeys']);
-      final entitlements = decodedEntitlements.isNotEmpty
-          ? decodedEntitlements
-          : <MosaicEntitlement>{
-              for (final key in commerceConfiguration
-                      .mappingForProduct(productId)
-                      ?.entitlementKeys ??
-                  const <String>[])
-                MosaicEntitlement(id: key),
-            };
+      // `activeEntitlementKeys` is optional in the commerce-provider contract,
+      // and `entitlementLookupFailure: neverInferInactive` cuts both ways: an
+      // absent list may never be inferred inactive, and may never be filled in
+      // from the local commerce configuration either. Local mappings describe
+      // what a Product would grant, not what the store says it did grant, so
+      // they are reported as unknown rather than promoted to provider truth.
+      final entitlements = _entitlements(payload['activeEntitlementKeys']);
+      if (!payload.containsKey('activeEntitlementKeys') &&
+          (outcome == 'purchased' || outcome == 'alreadyEntitled')) {
+        _recordDiagnostic(
+          code: 'commerce.entitlements.unreported',
+          safeMessage: 'The native store reported no active access with this '
+              'purchase; entitlements stay unknown until the next lookup.',
+          productId: productId,
+          recoveryAction: MosaicCommerceRecoveryAction.retry,
+        );
+      }
       final transaction = payload['transactionReference'] as String?;
       return switch (outcome) {
         'purchased' => MosaicPurchased(
@@ -478,16 +491,48 @@ final class MosaicNativeStorePurchaseProvider
   MosaicCommerceDiagnostic _providerUnavailable(
     String operation,
     String? productId,
-  ) {
+  ) =>
+      _recordDiagnostic(
+        code: 'commerce.provider.unavailable',
+        safeMessage: 'The native commerce provider is unavailable.',
+        operation: operation,
+        productId: productId,
+        recoveryAction: MosaicCommerceRecoveryAction.retry,
+      );
+
+  /// Reports one commercial term the bridge refused to guess.
+  void _unknownTerm(String field, String consequence, String productId) {
+    _recordDiagnostic(
+      code: 'commerce.product.unknownTerm',
+      safeMessage: 'The native store reported an unrecognised $field, so '
+          '$consequence.',
+      operation: 'load',
+      productId: productId,
+      severity: MosaicCommerceDiagnosticSeverity.warning,
+      retryable: false,
+      recoveryAction: MosaicCommerceRecoveryAction.none,
+    );
+  }
+
+  MosaicCommerceDiagnostic _recordDiagnostic({
+    required String code,
+    required String safeMessage,
+    required MosaicCommerceRecoveryAction recoveryAction,
+    String operation = 'provider',
+    String? productId,
+    MosaicCommerceDiagnosticSeverity severity =
+        MosaicCommerceDiagnosticSeverity.error,
+    bool retryable = true,
+  }) {
     final diagnostic = MosaicCommerceDiagnostic(
-      code: 'commerce.provider.unavailable',
-      safeMessage: 'The native commerce provider is unavailable.',
-      severity: MosaicCommerceDiagnosticSeverity.error,
-      retryable: true,
+      code: code,
+      safeMessage: safeMessage,
+      severity: severity,
+      retryable: retryable,
       correlationId:
           'flutter_native_${operation}_${DateTime.now().microsecondsSinceEpoch}',
       mosaicProductId: productId,
-      recoveryAction: MosaicCommerceRecoveryAction.retry,
+      recoveryAction: recoveryAction,
     );
     if (_diagnostics.length == 32) _diagnostics.removeAt(0);
     _diagnostics.add(diagnostic);
@@ -495,10 +540,15 @@ final class MosaicNativeStorePurchaseProvider
   }
 }
 
+/// Reports one commercial term the bridge could not state, naming the field and
+/// what the SDK does instead.
+typedef _UnknownTermSink = void Function(String field, String consequence);
+
 MosaicProduct _decodeProduct(
   String id,
   Map<String, Object?> metadata,
   Map<String, Object?> record,
+  _UnknownTermSink onUnknownTerm,
 ) {
   _expectKeys(
     record,
@@ -524,14 +574,18 @@ MosaicProduct _decodeProduct(
       'introductoryOffer',
     },
   );
-  final billingPeriod = _decodePeriod(metadata['billingPeriod']);
+  final billingPeriod = _decodePeriod(metadata['billingPeriod'], onUnknownTerm);
   final trial = metadata['trial'] == null
       ? null
-      : _decodeTrial(_map(metadata['trial'], r'$.metadata.trial'));
+      : _decodeTrial(
+          _map(metadata['trial'], r'$.metadata.trial'),
+          onUnknownTerm,
+        );
   final introductory = metadata['introductoryOffer'] == null
       ? null
       : _decodeIntroductoryOffer(
           _map(metadata['introductoryOffer'], r'$.metadata.introductoryOffer'),
+          onUnknownTerm,
         );
   return MosaicProduct(
     id: id,
@@ -548,38 +602,76 @@ MosaicProduct _decodeProduct(
   );
 }
 
-MosaicCommerceTrial _decodeTrial(Map<String, Object?> value) =>
-    MosaicCommerceTrial(
-      period: _decodePeriod(value['period'])!,
-      eligibility: _decodeEligibility(value['eligibility']),
-    );
-
-MosaicCommerceIntroductoryOffer _decodeIntroductoryOffer(
+/// Decodes a trial, or omits it when its commercial terms cannot be stated.
+MosaicCommerceTrial? _decodeTrial(
   Map<String, Object?> value,
-) =>
-    MosaicCommerceIntroductoryOffer(
-      localizedPrice: _string(value['localizedPrice'], r'$.offer.price'),
-      period: _decodePeriod(value['period'])!,
-      cycles: value['cycles'] as int,
-      paymentMode: switch (value['paymentMode']) {
-        'payAsYouGo' => MosaicCommerceIntroductoryPaymentMode.payAsYouGo,
-        _ => MosaicCommerceIntroductoryPaymentMode.payUpFront,
-      },
-      eligibility: _decodeEligibility(value['eligibility']),
-    );
+  _UnknownTermSink onUnknownTerm,
+) {
+  final period = _decodePeriod(value['period'], onUnknownTerm);
+  if (period == null) {
+    onUnknownTerm('trial.period', 'the trial is omitted');
+    return null;
+  }
+  return MosaicCommerceTrial(
+    period: period,
+    eligibility: _decodeEligibility(value['eligibility']),
+  );
+}
 
-MosaicBillingPeriod? _decodePeriod(Object? value) {
+/// Decodes an introductory offer, or omits it when any term is unknown.
+///
+/// An offer with a guessed period or payment mode misstates what the customer
+/// is agreeing to pay, so an unrecognised value removes the offer instead of
+/// substituting a plausible one.
+MosaicCommerceIntroductoryOffer? _decodeIntroductoryOffer(
+  Map<String, Object?> value,
+  _UnknownTermSink onUnknownTerm,
+) {
+  final period = _decodePeriod(value['period'], onUnknownTerm);
+  if (period == null) {
+    onUnknownTerm('introductoryOffer.period', 'the offer is omitted');
+    return null;
+  }
+  final paymentMode = switch (value['paymentMode']) {
+    'payAsYouGo' => MosaicCommerceIntroductoryPaymentMode.payAsYouGo,
+    'payUpFront' => MosaicCommerceIntroductoryPaymentMode.payUpFront,
+    _ => null,
+  };
+  if (paymentMode == null) {
+    onUnknownTerm('introductoryOffer.paymentMode', 'the offer is omitted');
+    return null;
+  }
+  return MosaicCommerceIntroductoryOffer(
+    localizedPrice: _string(value['localizedPrice'], r'$.offer.price'),
+    period: period,
+    cycles: value['cycles'] as int,
+    paymentMode: paymentMode,
+    eligibility: _decodeEligibility(value['eligibility']),
+  );
+}
+
+/// Decodes a billing period, or `null` when its unit is not recognised.
+///
+/// A guessed unit turns a weekly plan into a yearly one on screen, so an
+/// unrecognised unit yields no period at all.
+MosaicBillingPeriod? _decodePeriod(
+  Object? value,
+  _UnknownTermSink onUnknownTerm,
+) {
   if (value == null) return null;
   final period = _map(value, r'$.period');
-  return MosaicBillingPeriod(
-    unit: switch (_string(period['unit'], r'$.period.unit')) {
-      'day' => MosaicBillingPeriodUnit.day,
-      'week' => MosaicBillingPeriodUnit.week,
-      'month' => MosaicBillingPeriodUnit.month,
-      _ => MosaicBillingPeriodUnit.year,
-    },
-    value: period['value'] as int,
-  );
+  final unit = switch (_string(period['unit'], r'$.period.unit')) {
+    'day' => MosaicBillingPeriodUnit.day,
+    'week' => MosaicBillingPeriodUnit.week,
+    'month' => MosaicBillingPeriodUnit.month,
+    'year' => MosaicBillingPeriodUnit.year,
+    _ => null,
+  };
+  if (unit == null) {
+    onUnknownTerm('period.unit', 'no billing period is reported');
+    return null;
+  }
+  return MosaicBillingPeriod(unit: unit, value: period['value'] as int);
 }
 
 MosaicCommerceOfferEligibility _decodeEligibility(Object? value) =>

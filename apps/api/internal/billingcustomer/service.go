@@ -141,7 +141,7 @@ func (s *Service) CreateOrGetForApplicationUser(ctx context.Context, projectID, 
 		}
 		return Customer{}, false, ErrUnavailable
 	}
-	_ = s.repository.RecordAudit(ctx, Actor{}, projectID, "billing.customer.created",
+	s.recordAudit(ctx, Actor{}, projectID, "billing.customer.created",
 		"billing_customer", customer.ID, map[string]string{"aliasType": AliasApplicationUser}, now)
 	logSafely(ctx, "billing customer created", map[string]string{
 		"project_id": projectID, "billing_customer_id": customer.ID, "creation_path": "trusted_identify",
@@ -193,7 +193,7 @@ func (s *Service) AttachApplicationUserAlias(ctx context.Context, actor Actor, p
 		}
 		return Alias{}, err
 	}
-	_ = s.repository.RecordAudit(ctx, actor, projectID, "billing.customer.alias_attached",
+	s.recordAudit(ctx, actor, projectID, "billing.customer.alias_attached",
 		"billing_customer", customerID, map[string]string{"aliasType": AliasApplicationUser}, now)
 	return alias, nil
 }
@@ -405,7 +405,7 @@ func (s *Service) ResolveLineageCustomer(ctx context.Context, projectID, lineage
 		if err := s.repository.AttachLineageCustomer(ctx, projectID, lineageID, resolution.CustomerID, now); err != nil {
 			return Resolution{}, ErrUnavailable
 		}
-		_ = s.repository.RecordAudit(ctx, Actor{}, projectID, "billing.lineage.customer_attached",
+		s.recordAudit(ctx, Actor{}, projectID, "billing.lineage.customer_attached",
 			"purchase_lineage", lineageID, map[string]string{"billingCustomerId": resolution.CustomerID}, now)
 
 		// An association that establishes who owns a purchase has to reach the
@@ -443,7 +443,7 @@ func (s *Service) ResolveLineageCustomer(ctx context.Context, projectID, lineage
 		}); err != nil {
 			return Resolution{}, ErrUnavailable
 		}
-		_ = s.repository.RecordAudit(ctx, Actor{}, projectID, "billing.lineage.identity_conflict_opened",
+		s.recordAudit(ctx, Actor{}, projectID, "billing.lineage.identity_conflict_opened",
 			"purchase_lineage", lineageID, map[string]string{
 				"conflictScope": ConflictScopeLineage, "diagnosticCode": resolution.DiagnosticCode,
 			}, now)
@@ -566,7 +566,7 @@ func (s *Service) completeAdoption(ctx context.Context, projectID string, lineag
 			return ErrUnavailable
 		}
 	}
-	_ = s.repository.RecordAudit(ctx, Actor{}, projectID, "billing.customer.anchor_adopted",
+	s.recordAudit(ctx, Actor{}, projectID, "billing.customer.anchor_adopted",
 		"billing_customer", anchorID, map[string]string{
 			"adoptedByBillingCustomerId": adopterID,
 			"purchaseLineageId":          lineage.ID,
@@ -718,7 +718,7 @@ func (s *Service) ResolveConflict(ctx context.Context, actor Actor, projectID, c
 	// is the current state of one dispute; the audit trail is what an
 	// investigation reads, and it must not have to join back to a row that a
 	// later resolution could have rewritten.
-	_ = s.repository.RecordAudit(ctx, actor, projectID, "billing.identity_conflict.resolved",
+	s.recordAudit(ctx, actor, projectID, "billing.identity_conflict.resolved",
 		"billing_identity_conflict", conflictID, map[string]string{
 			"action": action, "conflictScope": conflict.Scope, "reason": reason,
 		}, now)
@@ -777,7 +777,7 @@ func (s *Service) openAliasConflict(ctx context.Context, actor Actor, projectID,
 	if err := s.repository.SetCustomerStatus(ctx, projectID, customerID, StatusFrozen, now); err != nil {
 		return ErrUnavailable
 	}
-	_ = s.repository.RecordAudit(ctx, actor, projectID, "billing.customer.identity_conflict_opened",
+	s.recordAudit(ctx, actor, projectID, "billing.customer.identity_conflict_opened",
 		"billing_customer", customerID, map[string]string{
 			"conflictScope": ConflictScopeAlias, "aliasType": AliasApplicationUser,
 			"diagnosticCode": DiagnosticAliasClaimsTwoCustomers,
@@ -859,6 +859,30 @@ func (s *Service) newID(prefix string) (string, error) {
 		return "", fmt.Errorf("generate billing identity identifier: %w", err)
 	}
 	return prefix + "_" + base64.RawURLEncoding.EncodeToString(buffer), nil
+}
+
+// recordAudit writes the audit event for an operation whose effect is already
+// durable, and reports a failed write loudly rather than discarding it.
+//
+// The operation is deliberately not failed on an audit error. Every call site
+// here runs after the mutation has committed, so returning an error would tell
+// the caller to retry something that has already happened — and identity
+// mutations are exactly the ones where a blind retry produces a duplicate
+// customer or a spurious conflict. What is actually lost is compliance
+// evidence, so the failure is raised where an operator and an alert can see it
+// instead of being swallowed by `_ =`.
+//
+// Identifiers only, in keeping with logSafely: no alias value, digest, or
+// correlator reaches a log.
+func (s *Service) recordAudit(ctx context.Context, actor Actor, projectID, action, resourceType, resourceID string, metadata map[string]string, now time.Time) {
+	if err := s.repository.RecordAudit(ctx, actor, projectID, action, resourceType, resourceID, metadata, now); err != nil {
+		zerolog.Ctx(ctx).Error().Err(err).
+			Str("project_id", projectID).
+			Str("audit_action", action).
+			Str("resource_type", resourceType).
+			Str("resource_id", resourceID).
+			Msg("billing identity audit event was not recorded")
+	}
 }
 
 // logSafely writes an operator line with identifiers only. No alias value, no

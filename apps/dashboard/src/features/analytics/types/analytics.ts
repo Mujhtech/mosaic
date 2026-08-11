@@ -130,6 +130,13 @@ export interface IdentityPreview {
 
 export interface AnalyticsScope {
   environmentId: string;
+  /**
+   * The Environment as an address names it — `prod`, `staging`, `dev`. Carried
+   * beside the id because every Environment-scoped recovery link is built from
+   * the alias: without it `analytics_collection_disabled` describes the fix and
+   * then offers no way to reach it.
+   */
+  environmentKey: string;
   organizationId: string;
   projectId: string;
 }

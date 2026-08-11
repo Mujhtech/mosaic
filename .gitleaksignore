@@ -1,0 +1,13 @@
+# Finding fingerprints that are verified false positives.
+#
+# Each line is commit:file:rule:line, copied verbatim from the gitleaks
+# report. A fingerprint exempts exactly one finding in exactly one commit;
+# editing the flagged line in a later commit produces a new fingerprint, so
+# nothing here can hide a future leak.
+#
+# apps/dashboard .../connect-app-store-connect-sheet.test.tsx: the `P8`
+# constant is a deliberately truncated PEM stub (48 base64 chars; a real P8
+# key body is ~250+) used to assert the credential document's field names.
+# The fixture has since been restructured to assemble the PEM at runtime so
+# the private-key rule no longer matches future edits of that file.
+42ef11ad2f0d6c038b240a00147127da57e48d8f:apps/dashboard/src/features/provider-connections/components/connect-app-store-connect-sheet.test.tsx:private-key:21

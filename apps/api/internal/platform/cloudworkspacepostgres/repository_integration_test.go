@@ -29,9 +29,9 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/hostedpublishingpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/pgtest"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercatalog"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
-	"github.com/Mujhtech/mosaic/apps/api/migrations"
 )
 
 func TestPhase3APersistenceRisks(t *testing.T) {
@@ -39,24 +39,13 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 	if databaseURL == "" {
 		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	db := openSQL(t, databaseURL)
 	defer db.Close()
-	goose.SetBaseFS(migrations.Files)
-	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatal(err)
-	}
-	// Reset by dropping the schema rather than rolling migrations down: since
-	// Phase 8, irreversible down migrations correctly refuse when affected data
-	// exists, so a rollback is not a usable test reset. DATABASE_TEST_URL is
-	// documented as a throwaway database.
-	if _, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`); err != nil {
-		t.Fatalf("reset the test schema (DATABASE_TEST_URL must be a throwaway database): %v", err)
-	}
-	if err := goose.UpToContext(ctx, db, ".", 7); err != nil {
-		t.Fatalf("apply accepted migrations through 00007: %v", err)
-	}
+	resetAndMigrate(t, db, 7)
+	// The assertion clock starts after the schema is up: a deadline
+	// created before migration is spent by migration.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	if _, err := db.ExecContext(ctx, `
 		INSERT INTO organizations(id,name,created_at,updated_at)
 			VALUES('upgrade_org','Upgrade',now(),now());
@@ -573,24 +562,13 @@ func TestPhase4AProviderPersistenceRisks(t *testing.T) {
 	if databaseURL == "" {
 		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	db := openSQL(t, databaseURL)
 	defer db.Close()
-	goose.SetBaseFS(migrations.Files)
-	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatal(err)
-	}
-	// Reset by dropping the schema rather than rolling migrations down: since
-	// Phase 8, irreversible down migrations correctly refuse when affected data
-	// exists, so a rollback is not a usable test reset. DATABASE_TEST_URL is
-	// documented as a throwaway database.
-	if _, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`); err != nil {
-		t.Fatalf("reset the test schema (DATABASE_TEST_URL must be a throwaway database): %v", err)
-	}
-	if err := goose.UpContext(ctx, db, "."); err != nil {
-		t.Fatalf("apply Phase 4A migrations: %v", err)
-	}
+	resetAndMigrate(t, db, 0)
+	// The assertion clock starts after the schema is up: a deadline
+	// created before migration is spent by migration.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatalf("open pool: %v", err)
@@ -620,7 +598,7 @@ func TestPhase4AProviderPersistenceRisks(t *testing.T) {
 	repository := cloudworkspacepostgres.New(pool)
 	service := cloudworkspace.NewService(
 		repository,
-		cloudworkspace.WithProviderOperations(cipher, catalog, time.Hour),
+		cloudworkspace.WithProviderOperations(cipher, cloudworkspace.ProviderCatalogClients{cloudworkspace.ProviderRevenueCat: catalog}, time.Hour),
 	)
 	actor := cloudworkspace.Actor{ID: "phase4a-owner"}
 	organization, err := service.CreateOrganization(ctx, actor, "Phase 4A")
@@ -812,24 +790,13 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	if databaseURL == "" {
 		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	db := openSQL(t, databaseURL)
 	defer db.Close()
-	goose.SetBaseFS(migrations.Files)
-	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatal(err)
-	}
-	// Reset by dropping the schema rather than rolling migrations down: since
-	// Phase 8, irreversible down migrations correctly refuse when affected data
-	// exists, so a rollback is not a usable test reset. DATABASE_TEST_URL is
-	// documented as a throwaway database.
-	if _, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`); err != nil {
-		t.Fatalf("reset the test schema (DATABASE_TEST_URL must be a throwaway database): %v", err)
-	}
-	if err := goose.UpContext(ctx, db, "."); err != nil {
-		t.Fatalf("apply Phase 3B migrations: %v", err)
-	}
+	resetAndMigrate(t, db, 0)
+	// The assertion clock starts after the schema is up: a deadline
+	// created before migration is spent by migration.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatalf("open pool: %v", err)
@@ -905,14 +872,14 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	}
 
 	publishingRepository := hostedpublishingpostgres.New(pool)
-	protocolSchema, err := os.Open(filepath.Join("../../../../../protocol/schema/v0.2/paywall.schema.json"))
+	protocolSchema, err := os.Open(filepath.Join("../../../../../protocol/schema/v0.3/paywall.schema.json"))
 	if err != nil {
-		t.Fatalf("open Protocol 0.2 schema: %v", err)
+		t.Fatalf("open Protocol 0.3 schema: %v", err)
 	}
 	protocolValidator, err := hostedpublishing.CompileProtocolValidator(protocolSchema)
 	_ = protocolSchema.Close()
 	if err != nil {
-		t.Fatalf("compile Protocol 0.2 validator: %v", err)
+		t.Fatalf("compile Protocol 0.3 validator: %v", err)
 	}
 	objects := &testObjectStore{objects: make(map[string][]byte)}
 	publishingOptions := []hostedpublishing.ServiceOption{
@@ -939,7 +906,7 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create paywall: %v", err)
 	}
-	document, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/v0.2/navigation-only.json"))
+	document, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/v0.3/navigation-only.json"))
 	if err != nil {
 		t.Fatalf("read canonical Protocol fixture: %v", err)
 	}
@@ -1037,7 +1004,7 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create second production Product: %v", err)
 	}
-	productionDocument, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/v0.2/hidden-purchase-target.json"))
+	productionDocument, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/v0.3/hidden-purchase-target.json"))
 	if err != nil {
 		t.Fatalf("read production Protocol fixture: %v", err)
 	}
@@ -1135,7 +1102,7 @@ func bindHostedImage(t *testing.T, document map[string]any, assetURL string) {
 	compatibility := document["compatibility"].(map[string]any)
 	required := compatibility["requiredCapabilities"].([]any)
 	for _, name := range []string{"component.image", "asset.remoteImage", "fallback.asset"} {
-		required = append(required, map[string]any{"name": name, "version": "0.2"})
+		required = append(required, map[string]any{"name": name, "version": "0.3"})
 	}
 	compatibility["requiredCapabilities"] = required
 	document["assets"] = []any{map[string]any{
@@ -1214,6 +1181,15 @@ func openSQL(t *testing.T, databaseURL string) *sql.DB {
 		t.Fatal(err)
 	}
 	return stdlib.OpenDB(*config)
+}
+
+// resetAndMigrate delegates to the shared pgtest helper so the migration
+// phase carries its own deadline and its failures name the real cause.
+func resetAndMigrate(t *testing.T, db *sql.DB, upTo int64) {
+	t.Helper()
+	if err := pgtest.ResetAndMigrate(db, upTo); err != nil {
+		t.Fatal(err)
+	}
 }
 
 type testObjectStore struct {

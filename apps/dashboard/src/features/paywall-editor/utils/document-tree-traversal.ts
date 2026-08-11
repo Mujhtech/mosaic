@@ -126,6 +126,7 @@ export function isPassiveProductNode(child: ProtocolNode): boolean {
       "productBadge",
       "switch",
       "carousel",
+      "tabs",
     ].includes(child.type) &&
     (child.type !== "stack" || child.children.every(isPassiveProductNode))
   );
@@ -208,9 +209,9 @@ export const REJECTION_COPY: Record<
       "Enter the deadline in Add content before inserting or dragging Countdown.",
   },
   "invalid-node": {
-    message: "The component subtree is not a valid Protocol 0.2 tree.",
+    message: "The component subtree is not a valid Protocol 0.3 tree.",
     recovery:
-      "Use supported components and keep every Carousel between two and twenty pages.",
+      "Use supported components, keep every Carousel between two and twenty pages, and every Tabs between two and eight tabs.",
   },
   "duplicate-id": {
     message:
@@ -318,6 +319,19 @@ export function visitContainerEntries(
             documentPath: pagePath,
           });
           visitContainerEntries(page.content, depth + 2, pagePath, entries);
+        });
+      } else if (node.type === "tabs") {
+        node.tabs.forEach((tab, tabIndex) => {
+          const tabPath = `${documentPath}/tabs/${tabIndex}/content`;
+          entries.push({
+            node: tab.content,
+            depth: depth + 1,
+            parentId: null,
+            index: tabIndex,
+            collection: "children",
+            documentPath: tabPath,
+          });
+          visitContainerEntries(tab.content, depth + 2, tabPath, entries);
         });
       }
     });
@@ -433,6 +447,13 @@ export function visitForParent(
             return result;
           }
         }
+      } else if (node.type === "tabs") {
+        for (const tab of node.tabs) {
+          const result = visitForParent(tab.content, id);
+          if (result) {
+            return result;
+          }
+        }
       }
     }
   }
@@ -507,6 +528,16 @@ export function findAncestorNodes(
             return [...ancestors, container, node];
           }
           const result = visit(page.content, [...ancestors, container, node]);
+          if (result) {
+            return result;
+          }
+        }
+      } else if (node.type === "tabs") {
+        for (const tab of node.tabs) {
+          if (tab.content.id === id) {
+            return [...ancestors, container, node];
+          }
+          const result = visit(tab.content, [...ancestors, container, node]);
           if (result) {
             return result;
           }
@@ -615,7 +646,9 @@ export function reconcileExpandedTreeNodes(
   const validContainerIds = new Set([
     ...document.screens.map((screen) => screen.layout.content.id),
     ...flattenDocument(document).flatMap((entry) =>
-      isContainerNode(entry.node) || entry.node.type === "carousel"
+      isContainerNode(entry.node) ||
+      entry.node.type === "carousel" ||
+      entry.node.type === "tabs"
         ? [entry.node.id]
         : []
     ),
@@ -692,6 +725,17 @@ export function mapNode(
         return {
           ...page,
           content: content.type === "stack" ? content : page.content,
+        };
+      }),
+    };
+  } else if (node.type === "tabs") {
+    nested = {
+      ...node,
+      tabs: node.tabs.map((tab) => {
+        const content: ProtocolNode = mapNode(tab.content, id, updater);
+        return {
+          ...tab,
+          content: content.type === "stack" ? content : tab.content,
         };
       }),
     };

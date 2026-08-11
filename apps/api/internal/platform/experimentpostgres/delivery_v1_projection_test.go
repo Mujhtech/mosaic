@@ -18,7 +18,7 @@ func TestDeliveryV1ProjectionKeepsLegacyClientsServed(t *testing.T) {
 		"publishedAt":   "2026-07-27T17:52:18.000Z",
 		"contentDigest": "sha256:stale-value-that-must-be-recomputed",
 		"compatibility": map[string]any{
-			"paywallProtocols":              []any{map[string]any{"version": "0.2"}},
+			"paywallProtocols":              []any{map[string]any{"version": "0.3"}},
 			"acceptance":                    "atomic",
 			"placementDecisionContracts":    []any{map[string]any{"version": "1"}},
 			"experimentAssignmentContracts": []any{map[string]any{"version": "1"}},

@@ -34,6 +34,7 @@ describe("privacy REST requests", () => {
         organizationId: "org_01",
         projectId: "project_01",
         environmentId: "environment_01",
+        environmentKey: "prod",
       },
       { scope: "application_user", value: identity }
     );
@@ -83,6 +84,7 @@ describe("privacy REST requests", () => {
         organizationId: "org_01",
         projectId: "project_01",
         environmentId: "environment_01",
+        environmentKey: "prod",
       },
       identity,
       "fresh-request-digest"
@@ -149,6 +151,7 @@ describe("analytics dimension mapping", () => {
         organizationId: "org_01",
         projectId: "project_01",
         environmentId: "environment_01",
+        environmentKey: "prod",
       },
       "purchases",
       {
@@ -221,6 +224,7 @@ describe("analytics dimension mapping", () => {
       organizationId: "org_01",
       projectId: "project_01",
       environmentId: "environment_01",
+      environmentKey: "prod",
     };
     const filters = {
       from: "2026-07-26",
@@ -296,6 +300,7 @@ describe("analytics dimension mapping", () => {
           organizationId: "org_01",
           projectId: "project_01",
           environmentId: "environment_01",
+          environmentKey: "prod",
         },
         {
           from: "2026-07-26",
@@ -338,6 +343,7 @@ describe("analytics dimension mapping", () => {
         organizationId: "org_01",
         projectId: "project_01",
         environmentId: "environment_01",
+        environmentKey: "prod",
       },
       {
         from: "2026-07-26",

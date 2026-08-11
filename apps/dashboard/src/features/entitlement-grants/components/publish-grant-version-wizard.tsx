@@ -23,6 +23,7 @@ import { StatusPill } from "@/features/billing-ledger/components/billing-chrome"
 import {
   evaluatePublishGate,
   type GrantProposal,
+  grantImpactCountsComplete,
   grantPolicyFields,
   grantPolicyLabel,
   grantPolicyNote,
@@ -124,6 +125,7 @@ export function PublishGrantVersionWizard({
     value: entitlement.id,
   }));
 
+  const impactCountsComplete = grantImpactCountsComplete(impact);
   const gate = evaluatePublishGate({
     canManage,
     impact,
@@ -381,21 +383,33 @@ export function PublishGrantVersionWizard({
                 <dl className="mt-3 grid gap-2 sm:grid-cols-2">
                   <ImpactRow
                     label="Purchases currently granting access"
-                    value={impact.impactedActiveSources ?? 0}
+                    value={impact.impactedActiveSources}
                   />
                   <ImpactRow
                     label="Billing Customers citing this Product"
-                    value={impact.impactedCustomers ?? 0}
+                    value={impact.impactedCustomers}
                   />
                   <ImpactRow
                     label="Entitlements a reprojection would re-derive"
-                    value={impact.impactedEntitlements ?? 0}
+                    value={impact.impactedEntitlements}
                   />
                   <ImpactRow
                     label="Products a reprojection would re-derive"
-                    value={impact.impactedProducts ?? 0}
+                    value={impact.impactedProducts}
                   />
                 </dl>
+                {impactCountsComplete ? null : (
+                  <p
+                    className="mt-3 rounded border border-destructive/35 bg-destructive/10 p-3 text-sm leading-6"
+                    role="alert"
+                  >
+                    At least one count above is unknown — the preview did not
+                    report it. Publishing stays unavailable until the blast
+                    radius is fully stated: an unknown count is not a zero, and
+                    this confirmation exists to state how many customers could
+                    lose access.
+                  </p>
+                )}
                 <p className="mt-3 text-muted-foreground text-xs leading-5">
                   Every count is from current committed state — the snapshot
                   each customer&rsquo;s pointer names, not the whole snapshot
@@ -460,7 +474,9 @@ export function PublishGrantVersionWizard({
                   Back to shape
                 </Button>
                 <Button
-                  disabled={impact?.additiveSuperset === false}
+                  disabled={
+                    impact?.additiveSuperset === false || !impactCountsComplete
+                  }
                   onClick={handleClick3}
                   type="button"
                 >
@@ -523,11 +539,30 @@ function StepChip({
   );
 }
 
-function ImpactRow({ label, value }: { label: string; value: number }) {
+/**
+ * One blast-radius count. An absent count reads "Unknown", never "0" — the two
+ * lead an operator to opposite decisions about an irreversible publish.
+ */
+function ImpactRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | undefined;
+}) {
+  const reported = typeof value === "number";
   return (
     <div>
       <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="font-semibold text-sm">{value}</dd>
+      <dd
+        className={
+          reported
+            ? "font-semibold text-sm"
+            : "font-semibold text-destructive text-sm"
+        }
+      >
+        {reported ? value : "Unknown — not reported"}
+      </dd>
     </div>
   );
 }

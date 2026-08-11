@@ -132,4 +132,32 @@ describe("replay comparison", () => {
   it("produces no comparison from a single attempt rather than inventing a baseline", () => {
     expect(selectComparableAttempts([attempt({})])).toBeUndefined();
   });
+
+  /**
+   * Protects: an attempt with no `attemptNumber` never becomes a column of the
+   * comparison.
+   *
+   * The sort key used to be `attemptNumber ?? 0`, which places an unnumbered
+   * attempt below attempt 1. The comparison reads its baseline off the end of
+   * that list, so a record with no position in the sequence silently became the
+   * "before" column an operator judges a replay result against.
+   */
+  it("excludes an unnumbered attempt from the comparison rather than sorting it as zero", () => {
+    const pair = selectComparableAttempts([
+      attempt({ attemptNumber: undefined, id: "attempt_unnumbered" }),
+      attempt({ attemptNumber: 1, id: "attempt_1" }),
+      attempt({ attemptNumber: 2, id: "attempt_2" }),
+    ]);
+
+    expect(pair?.[0].attempt.id).toBe("attempt_1");
+    expect(pair?.[1].attempt.id).toBe("attempt_2");
+    // Two attempts, but only one of them has a position: no comparison at all
+    // beats a comparison against a fabricated baseline.
+    expect(
+      selectComparableAttempts([
+        attempt({ attemptNumber: undefined, id: "attempt_unnumbered" }),
+        attempt({ attemptNumber: 2, id: "attempt_2" }),
+      ])
+    ).toBeUndefined();
+  });
 });

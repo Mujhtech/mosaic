@@ -348,6 +348,49 @@ function validateSummaryAccessVocabulary(artifacts) {
   return errors;
 }
 
+/**
+ * The webhook is the one contract in the protocol whose consumer tolerance is
+ * `ignore` for unknown fields, event types, and enumeration members. That is
+ * only safe because a consumer is never permitted to project state from the
+ * payload: an event is a *notification*, and the authoritative state is the
+ * Authoritative Entitlement snapshot the consumer must re-read.
+ *
+ * Nothing in a document can carry that rule, so the manifest states it and this
+ * guard pins it. Without the pin, dropping or reworded `authoritativeState`
+ * would leave three `ignore` arms standing with no counterweight, and a consumer
+ * built to the manifest could quietly start believing a truncated payload.
+ *
+ * Documented in docs/protocol/billing-state-webhook-v1.md.
+ */
+const REQUIRED_CONSUMER_TOLERANCE = Object.freeze({
+  authoritativeState: "reReadSnapshot",
+  signatureVerification: "requiredBeforeParsing",
+  duplicateEvent: "deduplicateByEventId",
+  ordering: "ignoreOlderSnapshotVersion",
+});
+
+function validateAuthoritativeReReadPolicy(artifacts) {
+  const errors = [];
+  const tolerance = artifacts.compatibilityManifest.consumerTolerance;
+  if (
+    tolerance === null ||
+    typeof tolerance !== "object" ||
+    Array.isArray(tolerance)
+  ) {
+    return [
+      "Webhook compatibility manifest must declare a consumerTolerance object; the ignore arms are only safe alongside the re-read requirement",
+    ];
+  }
+  for (const [key, expected] of Object.entries(REQUIRED_CONSUMER_TOLERANCE)) {
+    if (tolerance[key] !== expected) {
+      errors.push(
+        `Webhook consumerTolerance.${key} must be exactly "${expected}", not ${JSON.stringify(tolerance[key])}: a consumer may never project entitlement state from a webhook payload`,
+      );
+    }
+  }
+  return errors;
+}
+
 function validateCompatibility(artifacts) {
   const compiled = validators(artifacts);
   if (!compiled.manifest(artifacts.compatibilityManifest)) {
@@ -431,6 +474,7 @@ export function validateBillingStateWebhookV1Artifacts(artifacts) {
   const errors = [
     ...validateEventTypeVocabulary(artifacts),
     ...validateSummaryAccessVocabulary(artifacts),
+    ...validateAuthoritativeReReadPolicy(artifacts),
     ...validateCompatibility(artifacts),
   ];
 

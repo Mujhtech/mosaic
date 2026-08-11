@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'analytics_event.dart';
 import 'experiment_analytics.dart';
 import 'placement_identity.dart';
+import 'presentation.dart';
 import 'sha256.dart';
 
 const int mosaicAnalyticsMaximumQueueEvents = 1000;
@@ -276,12 +277,14 @@ final class MosaicAnalyticsRuntime
     required MosaicAnalyticsStorage storage,
     required bool environmentEnabled,
     required bool hostEnabled,
+    MosaicDiagnosticCallback? onDiagnostic,
   }) {
     final existing = _shared[namespace];
     if (existing != null) {
       existing.runtime
         .._environmentEnabled = environmentEnabled
-        .._hostEnabled = hostEnabled;
+        .._hostEnabled = hostEnabled
+        ..onDiagnostic ??= onDiagnostic;
       _shared[namespace] = (
         runtime: existing.runtime,
         references: existing.references + 1,
@@ -296,6 +299,7 @@ final class MosaicAnalyticsRuntime
       storage: storage,
       environmentEnabled: environmentEnabled,
       hostEnabled: hostEnabled,
+      onDiagnostic: onDiagnostic,
     );
     _shared[namespace] = (runtime: runtime, references: 1);
     return runtime;
@@ -310,6 +314,7 @@ final class MosaicAnalyticsRuntime
     this.clock = _systemClock,
     bool environmentEnabled = false,
     bool hostEnabled = true,
+    this.onDiagnostic,
     MosaicAnalyticsRandom? random,
   })  : _environmentEnabled = environmentEnabled,
         _hostEnabled = hostEnabled,
@@ -321,6 +326,10 @@ final class MosaicAnalyticsRuntime
   final MosaicAnalyticsTransport transport;
   final MosaicAnalyticsStorage storage;
   final MosaicAnalyticsClock clock;
+
+  /// Host channel for losses the queue cannot recover from. It is never used
+  /// for ordinary delivery outcomes, and never throws into the caller.
+  MosaicDiagnosticCallback? onDiagnostic;
   final MosaicAnalyticsRandom _random;
   final List<_QueuedAnalyticsEvent> _queue = [];
   Future<void> _mutations = Future.value();
@@ -770,9 +779,33 @@ final class MosaicAnalyticsRuntime
         _dropped++;
       }
     } on Object {
+      // A partially trusted queue is worse than none, so the whole document is
+      // discarded. That discards already-recorded events, which is real data
+      // loss and must be visible rather than inferable from `lastSafeCode`.
+      final discarded = _queue.length;
       _queue.clear();
       await _clearStorageSafely();
       _lastSafeCode = 'analytics.queue_rejected';
+      _diagnose(
+        'analytics.queue_rejected',
+        'The persisted analytics queue was unreadable and was discarded; '
+            '$discarded restored event(s) and any earlier unsent events are '
+            'lost.',
+      );
+    }
+  }
+
+  void _diagnose(String code, String message) {
+    try {
+      onDiagnostic?.call(
+        MosaicDiagnostic(
+          code: code,
+          message: message,
+          severity: MosaicDiagnosticSeverity.error,
+        ),
+      );
+    } on Object {
+      // A host diagnostic handler must never break analytics restoration.
     }
   }
 

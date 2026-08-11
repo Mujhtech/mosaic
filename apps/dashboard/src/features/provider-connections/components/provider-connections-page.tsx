@@ -17,9 +17,13 @@ import {
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query";
 import { ActiveProviderMatrix } from "@/features/provider-connections/components/active-provider-matrix";
+import { ConnectAppStoreConnectSheet } from "@/features/provider-connections/components/connect-app-store-connect-sheet";
 import { ConnectRevenueCatSheet } from "@/features/provider-connections/components/connect-revenuecat-sheet";
 import { ProviderConnectionsList } from "@/features/provider-connections/components/provider-connections-list";
-import { createAndTestRevenueCatMutationOptions } from "@/features/provider-connections/mutations/provider-connection-mutations";
+import {
+  createAndTestAppStoreConnectMutationOptions,
+  createAndTestRevenueCatMutationOptions,
+} from "@/features/provider-connections/mutations/provider-connection-mutations";
 import {
   activeProviderAssignmentQueryOptions,
   providerConnectionsQueryOptions,
@@ -57,8 +61,18 @@ export function ProviderConnectionsPage({
   const connectRevenueCat = useMutation(
     createAndTestRevenueCatMutationOptions(projectId, queryClient)
   );
+  const connectAppStoreConnect = useMutation(
+    createAndTestAppStoreConnectMutationOptions(projectId, queryClient)
+  );
   const applicationItems = applications.data?.items ?? [];
   const environmentItems = environments.data?.items ?? [];
+  // An unread scope list is not an empty Project. The sheets are told which of
+  // the two they are looking at so they never instruct an operator to create a
+  // scope that may already exist.
+  const retryScopes = () => {
+    applications.refetch();
+    environments.refetch();
+  };
   // Purchase setup acts only on the Environment the address names, so it reads the
   // path Environment the workspace switcher moves rather than a page-local choice.
   const selectedEnvironment = pathEnvironment;
@@ -172,23 +186,41 @@ export function ProviderConnectionsPage({
         </WorkflowPanel>
 
         <WorkflowPanel
-          description="RevenueCat and app-owned custom providers use scoped Connections. StoreKit and Google Play Billing are built in and never require a fake server connection."
+          description="RevenueCat, App Store Connect, and app-owned custom providers use scoped Connections. StoreKit and Google Play Billing are built in and never require a fake server connection."
           title="Connections"
         >
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <p className="max-w-2xl text-muted-foreground text-sm">
-              RevenueCat credentials are entered once, encrypted by the API, and
-              never returned.
+              Provider credentials are entered once, encrypted by the API, and
+              never returned. App Store Connect reads your existing App Store
+              catalog; it is not the same thing as StoreKit, which needs no
+              connection at all.
             </p>
             {access.canManage ? (
-              <ConnectRevenueCatSheet
-                applications={applicationItems}
-                environments={environmentItems}
-                onConnect={async (input) => {
-                  await connectRevenueCat.mutateAsync(input);
-                }}
-                providerBaseHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <ConnectRevenueCatSheet
+                  applications={applicationItems}
+                  applicationsUnreadable={applications.isError}
+                  environments={environmentItems}
+                  environmentsUnreadable={environments.isError}
+                  onConnect={async (input) => {
+                    await connectRevenueCat.mutateAsync(input);
+                  }}
+                  onRetryScopes={retryScopes}
+                  providerBaseHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
+                />
+                <ConnectAppStoreConnectSheet
+                  applications={applicationItems}
+                  applicationsUnreadable={applications.isError}
+                  environments={environmentItems}
+                  environmentsUnreadable={environments.isError}
+                  onConnect={async (input) => {
+                    await connectAppStoreConnect.mutateAsync(input);
+                  }}
+                  onRetryScopes={retryScopes}
+                  providerBaseHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
+                />
+              </div>
             ) : (
               <a
                 className="font-semibold text-primary text-sm"

@@ -57,12 +57,12 @@ func TestDeliveryV2CompilerAndCapabilityNegotiationUseExactDecisionReferences(t 
 		t.Fatalf("Delivery v2 omitted authoritative Environment mode: %#v", compiled.Release.Environment)
 	}
 	contract := compiled.Release.Compatibility.PlacementDecisionContracts[0]
-	request := SDKCapabilityRequest{Platform: "ios", SDKVersion: "1.0.0", SupportedConfigurationDeliveryVersions: []string{"2"}, SupportedPlacementDecisionContracts: []string{"1"}, SupportedDecisionFeatures: contract.RequiredFeatures, SupportedBucketingAlgorithms: contract.BucketingAlgorithms, SupportedPaywallProtocols: []SDKPaywallProtocolSupport{{Version: "0.2", Capabilities: []SDKCapability{}}}}
+	request := SDKCapabilityRequest{Platform: "ios", SDKVersion: "1.0.0", SupportedConfigurationDeliveryVersions: []string{"2"}, SupportedPlacementDecisionContracts: []string{"1"}, SupportedDecisionFeatures: contract.RequiredFeatures, SupportedBucketingAlgorithms: contract.BucketingAlgorithms, SupportedPaywallProtocols: []SDKPaywallProtocolSupport{{Version: "0.3", Capabilities: []SDKCapability{}}}}
 	for _, capability := range compiled.Release.Compatibility.PaywallProtocols[0].RequiredCapabilities {
 		request.SupportedPaywallProtocols[0].Capabilities = append(request.SupportedPaywallProtocols[0].Capabilities, SDKCapability{Name: capability.Name, Version: capability.Version})
 	}
 	if len(request.SupportedPaywallProtocols[0].Capabilities) == 0 {
-		request.SupportedPaywallProtocols[0].Capabilities = []SDKCapability{{Name: "component.text", Version: "0.2"}}
+		request.SupportedPaywallProtocols[0].Capabilities = []SDKCapability{{Name: "component.text", Version: "0.3"}}
 	}
 	if err := ValidateSDKCapabilityPayload(request, payload, "2"); err != nil {
 		t.Fatalf("valid v2 capability request rejected: %v", err)
@@ -93,7 +93,7 @@ func TestDeliveryV3CapabilityValidationAllowsNoAssignments(t *testing.T) {
 		SupportedExperimentFeatures:            sortedCapabilityKeys(supportedExperimentFeatures),
 		SupportedExperimentBucketingAlgorithms: sortedCapabilityKeys(supportedExperimentBucketingAlgorithms),
 		SupportedExperimentSchedulePolicies:    sortedCapabilityKeys(supportedExperimentSchedulePolicies),
-		SupportedPaywallProtocols:              []SDKPaywallProtocolSupport{{Version: "0.2", Capabilities: paywallCapabilities(release)}},
+		SupportedPaywallProtocols:              []SDKPaywallProtocolSupport{{Version: "0.3", Capabilities: paywallCapabilities(release)}},
 	}
 	if err = ValidateSDKCapabilityPayload(request, payload, "3"); err != nil {
 		t.Fatalf("zero-assignment Delivery v3 rejected: %v", err)
@@ -171,7 +171,7 @@ func TestCapabilityRefusalNamesTheMissingTerm(t *testing.T) {
 		SupportedExperimentFeatures:            features,
 		SupportedExperimentBucketingAlgorithms: sortedCapabilityKeys(supportedExperimentBucketingAlgorithms),
 		SupportedExperimentSchedulePolicies:    sortedCapabilityKeys(supportedExperimentSchedulePolicies),
-		SupportedPaywallProtocols:              []SDKPaywallProtocolSupport{{Version: "0.2", Capabilities: paywallCapabilities(release)}},
+		SupportedPaywallProtocols:              []SDKPaywallProtocolSupport{{Version: "0.3", Capabilities: paywallCapabilities(release)}},
 	}
 	if err = ValidateSDKCapabilityPayload(request, payload, "3"); err != nil {
 		t.Fatalf("baseline Delivery v3 request rejected: %v", err)
@@ -206,14 +206,14 @@ func TestCapabilityRefusalNamesTheMissingTerm(t *testing.T) {
 	// A Paywall capability the Release requires but the SDK did not advertise
 	// must be named too, so an integrator knows which renderer feature to ship.
 	request.SupportedExperimentFeatures = features
-	request.SupportedPaywallProtocols[0].Capabilities = []SDKCapability{{Name: "component.text", Version: "0.2"}}
+	request.SupportedPaywallProtocols[0].Capabilities = []SDKCapability{{Name: "component.text", Version: "0.3"}}
 	err = ValidateSDKCapabilityPayload(request, payload, "3")
 	capabilityError, ok = CapabilityFailure(err)
 	if !ok {
 		t.Fatalf("missing Paywall capability carried no detail: %v", err)
 	}
 	if capabilityError.Requirement != "paywallCapability" ||
-		capabilityError.Name == "" || capabilityError.Version != "0.2" ||
+		capabilityError.Name == "" || capabilityError.Version != "0.3" ||
 		capabilityError.Reason != CapabilityMissing {
 		t.Fatalf("refusal did not name the missing Paywall capability: %#v", capabilityError)
 	}

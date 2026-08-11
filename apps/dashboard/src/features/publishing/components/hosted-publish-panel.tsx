@@ -18,45 +18,25 @@ import {
 import { describeApiError } from "@/lib/api/errors";
 import { workspaceScopeParams } from "@/lib/routing/workspace-params";
 
-export function HostedPublishPanel({
-  environmentId,
-  environmentName,
-  organizationId,
-  paywallId,
-  projectId,
-}: {
+type HostedDraftSession = NonNullable<ReturnType<typeof useHostedDraftSession>>;
+
+interface HostedPublishPanelProps {
   environmentId: string;
   environmentName: string;
   organizationId: string;
   paywallId: string;
   projectId: string;
-}) {
-  const adapter = useHostedPublishingAdapter();
+}
+
+/**
+ * Publishing is bound to the exact Draft revision it was reviewed against, so
+ * the session check happens here — before any hook can build a request out of
+ * it. The panel used to substitute `expectedRevision: 0` while the session was
+ * absent, which is a real revision number, not a placeholder: it is what a
+ * never-saved Draft has.
+ */
+export function HostedPublishPanel(props: HostedPublishPanelProps) {
   const session = useHostedDraftSession();
-  const queryClient = useQueryClient();
-  const [acknowledgedRevision, setAcknowledgedRevision] = useState<
-    number | null
-  >(null);
-  const expectedRevision = session?.draft.revision ?? 0;
-  const acknowledgeMockProducts = acknowledgedRevision === expectedRevision;
-  const validationInput = {
-    draftId: session?.draft.id ?? "unavailable",
-    environmentId,
-    expectedRevision,
-    paywallId,
-    projectId,
-  };
-  const validation = useQuery({
-    ...publishValidationQueryOptions(validationInput, adapter),
-    enabled: adapter.status === "available" && !!session,
-  });
-  const publish = useMutation(
-    publishDraftMutationOptions(
-      { ...validationInput, acknowledgeMockProducts },
-      adapter,
-      queryClient
-    )
-  );
 
   if (!session) {
     // A missing Draft session is a real, recoverable condition (the Draft was
@@ -69,6 +49,44 @@ export function HostedPublishPanel({
       />
     );
   }
+
+  return <HostedPublishPanelForSession {...props} session={session} />;
+}
+
+function HostedPublishPanelForSession({
+  environmentId,
+  environmentName,
+  organizationId,
+  paywallId,
+  projectId,
+  session,
+}: HostedPublishPanelProps & { session: HostedDraftSession }) {
+  const adapter = useHostedPublishingAdapter();
+  const queryClient = useQueryClient();
+  const [acknowledgedRevision, setAcknowledgedRevision] = useState<
+    number | null
+  >(null);
+  const expectedRevision = session.draft.revision;
+  const acknowledgeMockProducts = acknowledgedRevision === expectedRevision;
+  const validationInput = {
+    draftId: session.draft.id,
+    environmentId,
+    expectedRevision,
+    paywallId,
+    projectId,
+  };
+  const validation = useQuery({
+    ...publishValidationQueryOptions(validationInput, adapter),
+    enabled: adapter.status === "available",
+  });
+  const publish = useMutation(
+    publishDraftMutationOptions(
+      { ...validationInput, acknowledgeMockProducts },
+      adapter,
+      queryClient
+    )
+  );
+
   const assetsHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/assets`;
   const placementsHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/placements`;
   const catalogHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`;

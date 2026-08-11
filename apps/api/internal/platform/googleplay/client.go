@@ -467,8 +467,16 @@ func (c *Client) execute(ctx context.Context, request *http.Request, out any) (i
 	if err != nil {
 		return 0, err
 	}
+	// A discarded decode error returned success with `out` left at its zero
+	// value, so a truncated or malformed Play response became an empty record
+	// the caller treated as authoritative — a subscription with no line items,
+	// an order with no products. The decode failure is reported like any other
+	// provider failure so the input is retried or classified rather than
+	// recorded from a body that was never read.
 	if out != nil && len(raw) > 0 {
-		_ = json.Unmarshal(raw, out)
+		if err := json.Unmarshal(raw, out); err != nil {
+			return status, &Error{HTTPStatus: status, Op: "decode_response", cause: errors.New("provider response was not valid JSON")}
+		}
 	}
 	return status, nil
 }

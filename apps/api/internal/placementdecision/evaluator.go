@@ -175,7 +175,7 @@ func evaluateCondition(node Condition, context EvaluationContext, ruleID, path s
 		}
 	case "condition":
 		input := lookup(node, context)
-		result = compare(node.Operator, input, node.Value)
+		result = compare(node.Source.Kind, node.Operator, input, node.Value)
 		*trace = appendTrace(*trace, TraceStep{Kind: "condition", RuleID: ruleID, ConditionPath: path, Source: node.Source.Kind, InputSource: input.Source, Operator: node.Operator, Result: result, Redacted: input.Sensitive})
 		return result
 	default:
@@ -195,17 +195,22 @@ func lookup(condition Condition, context EvaluationContext) InputValue {
 	}
 	switch condition.Source.Kind {
 	case "device.platform":
-		return scalar(context.Platform, context.Platform != "", "sdk")
+		return reported(context.Platform, true, "sdk")
 	case "device.os_version":
-		return scalar(context.OSVersion, validSemver(context.OSVersion), "sdk")
+		return reported(context.OSVersion, validSemver(context.OSVersion), "sdk")
 	case "application.version":
-		return scalar(context.ApplicationVersion, validSemver(context.ApplicationVersion), "host_application")
+		return reported(context.ApplicationVersion, validSemver(context.ApplicationVersion), "host_application")
 	case "application.locale":
 		normalized, ok := normalizeLocale(context.Locale)
-		return scalar(normalized, ok, "sdk")
+		if !ok {
+			normalized = context.Locale
+		}
+		return reported(normalized, ok, "sdk")
 	case "context.country":
-		country := normalizeCountry(context.Country)
-		return scalar(country, countryPattern.MatchString(country), "host_application")
+		if alpha2Pattern.MatchString(context.Country) {
+			return scalar(strings.ToUpper(context.Country), true, "host_application")
+		}
+		return reported(context.Country, false, "host_application")
 	case "environment.id":
 		return scalar(context.EnvironmentID, context.EnvironmentID != "", "configuration")
 	case "environment.key":
@@ -230,6 +235,20 @@ func lookup(condition Condition, context EvaluationContext) InputValue {
 func scalar(value any, valid bool, source string) InputValue {
 	return InputValue{Value: value, Valid: valid, Source: source}
 }
+
+// reported separates a value the host never supplied from one it supplied that
+// the evaluator cannot use. The empty string is absence, so exists is false. A
+// non-empty value that fails its grammar is present: exists is true and
+// does_not_exist is false, because the host did report a locale or a version,
+// while every comparison against it stays unknown rather than false. Collapsing
+// the two would let does_not_exist match a device that reported a malformed
+// value, which is a different population than a device that reported none.
+func reported(value string, usable bool, source string) InputValue {
+	if value == "" {
+		return InputValue{Source: "missing"}
+	}
+	return scalar(value, usable, source)
+}
 func mapValue(values map[string]InputValue, key string) InputValue {
 	if value, ok := values[key]; ok {
 		return value
@@ -237,7 +256,19 @@ func mapValue(values map[string]InputValue, key string) InputValue {
 	return InputValue{Source: "missing"}
 }
 
-func compare(operator string, input InputValue, operand *TypedValue) Truth {
+// closedVocabulary lists the sources whose value set the contract closes. A
+// value outside the set compares unknown, never false: returning false for
+// platform equals "ios" on a "windows" host would make the negation of that
+// condition a positive match on a platform the Rule was never written for.
+var closedVocabulary = map[string][]string{
+	"device.platform":      {"ios", "android"},
+	"entitlement_state":    {"active", "inactive", "unknown", "provider_unavailable", "failed"},
+	"product_availability": {"available", "unavailable", "unknown", "provider_unavailable", "failed"},
+	"product_readiness":    {"ready", "not_ready"},
+	"provider_capability":  {"available", "unavailable", "unknown"},
+}
+
+func compare(kind, operator string, input InputValue, operand *TypedValue) Truth {
 	missing := input.Source == "missing" || input.Value == nil
 	if operator == "exists" {
 		if missing {
@@ -254,9 +285,26 @@ func compare(operator string, input InputValue, operand *TypedValue) Truth {
 	if missing || !input.Valid || operand == nil {
 		return Unknown
 	}
+	if allowed, closed := closedVocabulary[kind]; closed {
+		text, ok := input.Value.(string)
+		if !ok || !contains(allowed, text) {
+			return Unknown
+		}
+	}
 	left, right := input.Value, operand.Value
 	switch operator {
 	case "equals", "not_equals":
+		if kind == "application.locale" {
+			text, ok := right.(string)
+			if !ok {
+				return Unknown
+			}
+			normalized, ok := normalizeLocale(text)
+			if !ok {
+				return Unknown
+			}
+			right = normalized
+		}
 		match, known := equalValues(left, right, operand.Type)
 		if !known {
 			return Unknown
@@ -269,6 +317,21 @@ func compare(operator string, input InputValue, operand *TypedValue) Truth {
 		values, ok := asStrings(right)
 		if !ok {
 			return Unknown
+		}
+		if kind == "application.locale" {
+			// One unusable member makes the whole condition unknown even when
+			// another member matches. The list is a single defective authored
+			// value, and deciding a Rule on the half that parsed would act on
+			// less than its author wrote.
+			canonical := make([]string, 0, len(values))
+			for _, value := range values {
+				normalized, ok := normalizeLocale(value)
+				if !ok {
+					return Unknown
+				}
+				canonical = append(canonical, normalized)
+			}
+			values = canonical
 		}
 		text, ok := left.(string)
 		if !ok {
@@ -301,7 +364,7 @@ func compare(operator string, input InputValue, operand *TypedValue) Truth {
 		if !ok1 || !ok2 {
 			return Unknown
 		}
-		return truth(localeMatches(locale, filter))
+		return localeMatches(locale, filter)
 	case "greater_than", "greater_than_or_equal", "less_than", "less_than_or_equal":
 		ordering, ok := compareOrdered(left, right, operand.Type)
 		if !ok {
@@ -538,53 +601,108 @@ func compareSemver(left, right semver) int {
 	return 0
 }
 
+// normalizeLocale reduces a BCP 47 tag to the canonical comparison form shared
+// by every Mosaic evaluator.
+//
+// Only the language-script-region core carries locale identity. A one-character
+// subtag opens a BCP 47 extension or private-use sequence (-u-, -t-, -x-), and
+// everything from there on is device detail: a host reporting
+// "en-US-u-rg-gbzzzz" for a region override reports the same locale as a host
+// reporting "en-US". Truncating at the first singleton is what keeps a runtime
+// tag from mis-evaluating equals/in/locale_matches against an authored "en-US",
+// and it is the same rule every SDK applies at its device- and host-locale
+// boundary, so a tag cannot mean one thing at the boundary and another here.
+// Empty subtags are dropped for the same reason.
+//
+// The tag is first cut at '@', '.', or '#', because a host reports an ICU
+// identifier rather than a language tag: "en_US@rg=gbzzzz" (keyword),
+// "en_US.UTF-8" (POSIX charset), and "en_US_#u-rg-gbzzzz" (Java
+// Locale.toString) all denote the locale "en-US". Without the cut the remainder
+// fails the subtag grammar and the whole tag evaluates unknown.
 func normalizeLocale(value string) (string, bool) {
-	value = strings.TrimSpace(strings.ReplaceAll(value, "_", "-"))
-	if value == "" || len(value) > 64 {
-		return "", false
+	rest := strings.TrimSpace(value)
+	if cut := strings.IndexAny(rest, "@.#"); cut >= 0 {
+		rest = rest[:cut]
 	}
-	parts := strings.Split(value, "-")
-	if len(parts) > 8 || len(parts[0]) < 2 || len(parts[0]) > 8 {
-		return "", false
-	}
-	for i, part := range parts {
+	rest = strings.ReplaceAll(rest, "_", "-")
+	parts := make([]string, 0, 8)
+	for last := false; !last; {
+		part := rest
+		if index := strings.IndexByte(rest, '-'); index >= 0 {
+			part, rest = rest[:index], rest[index+1:]
+		} else {
+			last = true
+		}
+		if len(part) == 1 {
+			break
+		}
 		if part == "" {
+			continue
+		}
+		if parts = append(parts, part); len(parts) > 8 {
 			return "", false
 		}
-		for _, char := range part {
-			if !(char >= 'A' && char <= 'Z') && !(char >= 'a' && char <= 'z') && !(char >= '0' && char <= '9') {
-				return "", false
-			}
-		}
+	}
+	if len(parts) == 0 || len(parts[0]) < 2 || len(parts[0]) > 8 || !isLocaleAlpha(parts[0]) {
+		return "", false
+	}
+	for index, part := range parts {
 		switch {
-		case i == 0:
-			parts[i] = strings.ToLower(part)
-		case len(part) == 4:
-			parts[i] = strings.ToUpper(part[:1]) + strings.ToLower(part[1:])
-		case len(part) == 2 || len(part) == 3:
-			parts[i] = strings.ToUpper(part)
+		case index == 0:
+			parts[index] = strings.ToLower(part)
+		case len(part) > 8 || !isLocaleAlphanumeric(part):
+			return "", false
+		case len(part) == 4 && isLocaleAlpha(part):
+			parts[index] = strings.ToUpper(part[:1]) + strings.ToLower(part[1:])
+		case len(part) == 2 && isLocaleAlpha(part), len(part) == 3 && isLocaleDigits(part):
+			parts[index] = strings.ToUpper(part)
 		default:
-			parts[i] = strings.ToLower(part)
+			parts[index] = strings.ToLower(part)
 		}
 	}
 	return strings.Join(parts, "-"), true
 }
-func localeMatches(locale, filter string) bool {
-	normalizedLocale, ok1 := normalizeLocale(locale)
-	normalizedFilter, ok2 := normalizeLocale(filter)
-	if !ok1 || !ok2 {
-		return false
-	}
-	l, f := strings.Split(strings.ToLower(normalizedLocale), "-"), strings.Split(strings.ToLower(normalizedFilter), "-")
-	if len(f) > len(l) {
-		return false
-	}
-	for i := range f {
-		if f[i] != "*" && f[i] != l[i] {
+
+func isLocaleAlpha(part string) bool {
+	for index := 0; index < len(part); index++ {
+		if char := part[index]; !(char >= 'A' && char <= 'Z') && !(char >= 'a' && char <= 'z') {
 			return false
 		}
 	}
 	return true
+}
+
+func isLocaleDigits(part string) bool {
+	for index := 0; index < len(part); index++ {
+		if char := part[index]; char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func isLocaleAlphanumeric(part string) bool {
+	for index := 0; index < len(part); index++ {
+		char := part[index]
+		if !(char >= 'A' && char <= 'Z') && !(char >= 'a' && char <= 'z') && !(char >= '0' && char <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// localeMatches applies RFC 4647 basic filtering to two canonicalized tags. A
+// range that cannot be canonicalized yields Unknown rather than False: False
+// would be a claim that the tag does not match, which under a not group would
+// turn into a positive match and let a Rule win on an operand the evaluator
+// could not read. The range grammar has no "*" wildcard.
+func localeMatches(locale, filter string) Truth {
+	candidate, candidateOK := normalizeLocale(locale)
+	rangeTag, rangeOK := normalizeLocale(filter)
+	if !candidateOK || !rangeOK {
+		return Unknown
+	}
+	return truth(candidate == rangeTag || strings.HasPrefix(candidate, rangeTag+"-"))
 }
 
 func digest(value []byte) string { sum := sha256.Sum256(value); return hex.EncodeToString(sum[:]) }

@@ -1,8 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-
+import { restAnalyticsAdapter } from "@/features/analytics/api/rest-analytics-adapter";
+import { AnalyticsCollectionPanel } from "@/features/analytics/components/analytics-collection-panel";
+import { useAnalyticsRoleState } from "@/features/analytics/hooks/use-analytics-role";
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import {
+  environmentAlias,
+  environmentForAlias,
+} from "@/features/environments/types/environment-alias";
 import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
 import {
   WorkflowPanel,
@@ -11,11 +17,14 @@ import {
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
 
 interface EnvironmentsPageProps {
+  /** The Environment the address names, e.g. `prod`. */
+  environmentKey: string;
   organizationId: string;
   projectId: string;
 }
 
 export function EnvironmentsPage({
+  environmentKey,
   organizationId,
   projectId,
 }: EnvironmentsPageProps) {
@@ -28,6 +37,10 @@ export function EnvironmentsPage({
     enabled: scopeReady,
   });
   const items = environments.data?.items ?? [];
+  const roleState = useAnalyticsRoleState(organizationId);
+  // Analytics collection is Environment-scoped, so the panel describes the
+  // Environment the address names rather than the first one in the list.
+  const routedEnvironment = environmentForAlias(items, environmentKey);
   const state = resolveHostedQueryState({
     emptyDescription:
       "Every project must retain Development, Staging, and Production. Retry loading this project.",
@@ -82,6 +95,20 @@ export function EnvironmentsPage({
             ))}
           </ul>
         </WorkflowPanel>
+        {routedEnvironment ? (
+          <AnalyticsCollectionPanel
+            adapter={restAnalyticsAdapter}
+            environmentName={routedEnvironment.name}
+            role={roleState.role}
+            roleUnknown={roleState.unknown}
+            scope={{
+              environmentId: routedEnvironment.id,
+              environmentKey: environmentAlias(routedEnvironment),
+              organizationId,
+              projectId,
+            }}
+          />
+        ) : null}
       </HostedResourceBoundary>
     </WorkspacePage>
   );

@@ -14,23 +14,23 @@ import {
   validatePreviewMessage,
 } from "../browser/index.js";
 import { validateBrowserContractGeneration } from "./browser-contract-validation.mjs";
-import { loadPreviewV02Artifacts } from "./preview-validation-v0.2.mjs";
+import { loadPreviewV03Artifacts } from "./preview-validation-v0.3.mjs";
 import {
-  loadProtocolV02Artifacts,
-  validateProtocolV02,
-  walkV02DocumentNodes,
-} from "./validation-v0.2.mjs";
+  loadProtocolV03Artifacts,
+  validateProtocolV03,
+  walkV03DocumentNodes,
+} from "./validation-v0.3.mjs";
 
 function previewArtifacts() {
-  return structuredClone(loadPreviewV02Artifacts());
+  return structuredClone(loadPreviewV03Artifacts());
 }
 
 function paywallArtifacts() {
-  return structuredClone(loadProtocolV02Artifacts());
+  return structuredClone(loadProtocolV03Artifacts());
 }
 
 function node(document, id) {
-  const result = walkV02DocumentNodes(document).find(
+  const result = walkV03DocumentNodes(document).find(
     ({ node: candidate }) => candidate.id === id,
   );
   assert.ok(result, `expected canonical node ${id}`);
@@ -39,7 +39,7 @@ function node(document, id) {
 
 function nodeValidatorAccepts(document, input) {
   return (
-    validateProtocolV02({
+    validateProtocolV03({
       document,
       manifest: input.manifest,
       manifestSchema: input.manifestSchema,
@@ -55,8 +55,8 @@ test("the browser contract declarations are generated from canonical schemas", (
 test("browser constants are derived from the frozen Local Preview schemas", () => {
   const input = previewArtifacts();
 
-  assert.equal(localPreviewContractVersion, "0.2");
-  assert.equal(localPreviewWebSocketProtocol, "mosaic.local-preview.v0.2");
+  assert.equal(localPreviewContractVersion, "0.3");
+  assert.equal(localPreviewWebSocketProtocol, "mosaic.local-preview.v0.3");
   assert.deepEqual(
     previewMessageTypes,
     input.previewMessageSchema.properties.type.enum,

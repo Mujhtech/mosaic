@@ -87,7 +87,7 @@ export function TemplateSelection({
               {autosave.message}
             </p>
             <p className="mt-2 text-muted-foreground text-sm">
-              Start from a template or import a known-good Protocol 0.2 file.
+              Start from a template or import a known-good Protocol 0.3 file.
               Nothing will overwrite an open editor without your action.
             </p>
           </div>

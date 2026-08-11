@@ -21,6 +21,7 @@ import {
 } from "@/features/provider-connections/queries/provider-connection-queries";
 import {
   activeProviderScopes,
+  providerConnectionLabel,
   purchaseProviderChoices,
 } from "@/features/provider-connections/types/provider-connection-view";
 import type {
@@ -204,7 +205,7 @@ function AssignmentSummary({
         </p>
         <p className="mt-0.5 text-muted-foreground text-xs">
           {assignmentView.connection
-            ? `${assignmentView.connection.provider === "revenuecat" ? "RevenueCat" : "Custom provider"} · ${assignmentView.connection.integrationMode === "sdk_only" ? "SDK-only" : "Server-connected"} · ${assignmentView.connection.mode}`
+            ? `${providerConnectionLabel(assignmentView.connection.provider)} · ${assignmentView.connection.integrationMode === "sdk_only" ? "SDK-only" : "Server-connected"} · ${assignmentView.connection.mode}`
             : "Connection metadata unavailable"}
         </p>
       </div>
@@ -411,6 +412,17 @@ function ProviderAssignmentControl({
               <p className="text-muted-foreground">
                 Paywalls:{" "}
                 {impact.data.paywalls.map((paywall) => paywall.name).join(", ")}
+              </p>
+            ) : null}
+            {impact.data.uncheckedPaywalls.length > 0 ? (
+              // Stated, not omitted: these are the Paywalls whose content
+              // Mosaic could not inspect, so the count above is a floor.
+              <p className="mt-1 text-destructive">
+                {impact.data.uncheckedPaywalls.length} Paywall
+                {impact.data.uncheckedPaywalls.length === 1 ? "" : "s"} could
+                not be checked — no active Draft exists in this Environment, so
+                Mosaic cannot tell whether their published content cites these
+                Products. Treat the count above as a minimum.
               </p>
             ) : null}
             <a

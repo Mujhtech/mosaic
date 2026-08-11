@@ -42,6 +42,15 @@ export interface HostedPlacement {
     readonly paywallId: string;
     readonly paywallName: string;
   };
+  /**
+   * Whether the binding read succeeded.
+   *
+   * `unknown` means Mosaic could not determine the binding — not that there is
+   * none. The two must stay separate: an unbound Placement offers a bind
+   * action, and offering that on an unreadable one invites overwriting a
+   * binding nobody could see.
+   */
+  readonly bindingState?: "bound" | "unbound" | "unknown";
   readonly id: string;
   readonly key: string;
   readonly name: string;

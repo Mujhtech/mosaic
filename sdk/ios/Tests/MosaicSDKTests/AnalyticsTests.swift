@@ -187,6 +187,9 @@ final class AnalyticsTests: XCTestCase {
     let runtime = MosaicAnalyticsRuntime(
       persistence: persistence, transport: transport, identityStore: identity,
       context: .init(sdkVersion: "0.6.0"), clock: { now }, jitter: { _ in 0 })
+    // Collection is enabled by default, so a disabled Environment is seeded
+    // explicitly here rather than relied on as the starting state.
+    await runtime.setCollection(environmentEnabled: false, hostEnabled: true)
     let disabledResult = await runtime.record(
       name: .paywallActionSelected,
       correlation: .init(paywallPresentationId: "presentation_disabled"),
@@ -558,6 +561,126 @@ final class AnalyticsTests: XCTestCase {
       XCTAssertNil(event.attribution.experimentAllocationVersion, name.rawValue)
       XCTAssertNoThrow(
         try MosaicAnalyticsCodec.decodeEvent(MosaicAnalyticsCodec.encode(event)), name.rawValue)
+    }
+  }
+
+  /// Analytics collection is opt-out. A host that never touches the flag gets a
+  /// live analytics runtime that queues events, and opts out explicitly through
+  /// the host gate alone. Ingestion stays gated by the Environment setting
+  /// server-side; this only pins the client default.
+  func testAnalyticsCollectionIsEnabledByDefaultAndHostsOptOutExplicitly() async throws {
+    // Port 1 is reserved, so nothing leaves the process during this test.
+    let baseURL = try XCTUnwrap(URL(string: "http://127.0.0.1:1"))
+    let mosaic = try await Mosaic.configureHosted(
+      publicSDKKey: "public_analytics_default_key",
+      baseURL: baseURL,
+      applicationVersion: nil,
+      requestTimeout: 1,
+      bundledFallback: .packaged,
+      purchaseProvider: MockMosaicPurchaseProvider(),
+      persistenceRoot: .unavailable
+    )
+
+    let defaultDiagnostics = await mosaic.analyticsDiagnostics()
+    XCTAssertTrue(defaultDiagnostics.collectionEnabled)
+    // Through the public handle, so the device-derived context the registry
+    // builds has to be acceptable to the codec for the default to mean anything.
+    let recorded = await mosaic.recordAnalytics(
+      .paywallActionSelected,
+      correlation: .init(paywallPresentationId: "presentation_default"),
+      payload: .init(action: "close"))
+    guard case .queued = recorded else {
+      return XCTFail("The enabled default must queue without any host opt-in: \(recorded)")
+    }
+    let queued = await mosaic.analyticsDiagnostics()
+    XCTAssertEqual(queued.queuedEventCount, 1)
+
+    // Opting out is a single host call that needs no knowledge of the
+    // Environment setting. It clears unsent events and stops recording.
+    await mosaic.setAnalyticsCollection(hostEnabled: false)
+    let optedOut = await mosaic.analyticsDiagnostics()
+    XCTAssertFalse(optedOut.collectionEnabled)
+    XCTAssertEqual(optedOut.queuedEventCount, 0)
+    let afterOptOut = await mosaic.recordAnalytics(
+      .paywallActionSelected,
+      correlation: .init(paywallPresentationId: "presentation_opted_out"),
+      payload: .init(action: "close"))
+    XCTAssertEqual(afterOptOut, .collectionDisabled)
+  }
+
+  /// The two collection gates are independent, and naming one must not write a
+  /// value for the other. With both parameters defaulted to `true`, the host
+  /// opt-out call `setAnalyticsCollection(hostEnabled:)` also wrote
+  /// `environmentEnabled: true`, so a host toggling its own gate back on would
+  /// silently re-enable a disabled Environment — the exact thing the API
+  /// documents it cannot do.
+  func testSettingOneCollectionGateLeavesTheOtherAtItsStoredValue() async throws {
+    // Port 1 is reserved, so nothing leaves the process during this test.
+    let baseURL = try XCTUnwrap(URL(string: "http://127.0.0.1:1"))
+    let mosaic = try await Mosaic.configureHosted(
+      publicSDKKey: "public_analytics_gate_key",
+      baseURL: baseURL,
+      applicationVersion: nil,
+      requestTimeout: 1,
+      bundledFallback: .packaged,
+      purchaseProvider: MockMosaicPurchaseProvider(),
+      persistenceRoot: .unavailable
+    )
+
+    await mosaic.setAnalyticsCollection(environmentEnabled: false)
+    let disabled = await mosaic.analyticsDiagnostics()
+    XCTAssertFalse(disabled.collectionEnabled)
+
+    // A host toggling only its own gate cannot revive the Environment gate.
+    await mosaic.setAnalyticsCollection(hostEnabled: true)
+    let stillDisabled = await mosaic.analyticsDiagnostics()
+    XCTAssertFalse(stillDisabled.collectionEnabled)
+
+    // And the host gate is likewise preserved across an Environment update.
+    await mosaic.setAnalyticsCollection(hostEnabled: false)
+    await mosaic.setAnalyticsCollection(environmentEnabled: true)
+    let hostStillOptedOut = await mosaic.analyticsDiagnostics()
+    XCTAssertFalse(hostStillOptedOut.collectionEnabled)
+  }
+
+  /// `Locale.current.identifier` is an ICU identifier: a region override or a
+  /// non-Gregorian calendar appends `@`-keywords that the closed event codec
+  /// rejects, which silently dropped every event on those devices. The
+  /// normalized tag must be accepted by the codec, not merely well formed.
+  func testDeviceLocaleNormalizationKeepsEventsAcceptableToTheClosedCodec() async throws {
+    XCTAssertEqual(MosaicDeviceLocale.contextTag("en_US@rg=gbzzzz"), "en-US")
+    XCTAssertEqual(MosaicDeviceLocale.contextTag("zh_Hans_CN@calendar=chinese"), "zh-Hans-CN")
+    // The iOS 16+ tag form of the same region override collapses identically,
+    // so the two deployment paths cannot disagree.
+    XCTAssertEqual(MosaicDeviceLocale.contextTag("en-US-u-rg-gbzzzz"), "en-US")
+    XCTAssertEqual(MosaicDeviceLocale.contextTag("en_US.UTF-8"), "en-US")
+    XCTAssertEqual(MosaicDeviceLocale.contextTag("en_US_#u-rg-gbzzzz"), "en-US")
+    XCTAssertEqual(MosaicDeviceLocale.contextTag("en_US_POSIX"), "en-US-posix")
+    // Nothing usable survives. The field is omitted rather than carrying a
+    // language the device never reported; the codec accepts an absent locale.
+    XCTAssertNil(MosaicDeviceLocale.contextTag("@calendar=chinese"))
+    XCTAssertNil(MosaicDeviceLocale.contextTag(""))
+    // The device's own locale must satisfy the contract on whatever host runs
+    // the suite, which is how the original defect reached CI unnoticed.
+    let deviceTag = try XCTUnwrap(MosaicDeviceLocale.currentContextTag)
+    XCTAssertEqual(MosaicDeviceLocale.contextTag(deviceTag), deviceTag)
+
+    for identifier in ["en_US@rg=gbzzzz", "zh_Hans_CN@calendar=chinese", deviceTag] {
+      let runtime = MosaicAnalyticsRuntime(
+        persistence: MosaicMemoryAnalyticsPersistence(),
+        transport: AnalyticsTestTransport(.fail),
+        identityStore: MosaicIdentityStore(persistence: MosaicMemoryIdentityPersistence()),
+        context: .init(
+          sdkVersion: mosaicSDKVersion, locale: MosaicDeviceLocale.contextTag(identifier)
+        ),
+        jitter: { _ in 0 })
+      let recorded = await runtime.record(
+        name: .paywallActionSelected,
+        correlation: .init(paywallPresentationId: "presentation_locale"),
+        attribution: .init(), payload: .init(action: "close"))
+      guard case .queued = recorded else {
+        return XCTFail("\(identifier) produced a context the codec rejects: \(recorded)")
+      }
     }
   }
 }

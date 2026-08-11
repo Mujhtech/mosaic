@@ -20,19 +20,19 @@ const BUNDLE_ID = /^[A-Za-z0-9][A-Za-z0-9.\-_]{1,254}$/;
 export function validateApplePrivateKey(value: string): string | undefined {
   const trimmed = value.trim();
   if (trimmed.length === 0) {
-    return "Paste the contents of the .p8 In-App Purchase key file.";
+    return "Upload the .p8 In-App Purchase key file.";
   }
   if (!trimmed.startsWith(APPLE_PEM_HEADER)) {
     return "This does not look like a .p8 key. The file starts with -----BEGIN PRIVATE KEY-----.";
   }
   if (!trimmed.endsWith(APPLE_PEM_FOOTER)) {
-    return "The key looks truncated. Paste the whole file, including the -----END PRIVATE KEY----- line.";
+    return "The key looks truncated. Upload the whole file, including the -----END PRIVATE KEY----- line.";
   }
   const body = trimmed
     .slice(APPLE_PEM_HEADER.length, -APPLE_PEM_FOOTER.length)
     .trim();
   if (body.length < 32) {
-    return "The key body is empty. Paste the whole .p8 file.";
+    return "The key body is empty. Upload the whole .p8 file.";
   }
 }
 
@@ -80,14 +80,14 @@ export function readGoogleServiceAccount(
 ): { error: string } | { summary: GoogleServiceAccountSummary } {
   const trimmed = value.trim();
   if (trimmed.length === 0) {
-    return { error: "Paste the service-account JSON key file." };
+    return { error: "Upload the service-account JSON key file." };
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(trimmed);
   } catch {
     return {
-      error: "This is not valid JSON. Paste the whole downloaded key file.",
+      error: "This is not valid JSON. Upload the whole downloaded key file.",
     };
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {

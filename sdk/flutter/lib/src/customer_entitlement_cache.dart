@@ -317,13 +317,23 @@ final class MosaicFileCustomerEntitlementCache
 /// knows before any snapshot exists. Putting it in the path — rather than
 /// inside one shared document — is what makes a wrong-customer read a missing
 /// file instead of a filtering mistake.
+///
+/// [applicationId] and [platform] are part of the authority scope and are
+/// therefore required. A caller that does not know both must not cache at all:
+/// the runtime disables the cache rather than hashing a placeholder that two
+/// differently-scoped installs would share. There is deliberately no default —
+/// a default would let a future caller omit the scope and silently collide with
+/// another one.
 String mosaicCustomerEntitlementCacheNamespace(
-        Uri baseUrl, String publicSdkKey, String customerBinding,
-        [String? applicationId, String? platform]) =>
+  Uri baseUrl,
+  String publicSdkKey,
+  String customerBinding,
+  String applicationId,
+  String platform,
+) =>
     mosaicSha256String(
       '${_normalizedBaseUrl(baseUrl)}\n$publicSdkKey\n$customerBinding\n'
-      '${applicationId ?? 'authority-unknown'}\n'
-      '${platform ?? 'authority-unknown'}\nentitlements-v2',
+      '$applicationId\n$platform\nentitlements-v2',
     );
 
 /// Namespace used by Phase 9B. It is read only for removal; its records do not

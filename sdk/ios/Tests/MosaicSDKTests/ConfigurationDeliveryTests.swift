@@ -127,7 +127,7 @@ final class ConfigurationClientTests: XCTestCase {
       mosaicExperimentSchedulePolicy)
     XCTAssertEqual(
       requests[0].headers["Mosaic-Paywall-Capabilities"],
-      MosaicCapabilityCatalog.v02.map { "\($0.rawValue)@\(mosaicProtocolVersion)" }.joined(
+      MosaicCapabilityCatalog.v03.map { "\($0.rawValue)@\(mosaicProtocolVersion)" }.joined(
         separator: ",")
     )
     let storedRecord = await store.record()

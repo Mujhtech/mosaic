@@ -16,6 +16,46 @@ import type { TransactionFact, ValidationAttempt } from "@/generated/api";
  * result" affordance cannot be built from this shape.
  */
 
+/**
+ * Orders Validation Attempts oldest-first, with unnumbered attempts last.
+ *
+ * Substituting `0` for a missing attempt number sorted those attempts to the
+ * very front, where "oldest" and "newest" are read off the ends: a single
+ * unnumbered record could silently become the baseline of a replay comparison,
+ * or be picked as the latest result. An attempt with no number has no position,
+ * so it is parked at the end instead of being given a false one.
+ */
+export function compareAttemptNumberAscending(
+  a: ValidationAttempt,
+  b: ValidationAttempt
+) {
+  const left = a.attemptNumber;
+  const right = b.attemptNumber;
+  if (typeof left !== "number") {
+    return typeof right === "number" ? 1 : 0;
+  }
+  if (typeof right !== "number") {
+    return -1;
+  }
+  return left - right;
+}
+
+/** Newest first, still with unnumbered attempts last rather than first. */
+export function compareAttemptNumberDescending(
+  a: ValidationAttempt,
+  b: ValidationAttempt
+) {
+  const left = a.attemptNumber;
+  const right = b.attemptNumber;
+  if (typeof left !== "number") {
+    return typeof right === "number" ? 1 : 0;
+  }
+  if (typeof right !== "number") {
+    return -1;
+  }
+  return right - left;
+}
+
 export interface ReplayComparisonRow {
   changed: boolean;
   earlier: string;
@@ -198,17 +238,25 @@ export function compareReplayAttempts(
  * Picks the two attempts a comparison should show: the newest attempt against
  * the newest one before it. Earlier attempts stay in the attempt history panel;
  * none is ever removed.
+ *
+ * An attempt with no `attemptNumber` has no place in the sequence, so it is not
+ * eligible to be either column. It used to be sorted as if it were attempt 0,
+ * which made it the baseline the operator judged the newest result against.
+ * Skipping it is the honest option: the attempt is still shown in full in the
+ * attempts panel, it simply cannot anchor an ordering it does not participate
+ * in.
  */
 export function selectComparableAttempts(
   attempts: readonly ValidationAttempt[],
   factsByAttemptId: ReadonlyMap<string, TransactionFact> = new Map()
 ): [ReplayComparisonInput, ReplayComparisonInput] | undefined {
-  if (attempts.length < 2) {
+  const sequenced = attempts.filter(
+    (attempt) => typeof attempt.attemptNumber === "number"
+  );
+  if (sequenced.length < 2) {
     return;
   }
-  const ordered = [...attempts].sort(
-    (a, b) => (a.attemptNumber ?? 0) - (b.attemptNumber ?? 0)
-  );
+  const ordered = [...sequenced].sort(compareAttemptNumberAscending);
   const latest = ordered.at(-1);
   const earlier = ordered.at(-2);
   if (!(latest && earlier)) {

@@ -31,6 +31,23 @@ presentation counts and the correlated client-completed purchase rate. Provider
 and Product issue reports include only bounded safe diagnostic-code and reason
 dimensions.
 
+`GET .../analytics/series` answers the same vocabulary per UTC calendar day for
+trend charts. It takes the summed query's `platform`, `locale`, and
+`applicationVersion` filters and its basis and timezone rules, and replaces the
+instant range with a `days` count clamped to 7..90. Completed days come from the
+daily aggregates; today is read live from raw events and is the only point
+marked `partial`. A count's missing day is an explicit zero and a rate's is
+null, so a day with no denominator is never drawn as a rate of zero. Filters are
+honoured only at the grain the aggregates were written with:
+`analytics_daily_event_counts` carries platform, locale, and application
+version, while `analytics_daily_funnel_counts` is aggregated undimensioned, so
+requesting a filter alongside a correlated funnel metric — every `*_rate` except
+`product_unavailable_rate`, plus `client_completed_purchases`, whose definition
+reads a payload field the daily grain does not carry — is refused with
+`analytics_dimension_unsupported` naming the filter and the metrics rather than
+answered with unfiltered numbers. A series for an Environment with collection
+disabled is refused with `analytics_collection_disabled`.
+
 ## Identity and privacy
 
 Installation and optional application-user identifiers are stored as opaque

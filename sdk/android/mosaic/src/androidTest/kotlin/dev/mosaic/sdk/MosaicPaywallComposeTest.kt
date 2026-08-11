@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionContains
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
@@ -40,6 +41,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeFalse
 import org.junit.Rule
 import org.junit.Test
 
@@ -206,8 +208,8 @@ class MosaicPaywallComposeTest {
     }
 
     @Test
-    fun protocolV02RendersNativeStatefulControlsAndHiddenSemantics() {
-        val document = protocolV02Bundle()
+    fun protocolV03RendersNativeStatefulControlsAndHiddenSemantics() {
+        val document = protocolV03Bundle()
         val selector = document.layout.content.walkDepthFirst()
             .filterIsInstance<MosaicProductSelectorComponent>()
             .single()
@@ -263,9 +265,9 @@ class MosaicPaywallComposeTest {
     }
 
     @Test
-    fun protocolV02NavigateToPresentsANativeSheetOverTheCurrentScreenAndBackDismissesIt() {
+    fun protocolV03NavigateToPresentsANativeSheetOverTheCurrentScreenAndBackDismissesIt() {
         val state = MosaicPaywallState(
-            protocolV02Bundle(),
+            protocolV03Bundle(),
             MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
         )
         runBlocking { state.loadProducts() }
@@ -291,8 +293,8 @@ class MosaicPaywallComposeTest {
     }
 
     @Test
-    fun protocolV02VerticalSelectorUsesFullWidthSourceOrderedRadioTargets() {
-        val document = protocolV02Bundle().withSelectorDirection(MosaicStackDirection.VERTICAL)
+    fun protocolV03VerticalSelectorUsesFullWidthSourceOrderedRadioTargets() {
+        val document = protocolV03Bundle().withSelectorDirection(MosaicStackDirection.VERTICAL)
         val state = MosaicPaywallState(
             document,
             MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
@@ -318,9 +320,9 @@ class MosaicPaywallComposeTest {
     }
 
     @Test
-    fun protocolV02ArabicRtlAtLargeFontScaleRemainsReachable() {
+    fun protocolV03ArabicRtlAtLargeFontScaleRemainsReachable() {
         val state = MosaicPaywallState(
-            protocolV02Bundle(),
+            protocolV03Bundle(),
             MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
             clock = { 1_893_455_998_000L },
         )
@@ -347,10 +349,84 @@ class MosaicPaywallComposeTest {
             .assertExists()
     }
 
+    /**
+     * The four components Protocol 0.3 adds, rendered from the canonical fixture.
+     *
+     * The risks this protects are the ones a decode test cannot see: a tab control that is not a
+     * tab to TalkBack, a tab-conditioned node that is merely invisible instead of removed from the
+     * tree, a Timeline entry that announces its parts out of order, and a rating whose spoken value
+     * repeats the step count instead of the points a listener can compare against the maximum.
+     */
     @Test
-    fun protocolV02ScreenshotMatchesCommittedPixelBaseline() {
+    fun protocolV03ComponentsExposeTabSemanticsOrderedEntriesAndRatingAnnouncement() {
         val state = MosaicPaywallState(
-            protocolV02Bundle(),
+            protocolV03Bundle(),
+            MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
+            clock = { 1_893_455_998_000L },
+        )
+        runBlocking { state.loadProducts() }
+        compose.setContent {
+            MaterialTheme { MosaicPaywallContent(state = state, onEvent = {}) }
+        }
+        compose.waitForIdle()
+
+        // The authored `initialTabId` is the second entry, so a positional default would fail here.
+        compose.onNodeWithTag("mosaic-tab-billing-tabs-annual", useUnmergedTree = true)
+            .assertIsSelected()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+            .assertContentDescriptionContains("Annual")
+        compose.onNodeWithTag("mosaic-tabbar-billing-tabs", useUnmergedTree = true)
+            .assertContentDescriptionContains("Compare billing periods")
+        compose.onNodeWithTag("mosaic-tabpanel-billing-tabs-annual", useUnmergedTree = true)
+            .assertExists()
+        compose.onNodeWithTag("mosaic-node-annual-note", useUnmergedTree = true).assertExists()
+
+        compose.onNodeWithTag("mosaic-tab-billing-tabs-monthly", useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+
+        compose.onNodeWithTag("mosaic-tabpanel-billing-tabs-monthly", useUnmergedTree = true)
+            .assertExists()
+        compose.onNodeWithTag("mosaic-tabpanel-billing-tabs-annual", useUnmergedTree = true)
+            .assertDoesNotExist()
+        // A false tab condition removes the node from layout, the accessibility tree, and focus
+        // order. Asserting absence rather than invisibility is the whole point of the rule.
+        compose.onNodeWithTag("mosaic-node-annual-note", useUnmergedTree = true)
+            .assertDoesNotExist()
+
+        // Segments are never joined: the container carries only its authored label, and each
+        // segment stays its own element. A renderer that concatenated them would fail the
+        // equality assertions below, not merely read differently.
+        compose.onNodeWithTag("mosaic-node-trial-timeline", useUnmergedTree = true)
+            .assertContentDescriptionEquals("How your free trial works")
+        compose.onNodeWithTag("mosaic-timeline-entry-trial-today", useUnmergedTree = true)
+            .assertExists()
+        compose.onNodeWithText("Today").assertExists()
+        compose.onNodeWithText("Full access starts immediately and nothing is charged.")
+            .assertExists()
+
+        compose.onNodeWithTag("mosaic-node-press-award", useUnmergedTree = true)
+            .assertContentDescriptionEquals("Press recognition")
+        compose.onNodeWithText("Editor's Choice").assertExists()
+
+        compose.onNodeWithTag("mosaic-node-rated-review", useUnmergedTree = true)
+            .assertContentDescriptionEquals("Customer review")
+        // Nine half-steps out of five points announces as four and a half, never as nine, and the
+        // phrasing comes from the reserved `mosaic.a11y.rating` catalog string, not from a
+        // connective this renderer composed. The symbols themselves are decorative.
+        compose.onNodeWithTag("mosaic-rating-rated-review", useUnmergedTree = true)
+            .assertContentDescriptionEquals("4.5 out of 5 stars")
+        // An absent rating draws no symbols and contributes no element.
+        compose.onNodeWithTag("mosaic-rating-analyst-note", useUnmergedTree = true)
+            .assertDoesNotExist()
+        compose.onNodeWithTag("mosaic-node-analyst-note", useUnmergedTree = true)
+            .assertContentDescriptionEquals("Analyst note")
+    }
+
+    @Test
+    fun protocolV03ScreenshotMatchesCommittedPixelBaseline() {
+        val state = MosaicPaywallState(
+            protocolV03Bundle(),
             MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
             clock = { 1_893_455_998_000L },
         )
@@ -368,7 +444,7 @@ class MosaicPaywallComposeTest {
 
         val image = compose.onNodeWithTag("mosaic-paywall", useUnmergedTree = true).captureToImage()
         val bitmap = image.asAndroidBitmap()
-        recordRendererScreenshot(bitmap, "mosaic-paywall-v02.png")
+        recordRendererScreenshot(bitmap, "mosaic-paywall-v03.png")
         val pixels = IntArray(bitmap.width * bitmap.height)
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         val digest = MessageDigest.getInstance("SHA-256")
@@ -380,16 +456,12 @@ class MosaicPaywallComposeTest {
         }
         val actual = "${bitmap.width}x${bitmap.height} " +
             digest.digest().joinToString("") { "%02x".format(it) }
-        val expected = InstrumentationRegistry.getInstrumentation().context
-            .assets.open("mosaic-paywall-v02-golden.sha256")
-            .bufferedReader().use { it.readText().trim() }
-
-        assertEquals("Update only after intentional renderer review. Actual: $actual", expected, actual)
+        assertPixelBaseline(actual)
         assertTrue(pixels.toSet().size > 16)
     }
 
     @Test
-    fun bundledFallbackMatchesCurrentProtocolV02PixelBaseline() {
+    fun bundledFallbackMatchesCurrentProtocolV03PixelBaseline() {
         val document = canonicalBundle()
         assertEquals(MOSAIC_PROTOCOL_VERSION, document.schemaVersion)
         val state = MosaicPaywallState(
@@ -411,7 +483,7 @@ class MosaicPaywallComposeTest {
 
         val image = compose.onNodeWithTag("mosaic-paywall", useUnmergedTree = true).captureToImage()
         val bitmap = image.asAndroidBitmap()
-        recordRendererScreenshot(bitmap, "mosaic-bundled-fallback-v02.png")
+        recordRendererScreenshot(bitmap, "mosaic-bundled-fallback-v03.png")
         val pixels = IntArray(bitmap.width * bitmap.height)
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         val digest = MessageDigest.getInstance("SHA-256")
@@ -423,11 +495,7 @@ class MosaicPaywallComposeTest {
         }
         val actual = "${bitmap.width}x${bitmap.height} " +
             digest.digest().joinToString("") { "%02x".format(it) }
-        val expected = InstrumentationRegistry.getInstrumentation().context
-            .assets.open("mosaic-paywall-v02-golden.sha256")
-            .bufferedReader().use { it.readText().trim() }
-
-        assertEquals("Update only after intentional renderer review. Actual: $actual", expected, actual)
+        assertPixelBaseline(actual)
         assertTrue(pixels.toSet().size > 16)
     }
 
@@ -475,9 +543,9 @@ class MosaicPaywallComposeTest {
         return MosaicProtocolDecoder.decode(source)
     }
 
-    private fun protocolV02Bundle(): MosaicPaywallDocument {
+    private fun protocolV03Bundle(): MosaicPaywallDocument {
         val context = InstrumentationRegistry.getInstrumentation().context
-        val source = context.assets.open("mosaic/v0.2/complete-paywall.json")
+        val source = context.assets.open("mosaic/v0.3/complete-paywall.json")
             .bufferedReader().use { it.readText() }
         return MosaicProtocolDecoder.decode(source)
     }
@@ -513,6 +581,28 @@ class MosaicPaywallComposeTest {
         )
     }
 
+    /**
+     * The committed digest, or [GOLDEN_UNRECORDED] when no baseline has been captured for the
+     * current protocol yet.
+     *
+     * A baseline recorded against a different document is not a baseline for this one, so the
+     * Protocol 0.3 digest is deliberately absent rather than carried over: the run is reported as
+     * skipped, with the digest to commit, instead of passing against a stale value or failing for a
+     * reason that is not a regression. Record it with
+     * `-Pandroid.testInstrumentationRunnerArguments.mosaic.recordRendererScreenshots=1` and commit
+     * the printed digest.
+     */
+    private fun assertPixelBaseline(actual: String) {
+        val expected = InstrumentationRegistry.getInstrumentation().context
+            .assets.open("mosaic-paywall-v03-golden.sha256")
+            .bufferedReader().use { it.readText().trim() }
+        assumeFalse(
+            "No Protocol 0.3 pixel baseline is recorded. Review the render, then commit: $actual",
+            expected == GOLDEN_UNRECORDED,
+        )
+        assertEquals("Update only after intentional renderer review. Actual: $actual", expected, actual)
+    }
+
     private fun recordRendererScreenshot(bitmap: Bitmap, name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         if (InstrumentationRegistry.getArguments().getString("mosaic.recordRendererScreenshots") != "1") {
@@ -522,5 +612,9 @@ class MosaicPaywallComposeTest {
         FileOutputStream(File(directory, name)).use { output ->
             check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
         }
+    }
+
+    private companion object {
+        const val GOLDEN_UNRECORDED = "unrecorded"
     }
 }

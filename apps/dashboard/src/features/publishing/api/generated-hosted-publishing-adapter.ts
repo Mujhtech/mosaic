@@ -348,6 +348,10 @@ export function createGeneratedHostedPublishingAdapter(
           paywall.name,
         ])
       );
+      // Only a 404 means "this Placement is unbound". Any other failure is a
+      // read Mosaic could not complete, and it is reported as such rather than
+      // being flattened into the same `null` — an unbound Placement invites a
+      // bind action, while an unreadable one must not.
       const bindings = await Promise.all(
         placementsResult.data.data.items.map(async (placement) => {
           try {
@@ -360,19 +364,23 @@ export function createGeneratedHostedPublishingAdapter(
               },
               throwOnError: true,
             });
-            return result.data.data;
+            return { binding: result.data.data, state: "bound" } as const;
           } catch (error) {
             if (error instanceof ApiError && error.status === 404) {
-              return null;
+              return { state: "unbound" } as const;
             }
-            throw error;
+            return { state: "unknown" } as const;
           }
         })
       );
       return placementsResult.data.data.items.map((placement, index) => {
         const mapped = mapPlacement(placement);
+        const probe = bindings[index];
+        if (probe?.state === "unknown") {
+          return { ...mapped, bindingState: "unknown" as const };
+        }
         const paywallId =
-          bindings[index]?.paywallId ??
+          probe?.binding?.paywallId ??
           placementBindings.get(
             placementBindingKey(input.environmentId, placement.id)
           );
@@ -382,10 +390,16 @@ export function createGeneratedHostedPublishingAdapter(
               binding: {
                 environmentId: input.environmentId,
                 paywallId,
-                paywallName: paywallNames.get(paywallId) ?? "Selected paywall",
+                // A bound Paywall missing from the Project listing is a real
+                // inconsistency, so it is named as unresolved rather than
+                // dressed up with a generic label that reads like a name.
+                paywallName:
+                  paywallNames.get(paywallId) ??
+                  `Unresolved Paywall (${paywallId})`,
               },
+              bindingState: "bound" as const,
             }
-          : mapped;
+          : { ...mapped, bindingState: "unbound" as const };
       });
     },
     async listPublishedVersions(input) {
@@ -685,7 +699,7 @@ export function createGeneratedHostedPublishingAdapter(
           name: product.name,
           ready: product.ready,
         })),
-        protocolVersion: "0.2",
+        protocolVersion: "0.3",
       };
     },
   };

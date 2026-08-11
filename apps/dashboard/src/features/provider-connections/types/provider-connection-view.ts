@@ -7,6 +7,35 @@ import type {
   ProviderHealthStatus,
 } from "@/generated/api";
 
+const PROVIDER_CONNECTION_LABELS: Record<
+  ProviderConnection["provider"],
+  string
+> = {
+  app_store_connect: "App Store Connect",
+  custom: "Custom provider",
+  revenuecat: "RevenueCat",
+};
+
+export function providerConnectionLabel(
+  provider: ProviderConnection["provider"]
+): string {
+  return PROVIDER_CONNECTION_LABELS[provider];
+}
+
+/**
+ * App Store Connect maps each Apple subscription group to one Offering holding
+ * one Package, so the advanced mapping control is named for the resource the
+ * operator actually sees in their own console rather than for the adapter's
+ * internal shape.
+ */
+export function providerOfferingLabel(
+  provider: ProviderConnection["provider"] | undefined
+): string {
+  return provider === "app_store_connect"
+    ? "Subscription group"
+    : "Package and Offering";
+}
+
 export type PurchaseProviderChoice =
   | {
       id: "native:app_store" | "native:google_play";

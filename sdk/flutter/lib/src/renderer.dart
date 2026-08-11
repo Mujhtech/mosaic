@@ -18,6 +18,7 @@ import 'transaction_observation.dart';
 part 'renderer_actions.dart';
 part 'renderer_layout.dart';
 part 'renderer_components.dart';
+part 'renderer_selection_components.dart';
 part 'renderer_appearance.dart';
 
 typedef MosaicBundledImageResolver = ImageProvider<Object>? Function(
@@ -33,7 +34,7 @@ typedef MosaicExternalUrlOpener = Future<bool> Function(Uri url);
 
 typedef _AvailableProductOption = ({
   String selectionId,
-  MosaicProductCardComponent? card,
+  MosaicProductCardComponent card,
   MosaicProductReference reference,
   MosaicProduct product,
 });
@@ -187,7 +188,7 @@ final class _MosaicPaywallHostState extends State<MosaicPaywallHost> {
   }
 }
 
-/// Native Flutter renderer for a fully validated Protocol 0.2 document.
+/// Native Flutter renderer for a fully validated Protocol 0.3 document.
 ///
 /// This embedded widget reports terminal results but never dismisses routes,
 /// sheets, dialogs, or other host-owned presentation UI.
@@ -241,11 +242,15 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
       <String, MosaicProduct>{};
   final Map<String, String?> _selectedProductCardIds = <String, String?>{};
   final Set<String> _notifiedUnavailableSelectors = <String>{};
+  final Set<String> _notifiedSubstitutedSelections = <String>{};
   final Set<String> _notifiedHiddenPurchaseTargets = <String>{};
   final Set<String> _notifiedMediaFailures = <String>{};
   final Set<String> _notifiedUnboundedFill = <String>{};
+  final Set<String> _notifiedUnknownColorTokens = <String>{};
+  final Set<String> _notifiedUnrenderableNodes = <String>{};
   final Set<String> _reportedRenderingFailures = <String>{};
   final Map<String, bool> _switchValues = <String, bool>{};
+  final Map<String, String> _tabSelections = <String, String>{};
   final Map<String, int> _carouselPages = <String, int>{};
   final Map<String, double> _screenScrollOffsets = <String, double>{};
   final List<String> _navigationHistory = <String>[];
@@ -256,6 +261,7 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   final Set<String> _programmaticSheetDismissals = <String>{};
 
   late MosaicResolvedLocalization _localization;
+  bool _notifiedUndeclaredDirection = false;
   bool _productsResolved = false;
   String? _busyActionId;
   int _loadGeneration = 0;
@@ -343,6 +349,14 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
         _selectedProductCardIds.clear();
       }
       _notifiedUnavailableSelectors.clear();
+      if (documentChanged) {
+        // A new document authors its own defaults, so a substitution against
+        // the previous one says nothing about this one. A Provider swap alone
+        // does not reset it: the same authored default is still in play, and
+        // re-reporting it on every swap would turn a once-per-selector signal
+        // into noise.
+        _notifiedSubstitutedSelections.clear();
+      }
       _productsResolved = false;
       unawaited(_loadProducts());
     } else if (localeChanged && _productsResolved) {
@@ -376,7 +390,32 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
       widget.document,
       requestedLocale: widget.requestedLocale,
     );
+    if (!_localization.directionIsDeclared) {
+      // Laying an RTL paywall out left to right mirrors nothing and reads
+      // wrongly end to end, so an undeclared direction is never silent.
+      _notifyUndeclaredDirection();
+    }
   }
+
+  void _notifyUndeclaredDirection() {
+    if (_notifiedUndeclaredDirection) return;
+    _notifiedUndeclaredDirection = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onDiagnostic?.call(
+        const MosaicDiagnostic(
+          code: 'localization.directionUndeclared',
+          message: 'No locale in the fallback chain declares a writing '
+              'direction; left to right is used.',
+          severity: MosaicDiagnosticSeverity.error,
+        ),
+      );
+    });
+  }
+
+  /// Runtime selection every conditional-visibility decision resolves against.
+  MosaicSelectionState get _selectionState =>
+      MosaicSelectionState(switches: _switchValues, tabs: _tabSelections);
 
   void _resetRuntimeState() {
     _switchValues
@@ -384,6 +423,16 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
       ..addEntries(
         widget.document.nodes.whereType<MosaicSwitchComponent>().map(
               (component) => MapEntry(component.id, component.initialValue),
+            ),
+      );
+    // Reset from the authored `initialTabId` on every accepted revision. There
+    // is no positional default, so a reordered tabs array cannot change which
+    // panel opens.
+    _tabSelections
+      ..clear()
+      ..addEntries(
+        widget.document.nodes.whereType<MosaicTabsComponent>().map(
+              (component) => MapEntry(component.id, component.initialTabId),
             ),
       );
     _carouselPages
@@ -397,6 +446,27 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   }
 
   void _resetNavigationState() {
+    // Sheet presentation is a navigation state, so an accepted revision ends
+    // it: the reset history holds the new document's initial Screen alone, and
+    // a Sheet pushed by the superseded document names a place that history no
+    // longer contains. Leaving it up would also strand the reset paywall
+    // behind a modal barrier, where a screen reader cannot reach it at all.
+    // The dismissal waits for the end of the frame because popping a route
+    // from didUpdateWidget would rebuild the Navigator mid-build.
+    final presentedSheetId = _presentedSheetId;
+    if (presentedSheetId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // A sheet stays presented until its route finishes animating out, so a
+        // second revision accepted inside that window must not pop again: the
+        // route below the outgoing sheet belongs to the host.
+        if (!mounted ||
+            _presentedSheetId != presentedSheetId ||
+            _programmaticSheetDismissals.contains(presentedSheetId)) {
+          return;
+        }
+        _dismissPresentedSheet(programmatic: true);
+      });
+    }
     _navigationHistory
       ..clear()
       ..addAll(
@@ -713,7 +783,7 @@ final class _MosaicDecorativeVideoState extends State<MosaicDecorativeVideo> {
 }
 
 /// Native horizontally paged Carousel that measures every page before
-/// presenting the largest-page height required by Protocol 0.2.
+/// presenting the largest-page height required by Protocol 0.3.
 final class MosaicCarouselViewport extends StatefulWidget {
   const MosaicCarouselViewport({
     required this.resetToken,

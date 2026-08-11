@@ -328,7 +328,7 @@ func sdkRequest(rawKey string, capabilities []string) *http.Request {
 	request.Header.Set("Mosaic-SDK-Platform", "flutter")
 	request.Header.Set("Mosaic-SDK-Version", "0.2.0-dev.5")
 	request.Header.Set("Mosaic-Configuration-Versions", "1")
-	request.Header.Set("Mosaic-Paywall-Protocol-Versions", "0.2")
+	request.Header.Set("Mosaic-Paywall-Protocol-Versions", "0.3")
 	request.Header.Set(capabilitiesHeader, strings.Join(capabilities, ","))
 	return request
 }

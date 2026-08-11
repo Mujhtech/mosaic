@@ -157,6 +157,25 @@ void main() {
       MosaicPreviewDraftIssueKind.unsupportedComponent,
     );
     expect(client.draftIssue?.location.componentId, 'close-label');
+
+    // The same must hold inside a Tabs panel. Reporting a generic invalid
+    // document that names nothing leaves an author with no way to find the
+    // block they must change.
+    final insidePanel = _unsupportedTabPanelDraftMessage(sequence: 6);
+    socket.add(jsonEncode(insidePanel));
+
+    expect(
+      client.draftIssue?.kind,
+      MosaicPreviewDraftIssueKind.unsupportedComponent,
+    );
+    expect(
+      client.draftIssue?.location.componentId,
+      'preview-billing-tabs-monthly-body',
+    );
+    expect(
+      client.draftIssue?.location.documentPath,
+      contains('tabs'),
+    );
     final rejected =
         _sentObjects(socket).last['payload']! as Map<String, Object?>;
     expect(rejected['reason'], 'unsupportedCapability');
@@ -449,7 +468,7 @@ MosaicPreviewClientIdentity _identity() => MosaicPreviewClientIdentity(
 List<Map<String, Object?>> _canonicalFlow() {
   return (jsonDecode(
     repositoryFile(
-      'protocol/fixtures/local-preview/v0.2/session-flow.messages.json',
+      'protocol/fixtures/local-preview/v0.3/session-flow.messages.json',
     ).readAsStringSync(),
   ) as List<Object?>)
       .cast<Map<String, Object?>>();
@@ -467,6 +486,27 @@ Map<String, Object?> _unsupportedDraftMessage({required int sequence}) {
   final document = payload['document']! as Map<String, Object?>;
   final headline = findNode(document, 'text');
   headline['type'] = 'video';
+  return message;
+}
+
+/// A draft whose only unsupported component sits inside a Tabs panel.
+Map<String, Object?> _unsupportedTabPanelDraftMessage({required int sequence}) {
+  final message =
+      jsonDecode(jsonEncode(_canonicalFlow()[3])) as Map<String, Object?>;
+  message['messageId'] = 'msg_unsupported_panel_$sequence';
+  final payload = message['payload']! as Map<String, Object?>;
+  payload['revision'] = <String, Object?>{
+    'revisionId': 'revision_unsupported_panel_$sequence',
+    'sequence': sequence,
+  };
+  final document = payload['document']! as Map<String, Object?>;
+  final tabs = findNode(document, 'tabs');
+  final firstTab =
+      (tabs['tabs']! as List<Object?>).first! as Map<String, Object?>;
+  final panel = firstTab['content']! as Map<String, Object?>;
+  final body =
+      (panel['children']! as List<Object?>).first! as Map<String, Object?>;
+  body['type'] = 'flutterWidget';
   return message;
 }
 

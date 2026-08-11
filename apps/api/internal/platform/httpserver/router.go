@@ -30,6 +30,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
+	"github.com/Mujhtech/mosaic/apps/api/internal/projectoverview"
 	analyticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/analytics"
 	billinghttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billing"
 	billingaccesshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingaccess"
@@ -46,6 +47,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/transport/health"
 	hostedpublishinghttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/hostedpublishing"
 	placementdecisionhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/placementdecision"
+	projectoverviewhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/projectoverview"
 )
 
 const (
@@ -103,6 +105,11 @@ type Dependencies struct {
 	AnalyticsKeyLimiter   analyticshttp.Limiter
 	AnalyticsEventLimiter analyticshttp.EventLimiter
 	Experiment            *experiment.Service
+	// ProjectOverview serves the dashboard's "today at a glance" summary. It is
+	// composed of billing and analytics reads but depends on neither being
+	// enabled: with billing off it still answers, reporting the billing metrics
+	// as unavailable rather than refusing the page.
+	ProjectOverview *projectoverview.Service
 	// Billing is nil unless MOSAIC_BILLING_ENABLED is set.
 	Billing *billing.Service
 	// BillingAccess owns the Phase 9B authoritative access surfaces: Customer
@@ -196,13 +203,13 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 	// Compatibility aliases retained for existing probes while documented callers migrate.
 	router.Mount("/health", health.LiveRoutes())
 	router.Mount("/ready", readinessRoutes(dependencies))
-	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.PlacementDecision != nil || dependencies.Analytics != nil || dependencies.BillingAccess != nil || hasBillingSurface(dependencies) {
+	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.PlacementDecision != nil || dependencies.Analytics != nil || dependencies.BillingAccess != nil || dependencies.ProjectOverview != nil || hasBillingSurface(dependencies) {
 		router.Route("/v1", func(versioned chi.Router) {
 			versioned.Use(trustedMutationOrigins(cfg.AllowedOrigins))
 			if dependencies.BrowserAuth != nil {
 				browserauthhttp.RegisterRoutes(versioned, dependencies.BrowserAuth, dependencies.BrowserAuthConfig)
 			}
-			if dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.Analytics != nil || hasBillingSurface(dependencies) {
+			if dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.Analytics != nil || dependencies.ProjectOverview != nil || hasBillingSurface(dependencies) {
 				versioned.Group(func(authenticated chi.Router) {
 					authenticated.Use(authn.Middleware(dependencies.PrincipalResolver))
 					// Authenticated dashboard APIs had no limit at all before
@@ -232,6 +239,12 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 						if dependencies.Analytics != nil {
 							analyticshttp.RegisterProjectRoutes(project, dependencies.Analytics,
 								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
+						}
+						if dependencies.ProjectOverview != nil {
+							// Registered before the billing modules so the
+							// overview route exists in compositions that enable
+							// no billing surface at all.
+							projectoverviewhttp.RegisterProjectRoutes(project, dependencies.ProjectOverview)
 						}
 						if dependencies.Billing != nil {
 							// Credential tests, reconciliation, replay, and

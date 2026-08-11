@@ -15,6 +15,12 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/migrations"
 )
 
+// stabilizationReadinessVersion is migration 00061, whose down guard refuses to
+// drop stabilization and rollback-readiness evidence. Stated as a version so
+// that adding a migration above it cannot change which migration this test
+// exercises.
+const stabilizationReadinessVersion = 61
+
 func TestStabilizationAndRollbackReadinessUsePersistedEvidence(t *testing.T) {
 	ctx, pool, db := executionDatabase(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -162,8 +168,16 @@ func TestStabilizationAndRollbackReadinessUsePersistedEvidence(t *testing.T) {
 	if err = goose.SetDialect("postgres"); err != nil {
 		t.Fatal(err)
 	}
-	if err = goose.DownContext(ctx, db, "."); err == nil || !strings.Contains(err.Error(), "immutable stabilization or rollback-readiness evidence exists") {
-		t.Fatalf("migration61 down guard error=%v", err)
+	// Rolled back to an explicit target rather than "one down from the top": a
+	// bare Down peels whichever migration is newest, so every migration added
+	// after 00061 silently pointed this assertion at unrelated schema. Anything
+	// above 00061 must roll back cleanly; 00061 itself is the guard under test.
+	if err = goose.DownToContext(ctx, db, ".", stabilizationReadinessVersion); err != nil {
+		t.Fatalf("rollback down to 00061 before the guard: %v", err)
+	}
+	if err = goose.DownToContext(ctx, db, ".", stabilizationReadinessVersion-1); err == nil ||
+		!strings.Contains(err.Error(), "immutable stabilization or rollback-readiness evidence exists") {
+		t.Fatalf("migration 00061 down guard error=%v", err)
 	}
 }
 

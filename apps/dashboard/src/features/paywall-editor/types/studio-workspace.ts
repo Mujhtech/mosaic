@@ -36,7 +36,11 @@ export type StudioRecentInsertableType =
   | "icon"
   | "featureList"
   | "productSelector"
-  | "button";
+  | "button"
+  | "tabs"
+  | "timeline"
+  | "award"
+  | "socialProof";
 
 export interface StudioWorkspacePanelPreference {
   readonly collapsed: boolean;

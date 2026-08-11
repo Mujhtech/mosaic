@@ -117,7 +117,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Bounded so a proxy's HTML error page or a multi-megabyte stack trace cannot
+ * be carried around in memory or dumped into a log line.
+ */
+const MAX_UNPARSED_BODY_CHARS = 500;
+
 function readErrorDescriptor(payload: unknown): ErrorDescriptor {
+  if (typeof payload === "string") {
+    // A failure whose body is not the Mosaic error envelope: a gateway page, a
+    // truncated 500, a plain-text panic. The body used to be discarded, leaving
+    // only "Request failed with status 500." — which is the same string for
+    // every possible cause. A bounded excerpt is attached instead.
+    //
+    // It rides in `details` under a key no `describeApiError` descriptor reads,
+    // so it stays available to devtools and error inspection without any path
+    // that renders raw server prose to a user.
+    const excerpt = payload.trim().slice(0, MAX_UNPARSED_BODY_CHARS);
+    return excerpt.length === 0
+      ? {}
+      : { details: { unparsedResponseBody: excerpt } };
+  }
+
   if (!isRecord(payload)) {
     return {};
   }
@@ -180,7 +201,10 @@ async function readResponsePayload(response: Response, correlationId: string) {
     return JSON.parse(responseText) as unknown;
   } catch (error) {
     if (!response.ok) {
-      return;
+      // The response already failed; the malformed body is evidence about why,
+      // so it is handed back as raw text rather than dropped. Returning
+      // `undefined` here erased the only clue a 500 with a broken body carries.
+      return responseText;
     }
 
     throw new ApiError("The service returned an invalid JSON response.", {

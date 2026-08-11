@@ -8,7 +8,7 @@ public struct MosaicProductCardComponent: Decodable, Sendable, Equatable, Identi
   public let mainAxisDistribution: MosaicMainAxisDistribution
   public let crossAxisAlignment: MosaicHorizontalAlignment
   public let children: [MosaicProductCardChild]
-  public let styles: MosaicAuthoredProductStyles
+  public let styles: MosaicSelectionStyles
   public let sizing: MosaicBoxSizing?
   public let clipContent: Bool?
   public let accessibility: MosaicProductCardAccessibility?
@@ -34,7 +34,7 @@ public struct MosaicProductCardComponent: Decodable, Sendable, Equatable, Identi
     crossAxisAlignment = try container.decode(
       MosaicHorizontalAlignment.self, forKey: .crossAxisAlignment)
     children = try container.decode([MosaicProductCardChild].self, forKey: .children)
-    styles = try container.decode(MosaicAuthoredProductStyles.self, forKey: .styles)
+    styles = try container.decode(MosaicSelectionStyles.self, forKey: .styles)
     sizing = try container.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
     clipContent = try container.decodeIfPresent(Bool.self, forKey: .clipContent)
     accessibility = try container.decodeIfPresent(
@@ -219,153 +219,6 @@ public struct MosaicButtonComponent: Decodable, Sendable, Equatable, Identifiabl
   public func content(isInProgress: Bool) -> [MosaicNode] {
     if isInProgress, let inProgressChildren { return inProgressChildren }
     return children
-  }
-}
-
-private protocol MosaicStyledButtonDecoding: Decodable {}
-
-public struct MosaicPurchaseButtonComponent: Decodable, Sendable, Equatable, Identifiable {
-  public let type: MosaicLayoutNodeKind
-  public let id: String
-  public let label: MosaicLocalizedText
-  public let inProgressLabel: MosaicLocalizedText
-  public let typography: MosaicTypography
-  public let appearance: MosaicBoxAppearance?
-  public let sizing: MosaicBoxSizing?
-  public let outerInsets: MosaicEdgeInsets?
-  public let visibility: MosaicVisibility
-  public let action: MosaicAction
-  public let accessibility: MosaicControlAccessibility
-
-  private enum CodingKeys: String, CodingKey {
-    case type, id, label, inProgressLabel, typography, appearance, sizing, outerInsets
-    case visibility, action, accessibility
-  }
-
-  public init(from decoder: any Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    type = try c.decode(MosaicLayoutNodeKind.self, forKey: .type)
-    id = try c.decode(String.self, forKey: .id)
-    label = try c.decode(MosaicLocalizedText.self, forKey: .label)
-    inProgressLabel = try c.decode(MosaicLocalizedText.self, forKey: .inProgressLabel)
-    typography =
-      try c.decodeIfPresent(MosaicTypography.self, forKey: .typography)
-      ?? .legacy(style: .label, alignment: .center)
-    appearance = try c.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
-    sizing = try c.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
-    outerInsets = try c.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
-    visibility = try c.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
-    action = try c.decode(MosaicAction.self, forKey: .action)
-    accessibility = try c.decode(MosaicControlAccessibility.self, forKey: .accessibility)
-  }
-}
-
-public struct MosaicRestoreButtonComponent: Decodable, Sendable, Equatable, Identifiable {
-  public let type: MosaicLayoutNodeKind
-  public let id: String
-  public let label: MosaicLocalizedText
-  public let inProgressLabel: MosaicLocalizedText
-  public let typography: MosaicTypography
-  public let appearance: MosaicBoxAppearance?
-  public let sizing: MosaicBoxSizing?
-  public let outerInsets: MosaicEdgeInsets?
-  public let visibility: MosaicVisibility
-  public let action: MosaicAction
-  public let accessibility: MosaicControlAccessibility
-
-  private enum CodingKeys: String, CodingKey {
-    case type, id, label, inProgressLabel, typography, appearance, sizing, outerInsets
-    case visibility, action, accessibility
-  }
-
-  public init(from decoder: any Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    type = try c.decode(MosaicLayoutNodeKind.self, forKey: .type)
-    id = try c.decode(String.self, forKey: .id)
-    label = try c.decode(MosaicLocalizedText.self, forKey: .label)
-    inProgressLabel = try c.decode(MosaicLocalizedText.self, forKey: .inProgressLabel)
-    typography =
-      try c.decodeIfPresent(MosaicTypography.self, forKey: .typography)
-      ?? .legacy(style: .label, alignment: .center)
-    appearance = try c.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
-    sizing = try c.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
-    outerInsets = try c.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
-    visibility = try c.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
-    action = try c.decode(MosaicAction.self, forKey: .action)
-    accessibility = try c.decode(MosaicControlAccessibility.self, forKey: .accessibility)
-  }
-}
-
-public struct MosaicCloseButtonComponent: Decodable, Sendable, Equatable, Identifiable {
-  public let type: MosaicLayoutNodeKind
-  public let id: String
-  public let label: MosaicLocalizedText
-  public let typography: MosaicTypography
-  public let appearance: MosaicBoxAppearance?
-  public let sizing: MosaicBoxSizing?
-  public let outerInsets: MosaicEdgeInsets?
-  public let visibility: MosaicVisibility
-  public let action: MosaicAction
-  public let accessibility: MosaicControlAccessibility
-
-  private enum CodingKeys: String, CodingKey {
-    case type, id, label, typography, appearance, sizing, outerInsets, visibility, action
-    case accessibility
-  }
-
-  public init(from decoder: any Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    type = try c.decode(MosaicLayoutNodeKind.self, forKey: .type)
-    id = try c.decode(String.self, forKey: .id)
-    label = try c.decode(MosaicLocalizedText.self, forKey: .label)
-    typography =
-      try c.decodeIfPresent(MosaicTypography.self, forKey: .typography)
-      ?? .legacy(style: .label, alignment: .center)
-    appearance = try c.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
-    sizing = try c.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
-    outerInsets = try c.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
-    visibility = try c.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
-    action = try c.decode(MosaicAction.self, forKey: .action)
-    accessibility = try c.decode(MosaicControlAccessibility.self, forKey: .accessibility)
-  }
-}
-
-public struct MosaicLegalTextComponent: Decodable, Sendable, Equatable, Identifiable {
-  public let type: MosaicLayoutNodeKind
-  public let id: String
-  public let value: MosaicLocalizedText
-  public let typography: MosaicTypography
-  public let appearance: MosaicBoxAppearance?
-  public let sizing: MosaicBoxSizing?
-  public let outerInsets: MosaicEdgeInsets?
-  public let visibility: MosaicVisibility
-  public let accessibility: MosaicTextAccessibility
-
-  public var alignment: MosaicTextAlignment { typography.alignment }
-
-  private enum CodingKeys: String, CodingKey {
-    case type, id, value, alignment, typography, appearance, sizing, outerInsets, visibility
-    case accessibility
-  }
-
-  public init(from decoder: any Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    type = try c.decode(MosaicLayoutNodeKind.self, forKey: .type)
-    id = try c.decode(String.self, forKey: .id)
-    value = try c.decode(MosaicLocalizedText.self, forKey: .value)
-    if let value = try c.decodeIfPresent(MosaicTypography.self, forKey: .typography) {
-      typography = value
-    } else {
-      typography = .legacy(
-        style: .caption,
-        alignment: try c.decode(MosaicTextAlignment.self, forKey: .alignment)
-      )
-    }
-    appearance = try c.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
-    sizing = try c.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
-    outerInsets = try c.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
-    visibility = try c.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
-    accessibility = try c.decode(MosaicTextAccessibility.self, forKey: .accessibility)
   }
 }
 

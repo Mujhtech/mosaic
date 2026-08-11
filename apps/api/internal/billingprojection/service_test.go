@@ -27,6 +27,9 @@ func proGrant() GrantVersion {
 	return GrantVersion{
 		ID: "pegv_1", ProductID: "prod_pro", EntitlementID: "ent_pro", EntitlementKey: "pro",
 		Version: 1, EffectiveStart: at("2025-01-01T00:00:00Z"), Policy: DefaultPolicy(),
+		// Coverage is stated: a grant version that lists no purchase types
+		// covers none, and the write path refuses to publish one.
+		SupportedPurchaseTypes: []string{"auto_renewable_subscription", "non_consumable"},
 	}
 }
 

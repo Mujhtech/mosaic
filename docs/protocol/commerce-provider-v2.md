@@ -16,7 +16,7 @@ commerceProviderContractVersion = "2"
 Readers reject unknown versions, record types, outcomes, and fields. The
 contract contains no provider-native objects, offer tokens, receipts, purchase
 tokens, signatures, customer identifiers, credentials, or executable code.
-Paywall Protocol `0.2` and Configuration Delivery `1` remain unchanged.
+Paywall Protocol `0.3` and Configuration Delivery `1` remain unchanged.
 
 Canonical artifacts are under:
 

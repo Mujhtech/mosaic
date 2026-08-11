@@ -14,6 +14,17 @@ import (
 var keyPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,62}$`)
 var nonWhitespacePattern = regexp.MustCompile(`\S`)
 
+// revenueCatSecretPattern and jsonDocumentPattern are the transport-level
+// shapes of the two server-connected credentials. Neither proves the credential
+// works; both keep an obviously wrong paste out of the encryption path.
+var (
+	revenueCatSecretPattern = regexp.MustCompile(`^sk_[^\s]+$`)
+	jsonDocumentPattern     = regexp.MustCompile(`(?s)^\s*\{.*\}\s*$`)
+	// providerCredentialShapePattern accepts either form, because the request
+	// that rotates a credential does not name its provider.
+	providerCredentialShapePattern = regexp.MustCompile(`(?s)^(sk_[^\s]+|\s*\{.*\}\s*)$`)
+)
+
 type organizationRequest struct {
 	Name string `json:"name"`
 }
@@ -148,28 +159,42 @@ type providerConnectionRequest struct {
 func (request *providerConnectionRequest) Validate() error {
 	return validation.ValidateStruct(request,
 		validation.Field(&request.Name, validation.Required, validation.Length(1, 120)),
-		validation.Field(&request.Provider, validation.Required, validation.In(cloudworkspace.ProviderRevenueCat, cloudworkspace.ProviderCustom)),
+		validation.Field(&request.Provider, validation.Required, validation.In(cloudworkspace.ProviderRevenueCat, cloudworkspace.ProviderAppStoreConnect, cloudworkspace.ProviderCustom)),
 		validation.Field(&request.IntegrationMode, validation.Required, validation.In(cloudworkspace.ProviderServerConnected, cloudworkspace.ProviderSDKOnly)),
 		validation.Field(&request.Mode, validation.Required, validation.In(cloudworkspace.ProviderSandbox, cloudworkspace.ProviderProduction)),
 		validation.Field(&request.ExternalProjectID, validation.Length(0, 255),
 			validation.When(request.Provider == cloudworkspace.ProviderRevenueCat,
-				validation.Required, validation.Match(nonWhitespacePattern))),
+				validation.Required, validation.Match(nonWhitespacePattern)),
+			// An App Store Connect API key is team-scoped and names no second
+			// project resource, so a value here is always a mistake.
+			validation.When(request.Provider == cloudworkspace.ProviderAppStoreConnect, validation.Empty)),
 		validation.Field(&request.EnvironmentIDs, validation.Required, validation.Length(1, 100), validation.Each(validation.Required)),
 		validation.Field(&request.ApplicationIDs, validation.Required, validation.Length(1, 100), validation.Each(validation.Required)),
 		validation.Field(&request.Credential, validation.Length(0, 4096),
 			validation.When(request.Provider == cloudworkspace.ProviderRevenueCat,
-				validation.Required, validation.Match(regexp.MustCompile(`^sk_[^\s]+$`))),
+				validation.Required, validation.Match(revenueCatSecretPattern)),
+			// The App Store Connect credential is a JSON document whose real
+			// shape — a parsable P-256 .p8, a ten-character key ID, an issuer
+			// UUID — is checked by the application service. Transport only
+			// asserts that something was sent and that it looks like JSON.
+			validation.When(request.Provider == cloudworkspace.ProviderAppStoreConnect,
+				validation.Required, validation.Match(jsonDocumentPattern)),
 			validation.When(request.Provider == cloudworkspace.ProviderCustom, validation.Empty)),
 	)
 }
 
+// providerCredentialRequest carries a replacement credential for an existing
+// connection. The connection determines the provider, so the payload cannot be
+// validated against one provider's shape here; the service applies the rules
+// for the connection's actual provider.
 type providerCredentialRequest struct {
 	Credential string `json:"credential"`
 }
 
 func (request *providerCredentialRequest) Validate() error {
 	return validation.ValidateStruct(request,
-		validation.Field(&request.Credential, validation.Required, validation.Length(6, 4096), validation.Match(regexp.MustCompile(`^sk_[^\s]+$`))),
+		validation.Field(&request.Credential, validation.Required, validation.Length(6, 4096),
+			validation.Match(providerCredentialShapePattern)),
 	)
 }
 

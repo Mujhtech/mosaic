@@ -53,11 +53,11 @@ void main() {
         <String>['trusted_server_time_v1']);
   });
 
-  test('hosted transport advertises every exact Protocol 0.2 capability', () {
+  test('hosted transport advertises every exact Protocol 0.3 capability', () {
     expect(
       mosaicPaywallCapabilitiesHeaderValue.split(',').toSet(),
       <String>{
-        for (final capability in mosaicProtocolV02Capabilities)
+        for (final capability in mosaicProtocolV03Capabilities)
           '$capability@$mosaicProtocolVersion',
       },
     );

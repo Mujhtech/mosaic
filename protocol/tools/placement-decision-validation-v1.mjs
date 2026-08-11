@@ -230,9 +230,34 @@ function compareSemver(left, right) {
   return 0;
 }
 
-function normalizeLocale(value) {
+/**
+ * The canonical comparison form of one locale tag.
+ *
+ * Only the language-script-region core carries identity here. A one-character
+ * subtag opens a BCP 47 extension or private-use sequence (`-u-`, `-t-`, `-x-`),
+ * and everything from there on is device detail: a host that reports
+ * `en-US-u-rg-gbzzzz` for a region override is reporting the same locale as a
+ * host that reports `en-US`. Truncating at the first singleton is what keeps a
+ * runtime tag from mis-evaluating `equals`/`in` against an authored `en-US`,
+ * and it is the same rule the SDK source boundaries apply before a tag ever
+ * reaches an evaluator, so both layers agree on every input. Empty subtags are
+ * dropped for the same reason.
+ *
+ * The tag is first cut at `@`, `.`, or `#`, because a host reports an ICU
+ * identifier rather than a language tag: `en_US@rg=gbzzzz` (keyword),
+ * `en_US.UTF-8` (POSIX charset), and `en_US_#u-rg-gbzzzz` (Java
+ * `Locale.toString`) all denote the locale `en-US`. Without the cut the
+ * remainder fails the subtag grammar and the whole tag evaluates unknown, which
+ * is the original defect this contract clarification exists to close.
+ */
+export function normalizeLocale(value) {
   if (typeof value !== "string") return null;
-  const parts = value.trim().replaceAll("_", "-").split("-");
+  const parts = [];
+  for (const part of value.trim().split(/[@.#]/, 1)[0].replaceAll("_", "-").split("-")) {
+    if (part.length === 0) continue;
+    if (part.length === 1) break;
+    parts.push(part);
+  }
   if (parts.length === 0 || parts.length > 8 || !/^[A-Za-z]{2,8}$/.test(parts[0]) || parts.slice(1).some((part) => !/^[A-Za-z0-9]{1,8}$/.test(part))) return null;
   return parts.map((part, index) => {
     if (index === 0) return part.toLowerCase();
@@ -256,7 +281,11 @@ function sourceValue(source, context) {
   };
   if (Object.hasOwn(values, source.kind)) {
     const value = values[source.kind];
-    if (source.kind === "context.country" && typeof value === "string") return /^[A-Za-z]{2}$/.test(value) ? value.toUpperCase() : MISSING;
+    // Presence is "did the host supply a value", never "is the value usable".
+    // An unrecognizable country is reported, not absent, exactly as an
+    // unrecognizable locale, a malformed version, and an out-of-set platform
+    // are; only the comparisons on it are unknown.
+    if (source.kind === "context.country") return value == null ? MISSING : typeof value === "string" && /^[A-Za-z]{2}$/.test(value) ? value.toUpperCase() : value;
     if (source.kind === "application.locale") return value == null ? MISSING : normalizeLocale(value) ?? value;
     return value ?? MISSING;
   }
@@ -283,6 +312,7 @@ function evaluateLeaf(leaf, context) {
   };
   if (closedStates[leaf.source.kind] && !closedStates[leaf.source.kind].includes(value)) return "unknown";
   if (["device.os_version", "application.version"].includes(leaf.source.kind) && parseSemver(value) === null) return "unknown";
+  if (leaf.source.kind === "context.country" && !(typeof value === "string" && /^[A-Z]{2}$/.test(value))) return "unknown";
   if (leaf.source.kind === "application.locale" && normalizeLocale(value) === null) return "unknown";
   if (leaf.operand.type === "semantic_version" && ["equals", "not_equals", "greater_than", "greater_than_or_equal", "less_than", "less_than_or_equal"].includes(leaf.operator)) {
     const comparison = compareSemver(value, operand);
@@ -325,15 +355,49 @@ function evaluateNode(node, context) {
   return values.includes("true") ? "true" : values.includes("unknown") ? "unknown" : "false";
 }
 
+/**
+ * A refusal to evaluate, rather than a wrong decision quietly returned.
+ *
+ * The evaluator is a reference implementation every SDK is checked against, so
+ * the cases it cannot answer must be distinguishable from the cases it answers
+ * `no_paywall`. `code` is the machine-readable kind.
+ */
+export class DecisionEvaluationError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = "DecisionEvaluationError";
+    this.code = code;
+  }
+}
+
 function resolveOutcome(outcome, fallbackByKey, path = []) {
   if (outcome.type !== "fallback") return { ...(path.length === 0 ? {} : { fallbackPath: path }), outcome };
-  return resolveOutcome(fallbackByKey.get(outcome.key).outcome, fallbackByKey, [...path, outcome.key]);
+  // Reachable only on a document that never passed validateDecisionV1, which is
+  // exactly when a bare TypeError would be least informative.
+  const fallback = fallbackByKey.get(outcome.key);
+  if (fallback === undefined) {
+    throw new DecisionEvaluationError(
+      "unknown_fallback_key",
+      `Rule set declares no fallback for key "${outcome.key}"${path.length === 0 ? "" : ` (reached via ${path.join(" -> ")})`}; the document is not valid against the placement decision schema`,
+    );
+  }
+  return resolveOutcome(fallback.outcome, fallbackByKey, [...path, outcome.key]);
 }
 
 export function evaluateDecisionV1(document, context, assignment) {
   const ruleSet = document.ruleSet;
   const fallbackByKey = new Map(ruleSet.fallbacks.map((fallback) => [fallback.key, fallback]));
-  const now = Date.parse(context.now ?? new Date(0).toISOString());
+  // A QA override is a time window. Evaluating one against an assumed clock
+  // silently closes every window, so when overrides exist the caller must say
+  // what time it is. With no overrides declared, `now` is genuinely unused and
+  // demanding it would be gratuitous.
+  const now = Date.parse(context.now ?? "");
+  if (ruleSet.qaOverrides.length > 0 && Number.isNaN(now)) {
+    throw new DecisionEvaluationError(
+      "now_required",
+      `Rule set declares ${ruleSet.qaOverrides.length} QA override window(s), so context.now is required and must be an RFC 3339 timestamp; received ${JSON.stringify(context.now)}`,
+    );
+  }
   const override = ruleSet.qaOverrides.find((candidate) => candidate.selectorDigest === context.qaOverrideSelectorDigest && now >= Date.parse(candidate.startsAt) && now < Date.parse(candidate.expiresAt));
   if (override) return { matchedRuleId: null, overrideId: override.id, ...resolveOutcome(override.outcome, fallbackByKey) };
   if (!ruleSet.enabled) return { matchedRuleId: null, ...resolveOutcome(ruleSet.defaultOutcome, fallbackByKey) };
@@ -350,10 +414,38 @@ export function evaluateDecisionV1(document, context, assignment) {
   return { matchedRuleId: null, ...resolveOutcome(ruleSet.defaultOutcome, fallbackByKey) };
 }
 
+/**
+ * Floors for the cross-SDK corpora.
+ *
+ * A conformance loop over an empty array reports perfect conformance, so a
+ * corpus that is truncated, emptied, or renamed out from under the loop is
+ * indistinguishable from one that passes. These are the sizes the corpora had
+ * when the rulings they pin were approved; growing a corpus is expected, and
+ * shrinking one has to be a deliberate edit here rather than a silent pass.
+ */
+const DECISION_V1_CORPUS_FLOORS = Object.freeze({
+  evaluatorCases: 34,
+  rolloutVectors: 3,
+  invalidFixtures: 9,
+});
+
 export function validateDecisionV1Artifacts(artifacts = loadDecisionV1Artifacts()) {
   const errors = [];
   const validators = compiledValidators(artifacts);
   if (!validators.manifest(artifacts.manifest)) errors.push(...schemaErrors("compatibility manifest", validators.manifest.errors));
+  for (const [name, corpus, floor] of [
+    ["evaluator conformance cases", artifacts.evaluatorFixture.cases, DECISION_V1_CORPUS_FLOORS.evaluatorCases],
+    ["rollout vectors", artifacts.rolloutFixture.vectors, DECISION_V1_CORPUS_FLOORS.rolloutVectors],
+    ["invalid fixtures", artifacts.invalidFixtures, DECISION_V1_CORPUS_FLOORS.invalidFixtures],
+  ]) {
+    if (!Array.isArray(corpus) || corpus.length < floor) {
+      errors.push(`Placement Decision 1 ${name} corpus holds ${Array.isArray(corpus) ? corpus.length : "no array"}, below the floor of ${floor}; a conformance loop over a shrunken corpus passes vacuously`);
+    }
+  }
+  const caseNames = artifacts.evaluatorFixture.cases.map((testCase) => testCase.name);
+  if (new Set(caseNames).size !== caseNames.length) {
+    errors.push("Placement Decision 1 evaluator conformance case names must be unique; a duplicated name hides a case that was meant to be distinct");
+  }
   errors.push(...validateDecisionV1(artifacts.evaluatorFixture.decision, artifacts));
   for (const invalid of artifacts.invalidFixtures) if (validateDecisionV1(invalid, artifacts).length === 0) errors.push(`invalid fixture ${invalid.ruleSet.id} was accepted`);
   for (const vector of artifacts.rolloutFixture.vectors) {

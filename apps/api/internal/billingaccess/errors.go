@@ -23,4 +23,9 @@ var (
 	// ErrDestinationRefused is an SSRF-policy refusal. It is returned to the
 	// operator configuring the destination, never to the destination.
 	ErrDestinationRefused = errors.New("the destination address is not allowed")
+	// ErrUnrepresentable means Mosaic holds a value the contract's closed
+	// vocabulary cannot express, on a member the contract requires. It is a
+	// distinct error because the answer is never to substitute a neighbouring
+	// enum member: the reader would take the substitute as a statement of fact.
+	ErrUnrepresentable = errors.New("the stored value cannot be expressed in the contract vocabulary")
 )

@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'commerce_configuration.dart';
+import 'presentation.dart';
 import 'protocol.dart';
 import 'sha256.dart';
 import 'transaction_observation_transport.dart';
@@ -794,6 +795,7 @@ final class MosaicTransactionObservationRuntime
     this.settings = const MosaicTransactionObservationSettings(),
     this.storage = const MosaicFileTransactionObservationStorage(),
     this.clock = _systemClock,
+    this.onDiagnostic,
     double Function()? random,
   })  : _hostEnabled = settings.hostEnabled,
         _random = random ?? Random.secure().nextDouble;
@@ -805,6 +807,10 @@ final class MosaicTransactionObservationRuntime
   final MosaicTransactionObservationSettings settings;
   final MosaicTransactionObservationStorage storage;
   final MosaicTransactionObservationClock clock;
+
+  /// Host channel for losses the queue cannot recover from. It never throws
+  /// into the caller and is never used for ordinary delivery outcomes.
+  final MosaicDiagnosticCallback? onDiagnostic;
   final double Function() _random;
 
   final List<_QueuedObservation> _queue = <_QueuedObservation>[];
@@ -941,10 +947,19 @@ final class MosaicTransactionObservationRuntime
         return;
       }
       final now = clock().toUtc();
+      // `providerId` is required by the observation contract. An observation
+      // without one is dropped here rather than handed to the constructor as an
+      // empty string that only its validation happens to reject.
+      if (providerId == null) {
+        _incomplete++;
+        _lastSafeCode = mosaicTransactionObservationIncompleteCode;
+        await _persistSafely();
+        return;
+      }
       final MosaicTransactionObservation observation;
       try {
         observation = MosaicTransactionObservation(
-          providerId: providerId ?? '',
+          providerId: providerId,
           storePlatform: storePlatform,
           reference: reference,
           observedAt: (observedAt ?? now).toUtc(),
@@ -1226,11 +1241,27 @@ final class MosaicTransactionObservationRuntime
       }
     } on Object {
       // A corrupt document must never wedge the SDK, and must never be
-      // partially trusted.
+      // partially trusted. Discarding it drops undelivered Transaction
+      // Observations, so the loss is reported rather than left to be inferred
+      // from `lastSafeCode`.
+      final discarded = _queue.length;
       _queue.clear();
       _acknowledged.clear();
       await _clearStorageSafely();
       _lastSafeCode = mosaicTransactionObservationQueueRejectedCode;
+      try {
+        onDiagnostic?.call(
+          MosaicDiagnostic(
+            code: mosaicTransactionObservationQueueRejectedCode,
+            message: 'The persisted Transaction Observation queue was '
+                'unreadable and was discarded; $discarded restored '
+                'observation(s) and any earlier unsent ones are lost.',
+            severity: MosaicDiagnosticSeverity.error,
+          ),
+        );
+      } on Object {
+        // A host diagnostic handler must never break queue restoration.
+      }
     }
   }
 

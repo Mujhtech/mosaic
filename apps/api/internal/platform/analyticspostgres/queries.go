@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 )
@@ -77,13 +79,7 @@ var rawMetricExpressions = map[string]rawMetricExpression{
 }
 
 func (r *Repository) Query(ctx context.Context, actor analytics.Actor, query analytics.Query, metricIDs []string) (analytics.AnalyticsResult, error) {
-	if _, err := requireRole(ctx, r.pool, actor, query.ProjectID, "owner", "admin", "member"); err != nil {
-		return analytics.AnalyticsResult{}, err
-	}
-	var project string
-	if err := r.pool.QueryRow(ctx, `SELECT project_id FROM environments WHERE id=$1`, query.EnvironmentID).Scan(&project); errors.Is(err, pgx.ErrNoRows) || err == nil && project != query.ProjectID {
-		return analytics.AnalyticsResult{}, analytics.ErrNotFound
-	} else if err != nil {
+	if err := r.authorizeEnvironmentScope(ctx, actor, query.ProjectID, query.EnvironmentID); err != nil {
 		return analytics.AnalyticsResult{}, err
 	}
 	if len(metricIDs) == 0 {
@@ -91,7 +87,7 @@ func (r *Repository) Query(ctx context.Context, actor analytics.Actor, query ana
 			metricIDs = append(metricIDs, id)
 		}
 	}
-	result := analytics.AnalyticsResult{Metrics: make([]analytics.Metric, 0, len(metricIDs)), Freshness: analytics.Freshness{LateEventPolicy: "Events are accepted for seven days and rebuild their occurred-at UTC bucket."}}
+	result := analytics.AnalyticsResult{Metrics: make([]analytics.Metric, 0, len(metricIDs)), Freshness: analytics.Freshness{LateEventPolicy: analytics.LateEventPolicy}}
 	_ = r.pool.QueryRow(ctx, `SELECT latest_received_at,latest_aggregated_at FROM analytics_aggregate_watermarks WHERE environment_id=$1`, query.EnvironmentID).Scan(&result.Freshness.LatestReceivedAt, &result.Freshness.LatestAggregatedAt)
 	if len(metricIDs) == 1 && len(metricIDs[0]) > 2 && metricIDs[0][:2] == "__" {
 		if metricIDs[0] == "__freshness" {
@@ -136,6 +132,221 @@ func (r *Repository) Query(ctx context.Context, actor analytics.Actor, query ana
 		result.Metrics = append(result.Metrics, metric)
 	}
 	return result, nil
+}
+
+// DailySeries reads the completed daily funnel buckets for several metrics in
+// one grouped statement.
+//
+// One statement, not one per day and not one per metric: this backs a chart
+// whose x-axis length is caller-selectable, and a per-day round trip would make
+// a 90-day chart ninety times the cost of a 1-day one for the same rows.
+//
+// analytics_daily_funnel_counts_query_idx(environment_id, bucket_date,
+// metric_id) covers the predicate, so the read is an index range scan over the
+// requested days rather than a scan of the Environment's aggregate history.
+//
+// The funnel table declares dimension columns — platform, locale, placement,
+// paywall version, product, provider — but RunAggregation never writes them, so
+// every row is the undimensioned daily total and the SUM collapses only the
+// per-metric rows. That is exactly what the complete-day branch of metricCounts
+// does for a scalar window. A filtered request is therefore served from
+// analytics_daily_event_counts instead, which is written at full dimension
+// grain; see dimensionedDailySeries. A denominator is NULL for count metrics
+// and for a day with no rows; it is summed only when at least one row carries
+// one, so a rate with no denominator stays distinguishable from a rate of zero.
+func (r *Repository) DailySeries(ctx context.Context, actor analytics.Actor, query analytics.Query,
+	metricIDs []string) (analytics.DailySeriesResult, error) {
+
+	if err := r.authorizeEnvironmentScope(ctx, actor, query.ProjectID, query.EnvironmentID); err != nil {
+		return analytics.DailySeriesResult{}, err
+	}
+	result := analytics.DailySeriesResult{
+		Points:    []analytics.DailyMetricPoint{},
+		Freshness: analytics.Freshness{LateEventPolicy: analytics.LateEventPolicy},
+	}
+	// An Environment that has never been aggregated has no watermark row, and
+	// absent freshness is the honest answer for it. A read that actually failed
+	// is not the same thing: leaving freshness nil there would report "not yet
+	// aggregated" for a query that broke, so it is logged rather than discarded.
+	var latestReceivedAt, latestAggregatedAt *time.Time
+	switch err := r.pool.QueryRow(ctx, `SELECT latest_received_at,latest_aggregated_at FROM analytics_aggregate_watermarks WHERE environment_id=$1`,
+		query.EnvironmentID).Scan(&latestReceivedAt, &latestAggregatedAt); {
+	case err == nil:
+		result.Freshness.LatestReceivedAt = latestReceivedAt
+		result.Freshness.LatestAggregatedAt = latestAggregatedAt
+	case !errors.Is(err, pgx.ErrNoRows):
+		zerolog.Ctx(ctx).Error().
+			Str("project_id", query.ProjectID).
+			Str("environment_id", query.EnvironmentID).
+			Str("analytics_error_kind", fmt.Sprintf("%T", err)).
+			Msg("analytics aggregate watermark could not be read; the series omits freshness")
+	}
+
+	known := make([]string, 0, len(metricIDs))
+	for _, id := range metricIDs {
+		if _, ok := metricDefinitions[id]; ok {
+			known = append(known, id)
+		}
+	}
+	if len(known) == 0 {
+		return result, nil
+	}
+	if analytics.SeriesFiltered(query) {
+		points, err := r.dimensionedDailySeries(ctx, query, known)
+		if err != nil {
+			return analytics.DailySeriesResult{}, err
+		}
+		result.Points = points
+		return result, nil
+	}
+
+	rows, err := r.pool.Query(ctx, `SELECT bucket_date,metric_id,COALESCE(SUM(numerator),0),
+			CASE WHEN COUNT(denominator)=0 THEN NULL ELSE SUM(denominator) END
+		FROM analytics_daily_funnel_counts
+		WHERE environment_id=$1 AND bucket_date >= $2::date AND bucket_date < $3::date AND metric_id = ANY($4)
+		GROUP BY bucket_date,metric_id
+		ORDER BY bucket_date,metric_id`,
+		query.EnvironmentID, utcDay(query.From), utcDay(query.To), known)
+	if err != nil {
+		return analytics.DailySeriesResult{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var point analytics.DailyMetricPoint
+		if err = rows.Scan(&point.Date, &point.MetricID, &point.Numerator, &point.Denominator); err != nil {
+			return analytics.DailySeriesResult{}, err
+		}
+		point.Date = utcDay(point.Date)
+		result.Points = append(result.Points, point)
+	}
+	if err = rows.Err(); err != nil {
+		return analytics.DailySeriesResult{}, err
+	}
+	return result, nil
+}
+
+// dailyEventExpression is a metric expressed over analytics_daily_event_counts.
+//
+// events narrows the index seek to the metric's own event names, so a filtered
+// series reads the rows for one metric rather than the Environment's whole day.
+// numerator and denominator are FILTER predicates over that narrowed set.
+type dailyEventExpression struct {
+	events                 []string
+	numerator, denominator string
+}
+
+// dailyEventExpressions is the subset of the metric vocabulary that the
+// dimensioned daily aggregate can answer.
+//
+// Membership is not a choice, it is the write grain:
+// analytics_daily_event_counts groups by event name, authority, platform,
+// locale, application version, placement, paywall version, product, and
+// provider, and by nothing else. A metric whose definition needs a payload
+// field — client_completed_purchases reads payload->>'outcome' to exclude
+// already-entitled completions — or a correlation between two events cannot be
+// recovered from it at any grain. analytics.SeriesMetricSpec.Dimensioned
+// mirrors this set, and a test asserts the two agree.
+var dailyEventExpressions = map[string]dailyEventExpression{
+	"placement_requests":         {[]string{"placement_requested"}, "SUM(event_count)", ""},
+	"placement_paywall_selected": {[]string{"placement_paywall_selected"}, "SUM(event_count)", ""},
+	"placement_no_paywall":       {[]string{"placement_no_paywall"}, "SUM(event_count)", ""},
+	"placement_fallback_used":    {[]string{"placement_fallback_used"}, "SUM(event_count)", ""},
+	"placement_unavailable":      {[]string{"placement_unavailable"}, "SUM(event_count)", ""},
+	"paywall_presentations":      {[]string{"paywall_presented"}, "SUM(event_count)", ""},
+	"product_selections":         {[]string{"product_selected"}, "SUM(event_count)", ""},
+	"purchase_starts":            {[]string{"purchase_started"}, "SUM(event_count)", ""},
+	"purchase_cancelled":         {[]string{"purchase_cancelled"}, "SUM(event_count)", ""},
+	"purchase_failed":            {[]string{"purchase_failed"}, "SUM(event_count)", ""},
+	"restore_completed":          {[]string{"restore_completed"}, "SUM(event_count)", ""},
+	"restore_nothing_found":      {[]string{"restore_nothing_found"}, "SUM(event_count)", ""},
+	"restore_cancelled":          {[]string{"restore_cancelled"}, "SUM(event_count)", ""},
+	"restore_failed":             {[]string{"restore_failed"}, "SUM(event_count)", ""},
+	"provider_errors": {
+		[]string{"product_load_failed", "purchase_failed", "restore_failed"},
+		"SUM(event_count) FILTER(WHERE provider IS NOT NULL)", "",
+	},
+	"product_unavailable_rate": {
+		[]string{"product_unavailable", "product_load_completed", "product_load_failed"},
+		"SUM(event_count) FILTER(WHERE event_name='product_unavailable')",
+		"SUM(event_count) FILTER(WHERE event_name IN('product_load_completed','product_load_failed'))",
+	},
+}
+
+// dimensionedDailySeries answers a filtered series from the dimensioned daily
+// event aggregate.
+//
+// One grouped statement per metric, never one per day: this backs a chart whose
+// x-axis length is caller-selectable, and a per-day round trip would make a
+// 90-day chart ninety times the cost of a 1-day one for the same rows.
+// analytics_daily_event_counts_query_idx(environment_id, bucket_date,
+// event_name) covers the seek; the dimension predicates are residual filters
+// over the handful of rows a day holds for one event name.
+//
+// A metric outside dailyEventExpressions is refused rather than answered from
+// the undimensioned funnel table. Serving unfiltered totals under a filtered
+// heading would be indistinguishable from a correct answer, and the reader
+// would act on it.
+func (r *Repository) dimensionedDailySeries(ctx context.Context, query analytics.Query,
+	metricIDs []string) ([]analytics.DailyMetricPoint, error) {
+
+	points := []analytics.DailyMetricPoint{}
+	for _, id := range metricIDs {
+		expression, ok := dailyEventExpressions[id]
+		if !ok {
+			return nil, &analytics.UnsupportedDimensionError{
+				Dimension: "platform, locale, or applicationVersion", MetricIDs: []string{id},
+			}
+		}
+		denominator := "NULL::bigint"
+		if expression.denominator != "" {
+			denominator = "COALESCE(" + expression.denominator + ",0)"
+		}
+		rows, err := r.pool.Query(ctx, `SELECT bucket_date,COALESCE(`+expression.numerator+`,0),`+denominator+`
+			FROM analytics_daily_event_counts
+			WHERE environment_id=$1 AND bucket_date >= $2::date AND bucket_date < $3::date
+				AND event_name = ANY($4)
+				AND ($5='' OR platform=$5) AND ($6='' OR locale=$6) AND ($7='' OR application_version=$7)
+			GROUP BY bucket_date ORDER BY bucket_date`,
+			query.EnvironmentID, utcDay(query.From), utcDay(query.To), expression.events,
+			query.Platform, query.Locale, query.ApplicationVersion)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			point := analytics.DailyMetricPoint{MetricID: id}
+			if err = rows.Scan(&point.Date, &point.Numerator, &point.Denominator); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			point.Date = utcDay(point.Date)
+			points = append(points, point)
+		}
+		rows.Close()
+		if err = rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return points, nil
+}
+
+// authorizeEnvironmentScope applies the analytics read bar and refuses an
+// Environment that belongs to another Project.
+//
+// The containment half is not optional. Every count below filters on
+// environment_id alone, so without it a member of one Project could pair their
+// own projectId with another Project's environmentId and read its numbers.
+func (r *Repository) authorizeEnvironmentScope(ctx context.Context, actor analytics.Actor,
+	projectID, environmentID string) error {
+
+	if _, err := requireRole(ctx, r.pool, actor, projectID, "owner", "admin", "member"); err != nil {
+		return err
+	}
+	var project string
+	err := r.pool.QueryRow(ctx, `SELECT project_id FROM environments WHERE id=$1`, environmentID).Scan(&project)
+	if errors.Is(err, pgx.ErrNoRows) || err == nil && project != projectID {
+		return analytics.ErrNotFound
+	}
+	return err
 }
 
 func utcDay(value time.Time) time.Time {

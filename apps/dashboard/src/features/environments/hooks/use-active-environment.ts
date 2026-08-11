@@ -127,6 +127,13 @@ export function useActiveEnvironment() {
      * the address described another.
      */
     pathEnvironment: fromPath,
+    /**
+     * What the address wrote in the Environment slot, resolved or not. A caller
+     * that must not silently substitute a different Environment compares this
+     * against `pathEnvironment`: a segment that is present but unresolved is a
+     * wrong address, not an absent one.
+     */
+    pathSegment: scope.environmentSegment,
     organizationId: scope.organizationId,
     pathFor,
     projectId,

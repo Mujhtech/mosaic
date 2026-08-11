@@ -632,49 +632,96 @@ enum MosaicPlacementEvaluator {
       return compare(
         value(
           for: source, set: set, context: context, identity: identity,
-          productReadiness: productReadiness), operator: op, operand: operand)
+          productReadiness: productReadiness),
+        source: source, operator: op, operand: operand)
     }
   }
+
+  /// What a source resolves to before an operator is applied.
+  ///
+  /// A host-supplied locale that cannot be normalized is *present* — `exists`
+  /// is true — and compares unknown. Reporting it absent would make
+  /// `does_not_exist` rules match users who do have a locale.
+  private enum ResolvedAttribute {
+    case absent
+    case comparable(MosaicTypedValue)
+    case presentNotComparable
+
+    var isAbsent: Bool {
+      if case .absent = self { return true }
+      return false
+    }
+  }
+
+  /// The closed vocabulary of `device.platform`. A value outside it — a future
+  /// or misconfigured host reporting `windows` — is present and compares
+  /// unknown; answering false would make `not (platform equals "ios")` a
+  /// positive match on a platform the Rule was never written for. The remaining
+  /// closed vocabularies reach the evaluator as parsed enums, so they cannot
+  /// carry an out-of-set value here.
+  private static let platformVocabulary: Set<String> = ["ios", "android"]
 
   private static func value(
     for source: MosaicDecisionSource, set: MosaicDecisionRuleSet, context: MosaicDecisionContext,
     identity: MosaicIdentitySnapshot, productReadiness: [String: MosaicProductReadiness]
-  ) -> MosaicTypedValue? {
+  ) -> ResolvedAttribute {
+    // Presence reports whether the host supplied a value, never whether the
+    // value is usable, so each host-supplied source decides separately between
+    // absent and present-but-not-comparable.
     switch source {
-    case .devicePlatform: return context.platform.map(MosaicTypedValue.string)
+    case .devicePlatform:
+      return resolve(context.platform) {
+        platformVocabulary.contains($0) ? .string($0) : nil
+      }
     case .deviceOSVersion:
-      return context.operatingSystemVersion.map(MosaicTypedValue.semanticVersion)
+      return resolve(context.operatingSystemVersion) { .semanticVersion($0) }
     case .applicationVersion:
-      return context.applicationVersion.map(MosaicTypedValue.semanticVersion)
+      return resolve(context.applicationVersion) { .semanticVersion($0) }
     case .applicationLocale:
-      return context.applicationLocale.flatMap(normalizeLocale).map(MosaicTypedValue.string)
+      return resolve(context.applicationLocale) { normalizeLocale($0).map(MosaicTypedValue.string) }
     case .country:
-      guard let value = context.country?.uppercased(),
-        value.range(of: "^[A-Z]{2}$", options: .regularExpression) != nil
-      else { return nil }
-      return .string(value)
-    case .environmentID: return .string(set.environmentId)
-    case .environmentKey: return .string(set.environmentKey)
-    case .userPresent: return .boolean(identity.userID != nil)
-    case .userAttribute(let key): return context.attributes[key] ?? identity.attributes[key]
-    case .entitlementState(let key): return context.entitlements[key].map { .string($0.rawValue) }
-    case .productAvailability(let id): return context.products[id].map { .string($0.rawValue) }
-    case .productReadiness(let id): return productReadiness[id].map { .string($0.rawValue) }
+      return resolve(context.country) {
+        let value = $0.uppercased()
+        return value.range(of: "^[A-Z]{2}$", options: .regularExpression) != nil
+          ? .string(value) : nil
+      }
+    case .environmentID: return .comparable(.string(set.environmentId))
+    case .environmentKey: return .comparable(.string(set.environmentKey))
+    case .userPresent: return .comparable(.boolean(identity.userID != nil))
+    case .userAttribute(let key):
+      return resolve(context.attributes[key] ?? identity.attributes[key]) { $0 }
+    case .entitlementState(let key):
+      return resolve(context.entitlements[key]) { .string($0.rawValue) }
+    case .productAvailability(let id):
+      return resolve(context.products[id]) { .string($0.rawValue) }
+    case .productReadiness(let id):
+      return resolve(productReadiness[id]) { .string($0.rawValue) }
     case .providerCapability(let capability):
-      return context.providerCapabilities[capability].map { .string($0.rawValue) }
+      return resolve(context.providerCapabilities[capability]) { .string($0.rawValue) }
     }
   }
 
+  /// Absent when the host supplied nothing, comparable when the supplied value
+  /// has a usable form, and present-but-not-comparable otherwise.
+  private static func resolve<Value>(
+    _ supplied: Value?, comparable: (Value) -> MosaicTypedValue?
+  ) -> ResolvedAttribute {
+    guard let supplied else { return .absent }
+    guard let value = comparable(supplied) else { return .presentNotComparable }
+    return .comparable(value)
+  }
+
   private static func compare(
-    _ value: MosaicTypedValue?, operator op: MosaicDecisionOperator, operand: MosaicTypedValue?
+    _ attribute: ResolvedAttribute, source: MosaicDecisionSource,
+    operator op: MosaicDecisionOperator, operand: MosaicTypedValue?
   ) -> MosaicThreeState {
-    if op == .exists { return value == nil ? .false : .true }
-    if op == .doesNotExist { return value == nil ? .true : .false }
-    guard let value, let operand else { return .unknown }
-    if op == .localeMatches, case .string(let lhs) = value, case .string(let rhs) = operand,
-      let tag = normalizeLocale(lhs), let range = normalizeLocale(rhs)
-    {
-      return tag == range || tag.hasPrefix(range + "-") ? .true : .false
+    if op == .exists { return attribute.isAbsent ? .false : .true }
+    if op == .doesNotExist { return attribute.isAbsent ? .true : .false }
+    // Present but not comparable: every operator other than presence is
+    // unknown, which is never a match and never a negated match.
+    guard case .comparable(let value) = attribute, let operand else { return .unknown }
+    if case .applicationLocale = source, let result = compareLocale(value, op, operand) {
+      return result
     }
     if case .semanticVersion(let lhs) = value {
       guard case .semanticVersion(let rhs) = operand,
@@ -709,6 +756,44 @@ enum MosaicPlacementEvaluator {
     return (op == .equals ? equal : !equal) ? .true : .false
   }
 
+  /// Locale comparison against an authored operand, or `nil` when the operator
+  /// is not one this source compares.
+  ///
+  /// The authored side is canonicalized exactly as the host side is, so
+  /// `en_US` in a document and `en-US` from a device denote one locale. An
+  /// operand with no canonical form makes the condition unknown rather than
+  /// false — and for `in`/`not_in` a single unusable member does so even when
+  /// another member matches, because the list is a defective authored value and
+  /// deciding on half of it would decide on half of what its author wrote.
+  private static func compareLocale(
+    _ value: MosaicTypedValue, _ op: MosaicDecisionOperator, _ operand: MosaicTypedValue
+  ) -> MosaicThreeState? {
+    guard case .string(let tag) = value else { return nil }
+    switch op {
+    case .localeMatches:
+      guard case .string(let authored) = operand, let range = normalizeLocale(authored) else {
+        return .unknown
+      }
+      return tag == range || tag.hasPrefix(range + "-") ? .true : .false
+    case .equals, .notEquals:
+      guard case .string(let authored) = operand, let canonical = normalizeLocale(authored) else {
+        return .unknown
+      }
+      return (op == .equals ? tag == canonical : tag != canonical) ? .true : .false
+    case .in, .notIn:
+      guard case .stringList(let authored) = operand else { return .unknown }
+      var canonical: [String] = []
+      for member in authored {
+        guard let tag = normalizeLocale(member) else { return .unknown }
+        canonical.append(tag)
+      }
+      let included = canonical.contains(tag)
+      return (op == .in ? included : !included) ? .true : .false
+    default:
+      return nil
+    }
+  }
+
   private static func ordering(_ result: ComparisonResult, _ op: MosaicDecisionOperator)
     -> MosaicThreeState
   {
@@ -725,19 +810,12 @@ enum MosaicPlacementEvaluator {
     return match ? .true : .false
   }
 
+  /// The comparable identity of a locale is its language-script-region core, so
+  /// a host-supplied `en-US-u-rg-gbzzzz` or `en--US` targets as `en-US` rather
+  /// than matching nothing. Catalog lookup canonicalizes identically; the two
+  /// must not disagree about what "the same locale" is.
   private static func normalizeLocale(_ value: String) -> String? {
-    let normalizedSeparators = value.replacingOccurrences(of: "_", with: "-")
-    guard normalizedSeparators.count <= 64,
-      normalizedSeparators.range(
-        of: "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$", options: .regularExpression) != nil
-    else { return nil }
-    return normalizedSeparators.split(separator: "-").enumerated().map { index, part in
-      let text = String(part)
-      if index == 0 { return text.lowercased() }
-      if text.count == 4 { return text.prefix(1).uppercased() + text.dropFirst().lowercased() }
-      if text.count == 2 || text.count == 3 { return text.uppercased() }
-      return text.lowercased()
-    }.joined(separator: "-")
+    MosaicDeviceLocale.canonicalTag(value)
   }
 }
 

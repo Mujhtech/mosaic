@@ -160,7 +160,7 @@ final class MosaicConfigurationCapabilityRequest {
             'version': mosaicProtocolVersion,
             'capabilities': <Map<String, String>>[
               for (final capability
-                  in mosaicProtocolV02Capabilities.toList()..sort())
+                  in mosaicProtocolV03Capabilities.toList()..sort())
                 <String, String>{
                   'name': capability,
                   'version': mosaicProtocolVersion,
@@ -388,10 +388,20 @@ final class MosaicConfigurationClient {
         'configuration.refresh.releaseOrCommerceRejected',
       );
     }
+    // A release's publish time is an authoring fact, not an observation of the
+    // current server clock. Substituting it would anchor countdowns, freshness,
+    // and QA windows to a moment that may be days old while presenting it as
+    // trusted, so an absent server time yields no anchor.
+    final serverTime = response.serverTime;
     try {
       final receivedAt = DateTime.now().toUtc();
-      final serverTime = response.serverTime ??
-          DateTime.parse(envelope.release.publishedAt).toUtc();
+      if (serverTime == null) {
+        _diagnose(
+          'configuration.serverTime.absent',
+          'The configuration response carried no server time; time-dependent '
+              'behaviour runs without a trusted clock.',
+        );
+      }
       await cache.write(
         cacheNamespace,
         MosaicConfigurationCacheEntry(
@@ -413,8 +423,7 @@ final class MosaicConfigurationClient {
       commerceEnvelope: commerceEnvelope,
       commerceSource: commerceSource,
       commerceEtag: commerceEtag,
-      trustedServerTime: response.serverTime ??
-          DateTime.parse(envelope.release.publishedAt).toUtc(),
+      trustedServerTime: serverTime,
       localReceiptTime: DateTime.now().toUtc(),
     );
     _accept(configuration);

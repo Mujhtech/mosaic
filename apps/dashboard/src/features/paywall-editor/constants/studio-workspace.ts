@@ -86,6 +86,10 @@ export const STUDIO_RECENT_INSERTABLE_TYPES = [
   "featureList",
   "productSelector",
   "button",
+  "tabs",
+  "timeline",
+  "award",
+  "socialProof",
 ] as const satisfies readonly StudioRecentInsertableType[];
 
 const EMPTY_LABELS = Object.freeze({}) as Readonly<Record<string, string>>;

@@ -112,6 +112,80 @@ func TestSensitiveTraceRedactsValues(t *testing.T) {
 	}
 }
 
+// The conformance corpus pins the ruled locale cases end to end, but it
+// exercises only a handful of tags. These assert the normalization rules the
+// corpus cannot reach: script/region/variant casing, the singleton truncation
+// boundary, empty-subtag dropping, the ICU pre-cut on shapes the corpus does not
+// carry, and the bounds that still reject a tag outright. Every expectation was
+// produced by running protocol/tools/placement-decision-validation-v1.mjs's
+// exported normalizeLocale over these same inputs and diffing, not by reading
+// the Go implementation back.
+func TestNormalizeLocaleFollowsProtocolRules(t *testing.T) {
+	for _, testCase := range []struct{ input, want string }{
+		{"en-US-u-rg-gbzzzz", "en-US"}, // extension subtags are device detail, not identity
+		{"pt-BR-u-nu-latn", "pt-BR"},
+		{"de_DE-x-corp", "de-DE"},    // private use truncates, underscores become hyphens
+		{"en--US", "en-US"},          // empty subtags are dropped, not rejected
+		{"  en_us  ", "en-US"},       // trimmed, region uppercased
+		{"zh-hans-cn", "zh-Hans-CN"}, // script is title case
+		{"es-419", "es-419"},         // numeric region stays as authored
+		{"en-1234-US", "en-1234-US"}, // a 4-char non-alpha subtag is not a script
+		{"en-US-POSIX", "en-US-posix"},
+		{"ja_JP.eucJP", "ja-JP"},           // POSIX charset suffix is cut
+		{"en_US.UTF-8@euro", "en-US"},      // cut takes the first of '.' and '@'
+		{"en.US@x", "en"},                  // the cut precedes the subtag scan
+		{"POSIX", "posix"},                 // a bare language is still a tag
+		{"C", ""},                          // the C locale is one character, so nothing survives
+		{"x-private", ""},                  // a leading singleton leaves no language
+		{"@en-US", ""},                     // a leading cut character leaves nothing
+		{"!!not-a-locale", ""},             // pinned present-but-unusable by the corpus
+		{"en-AA-BB-CC-DD-EE-FF-GG-HH", ""}, // the range the corpus uses for unknown locale_matches
+		{"", ""},
+		{"1en-US", ""},                     // language must be alphabetic
+		{"en-US!", ""},                     // non-alphanumeric subtag
+		{"verylongl-US", ""},               // language exceeds eight characters
+		{"en-verylongsubtag", ""},          // targeting does not recover the language subtag
+		{"aa-bb-cc-dd-ee-ff-gg-hh-ii", ""}, // more than eight subtags
+		{"aa-bb-cc-dd-ee-ff-gg-hh", "aa-BB-CC-DD-EE-FF-GG-HH"}, // exactly eight is allowed
+	} {
+		t.Run(testCase.input, func(t *testing.T) {
+			got, ok := normalizeLocale(testCase.input)
+			if ok != (testCase.want != "") {
+				t.Fatalf("normalizeLocale(%q) ok = %v, want %v", testCase.input, ok, testCase.want != "")
+			}
+			if got != testCase.want {
+				t.Fatalf("normalizeLocale(%q) = %q, want %q", testCase.input, got, testCase.want)
+			}
+		})
+	}
+}
+
+// The corpus pins the closed-vocabulary rule for device.platform under both a
+// direct and a negated condition, but platform is the only one of the five
+// closed sources it reaches. These assert that the other four are actually
+// registered, since a missing map entry would silently restore "unknown means
+// false" for provider-sourced values, where a not_equals is a positive match.
+func TestOutOfSetClosedVocabularyComparesUnknown(t *testing.T) {
+	for kind, outOfSet := range map[string]string{
+		"entitlement_state":    "cancelled",
+		"product_availability": "pending",
+		"product_readiness":    "partially_ready",
+		"provider_capability":  "degraded",
+	} {
+		t.Run(kind, func(t *testing.T) {
+			input := InputValue{Value: outOfSet, Valid: true, Source: "provider_observation"}
+			for _, operator := range []string{"equals", "not_equals"} {
+				if result := compare(kind, operator, input, &TypedValue{Type: "string", Value: "active"}); result != Unknown {
+					t.Fatalf("%s %s on out-of-set %q = %q, want %q", kind, operator, outOfSet, result, Unknown)
+				}
+			}
+			if result := compare(kind, "exists", input, nil); result != True {
+				t.Fatalf("%s exists on out-of-set %q = %q, want %q", kind, outOfSet, result, True)
+			}
+		})
+	}
+}
+
 func containsText(value, candidate string) bool {
 	for index := 0; index+len(candidate) <= len(value); index++ {
 		if value[index:index+len(candidate)] == candidate {

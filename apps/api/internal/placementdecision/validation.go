@@ -8,7 +8,6 @@ import (
 	"math"
 	"regexp"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -17,6 +16,9 @@ const maxDocumentBytes = 256 << 10
 var (
 	keyPattern     = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 	countryPattern = regexp.MustCompile(`^[A-Z]{2}$`)
+	// alpha2Pattern recognizes a host-reported country in either case. The
+	// authored side stays on countryPattern, which is canonical-only.
+	alpha2Pattern = regexp.MustCompile(`^[A-Za-z]{2}$`)
 )
 
 type ReferenceCatalog interface {
@@ -479,7 +481,6 @@ func normalizedOperators(values []string) []string {
 	sort.Strings(result)
 	return result
 }
-func normalizeCountry(value string) string { return strings.ToUpper(strings.TrimSpace(value)) }
 func fallbackMap(values []Fallback) map[string]Outcome {
 	result := make(map[string]Outcome, len(values))
 	for _, value := range values {

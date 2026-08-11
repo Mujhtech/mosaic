@@ -45,7 +45,7 @@ void main() {
     );
   });
 
-  testWidgets('renders the Protocol 0.2 controls with native Flutter widgets',
+  testWidgets('renders the Protocol 0.3 controls with native Flutter widgets',
       (tester) async {
     await _pumpPaywall(tester, MockMosaicPurchaseProvider(products: _products));
 
@@ -427,9 +427,14 @@ void main() {
     await _tap(tester, 'mosaic-purchase');
 
     expect(results.single, isA<MosaicPurchaseFailedPresentationResult>());
-    expect(diagnostics.single.code, 'purchase_provider_exception');
-    expect(
-        diagnostics.single.message, isNot(contains('private provider detail')));
+    // The fixture's bundled Award emblem and Social Proof avatar are
+    // unresolvable in this host, and each correctly reports itself, so the
+    // purchase diagnostic is selected by code rather than by being the only
+    // one.
+    final failure = diagnostics
+        .where((diagnostic) => diagnostic.code == 'purchase_provider_exception')
+        .single;
+    expect(failure.message, isNot(contains('private provider detail')));
   });
 
   testWidgets('product-load exception uses the safe unavailable fallback',
@@ -509,7 +514,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(MosaicPaywall), findsOneWidget);
-    expect(diagnostics.single.code, 'primary_document_rejected');
+    expect(
+      diagnostics
+          .where(
+            (diagnostic) => diagnostic.code == 'primary_document_rejected',
+          )
+          .length,
+      1,
+    );
   });
 }
 

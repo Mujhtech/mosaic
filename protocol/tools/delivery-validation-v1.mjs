@@ -6,9 +6,9 @@ import Ajv2020 from "ajv/dist/2020.js";
 
 import { releaseMaterialDigest, sha256Digest } from "./delivery-v1-common.mjs";
 import {
-  loadProtocolV02Artifacts,
-  validateProtocolV02,
-} from "./validation-v0.2.mjs";
+  loadProtocolV03Artifacts,
+  validateProtocolV03,
+} from "./validation-v0.3.mjs";
 
 const toolsDirectory = dirname(fileURLToPath(import.meta.url));
 export const deliveryV1Root = resolve(toolsDirectory, "..");
@@ -181,7 +181,7 @@ function validateReleaseSemantics(errors, envelope, protocolArtifacts) {
       errors.push(`Paywall Version ${version.id} documentDigest does not match`);
     }
     errors.push(
-      ...validateProtocolV02({
+      ...validateProtocolV03({
         ...protocolArtifacts,
         document: version.document,
       }).map((error) => `Paywall Version ${version.id}: ${error}`),
@@ -279,7 +279,7 @@ export function validateDeliveryV1Release(
   envelope,
   artifacts = loadDeliveryV1Artifacts(),
 ) {
-  const protocolArtifacts = loadProtocolV02Artifacts();
+  const protocolArtifacts = loadProtocolV03Artifacts();
   const compiled = validators({
     ...artifacts,
     paywallSchema: protocolArtifacts.paywallSchema,
@@ -297,7 +297,7 @@ export function validateDeliveryV1CapabilityRequest(
   request,
   artifacts = loadDeliveryV1Artifacts(),
 ) {
-  const protocolArtifacts = loadProtocolV02Artifacts();
+  const protocolArtifacts = loadProtocolV03Artifacts();
   const compiled = validators({
     ...artifacts,
     paywallSchema: protocolArtifacts.paywallSchema,
@@ -321,7 +321,7 @@ export function validateDeliveryV1CapabilityRequest(
 export function validateDeliveryV1Artifacts(
   artifacts = loadDeliveryV1Artifacts(),
 ) {
-  const protocolArtifacts = loadProtocolV02Artifacts();
+  const protocolArtifacts = loadProtocolV03Artifacts();
   const compiled = validators({
     ...artifacts,
     paywallSchema: protocolArtifacts.paywallSchema,

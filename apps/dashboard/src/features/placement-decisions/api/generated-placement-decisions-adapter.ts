@@ -481,6 +481,11 @@ export function createGeneratedPlacementDecisionsAdapter(
         throw new Error("Placement not found.");
       }
       let resource: PlacementRuleSetDraftResource;
+      // Only a 404 is treated as "no rule set yet"; every other failure still
+      // propagates. The distinction is carried out to the view so an
+      // unconfigured Placement is captioned as such rather than presented as an
+      // ordinary empty draft.
+      let draftOrigin: PlacementDecisionDetail["draftOrigin"] = "server";
       try {
         const result = await getPlacementDecision({
           client,
@@ -492,6 +497,7 @@ export function createGeneratedPlacementDecisionsAdapter(
         if (!(error instanceof ApiError) || error.status !== 404) {
           throw error;
         }
+        draftOrigin = "not_configured";
         const document = await initialDocument(client, scope);
         const now = new Date().toISOString();
         resource = {
@@ -542,6 +548,7 @@ export function createGeneratedPlacementDecisionsAdapter(
         })),
         description: placement.description,
         draft: draft(resource),
+        draftOrigin,
         id: placement.id,
         key: placement.key,
         name: placement.name,

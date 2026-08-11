@@ -282,7 +282,7 @@ export function usePreviewConnection(options: {
           code: "preview.incompatibleSchemaVersion",
           message: `This connection negotiated Local Preview ${negotiatedProtocolVersionRef.current ?? "unknown"}, so Studio withheld the Protocol ${document.schemaVersion} draft.`,
           recovery:
-            "Update the preview relay or client to Local Preview 0.2, then reconnect.",
+            "Update the preview relay or client to Local Preview 0.3, then reconnect.",
           createdAt: new Date().toISOString(),
         });
         return false;

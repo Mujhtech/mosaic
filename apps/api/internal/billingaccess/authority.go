@@ -183,8 +183,13 @@ func (s *Service) SyncAuthorityV2(ctx context.Context, authenticated Authenticat
 		return result, encodeErr
 	}
 
+	// A failed health read reports degraded, never current: the read model
+	// defaults to `current`, so `err == nil` alone published "up to date" as the
+	// answer to a question that was never answered.
 	if status, statusErr := s.repository.ProjectionStatusFor(ctx, token.ProjectID, token.EnvironmentID, token.CustomerID); statusErr == nil {
 		selection.Snapshot.Projection = status
+	} else {
+		selection.Snapshot.Projection = ProjectionStatusUnavailable(selection.Snapshot.ComputedAt)
 	}
 	issuedAt := s.now()
 	authority := authorityRecord(selection)

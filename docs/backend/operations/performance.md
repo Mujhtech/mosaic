@@ -158,7 +158,7 @@ both found by this run:
 - `cmd/loadgen` sent no capability headers, so `GET /v1/sdk/configuration` was
   answered `406 unsupported_capability` for every delivery version and the
   delivery scenarios had never measured a Configuration Release. It now
-  advertises the full Paywall 0.2, Placement Decision, and Experiment
+  advertises the full Paywall 0.3, Placement Decision, and Experiment
   Assignment vocabulary, so negotiation selects the highest representation the
   Environment serves.
 - The Compose `api` and `worker` services passed only the variables Compose

@@ -11,8 +11,18 @@ import {
   flattenDocument,
   screenContainingNode,
 } from "@/features/paywall-editor/utils/document-tree-traversal";
+import {
+  eligibleTabControllers,
+  ratingMaximumSteps,
+  socialProofRatingIsInBounds,
+  TIMELINE_STYLE_FIELDS,
+  type TimelineStyleField,
+  timelineStyleFieldIsConsumed,
+  timelineStyleFieldIsDeclared,
+} from "@/features/paywall-editor/utils/protocol-component-rules";
 import { fillAxisIsBounded } from "@/features/paywall-editor/utils/sizing";
 import {
+  paywallContractVersion,
   resolveBackgroundToken,
   resolveColorToken,
   resolveProductBadgeStyle,
@@ -22,6 +32,12 @@ import {
 const PRODUCT_TOKEN = /\{\{\s*product\.(?:name|price)\s*\}\}/;
 
 const IDENTIFIER = /^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$/;
+
+const TIMELINE_STYLE_LABELS: Readonly<Record<TimelineStyleField, string>> = {
+  markerColor: "Marker colour",
+  markerSize: "Marker size",
+  descriptionTypography: "Description typography",
+};
 
 function issue(
   code: string,
@@ -267,6 +283,53 @@ function foregroundFields(node: ProtocolNode): ContrastField[] {
       ];
     case "icon":
       return [{ property: "color", color: node.color, threshold: 3 }];
+    case "timeline":
+      return [
+        {
+          property: "titleTypography.color",
+          color: node.titleTypography.color,
+          threshold: 4.5,
+        },
+        ...(node.descriptionTypography
+          ? [
+              {
+                property: "descriptionTypography.color",
+                color: node.descriptionTypography.color,
+                threshold: 4.5,
+              },
+            ]
+          : []),
+      ];
+    case "award":
+      return [
+        {
+          property: "titleTypography.color",
+          color: node.titleTypography.color,
+          threshold: 4.5,
+        },
+        ...(node.subtitleTypography
+          ? [
+              {
+                property: "subtitleTypography.color",
+                color: node.subtitleTypography.color,
+                threshold: 4.5,
+              },
+            ]
+          : []),
+      ];
+    case "socialProof":
+      return [
+        {
+          property: "quoteTypography.color",
+          color: node.quoteTypography.color,
+          threshold: 4.5,
+        },
+        {
+          property: "attributionTypography.color",
+          color: node.attributionTypography.color,
+          threshold: 4.5,
+        },
+      ];
     case "switch":
       return [
         {
@@ -528,6 +591,43 @@ function localizedEntries(
       ];
     case "stack":
       return [];
+    case "tabs":
+      return [
+        { property: "accessibility", value: node.accessibility.label },
+        ...node.tabs.map((tab, index) => ({
+          property: `tabs.${index}.label`,
+          value: tab.label,
+        })),
+      ];
+    case "timeline":
+      return [
+        { property: "accessibility", value: node.accessibility.label },
+        ...node.entries.flatMap((entry, index) => [
+          { property: `entries.${index}.title`, value: entry.title },
+          ...(entry.description
+            ? [
+                {
+                  property: `entries.${index}.description`,
+                  value: entry.description,
+                },
+              ]
+            : []),
+        ]),
+      ];
+    case "award":
+      return [
+        { property: "accessibility", value: node.accessibility.label },
+        { property: "title", value: node.title },
+        ...(node.subtitle
+          ? [{ property: "subtitle", value: node.subtitle }]
+          : []),
+      ];
+    case "socialProof":
+      return [
+        { property: "accessibility", value: node.accessibility.label },
+        { property: "quote", value: node.quote },
+        { property: "attribution", value: node.attribution },
+      ];
     default: {
       const unhandled: never = node;
       throw new Error(`Unhandled node.type: ${JSON.stringify(unhandled)}`);
@@ -542,7 +642,6 @@ interface NodeValidationContext {
   readonly productIds: ReadonlySet<string>;
   readonly selectorIds: ReadonlySet<string>;
   readonly state: {
-    emittedCannotVerifyContrast: boolean;
     readonly seenIds: Set<string>;
   };
 }
@@ -572,7 +671,7 @@ function validateNodeIdentity(
     issues.push(
       issue(
         "component.invalidId",
-        `Component ID ${node.id} is not a valid Protocol 0.2 identifier.`,
+        `Component ID ${node.id} is not a valid Protocol 0.3 identifier.`,
         `${path}/id`,
         "Use a lowercase identifier containing letters, numbers, dashes, or underscores.",
         node.id,
@@ -647,7 +746,7 @@ function validateNodeColour(
   context: NodeValidationContext
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const { document, state } = context;
+  const { document } = context;
   for (const field of foregroundFields(node)) {
     const contrast = evaluateContrast(
       document,
@@ -661,21 +760,6 @@ function validateNodeColour(
           `Text or icon contrast is below ${field.threshold}:1 after literal colour alpha and composed opacity.`,
           `${path}/${field.property.replaceAll(".", "/")}`,
           "Choose literal foreground and background colours with sufficient contrast in every authored state.",
-          node.id,
-          field.property
-        )
-      );
-    } else if (
-      contrast === "cannotVerify" &&
-      !state.emittedCannotVerifyContrast
-    ) {
-      state.emittedCannotVerifyContrast = true;
-      issues.push(
-        warning(
-          "appearance.contrastCannotVerify",
-          "Contrast cannot be verified because semantic colours are mapped by the host app theme.",
-          `${path}/${field.property.replaceAll(".", "/")}`,
-          "Verify this semantic colour pair in every host theme, or use literal colours for a Studio contrast result.",
           node.id,
           field.property
         )
@@ -695,21 +779,6 @@ function validateNodeColour(
           "Control-boundary contrast is below 3:1 after literal colour alpha and composed opacity.",
           `${path}/${field.property.replaceAll(".", "/")}`,
           "Choose a border or track colour that contrasts with the adjacent background.",
-          node.id,
-          field.property
-        )
-      );
-    } else if (
-      contrast === "cannotVerify" &&
-      !state.emittedCannotVerifyContrast
-    ) {
-      state.emittedCannotVerifyContrast = true;
-      issues.push(
-        warning(
-          "appearance.contrastCannotVerify",
-          "Control-boundary contrast cannot be verified because semantic colours are mapped by the host app theme.",
-          `${path}/${field.property.replaceAll(".", "/")}`,
-          "Verify this semantic colour pair in every host theme, or use literal colours for a Studio contrast result.",
           node.id,
           field.property
         )
@@ -871,20 +940,170 @@ function validateNodeReferences(
       )
     );
   }
+  if (
+    node.type === "award" &&
+    node.emblem?.type === "image" &&
+    !assetIds.has(node.emblem.assetId)
+  ) {
+    issues.push(
+      issue(
+        "asset.missingReference",
+        `Award emblem references missing asset ${node.emblem.assetId}.`,
+        `${path}/emblem/assetId`,
+        "Choose a bundled image asset that exists in this document.",
+        node.id,
+        "emblem.assetId"
+      )
+    );
+  }
+  if (
+    node.type === "socialProof" &&
+    node.avatar &&
+    !assetIds.has(node.avatar.assetId)
+  ) {
+    issues.push(
+      issue(
+        "asset.missingReference",
+        `Avatar references missing asset ${node.avatar.assetId}.`,
+        `${path}/avatar/assetId`,
+        "Choose a bundled image asset that exists in this document.",
+        node.id,
+        "avatar.assetId"
+      )
+    );
+  }
   return issues;
+}
+
+/** Rules that only exist for the components Protocol 0.3 added. */
+function validateNodeComponentRules(
+  node: ProtocolNode,
+  path: string,
+  context: NodeValidationContext
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (
+    node.type === "tabs" &&
+    !node.tabs.some((tab) => tab.id === node.initialTabId)
+  ) {
+    issues.push(
+      issue(
+        "tabs.invalidInitialSelection",
+        `Initial tab ${node.initialTabId} is not one of this component's tabs.`,
+        `${path}/initialTabId`,
+        "Choose one of this component's tabs as the opening panel.",
+        node.id,
+        "initialTabId"
+      )
+    );
+  }
+  if (node.type === "timeline") {
+    for (const field of TIMELINE_STYLE_FIELDS) {
+      const consumed = timelineStyleFieldIsConsumed(node, field);
+      const declared = timelineStyleFieldIsDeclared(node, field);
+      if (consumed && !declared) {
+        issues.push(
+          issue(
+            "timeline.missingEntryStyle",
+            `${TIMELINE_STYLE_LABELS[field]} is required because an entry uses it.`,
+            `${path}/${field}`,
+            `Set ${TIMELINE_STYLE_LABELS[field]}, or remove the entry ${field === "descriptionTypography" ? "descriptions" : "markers"} that need it.`,
+            node.id,
+            field
+          )
+        );
+      }
+      if (!consumed && declared) {
+        issues.push(
+          issue(
+            "timeline.unusedEntryStyle",
+            `${TIMELINE_STYLE_LABELS[field]} is declared but no entry uses it.`,
+            `${path}/${field}`,
+            `Remove ${TIMELINE_STYLE_LABELS[field]}, or give an entry the ${field === "descriptionTypography" ? "description" : "marker"} that consumes it.`,
+            node.id,
+            field
+          )
+        );
+      }
+    }
+  }
+  if (
+    node.type === "socialProof" &&
+    node.rating &&
+    !socialProofRatingIsInBounds(node.rating)
+  ) {
+    issues.push(
+      issue(
+        "socialProof.ratingOutOfBounds",
+        `Rating ${node.rating.value} exceeds ${ratingMaximumSteps(node.rating)} ${node.rating.step} steps out of ${node.rating.maximum}.`,
+        `${path}/rating/value`,
+        "Lower the rating, raise the maximum, or change the step size.",
+        node.id,
+        "rating.value"
+      )
+    );
+  }
+  return [...issues, ...validateTabVisibility(node, path, context)];
+}
+
+/**
+ * The four rules a `{ mode: "tab" }` condition must satisfy. The protocol
+ * rejects the whole document when any of them fails, so the editor names the
+ * specific one rather than reporting a generic invalid document.
+ */
+function validateTabVisibility(
+  node: ProtocolNode,
+  path: string,
+  context: NodeValidationContext
+): ValidationIssue[] {
+  const visibility = "visibility" in node ? node.visibility : undefined;
+  if (visibility?.mode !== "tab") {
+    return [];
+  }
+  const { document } = context;
+  const recovery =
+    "Point the condition at a Tabs component on this screen that does not contain this layer, then choose one of its tabs.";
+  const controller = eligibleTabControllers(document, node.id).find(
+    (candidate) => candidate.id === visibility.tabsId
+  );
+  if (!controller) {
+    return [
+      issue(
+        "visibility.invalidTabController",
+        `Tabs ${visibility.tabsId} is not a Tabs component this layer may be conditioned on.`,
+        `${path}/visibility/tabsId`,
+        recovery,
+        node.id,
+        "visibility.tabsId"
+      ),
+    ];
+  }
+  if (!controller.tabs.some((tab) => tab.id === visibility.equals)) {
+    return [
+      issue(
+        "visibility.invalidTabValue",
+        `Tab ${visibility.equals} is not declared by Tabs ${controller.id}.`,
+        `${path}/visibility/equals`,
+        recovery,
+        node.id,
+        "visibility.equals"
+      ),
+    ];
+  }
+  return [];
 }
 
 export function validateEditorDocument(
   document: MosaicDocument
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  if (document.schemaVersion !== "0.2") {
+  if (document.schemaVersion !== paywallContractVersion) {
     issues.push(
       issue(
         "schema.unsupportedVersion",
         `Schema ${String(document.schemaVersion)} is not supported by this Studio.`,
         "/schemaVersion",
-        "Import a Protocol 0.2 document.",
+        `Import a Protocol ${paywallContractVersion} document.`,
         undefined,
         "schemaVersion"
       )
@@ -896,7 +1115,7 @@ export function validateEditorDocument(
         "document.invalidId",
         "The document ID must start with a lowercase letter and use letters, numbers, dashes, or underscores.",
         "/id",
-        "Rename the document using a Protocol 0.2 identifier.",
+        "Rename the document using a Protocol 0.3 identifier.",
         undefined,
         "id"
       )
@@ -936,7 +1155,6 @@ export function validateEditorDocument(
     )
   );
   const assetIds = new Set(document.assets.map((asset) => asset.id));
-  const emittedCannotVerifyContrast = false;
 
   document.screens.forEach((screen, index) => {
     if (screen.layout.content.children.length === 0) {
@@ -958,7 +1176,7 @@ export function validateEditorDocument(
     document,
     productIds,
     selectorIds,
-    state: { emittedCannotVerifyContrast, seenIds },
+    state: { seenIds },
   };
   for (const { node, documentPath: path } of entries) {
     issues.push(...validateNodeIdentity(node, path, context));
@@ -966,6 +1184,7 @@ export function validateEditorDocument(
     issues.push(...validateNodeColour(node, path, context));
     issues.push(...validateNodeLayout(node, path, context));
     issues.push(...validateNodeReferences(node, path, context));
+    issues.push(...validateNodeComponentRules(node, path, context));
   }
 
   return issues;

@@ -1,12 +1,19 @@
 # Mosaic Protocol
 
-Protocol `0.2` is Mosaic's single **approved** native-paywall contract, as of
-Mosaic v1 GA. It is platform-neutral and contains declarative data only. Studio,
-Local Preview, Flutter, SwiftUI, and Jetpack Compose all consume this exact
-version.
+Protocol `0.3` is Mosaic's single native-paywall contract, and is currently a
+**release candidate**. It is platform-neutral and contains declarative data
+only. Studio, Local Preview, Flutter, SwiftUI, and Jetpack Compose all consume
+this exact version.
+
+`0.3` replaced approved Protocol `0.2` outright: `0.2` was deleted rather than
+deprecated, and there is no migration path. See ADR-0026. `0.3` stays a
+candidate until the renderers, Studio, and the backend implement its four new
+components — the outstanding gates are listed in
+[the contract document](../docs/protocol/v0.3.md#what-must-pass-before-03-can-be-marked-approved).
 
 Approved contracts are immutable: their behaviour is frozen and a behaviour
-change requires a new contract version. See
+change requires a new contract version. A release candidate is not yet frozen
+and may still take narrowing corrections. See
 [versioning](../docs/protocol/versioning.md), the
 [compatibility policy](../docs/protocol/compatibility-policy.md), and the
 [breaking-change process](../docs/protocol/breaking-change-process.md).
@@ -16,13 +23,13 @@ Canonical artifacts live under:
 ```text
 protocol/
 ├── browser/                    # browser validator and generated declarations
-├── compatibility/v0.2.json
+├── compatibility/v0.3.json
 ├── fixtures/
-│   ├── local-preview/v0.2/
-│   └── v0.2/
+│   ├── local-preview/v0.3/
+│   └── v0.3/
 ├── schema/
-│   ├── local-preview/v0.2/
-│   └── v0.2/
+│   ├── local-preview/v0.3/
+│   └── v0.3/
 └── tools/                      # current validation and browser generation
 ```
 
@@ -33,20 +40,20 @@ product templates, design tokens, gradients, media backgrounds, shadows,
 visibility, and two-axis sizing. SDKs may package generated copies but must not
 maintain hand-edited platform forks.
 
-Local Preview is also `0.2` only and uses the exact WebSocket subprotocol
-`mosaic.local-preview.v0.2`. A client must report Protocol `0.2` and every
+Local Preview is also `0.3` only and uses the exact WebSocket subprotocol
+`mosaic.local-preview.v0.3`. A client must report Protocol `0.3` and every
 required capability before Studio sends a draft. Accepted revisions reset
 navigation, Carousel, Switch, and Product Selector runtime state from the new
 document.
 
 Configuration Delivery `1` is a separate immutable hosted-release envelope
-around accepted Protocol `0.2` documents. Its schemas, compatibility manifest,
+around accepted Protocol `0.3` documents. Its schemas, compatibility manifest,
 fixtures, atomic validation rules, and fallback behavior are documented in
 `docs/protocol/configuration-delivery-v1.md`.
 
 Placement Decision `1` is the separate deterministic local-evaluation contract
 for advanced Placement Rules. Configuration Delivery `2` atomically carries
-those Rule Sets with exact unchanged Protocol `0.2` Paywall Versions and
+those Rule Sets with exact unchanged Protocol `0.3` Paywall Versions and
 Product/Entitlement references. Delivery `1` remains available only as a safe
 projection of an explicit default Paywall.
 
@@ -55,7 +62,7 @@ capabilities, verified Product resolution, localized commerce metadata,
 purchase and restore outcomes, active Entitlement lookup, freshness, and safe
 diagnostics. Version `2` additionally freezes native recovery modes,
 asynchronous commerce updates, and idempotent local acceptance before native
-finalization. Neither adds provider data to Paywall Protocol `0.2` or
+finalization. Neither adds provider data to Paywall Protocol `0.3` or
 Configuration Delivery `1`.
 
 Commerce Configurations `1` and `2` are immutable sidecars that associate
@@ -170,8 +177,8 @@ canonical digests, and browser generation drift.
 
 See:
 
-- `docs/protocol/v0.2.md`
-- `docs/protocol/local-preview-v0.2.md`
+- `docs/protocol/v0.3.md`
+- `docs/protocol/local-preview-v0.3.md`
 - `docs/protocol/versioning.md`
 - `docs/protocol/configuration-delivery-v1.md`
 - `docs/protocol/commerce-provider-v1.md`

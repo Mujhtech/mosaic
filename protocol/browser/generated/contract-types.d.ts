@@ -1,431 +1,443 @@
 // Generated from canonical Mosaic JSON Schemas. Do not edit.
 
-export type MosaicPaywallV02Version = "0.2";
+export type MosaicPaywallV03Version = "0.3";
 
-export type MosaicPaywallV02Identifier = string;
+export type MosaicPaywallV03Identifier = string;
 
-export type MosaicPaywallV02LocalizationKey = string;
+export type MosaicPaywallV03LocalizationKey = string;
 
-export type MosaicPaywallV02LocaleTag = string;
+export type MosaicPaywallV03LocaleTag = string;
 
-export type MosaicPaywallV02LocalizedText = {
+export type MosaicPaywallV03LocalizedText = {
   "default": string;
-  "localizationKey": MosaicPaywallV02LocalizationKey;
+  "localizationKey": MosaicPaywallV03LocalizationKey;
 };
 
-export type MosaicPaywallV02LocaleCatalog = {
+export type MosaicPaywallV03ReservedAccessibilityKey = "mosaic.a11y.rating" | "mosaic.a11y.in_progress";
+
+export type MosaicPaywallV03LocaleCatalog = {
   "direction": "ltr" | "rtl";
   "strings": Record<string, string>;
 };
 
-export type MosaicPaywallV02Localization = {
-  "defaultLocale": MosaicPaywallV02LocaleTag;
-  "fallbackLocale": MosaicPaywallV02LocaleTag;
-  "locales": Record<string, MosaicPaywallV02LocaleCatalog>;
+export type MosaicPaywallV03Localization = {
+  "defaultLocale": MosaicPaywallV03LocaleTag;
+  "fallbackLocale": MosaicPaywallV03LocaleTag;
+  "locales": Record<string, MosaicPaywallV03LocaleCatalog>;
 };
 
-export type MosaicPaywallV02CapabilityName = "layout.scrollContainer" | "layout.stack" | "layout.sizing" | "layout.heightSizing" | "layout.outerInsets" | "navigation.screens" | "navigation.sheets" | "component.text" | "component.image" | "component.icon" | "component.featureList" | "component.productSelector" | "component.productCard" | "component.productBadge" | "component.button" | "component.carousel" | "component.switch" | "component.countdown" | "localization.catalogs" | "localization.rtl" | "localization.productTemplate" | "product.references" | "asset.bundledImage" | "asset.remoteImage" | "asset.bundledVideo" | "asset.remoteVideo" | "action.purchase" | "action.restore" | "action.close" | "action.navigateTo" | "action.navigateBack" | "action.openExternalUrl" | "accessibility.metadata" | "fallback.asset" | "fallback.product" | "outcome.normalized" | "style.colors" | "style.designTokens" | "style.gradientBackground" | "style.mediaBackground" | "style.shadow" | "style.box" | "style.clipping" | "style.typography" | "style.productCardStates" | "visibility.static" | "condition.switchVisibility";
+export type MosaicPaywallV03CapabilityName = "layout.scrollContainer" | "layout.stack" | "layout.sizing" | "layout.heightSizing" | "layout.outerInsets" | "navigation.screens" | "navigation.sheets" | "component.text" | "component.image" | "component.icon" | "component.featureList" | "component.productSelector" | "component.productCard" | "component.productBadge" | "component.button" | "component.carousel" | "component.switch" | "component.countdown" | "component.tabs" | "component.timeline" | "component.award" | "component.socialProof" | "localization.catalogs" | "localization.rtl" | "localization.productTemplate" | "product.references" | "asset.bundledImage" | "asset.remoteImage" | "asset.bundledVideo" | "asset.remoteVideo" | "action.purchase" | "action.restore" | "action.close" | "action.navigateTo" | "action.navigateBack" | "action.openExternalUrl" | "accessibility.metadata" | "accessibility.reservedStrings" | "fallback.asset" | "fallback.product" | "outcome.normalized" | "style.colors" | "style.designTokens" | "style.gradientBackground" | "style.mediaBackground" | "style.shadow" | "style.box" | "style.clipping" | "style.typography" | "style.productCardStates" | "visibility.static" | "condition.switchVisibility" | "condition.tabVisibility";
 
-export type MosaicPaywallV02RequiredCapability = {
-  "name": MosaicPaywallV02CapabilityName;
-  "version": MosaicPaywallV02Version;
+export type MosaicPaywallV03RequiredCapability = {
+  "name": MosaicPaywallV03CapabilityName;
+  "version": MosaicPaywallV03Version;
 };
 
-export type MosaicPaywallV02DocumentCompatibility = {
-  "requiredCapabilities": Array<MosaicPaywallV02RequiredCapability>;
+export type MosaicPaywallV03DocumentCompatibility = {
+  "requiredCapabilities": Array<MosaicPaywallV03RequiredCapability>;
 };
 
-export type MosaicPaywallV02LogicalSize = number;
+export type MosaicPaywallV03LogicalSize = number;
 
-export type MosaicPaywallV02PositiveLogicalSize = number;
+export type MosaicPaywallV03PositiveLogicalSize = number;
 
-export type MosaicPaywallV02EdgeInsets = {
-  "top": MosaicPaywallV02LogicalSize;
-  "start": MosaicPaywallV02LogicalSize;
-  "bottom": MosaicPaywallV02LogicalSize;
-  "end": MosaicPaywallV02LogicalSize;
+export type MosaicPaywallV03EdgeInsets = {
+  "top": MosaicPaywallV03LogicalSize;
+  "start": MosaicPaywallV03LogicalSize;
+  "bottom": MosaicPaywallV03LogicalSize;
+  "end": MosaicPaywallV03LogicalSize;
 };
 
-export type MosaicPaywallV02TextAlignment = "start" | "center" | "end";
+export type MosaicPaywallV03TextAlignment = "start" | "center" | "end";
 
-export type MosaicPaywallV02SemanticColor = "text.primary" | "text.secondary" | "surface.default" | "surface.elevated" | "action.primary" | "action.onPrimary" | "border.default" | "transparent";
+export type MosaicPaywallV03SemanticColor = "text.primary" | "text.secondary" | "surface.default" | "surface.elevated" | "action.primary" | "action.onPrimary" | "border.default" | "transparent";
 
-export type MosaicPaywallV02LiteralColor = string;
+export type MosaicPaywallV03LiteralColor = string;
 
-export type MosaicPaywallV02ColorTokenReference = {
+export type MosaicPaywallV03ColorTokenReference = {
   "type": "colorToken";
-  "id": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
 };
 
-export type MosaicPaywallV02Color = MosaicPaywallV02SemanticColor | MosaicPaywallV02LiteralColor | MosaicPaywallV02ColorTokenReference;
+export type MosaicPaywallV03Color = MosaicPaywallV03SemanticColor | MosaicPaywallV03LiteralColor | MosaicPaywallV03ColorTokenReference;
 
-export type MosaicPaywallV02AxisSizingValue = "fit" | "fill" | {
+export type MosaicPaywallV03AxisSizingValue = "fit" | "fill" | {
   "mode": "fixed";
-  "value": MosaicPaywallV02PositiveLogicalSize;
+  "value": MosaicPaywallV03PositiveLogicalSize;
 };
 
-export type MosaicPaywallV02BoxSizing = {
-  "width": MosaicPaywallV02AxisSizingValue;
-  "height": MosaicPaywallV02AxisSizingValue;
+export type MosaicPaywallV03BoxSizing = {
+  "width": MosaicPaywallV03AxisSizingValue;
+  "height": MosaicPaywallV03AxisSizingValue;
 };
 
-export type MosaicPaywallV02GradientStop = {
+export type MosaicPaywallV03GradientStop = {
   "position": number;
-  "color": MosaicPaywallV02Color;
+  "color": MosaicPaywallV03Color;
 };
 
-export type MosaicPaywallV02GradientStops = Array<MosaicPaywallV02GradientStop>;
+export type MosaicPaywallV03GradientStops = Array<MosaicPaywallV03GradientStop>;
 
-export type MosaicPaywallV02NormalizedPoint = {
+export type MosaicPaywallV03NormalizedPoint = {
   "x": number;
   "y": number;
 };
 
-export type MosaicPaywallV02ColorBackground = {
+export type MosaicPaywallV03ColorBackground = {
   "type": "color";
-  "value": MosaicPaywallV02Color;
+  "value": MosaicPaywallV03Color;
 };
 
-export type MosaicPaywallV02LinearGradientBackground = {
+export type MosaicPaywallV03LinearGradientBackground = {
   "type": "linearGradient";
   "angle": number;
-  "stops": MosaicPaywallV02GradientStops;
+  "stops": MosaicPaywallV03GradientStops;
 };
 
-export type MosaicPaywallV02RadialGradientBackground = {
+export type MosaicPaywallV03RadialGradientBackground = {
   "type": "radialGradient";
-  "center": MosaicPaywallV02NormalizedPoint;
+  "center": MosaicPaywallV03NormalizedPoint;
   "radius": number;
-  "stops": MosaicPaywallV02GradientStops;
+  "stops": MosaicPaywallV03GradientStops;
 };
 
-export type MosaicPaywallV02MediaContentMode = "fit" | "fill";
+export type MosaicPaywallV03MediaContentMode = "fit" | "fill";
 
-export type MosaicPaywallV02ImageBackground = {
+export type MosaicPaywallV03ImageBackground = {
   "type": "image";
-  "assetId": MosaicPaywallV02Identifier;
-  "contentMode": MosaicPaywallV02MediaContentMode;
-  "fallbackColor": MosaicPaywallV02Color;
+  "assetId": MosaicPaywallV03Identifier;
+  "contentMode": MosaicPaywallV03MediaContentMode;
+  "fallbackColor": MosaicPaywallV03Color;
 };
 
-export type MosaicPaywallV02VideoBackground = {
+export type MosaicPaywallV03VideoBackground = {
   "type": "video";
-  "assetId": MosaicPaywallV02Identifier;
-  "contentMode": MosaicPaywallV02MediaContentMode;
-  "posterAssetId"?: MosaicPaywallV02Identifier;
-  "fallbackColor": MosaicPaywallV02Color;
+  "assetId": MosaicPaywallV03Identifier;
+  "contentMode": MosaicPaywallV03MediaContentMode;
+  "posterAssetId"?: MosaicPaywallV03Identifier;
+  "fallbackColor": MosaicPaywallV03Color;
 };
 
-export type MosaicPaywallV02BackgroundTokenReference = {
+export type MosaicPaywallV03BackgroundTokenReference = {
   "type": "backgroundToken";
-  "id": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
 };
 
-export type MosaicPaywallV02Background = MosaicPaywallV02ColorBackground | MosaicPaywallV02LinearGradientBackground | MosaicPaywallV02RadialGradientBackground | MosaicPaywallV02ImageBackground | MosaicPaywallV02VideoBackground | MosaicPaywallV02BackgroundTokenReference;
+export type MosaicPaywallV03Background = MosaicPaywallV03ColorBackground | MosaicPaywallV03LinearGradientBackground | MosaicPaywallV03RadialGradientBackground | MosaicPaywallV03ImageBackground | MosaicPaywallV03VideoBackground | MosaicPaywallV03BackgroundTokenReference;
 
-export type MosaicPaywallV02InlineShadow = {
+export type MosaicPaywallV03InlineShadow = {
   "type": "shadow";
-  "color": MosaicPaywallV02Color;
+  "color": MosaicPaywallV03Color;
   "offsetX": number;
   "offsetY": number;
-  "blurRadius": MosaicPaywallV02LogicalSize;
+  "blurRadius": MosaicPaywallV03LogicalSize;
 };
 
-export type MosaicPaywallV02ShadowTokenReference = {
+export type MosaicPaywallV03ShadowTokenReference = {
   "type": "shadowToken";
-  "id": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
 };
 
-export type MosaicPaywallV02Shadow = MosaicPaywallV02InlineShadow | MosaicPaywallV02ShadowTokenReference;
+export type MosaicPaywallV03Shadow = MosaicPaywallV03InlineShadow | MosaicPaywallV03ShadowTokenReference;
 
-export type MosaicPaywallV02DesignTokenName = string;
+export type MosaicPaywallV03DesignTokenName = string;
 
-export type MosaicPaywallV02ColorToken = {
-  "id": MosaicPaywallV02Identifier;
-  "name": MosaicPaywallV02DesignTokenName;
-  "value": MosaicPaywallV02Color;
+export type MosaicPaywallV03ColorToken = {
+  "id": MosaicPaywallV03Identifier;
+  "name": MosaicPaywallV03DesignTokenName;
+  "value": MosaicPaywallV03Color;
 };
 
-export type MosaicPaywallV02BackgroundToken = {
-  "id": MosaicPaywallV02Identifier;
-  "name": MosaicPaywallV02DesignTokenName;
-  "value": MosaicPaywallV02Background;
+export type MosaicPaywallV03BackgroundToken = {
+  "id": MosaicPaywallV03Identifier;
+  "name": MosaicPaywallV03DesignTokenName;
+  "value": MosaicPaywallV03Background;
 };
 
-export type MosaicPaywallV02ShadowToken = {
-  "id": MosaicPaywallV02Identifier;
-  "name": MosaicPaywallV02DesignTokenName;
-  "value": MosaicPaywallV02Shadow;
+export type MosaicPaywallV03ShadowToken = {
+  "id": MosaicPaywallV03Identifier;
+  "name": MosaicPaywallV03DesignTokenName;
+  "value": MosaicPaywallV03Shadow;
 };
 
-export type MosaicPaywallV02DesignSystem = {
-  "colors": Array<MosaicPaywallV02ColorToken>;
-  "backgrounds": Array<MosaicPaywallV02BackgroundToken>;
-  "shadows": Array<MosaicPaywallV02ShadowToken>;
+export type MosaicPaywallV03DesignSystem = {
+  "colors": Array<MosaicPaywallV03ColorToken>;
+  "backgrounds": Array<MosaicPaywallV03BackgroundToken>;
+  "shadows": Array<MosaicPaywallV03ShadowToken>;
 };
 
-export type MosaicPaywallV02Border = {
-  "color": MosaicPaywallV02Color;
-  "width": MosaicPaywallV02LogicalSize;
+export type MosaicPaywallV03Border = {
+  "color": MosaicPaywallV03Color;
+  "width": MosaicPaywallV03LogicalSize;
 };
 
-export type MosaicPaywallV02BorderOverride = {
-  "color"?: MosaicPaywallV02Color;
-  "width"?: MosaicPaywallV02LogicalSize;
+export type MosaicPaywallV03BorderOverride = {
+  "color"?: MosaicPaywallV03Color;
+  "width"?: MosaicPaywallV03LogicalSize;
 };
 
-export type MosaicPaywallV02BoxAppearance = {
-  "background"?: MosaicPaywallV02Background;
-  "border"?: MosaicPaywallV02Border;
-  "cornerRadius"?: MosaicPaywallV02LogicalSize;
+export type MosaicPaywallV03BoxAppearance = {
+  "background"?: MosaicPaywallV03Background;
+  "border"?: MosaicPaywallV03Border;
+  "cornerRadius"?: MosaicPaywallV03LogicalSize;
   "opacity"?: number;
-  "padding"?: MosaicPaywallV02EdgeInsets;
-  "shadow"?: MosaicPaywallV02Shadow;
+  "padding"?: MosaicPaywallV03EdgeInsets;
+  "shadow"?: MosaicPaywallV03Shadow;
 };
 
-export type MosaicPaywallV02ContainerAppearance = {
-  "background"?: MosaicPaywallV02Background;
-  "border"?: MosaicPaywallV02Border;
-  "cornerRadius"?: MosaicPaywallV02LogicalSize;
+export type MosaicPaywallV03ContainerAppearance = {
+  "background"?: MosaicPaywallV03Background;
+  "border"?: MosaicPaywallV03Border;
+  "cornerRadius"?: MosaicPaywallV03LogicalSize;
   "opacity"?: number;
   "clipContent"?: boolean;
-  "shadow"?: MosaicPaywallV02Shadow;
+  "shadow"?: MosaicPaywallV03Shadow;
 };
 
-export type MosaicPaywallV02TypographyStyle = "display" | "title" | "heading" | "body" | "label" | "caption";
+export type MosaicPaywallV03TypographyStyle = "display" | "title" | "heading" | "body" | "label" | "caption";
 
-export type MosaicPaywallV02FontWeight = "regular" | "medium" | "semibold" | "bold";
+export type MosaicPaywallV03FontWeight = "regular" | "medium" | "semibold" | "bold";
 
-export type MosaicPaywallV02BaseTypography = {
-  "style": MosaicPaywallV02TypographyStyle;
+export type MosaicPaywallV03BaseTypography = {
+  "style": MosaicPaywallV03TypographyStyle;
   "fontSize": number;
   "lineHeightMultiplier": number;
-  "weight": MosaicPaywallV02FontWeight;
-  "color": MosaicPaywallV02Color;
-  "alignment": MosaicPaywallV02TextAlignment;
+  "weight": MosaicPaywallV03FontWeight;
+  "color": MosaicPaywallV03Color;
+  "alignment": MosaicPaywallV03TextAlignment;
 };
 
-export type MosaicPaywallV02Typography = {
-  "style": MosaicPaywallV02TypographyStyle;
+export type MosaicPaywallV03Typography = {
+  "style": MosaicPaywallV03TypographyStyle;
   "fontSize": number;
   "lineHeightMultiplier": number;
-  "weight": MosaicPaywallV02FontWeight;
-  "color": MosaicPaywallV02Color;
-  "alignment": MosaicPaywallV02TextAlignment;
+  "weight": MosaicPaywallV03FontWeight;
+  "color": MosaicPaywallV03Color;
+  "alignment": MosaicPaywallV03TextAlignment;
   "maxLines"?: number;
   "overflow"?: "clip" | "ellipsis";
 };
 
-export type MosaicPaywallV02Visibility = {
+export type MosaicPaywallV03Visibility = {
   "mode": "always";
 } | {
   "mode": "hidden";
 } | {
   "mode": "switch";
-  "switchId": MosaicPaywallV02Identifier;
+  "switchId": MosaicPaywallV03Identifier;
   "equals": boolean;
+} | {
+  "mode": "tab";
+  "tabsId": MosaicPaywallV03Identifier;
+  "equals": MosaicPaywallV03Identifier;
 };
 
-export type MosaicPaywallV02ControlAccessibility = {
-  "label": MosaicPaywallV02LocalizedText;
-  "hint"?: MosaicPaywallV02LocalizedText;
+export type MosaicPaywallV03ControlAccessibility = {
+  "label": MosaicPaywallV03LocalizedText;
+  "hint"?: MosaicPaywallV03LocalizedText;
 };
 
-export type MosaicPaywallV02TextAccessibility = {
+export type MosaicPaywallV03TextAccessibility = {
   "role": "text";
-  "label"?: MosaicPaywallV02LocalizedText;
+  "label"?: MosaicPaywallV03LocalizedText;
 } | {
   "role": "heading";
   "level": number;
-  "label"?: MosaicPaywallV02LocalizedText;
+  "label"?: MosaicPaywallV03LocalizedText;
 };
 
-export type MosaicPaywallV02ImageAccessibility = {
+export type MosaicPaywallV03ImageAccessibility = {
   "hidden": true;
 } | {
   "hidden": false;
-  "label": MosaicPaywallV02LocalizedText;
+  "label": MosaicPaywallV03LocalizedText;
 };
 
-export type MosaicPaywallV02BundledAssetSource = {
+export type MosaicPaywallV03BundledAssetSource = {
   "type": "bundled";
   "key": string;
 };
 
-export type MosaicPaywallV02RemoteAssetSource = {
+export type MosaicPaywallV03RemoteAssetSource = {
   "type": "remote";
-  "url": MosaicPaywallV02ExternalUrl;
+  "url": MosaicPaywallV03ExternalUrl;
 };
 
-export type MosaicPaywallV02AssetSource = MosaicPaywallV02BundledAssetSource | MosaicPaywallV02RemoteAssetSource;
+export type MosaicPaywallV03AssetSource = MosaicPaywallV03BundledAssetSource | MosaicPaywallV03RemoteAssetSource;
 
-export type MosaicPaywallV02ImageAssetFallback = {
+export type MosaicPaywallV03ImageAssetFallback = {
   "type": "placeholder";
-  "value": MosaicPaywallV02LocalizedText;
+  "value": MosaicPaywallV03LocalizedText;
 };
 
-export type MosaicPaywallV02ImageAsset = {
+export type MosaicPaywallV03ImageAsset = {
   "type": "image";
-  "id": MosaicPaywallV02Identifier;
-  "source": MosaicPaywallV02AssetSource;
-  "fallback": MosaicPaywallV02ImageAssetFallback;
+  "id": MosaicPaywallV03Identifier;
+  "source": MosaicPaywallV03AssetSource;
+  "fallback": MosaicPaywallV03ImageAssetFallback;
 };
 
-export type MosaicPaywallV02VideoAsset = {
+export type MosaicPaywallV03VideoAsset = {
   "type": "video";
-  "id": MosaicPaywallV02Identifier;
-  "source": MosaicPaywallV02AssetSource;
+  "id": MosaicPaywallV03Identifier;
+  "source": MosaicPaywallV03AssetSource;
 };
 
-export type MosaicPaywallV02Asset = MosaicPaywallV02ImageAsset | MosaicPaywallV02VideoAsset;
+export type MosaicPaywallV03Asset = MosaicPaywallV03ImageAsset | MosaicPaywallV03VideoAsset;
 
-export type MosaicPaywallV02ProductReference = {
-  "id": MosaicPaywallV02Identifier;
+export type MosaicPaywallV03ProductReference = {
+  "id": MosaicPaywallV03Identifier;
   "productId": string;
-  "label": MosaicPaywallV02LocalizedText;
+  "label": MosaicPaywallV03LocalizedText;
 };
 
-export type MosaicPaywallV02ScreenPresentation = {
+export type MosaicPaywallV03ScreenPresentation = {
   "type": "screen";
 } | {
   "type": "sheet";
 };
 
-export type MosaicPaywallV02Screen = {
-  "id": MosaicPaywallV02Identifier;
-  "accessibilityLabel"?: MosaicPaywallV02LocalizedText;
-  "presentation": MosaicPaywallV02ScreenPresentation;
-  "layout": MosaicPaywallV02ScrollContainer;
+export type MosaicPaywallV03Screen = {
+  "id": MosaicPaywallV03Identifier;
+  "accessibilityLabel"?: MosaicPaywallV03LocalizedText;
+  "presentation": MosaicPaywallV03ScreenPresentation;
+  "layout": MosaicPaywallV03ScrollContainer;
 };
 
-export type MosaicPaywallV02ScrollContainer = {
+export type MosaicPaywallV03ScrollContainer = {
   "type": "scrollContainer";
-  "id": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
   "axis": "vertical";
   "safeArea": "respect";
   "showsIndicators": boolean;
-  "background"?: MosaicPaywallV02Background;
-  "content": MosaicPaywallV02Stack;
+  "background"?: MosaicPaywallV03Background;
+  "content": MosaicPaywallV03Stack;
 };
 
-export type MosaicPaywallV02Stack = {
+export type MosaicPaywallV03Stack = {
   "type": "stack";
-  "id": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
   "direction": "vertical" | "horizontal";
-  "gap": MosaicPaywallV02LogicalSize;
-  "padding": MosaicPaywallV02EdgeInsets;
+  "gap": MosaicPaywallV03LogicalSize;
+  "padding": MosaicPaywallV03EdgeInsets;
   "mainAxisDistribution": "start" | "center" | "end" | "spaceBetween";
   "crossAxisAlignment": "start" | "center" | "end" | "stretch";
-  "appearance"?: MosaicPaywallV02ContainerAppearance;
-  "sizing"?: MosaicPaywallV02BoxSizing;
-  "outerInsets"?: MosaicPaywallV02EdgeInsets;
-  "visibility"?: MosaicPaywallV02Visibility;
-  "children": Array<MosaicPaywallV02Node>;
+  "appearance"?: MosaicPaywallV03ContainerAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "children": Array<MosaicPaywallV03Node>;
 };
 
-export type MosaicPaywallV02Node = MosaicPaywallV02Stack | MosaicPaywallV02TextComponent | MosaicPaywallV02ImageComponent | MosaicPaywallV02IconComponent | MosaicPaywallV02FeatureListComponent | MosaicPaywallV02ProductSelectorComponent | MosaicPaywallV02ButtonComponent | MosaicPaywallV02CarouselComponent | MosaicPaywallV02SwitchComponent | MosaicPaywallV02CountdownComponent;
+export type MosaicPaywallV03Node = MosaicPaywallV03Stack | MosaicPaywallV03TextComponent | MosaicPaywallV03ImageComponent | MosaicPaywallV03IconComponent | MosaicPaywallV03FeatureListComponent | MosaicPaywallV03ProductSelectorComponent | MosaicPaywallV03ButtonComponent | MosaicPaywallV03CarouselComponent | MosaicPaywallV03SwitchComponent | MosaicPaywallV03CountdownComponent | MosaicPaywallV03TabsComponent | MosaicPaywallV03TimelineComponent | MosaicPaywallV03AwardComponent | MosaicPaywallV03SocialProofComponent;
 
-export type MosaicPaywallV02TextComponent = {
+export type MosaicPaywallV03TextComponent = {
   "type": "text";
-  "id": MosaicPaywallV02Identifier;
-  "value": MosaicPaywallV02LocalizedText;
-  "typography": MosaicPaywallV02Typography;
-  "appearance"?: MosaicPaywallV02BoxAppearance;
-  "sizing"?: MosaicPaywallV02BoxSizing;
-  "outerInsets"?: MosaicPaywallV02EdgeInsets;
-  "visibility"?: MosaicPaywallV02Visibility;
-  "accessibility": MosaicPaywallV02TextAccessibility;
+  "id": MosaicPaywallV03Identifier;
+  "value": MosaicPaywallV03LocalizedText;
+  "typography": MosaicPaywallV03Typography;
+  "appearance"?: MosaicPaywallV03BoxAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "accessibility": MosaicPaywallV03TextAccessibility;
 };
 
-export type MosaicPaywallV02ImageComponent = {
+export type MosaicPaywallV03ImageComponent = {
   "type": "image";
-  "id": MosaicPaywallV02Identifier;
-  "assetId": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
+  "assetId": MosaicPaywallV03Identifier;
   "aspectRatio"?: number;
   "contentMode": "fit" | "fill";
-  "appearance"?: MosaicPaywallV02BoxAppearance;
-  "sizing"?: MosaicPaywallV02BoxSizing;
-  "outerInsets"?: MosaicPaywallV02EdgeInsets;
-  "visibility"?: MosaicPaywallV02Visibility;
-  "accessibility": MosaicPaywallV02ImageAccessibility;
+  "appearance"?: MosaicPaywallV03BoxAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "accessibility": MosaicPaywallV03ImageAccessibility;
 };
 
-export type MosaicPaywallV02IconName = "checkmark" | "close" | "lock" | "restore" | "externalLink" | "arrowBackward" | "arrowForward" | "chevronBackward" | "chevronForward";
+export type MosaicPaywallV03IconName = "checkmark" | "close" | "lock" | "restore" | "externalLink" | "arrowBackward" | "arrowForward" | "chevronBackward" | "chevronForward";
 
-export type MosaicPaywallV02IconComponent = {
+export type MosaicPaywallV03IconComponent = {
   "type": "icon";
-  "id": MosaicPaywallV02Identifier;
-  "name": MosaicPaywallV02IconName;
-  "size": MosaicPaywallV02PositiveLogicalSize;
-  "color": MosaicPaywallV02Color;
-  "appearance"?: MosaicPaywallV02BoxAppearance;
-  "sizing"?: MosaicPaywallV02BoxSizing;
-  "outerInsets"?: MosaicPaywallV02EdgeInsets;
-  "visibility"?: MosaicPaywallV02Visibility;
-  "accessibility": MosaicPaywallV02ImageAccessibility;
+  "id": MosaicPaywallV03Identifier;
+  "name": MosaicPaywallV03IconName;
+  "size": MosaicPaywallV03PositiveLogicalSize;
+  "color": MosaicPaywallV03Color;
+  "appearance"?: MosaicPaywallV03BoxAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "accessibility": MosaicPaywallV03ImageAccessibility;
 };
 
-export type MosaicPaywallV02FeatureListItem = {
-  "id": MosaicPaywallV02Identifier;
-  "text": MosaicPaywallV02LocalizedText;
+export type MosaicPaywallV03FeatureListItem = {
+  "id": MosaicPaywallV03Identifier;
+  "text": MosaicPaywallV03LocalizedText;
 };
 
-export type MosaicPaywallV02FeatureListComponent = {
+export type MosaicPaywallV03FeatureListComponent = {
   "type": "featureList";
-  "id": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
   "marker": "checkmark";
-  "gap": MosaicPaywallV02LogicalSize;
-  "markerColor": MosaicPaywallV02Color;
-  "items": Array<MosaicPaywallV02FeatureListItem>;
-  "typography": MosaicPaywallV02BaseTypography;
-  "appearance"?: MosaicPaywallV02BoxAppearance;
-  "sizing"?: MosaicPaywallV02BoxSizing;
-  "outerInsets"?: MosaicPaywallV02EdgeInsets;
-  "visibility"?: MosaicPaywallV02Visibility;
-  "accessibility": MosaicPaywallV02ControlAccessibility;
+  "gap": MosaicPaywallV03LogicalSize;
+  "markerColor": MosaicPaywallV03Color;
+  "items": Array<MosaicPaywallV03FeatureListItem>;
+  "typography": MosaicPaywallV03BaseTypography;
+  "appearance"?: MosaicPaywallV03BoxAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "accessibility": MosaicPaywallV03ControlAccessibility;
 };
 
-export type MosaicPaywallV02UnavailableProductFallback = {
+export type MosaicPaywallV03UnavailableProductFallback = {
   "selection": "firstAvailable";
   "whenNoneAvailable": "showMessageAndDisablePurchase";
-  "message": MosaicPaywallV02LocalizedText;
+  "message": MosaicPaywallV03LocalizedText;
 };
 
-export type MosaicPaywallV02ProductCardDefaultStyle = {
-  "background": MosaicPaywallV02Background;
-  "border": MosaicPaywallV02Border;
-  "cornerRadius": MosaicPaywallV02LogicalSize;
-  "padding": MosaicPaywallV02EdgeInsets;
+export type MosaicPaywallV03SelectionStateStyle = {
+  "background": MosaicPaywallV03Background;
+  "border": MosaicPaywallV03Border;
+  "cornerRadius": MosaicPaywallV03LogicalSize;
+  "padding": MosaicPaywallV03EdgeInsets;
   "opacity": number;
-  "shadow"?: MosaicPaywallV02Shadow;
+  "shadow"?: MosaicPaywallV03Shadow;
 };
 
-export type MosaicPaywallV02EdgeInsetsOverride = {
-  "top"?: MosaicPaywallV02LogicalSize;
-  "start"?: MosaicPaywallV02LogicalSize;
-  "bottom"?: MosaicPaywallV02LogicalSize;
-  "end"?: MosaicPaywallV02LogicalSize;
+export type MosaicPaywallV03ProductCardDefaultStyle = MosaicPaywallV03SelectionStateStyle;
+
+export type MosaicPaywallV03EdgeInsetsOverride = {
+  "top"?: MosaicPaywallV03LogicalSize;
+  "start"?: MosaicPaywallV03LogicalSize;
+  "bottom"?: MosaicPaywallV03LogicalSize;
+  "end"?: MosaicPaywallV03LogicalSize;
 };
 
-export type MosaicPaywallV02ProductCardSelectedStyle = {
-  "background"?: MosaicPaywallV02Background;
-  "border"?: MosaicPaywallV02BorderOverride;
-  "cornerRadius"?: MosaicPaywallV02LogicalSize;
-  "padding"?: MosaicPaywallV02EdgeInsetsOverride;
+export type MosaicPaywallV03SelectionStateStyleOverride = {
+  "background"?: MosaicPaywallV03Background;
+  "border"?: MosaicPaywallV03BorderOverride;
+  "cornerRadius"?: MosaicPaywallV03LogicalSize;
+  "padding"?: MosaicPaywallV03EdgeInsetsOverride;
   "opacity"?: number;
-  "shadow"?: MosaicPaywallV02Shadow;
+  "shadow"?: MosaicPaywallV03Shadow;
 };
 
-export type MosaicPaywallV02ProductCardStyles = {
-  "default": MosaicPaywallV02ProductCardDefaultStyle;
-  "selected": MosaicPaywallV02ProductCardSelectedStyle;
+export type MosaicPaywallV03SelectionStyles = {
+  "default": MosaicPaywallV03SelectionStateStyle;
+  "selected": MosaicPaywallV03SelectionStateStyleOverride;
 };
 
-export type MosaicPaywallV02ProductCardAccessibility = {
-  "label": MosaicPaywallV02LocalizedText;
+export type MosaicPaywallV03ProductCardSelectedStyle = MosaicPaywallV03SelectionStateStyleOverride;
+
+export type MosaicPaywallV03ProductCardStyles = MosaicPaywallV03SelectionStyles;
+
+export type MosaicPaywallV03ProductCardAccessibility = {
+  "label": MosaicPaywallV03LocalizedText;
 };
 
-export type MosaicPaywallV02ProductBadgePlacement = {
+export type MosaicPaywallV03ProductBadgePlacement = {
   "mode": "nested";
 } | {
   "mode": "overlay";
@@ -433,466 +445,592 @@ export type MosaicPaywallV02ProductBadgePlacement = {
   "inset": number;
 };
 
-export type MosaicPaywallV02ProductCardPassiveStack = {
+export type MosaicPaywallV03ProductCardPassiveStack = {
   "type": "stack";
-  "id": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
   "direction": "vertical" | "horizontal";
-  "gap": MosaicPaywallV02LogicalSize;
-  "padding": MosaicPaywallV02EdgeInsets;
+  "gap": MosaicPaywallV03LogicalSize;
+  "padding": MosaicPaywallV03EdgeInsets;
   "mainAxisDistribution": "start" | "center" | "end" | "spaceBetween";
   "crossAxisAlignment": "start" | "center" | "end" | "stretch";
-  "appearance"?: MosaicPaywallV02ContainerAppearance;
-  "sizing"?: MosaicPaywallV02BoxSizing;
-  "outerInsets"?: MosaicPaywallV02EdgeInsets;
-  "visibility"?: MosaicPaywallV02Visibility;
-  "children": Array<MosaicPaywallV02ProductCardPassiveNode>;
+  "appearance"?: MosaicPaywallV03ContainerAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "children": Array<MosaicPaywallV03ProductCardPassiveNode>;
 };
 
-export type MosaicPaywallV02ProductCardPassiveNode = MosaicPaywallV02ProductCardPassiveStack | MosaicPaywallV02TextComponent | MosaicPaywallV02ImageComponent | MosaicPaywallV02IconComponent | MosaicPaywallV02FeatureListComponent | MosaicPaywallV02CountdownComponent;
+export type MosaicPaywallV03ProductCardPassiveNode = MosaicPaywallV03ProductCardPassiveStack | MosaicPaywallV03TextComponent | MosaicPaywallV03ImageComponent | MosaicPaywallV03IconComponent | MosaicPaywallV03FeatureListComponent | MosaicPaywallV03CountdownComponent | MosaicPaywallV03TimelineComponent | MosaicPaywallV03AwardComponent | MosaicPaywallV03SocialProofComponent;
 
-export type MosaicPaywallV02ProductBadgeComponent = {
+export type MosaicPaywallV03ProductBadgeComponent = {
   "type": "productBadge";
-  "id": MosaicPaywallV02Identifier;
-  "placement": MosaicPaywallV02ProductBadgePlacement;
+  "id": MosaicPaywallV03Identifier;
+  "placement": MosaicPaywallV03ProductBadgePlacement;
   "direction": "vertical" | "horizontal";
-  "gap": MosaicPaywallV02LogicalSize;
+  "gap": MosaicPaywallV03LogicalSize;
   "mainAxisDistribution": "start" | "center" | "end" | "spaceBetween";
   "crossAxisAlignment": "start" | "center" | "end" | "stretch";
-  "children": Array<MosaicPaywallV02ProductCardPassiveNode>;
-  "styles": MosaicPaywallV02ProductCardStyles;
-  "sizing"?: MosaicPaywallV02BoxSizing;
+  "children": Array<MosaicPaywallV03ProductCardPassiveNode>;
+  "styles": MosaicPaywallV03ProductCardStyles;
+  "sizing"?: MosaicPaywallV03BoxSizing;
 };
 
-export type MosaicPaywallV02ProductCardChild = MosaicPaywallV02ProductCardPassiveNode | MosaicPaywallV02ProductBadgeComponent;
+export type MosaicPaywallV03ProductCardChild = MosaicPaywallV03ProductCardPassiveNode | MosaicPaywallV03ProductBadgeComponent;
 
-export type MosaicPaywallV02ProductCardComponent = {
+export type MosaicPaywallV03ProductCardComponent = {
   "type": "productCard";
-  "id": MosaicPaywallV02Identifier;
-  "productReferenceId": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
+  "productReferenceId": MosaicPaywallV03Identifier;
   "direction": "vertical" | "horizontal";
-  "gap": MosaicPaywallV02LogicalSize;
+  "gap": MosaicPaywallV03LogicalSize;
   "mainAxisDistribution": "start" | "center" | "end" | "spaceBetween";
   "crossAxisAlignment": "start" | "center" | "end" | "stretch";
-  "children": Array<MosaicPaywallV02ProductCardChild>;
-  "styles": MosaicPaywallV02ProductCardStyles;
-  "sizing"?: MosaicPaywallV02BoxSizing;
+  "children": Array<MosaicPaywallV03ProductCardChild>;
+  "styles": MosaicPaywallV03ProductCardStyles;
+  "sizing"?: MosaicPaywallV03BoxSizing;
   "clipContent"?: false;
-  "accessibility"?: MosaicPaywallV02ProductCardAccessibility;
+  "accessibility"?: MosaicPaywallV03ProductCardAccessibility;
 };
 
-export type MosaicPaywallV02ProductSelectorComponent = {
+export type MosaicPaywallV03ProductSelectorComponent = {
   "type": "productSelector";
-  "id": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
   "direction": "vertical" | "horizontal";
-  "gap": MosaicPaywallV02LogicalSize;
+  "gap": MosaicPaywallV03LogicalSize;
   "crossAxisAlignment": "start" | "center" | "end" | "stretch";
-  "initialProductCardId": MosaicPaywallV02Identifier;
-  "cards": Array<MosaicPaywallV02ProductCardComponent>;
-  "appearance"?: MosaicPaywallV02BoxAppearance;
-  "sizing"?: MosaicPaywallV02BoxSizing;
-  "outerInsets"?: MosaicPaywallV02EdgeInsets;
-  "visibility"?: MosaicPaywallV02Visibility;
-  "unavailableFallback": MosaicPaywallV02UnavailableProductFallback;
-  "accessibility": MosaicPaywallV02ControlAccessibility;
+  "initialProductCardId": MosaicPaywallV03Identifier;
+  "cards": Array<MosaicPaywallV03ProductCardComponent>;
+  "appearance"?: MosaicPaywallV03BoxAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "unavailableFallback": MosaicPaywallV03UnavailableProductFallback;
+  "accessibility": MosaicPaywallV03ControlAccessibility;
 };
 
-export type MosaicPaywallV02PurchaseAction = {
+export type MosaicPaywallV03PurchaseAction = {
   "type": "purchase";
-  "productSelectorId": MosaicPaywallV02Identifier;
+  "productSelectorId": MosaicPaywallV03Identifier;
 };
 
-export type MosaicPaywallV02RestoreAction = {
+export type MosaicPaywallV03RestoreAction = {
   "type": "restore";
 };
 
-export type MosaicPaywallV02CloseAction = {
+export type MosaicPaywallV03CloseAction = {
   "type": "close";
 };
 
-export type MosaicPaywallV02NavigateToAction = {
+export type MosaicPaywallV03NavigateToAction = {
   "type": "navigateTo";
-  "screenId": MosaicPaywallV02Identifier;
+  "screenId": MosaicPaywallV03Identifier;
 };
 
-export type MosaicPaywallV02NavigateBackAction = {
+export type MosaicPaywallV03NavigateBackAction = {
   "type": "navigateBack";
 };
 
-export type MosaicPaywallV02ExternalUrl = string;
+export type MosaicPaywallV03ExternalUrl = string;
 
-export type MosaicPaywallV02OpenExternalUrlAction = {
+export type MosaicPaywallV03OpenExternalUrlAction = {
   "type": "openExternalUrl";
-  "url": MosaicPaywallV02ExternalUrl;
+  "url": MosaicPaywallV03ExternalUrl;
 };
 
-export type MosaicPaywallV02ButtonAction = MosaicPaywallV02PurchaseAction | MosaicPaywallV02RestoreAction | MosaicPaywallV02CloseAction | MosaicPaywallV02NavigateToAction | MosaicPaywallV02NavigateBackAction | MosaicPaywallV02OpenExternalUrlAction;
+export type MosaicPaywallV03ButtonAction = MosaicPaywallV03PurchaseAction | MosaicPaywallV03RestoreAction | MosaicPaywallV03CloseAction | MosaicPaywallV03NavigateToAction | MosaicPaywallV03NavigateBackAction | MosaicPaywallV03OpenExternalUrlAction;
 
-export type MosaicPaywallV02ButtonComponent = {
+export type MosaicPaywallV03ButtonComponent = {
   "type": "button";
-  "id": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
   "direction": "vertical" | "horizontal";
-  "gap": MosaicPaywallV02LogicalSize;
+  "gap": MosaicPaywallV03LogicalSize;
   "mainAxisDistribution": "start" | "center" | "end" | "spaceBetween";
   "crossAxisAlignment": "start" | "center" | "end" | "stretch";
-  "children": Array<MosaicPaywallV02Node>;
-  "inProgressChildren"?: Array<MosaicPaywallV02Node>;
-  "appearance"?: MosaicPaywallV02BoxAppearance;
-  "sizing"?: MosaicPaywallV02BoxSizing;
-  "outerInsets"?: MosaicPaywallV02EdgeInsets;
-  "visibility"?: MosaicPaywallV02Visibility;
-  "action": MosaicPaywallV02ButtonAction;
-  "accessibility": MosaicPaywallV02ControlAccessibility;
+  "children": Array<MosaicPaywallV03Node>;
+  "inProgressChildren"?: Array<MosaicPaywallV03Node>;
+  "appearance"?: MosaicPaywallV03BoxAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "action": MosaicPaywallV03ButtonAction;
+  "accessibility": MosaicPaywallV03ControlAccessibility;
 };
 
-export type MosaicPaywallV02CarouselPage = {
-  "id": MosaicPaywallV02Identifier;
-  "accessibilityLabel": MosaicPaywallV02LocalizedText;
-  "content": MosaicPaywallV02Stack;
+export type MosaicPaywallV03CarouselPage = {
+  "id": MosaicPaywallV03Identifier;
+  "accessibilityLabel": MosaicPaywallV03LocalizedText;
+  "content": MosaicPaywallV03Stack;
 };
 
-export type MosaicPaywallV02CarouselComponent = {
+export type MosaicPaywallV03CarouselComponent = {
   "type": "carousel";
-  "id": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
   "initialPageIndex": number;
   "showsIndicators": boolean;
-  "pages": Array<MosaicPaywallV02CarouselPage>;
-  "appearance"?: MosaicPaywallV02ContainerAppearance;
-  "sizing"?: MosaicPaywallV02BoxSizing;
-  "outerInsets"?: MosaicPaywallV02EdgeInsets;
-  "visibility"?: MosaicPaywallV02Visibility;
-  "accessibility": MosaicPaywallV02ControlAccessibility;
+  "pages": Array<MosaicPaywallV03CarouselPage>;
+  "appearance"?: MosaicPaywallV03ContainerAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "accessibility": MosaicPaywallV03ControlAccessibility;
 };
 
-export type MosaicPaywallV02SwitchComponent = {
+export type MosaicPaywallV03SwitchComponent = {
   "type": "switch";
-  "id": MosaicPaywallV02Identifier;
-  "label": MosaicPaywallV02LocalizedText;
+  "id": MosaicPaywallV03Identifier;
+  "label": MosaicPaywallV03LocalizedText;
   "initialValue": boolean;
-  "typography": MosaicPaywallV02BaseTypography;
-  "offTrackColor": MosaicPaywallV02Color;
-  "onTrackColor": MosaicPaywallV02Color;
-  "thumbColor": MosaicPaywallV02Color;
-  "appearance"?: MosaicPaywallV02BoxAppearance;
-  "sizing"?: MosaicPaywallV02BoxSizing;
-  "outerInsets"?: MosaicPaywallV02EdgeInsets;
-  "visibility"?: MosaicPaywallV02Visibility;
-  "accessibility": MosaicPaywallV02ControlAccessibility;
+  "typography": MosaicPaywallV03BaseTypography;
+  "offTrackColor": MosaicPaywallV03Color;
+  "onTrackColor": MosaicPaywallV03Color;
+  "thumbColor": MosaicPaywallV03Color;
+  "appearance"?: MosaicPaywallV03BoxAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "accessibility": MosaicPaywallV03ControlAccessibility;
 };
 
-export type MosaicPaywallV02CountdownComponent = {
+export type MosaicPaywallV03CountdownComponent = {
   "type": "countdown";
-  "id": MosaicPaywallV02Identifier;
+  "id": MosaicPaywallV03Identifier;
   "endsAt": string;
   "largestUnit": "day" | "hour" | "minute" | "second";
   "smallestUnit": "day" | "hour" | "minute" | "second";
-  "completedText": MosaicPaywallV02LocalizedText;
-  "typography": MosaicPaywallV02BaseTypography;
-  "appearance"?: MosaicPaywallV02BoxAppearance;
-  "sizing"?: MosaicPaywallV02BoxSizing;
-  "outerInsets"?: MosaicPaywallV02EdgeInsets;
-  "visibility"?: MosaicPaywallV02Visibility;
-  "accessibility": MosaicPaywallV02TextAccessibility;
+  "completedText": MosaicPaywallV03LocalizedText;
+  "typography": MosaicPaywallV03BaseTypography;
+  "appearance"?: MosaicPaywallV03BoxAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "accessibility": MosaicPaywallV03TextAccessibility;
 };
 
-export type MosaicPaywallV02Document = {
-  "schemaVersion": MosaicPaywallV02Version;
-  "id": MosaicPaywallV02Identifier;
+export type MosaicPaywallV03TabsEntry = {
+  "id": MosaicPaywallV03Identifier;
+  "label": MosaicPaywallV03LocalizedText;
+  "content": MosaicPaywallV03Stack;
+};
+
+export type MosaicPaywallV03TabsComponent = {
+  "type": "tabs";
+  "id": MosaicPaywallV03Identifier;
+  "tabBarDirection": "vertical" | "horizontal";
+  "tabBarGap": MosaicPaywallV03LogicalSize;
+  "tabBarDistribution": "start" | "center" | "end" | "spaceBetween";
+  "gap": MosaicPaywallV03LogicalSize;
+  "initialTabId": MosaicPaywallV03Identifier;
+  "tabs": Array<MosaicPaywallV03TabsEntry>;
+  "styles": MosaicPaywallV03SelectionStyles;
+  "labelTypography": MosaicPaywallV03BaseTypography;
+  "selectedLabelColor": MosaicPaywallV03Color;
+  "appearance"?: MosaicPaywallV03ContainerAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "accessibility": MosaicPaywallV03ControlAccessibility;
+};
+
+export type MosaicPaywallV03TimelineMarker = {
+  "kind": "dot";
+} | {
+  "kind": "ordinal";
+} | {
+  "kind": "icon";
+  "name": MosaicPaywallV03IconName;
+};
+
+export type MosaicPaywallV03TimelineConnector = {
+  "color": MosaicPaywallV03Color;
+  "width": MosaicPaywallV03PositiveLogicalSize;
+  "style": "solid" | "dashed";
+};
+
+export type MosaicPaywallV03TimelineEntry = {
+  "id": MosaicPaywallV03Identifier;
+  "title": MosaicPaywallV03LocalizedText;
+  "description"?: MosaicPaywallV03LocalizedText;
+  "marker"?: MosaicPaywallV03TimelineMarker;
+};
+
+export type MosaicPaywallV03TimelineComponent = {
+  "type": "timeline";
+  "id": MosaicPaywallV03Identifier;
+  "orientation": "vertical";
+  "gap": MosaicPaywallV03LogicalSize;
+  "connector": MosaicPaywallV03TimelineConnector;
+  "entries": Array<MosaicPaywallV03TimelineEntry>;
+  "markerColor"?: MosaicPaywallV03Color;
+  "markerSize"?: MosaicPaywallV03PositiveLogicalSize;
+  "titleTypography": MosaicPaywallV03BaseTypography;
+  "descriptionTypography"?: MosaicPaywallV03BaseTypography;
+  "appearance"?: MosaicPaywallV03BoxAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "accessibility": MosaicPaywallV03ControlAccessibility;
+};
+
+export type MosaicPaywallV03AwardEmblem = {
+  "type": "image";
+  "assetId": MosaicPaywallV03Identifier;
+  "size": MosaicPaywallV03PositiveLogicalSize;
+} | {
+  "type": "icon";
+  "name": MosaicPaywallV03IconName;
+  "size": MosaicPaywallV03PositiveLogicalSize;
+  "color": MosaicPaywallV03Color;
+};
+
+export type MosaicPaywallV03AwardComponent = {
+  "type": "award";
+  "id": MosaicPaywallV03Identifier;
+  "direction": "vertical" | "horizontal";
+  "gap": MosaicPaywallV03LogicalSize;
+  "crossAxisAlignment": "start" | "center" | "end" | "stretch";
+  "emblem"?: MosaicPaywallV03AwardEmblem;
+  "title": MosaicPaywallV03LocalizedText;
+  "titleTypography": MosaicPaywallV03BaseTypography;
+  "subtitle"?: MosaicPaywallV03LocalizedText;
+  "subtitleTypography"?: MosaicPaywallV03BaseTypography;
+  "appearance"?: MosaicPaywallV03BoxAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "accessibility": MosaicPaywallV03ControlAccessibility;
+};
+
+export type MosaicPaywallV03SocialProofRating = {
+  "symbol": "star";
+  "value": number;
+  "maximum": number;
+  "step": "whole" | "half";
+  "size": MosaicPaywallV03PositiveLogicalSize;
+  "filledColor": MosaicPaywallV03Color;
+  "emptyColor": MosaicPaywallV03Color;
+};
+
+export type MosaicPaywallV03SocialProofAvatar = {
+  "assetId": MosaicPaywallV03Identifier;
+  "size": MosaicPaywallV03PositiveLogicalSize;
+};
+
+export type MosaicPaywallV03SocialProofComponent = {
+  "type": "socialProof";
+  "id": MosaicPaywallV03Identifier;
+  "gap": MosaicPaywallV03LogicalSize;
+  "quote": MosaicPaywallV03LocalizedText;
+  "quoteTypography": MosaicPaywallV03BaseTypography;
+  "attribution": MosaicPaywallV03LocalizedText;
+  "attributionTypography": MosaicPaywallV03BaseTypography;
+  "rating"?: MosaicPaywallV03SocialProofRating;
+  "avatar"?: MosaicPaywallV03SocialProofAvatar;
+  "appearance"?: MosaicPaywallV03BoxAppearance;
+  "sizing"?: MosaicPaywallV03BoxSizing;
+  "outerInsets"?: MosaicPaywallV03EdgeInsets;
+  "visibility"?: MosaicPaywallV03Visibility;
+  "accessibility": MosaicPaywallV03ControlAccessibility;
+};
+
+export type MosaicPaywallV03Document = {
+  "schemaVersion": MosaicPaywallV03Version;
+  "id": MosaicPaywallV03Identifier;
   "revision": number;
-  "compatibility": MosaicPaywallV02DocumentCompatibility;
-  "localization": MosaicPaywallV02Localization;
-  "designSystem": MosaicPaywallV02DesignSystem;
-  "assets": Array<MosaicPaywallV02Asset>;
-  "products": Array<MosaicPaywallV02ProductReference>;
-  "initialScreenId": MosaicPaywallV02Identifier;
-  "screens": Array<MosaicPaywallV02Screen>;
+  "compatibility": MosaicPaywallV03DocumentCompatibility;
+  "localization": MosaicPaywallV03Localization;
+  "designSystem": MosaicPaywallV03DesignSystem;
+  "assets": Array<MosaicPaywallV03Asset>;
+  "products": Array<MosaicPaywallV03ProductReference>;
+  "initialScreenId": MosaicPaywallV03Identifier;
+  "screens": Array<MosaicPaywallV03Screen>;
 };
 
-export type MosaicPreviewV02MessageId = string;
+export type MosaicPreviewV03MessageId = string;
 
-export type MosaicPreviewV02SessionId = string;
+export type MosaicPreviewV03SessionId = string;
 
-export type MosaicPreviewV02ClientId = string;
+export type MosaicPreviewV03ClientId = string;
 
-export type MosaicPreviewV02EditableDocumentId = string;
+export type MosaicPreviewV03EditableDocumentId = string;
 
-export type MosaicPreviewV02RevisionId = string;
+export type MosaicPreviewV03RevisionId = string;
 
-export type MosaicPreviewV02UtcTimestamp = string;
+export type MosaicPreviewV03UtcTimestamp = string;
 
-export type MosaicPreviewV02MachineIdentifier = string;
+export type MosaicPreviewV03MachineIdentifier = string;
 
-export type MosaicPreviewV02SemanticVersion = string;
+export type MosaicPreviewV03SemanticVersion = string;
 
-export type MosaicPreviewV02SafeText = string;
+export type MosaicPreviewV03SafeText = string;
 
-export type MosaicPreviewV02SafeDisplayName = string;
+export type MosaicPreviewV03SafeDisplayName = string;
 
-export type MosaicPreviewV02DiagnosticCode = string;
+export type MosaicPreviewV03DiagnosticCode = string;
 
-export type MosaicPreviewV02JsonPointer = string;
+export type MosaicPreviewV03JsonPointer = string;
 
-export type MosaicPreviewV02ComponentId = string;
+export type MosaicPreviewV03ComponentId = string;
 
-export type MosaicPreviewV02LocaleTag = string;
+export type MosaicPreviewV03LocaleTag = string;
 
-export type MosaicPreviewV02LocalRevision = {
-  "revisionId": MosaicPreviewV02RevisionId;
+export type MosaicPreviewV03LocalRevision = {
+  "revisionId": MosaicPreviewV03RevisionId;
   "sequence": number;
 };
 
-export type MosaicPreviewV02SoftwareIdentity = {
-  "id": MosaicPreviewV02MachineIdentifier;
-  "version": MosaicPreviewV02SemanticVersion;
+export type MosaicPreviewV03SoftwareIdentity = {
+  "id": MosaicPreviewV03MachineIdentifier;
+  "version": MosaicPreviewV03SemanticVersion;
 };
 
-export type MosaicPreviewV02ApplicationIdentity = {
-  "id": MosaicPreviewV02MachineIdentifier;
-  "displayName": MosaicPreviewV02SafeDisplayName;
+export type MosaicPreviewV03ApplicationIdentity = {
+  "id": MosaicPreviewV03MachineIdentifier;
+  "displayName": MosaicPreviewV03SafeDisplayName;
   "version": string;
 };
 
-export type MosaicPreviewV02DeviceIdentity = {
-  "displayName": MosaicPreviewV02SafeDisplayName;
-  "systemName": MosaicPreviewV02SafeDisplayName;
+export type MosaicPreviewV03DeviceIdentity = {
+  "displayName": MosaicPreviewV03SafeDisplayName;
+  "systemName": MosaicPreviewV03SafeDisplayName;
   "systemVersion": string;
 };
 
-export type MosaicPreviewV02ClientIdentity = {
-  "clientId": MosaicPreviewV02ClientId;
-  "displayName": MosaicPreviewV02SafeDisplayName;
-  "renderer": MosaicPreviewV02SoftwareIdentity;
-  "application": MosaicPreviewV02ApplicationIdentity;
-  "device": MosaicPreviewV02DeviceIdentity;
+export type MosaicPreviewV03ClientIdentity = {
+  "clientId": MosaicPreviewV03ClientId;
+  "displayName": MosaicPreviewV03SafeDisplayName;
+  "renderer": MosaicPreviewV03SoftwareIdentity;
+  "application": MosaicPreviewV03ApplicationIdentity;
+  "device": MosaicPreviewV03DeviceIdentity;
 };
 
-export type MosaicPreviewV02SupportedCapability = {
-  "name": MosaicPreviewV02MachineIdentifier;
-  "version": MosaicPreviewV02SemanticVersion;
+export type MosaicPreviewV03SupportedCapability = {
+  "name": MosaicPreviewV03MachineIdentifier;
+  "version": MosaicPreviewV03SemanticVersion;
 };
 
-export type MosaicPreviewV02CapabilityName = "preview.liveUpdate" | "preview.mockCommerce" | "preview.localeOverride" | "preview.textScale" | "preview.diagnostics";
+export type MosaicPreviewV03CapabilityName = "preview.liveUpdate" | "preview.mockCommerce" | "preview.localeOverride" | "preview.textScale" | "preview.diagnostics";
 
-export type MosaicPreviewV02Capability = {
-  "name": MosaicPreviewV02CapabilityName;
-  "version": "0.2";
+export type MosaicPreviewV03Capability = {
+  "name": MosaicPreviewV03CapabilityName;
+  "version": "0.3";
 };
 
-export type MosaicPreviewV02Limits = {
+export type MosaicPreviewV03Limits = {
   "maxDocumentBytes": number;
 };
 
-export type MosaicPreviewV02Context = {
-  "locale": MosaicPreviewV02LocaleTag;
+export type MosaicPreviewV03Context = {
+  "locale": MosaicPreviewV03LocaleTag;
   "textScale": number;
 };
 
-export type MosaicPreviewV02DiagnosticLocation = {
-  "documentPath": MosaicPreviewV02JsonPointer;
-  "componentId"?: MosaicPreviewV02ComponentId;
+export type MosaicPreviewV03DiagnosticLocation = {
+  "documentPath": MosaicPreviewV03JsonPointer;
+  "componentId"?: MosaicPreviewV03ComponentId;
   "property"?: string;
 };
 
-export type MosaicPreviewV02RecoveryAction = {
+export type MosaicPreviewV03RecoveryAction = {
   "action": "editProperty" | "removeComponent" | "bindProduct" | "selectSupportedTemplate" | "updatePreviewClient" | "restoreLastValidDraft" | "retry" | "reconnect" | "inspectComponent";
-  "message": MosaicPreviewV02SafeText;
+  "message": MosaicPreviewV03SafeText;
 };
 
-export type MosaicPreviewV02ValidationDiagnostic = {
-  "code": MosaicPreviewV02DiagnosticCode;
-  "message": MosaicPreviewV02SafeText;
-  "location": MosaicPreviewV02DiagnosticLocation;
-  "recovery": MosaicPreviewV02RecoveryAction;
+export type MosaicPreviewV03ValidationDiagnostic = {
+  "code": MosaicPreviewV03DiagnosticCode;
+  "message": MosaicPreviewV03SafeText;
+  "location": MosaicPreviewV03DiagnosticLocation;
+  "recovery": MosaicPreviewV03RecoveryAction;
 };
 
-export type MosaicPreviewV02CompatibilityWarning = {
-  "code": MosaicPreviewV02DiagnosticCode;
+export type MosaicPreviewV03CompatibilityWarning = {
+  "code": MosaicPreviewV03DiagnosticCode;
   "severity": "warning" | "blocking";
-  "message": MosaicPreviewV02SafeText;
-  "location"?: MosaicPreviewV02DiagnosticLocation;
-  "capability"?: MosaicPreviewV02SupportedCapability;
+  "message": MosaicPreviewV03SafeText;
+  "location"?: MosaicPreviewV03DiagnosticLocation;
+  "capability"?: MosaicPreviewV03SupportedCapability;
   "fallback": "keepLastAcceptedDraft" | "useDeclaredAssetFallback" | "useSelectorFallback" | "nativeApproximation";
-  "recovery": MosaicPreviewV02RecoveryAction;
+  "recovery": MosaicPreviewV03RecoveryAction;
 };
 
-export type MosaicPreviewV02RenderDiagnostic = {
-  "code": MosaicPreviewV02DiagnosticCode;
-  "message": MosaicPreviewV02SafeText;
-  "location"?: MosaicPreviewV02DiagnosticLocation;
+export type MosaicPreviewV03RenderDiagnostic = {
+  "code": MosaicPreviewV03DiagnosticCode;
+  "message": MosaicPreviewV03SafeText;
+  "location"?: MosaicPreviewV03DiagnosticLocation;
   "fallback": "keepLastAcceptedDraft";
-  "recovery": MosaicPreviewV02RecoveryAction;
+  "recovery": MosaicPreviewV03RecoveryAction;
 };
 
-export type MosaicPreviewV02Period = {
+export type MosaicPreviewV03Period = {
   "unit": "day" | "week" | "month" | "year";
   "value": number;
 };
 
-export type MosaicPreviewV02IntroductoryOffer = {
-  "localizedPrice": MosaicPreviewV02SafeDisplayName;
-  "period": MosaicPreviewV02Period;
+export type MosaicPreviewV03IntroductoryOffer = {
+  "localizedPrice": MosaicPreviewV03SafeDisplayName;
+  "period": MosaicPreviewV03Period;
   "cycles": number;
 };
 
-export type MosaicPreviewV02AvailableSubscriptionProduct = {
-  "productReferenceId": MosaicPreviewV02ComponentId;
+export type MosaicPreviewV03AvailableSubscriptionProduct = {
+  "productReferenceId": MosaicPreviewV03ComponentId;
   "availability": "available";
   "kind": "subscription";
-  "localizedPrice": MosaicPreviewV02SafeDisplayName;
+  "localizedPrice": MosaicPreviewV03SafeDisplayName;
   "currencyCode": string;
-  "billingPeriod": MosaicPreviewV02Period;
-  "trialPeriod"?: MosaicPreviewV02Period;
-  "introductoryOffer"?: MosaicPreviewV02IntroductoryOffer;
+  "billingPeriod": MosaicPreviewV03Period;
+  "trialPeriod"?: MosaicPreviewV03Period;
+  "introductoryOffer"?: MosaicPreviewV03IntroductoryOffer;
 };
 
-export type MosaicPreviewV02AvailableNonConsumableProduct = {
-  "productReferenceId": MosaicPreviewV02ComponentId;
+export type MosaicPreviewV03AvailableNonConsumableProduct = {
+  "productReferenceId": MosaicPreviewV03ComponentId;
   "availability": "available";
   "kind": "nonConsumable";
-  "localizedPrice": MosaicPreviewV02SafeDisplayName;
+  "localizedPrice": MosaicPreviewV03SafeDisplayName;
   "currencyCode": string;
 };
 
-export type MosaicPreviewV02UnavailableMockProduct = {
-  "productReferenceId": MosaicPreviewV02ComponentId;
+export type MosaicPreviewV03UnavailableMockProduct = {
+  "productReferenceId": MosaicPreviewV03ComponentId;
   "availability": "unavailable";
   "reason": "notConfigured" | "temporarilyUnavailable" | "unsupported";
 };
 
-export type MosaicPreviewV02MockProduct = MosaicPreviewV02AvailableSubscriptionProduct | MosaicPreviewV02AvailableNonConsumableProduct | MosaicPreviewV02UnavailableMockProduct;
+export type MosaicPreviewV03MockProduct = MosaicPreviewV03AvailableSubscriptionProduct | MosaicPreviewV03AvailableNonConsumableProduct | MosaicPreviewV03UnavailableMockProduct;
 
-export type MosaicPreviewV02NoEntitlement = {
+export type MosaicPreviewV03NoEntitlement = {
   "status": "none";
 };
 
-export type MosaicPreviewV02ActiveEntitlement = {
+export type MosaicPreviewV03ActiveEntitlement = {
   "status": "active";
-  "productReferenceId": MosaicPreviewV02ComponentId;
+  "productReferenceId": MosaicPreviewV03ComponentId;
 };
 
-export type MosaicPreviewV02MockEntitlement = MosaicPreviewV02NoEntitlement | MosaicPreviewV02ActiveEntitlement;
+export type MosaicPreviewV03MockEntitlement = MosaicPreviewV03NoEntitlement | MosaicPreviewV03ActiveEntitlement;
 
-export type MosaicPreviewV02MockCommerceState = {
-  "products": Array<MosaicPreviewV02MockProduct>;
+export type MosaicPreviewV03MockCommerceState = {
+  "products": Array<MosaicPreviewV03MockProduct>;
   "purchaseOutcome": "purchased" | "alreadyEntitled" | "cancelled" | "purchaseFailed";
   "restoreOutcome": "restored" | "alreadyEntitled" | "restoreNoPurchases" | "restoreFailed";
-  "entitlement": MosaicPreviewV02MockEntitlement;
+  "entitlement": MosaicPreviewV03MockEntitlement;
 };
 
-export type MosaicPreviewV02RevisionTarget = {
-  "clientId": MosaicPreviewV02ClientId;
-  "editableDocumentId": MosaicPreviewV02EditableDocumentId;
-  "revision": MosaicPreviewV02LocalRevision;
+export type MosaicPreviewV03RevisionTarget = {
+  "clientId": MosaicPreviewV03ClientId;
+  "editableDocumentId": MosaicPreviewV03EditableDocumentId;
+  "revision": MosaicPreviewV03LocalRevision;
 };
 
-export type MosaicPreviewV02ClientConnectedPayload = {
-  "client": MosaicPreviewV02ClientIdentity;
+export type MosaicPreviewV03ClientConnectedPayload = {
+  "client": MosaicPreviewV03ClientIdentity;
 };
 
-export type MosaicPreviewV02ClientDisconnectedPayload = {
-  "clientId": MosaicPreviewV02ClientId;
+export type MosaicPreviewV03ClientDisconnectedPayload = {
+  "clientId": MosaicPreviewV03ClientId;
   "reason": "closed" | "timeout" | "transportError" | "replaced" | "sessionEnded";
-  "diagnostic"?: MosaicPreviewV02SafeText;
+  "diagnostic"?: MosaicPreviewV03SafeText;
 };
 
-export type MosaicPreviewV02CapabilityReportPayload = {
-  "clientId": MosaicPreviewV02ClientId;
-  "supportedSchemaVersions": Array<MosaicPreviewV02SemanticVersion>;
-  "supportedCapabilities": Array<MosaicPreviewV02SupportedCapability>;
-  "previewCapabilities": Array<MosaicPreviewV02Capability>;
-  "limits": MosaicPreviewV02Limits;
+export type MosaicPreviewV03CapabilityReportPayload = {
+  "clientId": MosaicPreviewV03ClientId;
+  "supportedSchemaVersions": Array<MosaicPreviewV03SemanticVersion>;
+  "supportedCapabilities": Array<MosaicPreviewV03SupportedCapability>;
+  "previewCapabilities": Array<MosaicPreviewV03Capability>;
+  "limits": MosaicPreviewV03Limits;
 };
 
-export type MosaicPreviewV02DraftUpdatedPayload = {
-  "editableDocumentId": MosaicPreviewV02EditableDocumentId;
-  "revision": MosaicPreviewV02LocalRevision;
-  "document": MosaicPaywallV02Document;
-  "preview": MosaicPreviewV02Context;
+export type MosaicPreviewV03DraftUpdatedPayload = {
+  "editableDocumentId": MosaicPreviewV03EditableDocumentId;
+  "revision": MosaicPreviewV03LocalRevision;
+  "document": MosaicPaywallV03Document;
+  "preview": MosaicPreviewV03Context;
 };
 
-export type MosaicPreviewV02DraftAcceptedPayload = {
-  "clientId": MosaicPreviewV02ClientId;
-  "editableDocumentId": MosaicPreviewV02EditableDocumentId;
-  "revision": MosaicPreviewV02LocalRevision;
+export type MosaicPreviewV03DraftAcceptedPayload = {
+  "clientId": MosaicPreviewV03ClientId;
+  "editableDocumentId": MosaicPreviewV03EditableDocumentId;
+  "revision": MosaicPreviewV03LocalRevision;
 };
 
-export type MosaicPreviewV02DraftRejectedPayload = {
-  "clientId": MosaicPreviewV02ClientId;
-  "editableDocumentId": MosaicPreviewV02EditableDocumentId;
-  "revision": MosaicPreviewV02LocalRevision;
+export type MosaicPreviewV03DraftRejectedPayload = {
+  "clientId": MosaicPreviewV03ClientId;
+  "editableDocumentId": MosaicPreviewV03EditableDocumentId;
+  "revision": MosaicPreviewV03LocalRevision;
   "reason": "staleRevision" | "revisionConflict" | "validationFailed" | "unsupportedSchemaVersion" | "unsupportedCapability" | "documentTooLarge" | "renderFailed";
-  "diagnostics": Array<MosaicPreviewV02ValidationDiagnostic>;
+  "diagnostics": Array<MosaicPreviewV03ValidationDiagnostic>;
 };
 
-export type MosaicPreviewV02ValidationErrorPayload = {
-  "clientId": MosaicPreviewV02ClientId;
-  "editableDocumentId": MosaicPreviewV02EditableDocumentId;
-  "revision": MosaicPreviewV02LocalRevision;
-  "errors": Array<MosaicPreviewV02ValidationDiagnostic>;
+export type MosaicPreviewV03ValidationErrorPayload = {
+  "clientId": MosaicPreviewV03ClientId;
+  "editableDocumentId": MosaicPreviewV03EditableDocumentId;
+  "revision": MosaicPreviewV03LocalRevision;
+  "errors": Array<MosaicPreviewV03ValidationDiagnostic>;
 };
 
-export type MosaicPreviewV02RenderWarningPayload = {
-  "clientId": MosaicPreviewV02ClientId;
-  "editableDocumentId": MosaicPreviewV02EditableDocumentId;
-  "revision": MosaicPreviewV02LocalRevision;
-  "warnings": Array<MosaicPreviewV02CompatibilityWarning>;
+export type MosaicPreviewV03RenderWarningPayload = {
+  "clientId": MosaicPreviewV03ClientId;
+  "editableDocumentId": MosaicPreviewV03EditableDocumentId;
+  "revision": MosaicPreviewV03LocalRevision;
+  "warnings": Array<MosaicPreviewV03CompatibilityWarning>;
 };
 
-export type MosaicPreviewV02RenderFailurePayload = {
-  "clientId": MosaicPreviewV02ClientId;
-  "editableDocumentId": MosaicPreviewV02EditableDocumentId;
-  "revision": MosaicPreviewV02LocalRevision;
-  "failure": MosaicPreviewV02RenderDiagnostic;
+export type MosaicPreviewV03RenderFailurePayload = {
+  "clientId": MosaicPreviewV03ClientId;
+  "editableDocumentId": MosaicPreviewV03EditableDocumentId;
+  "revision": MosaicPreviewV03LocalRevision;
+  "failure": MosaicPreviewV03RenderDiagnostic;
 };
 
-export type MosaicPreviewV02MockCommerceStateChangedPayload = {
-  "editableDocumentId": MosaicPreviewV02EditableDocumentId;
-  "stateRevision": MosaicPreviewV02LocalRevision;
-  "state": MosaicPreviewV02MockCommerceState;
+export type MosaicPreviewV03MockCommerceStateChangedPayload = {
+  "editableDocumentId": MosaicPreviewV03EditableDocumentId;
+  "stateRevision": MosaicPreviewV03LocalRevision;
+  "state": MosaicPreviewV03MockCommerceState;
 };
 
-export type MosaicPreviewV02HeartbeatPayload = {
-  "clientId": MosaicPreviewV02ClientId;
+export type MosaicPreviewV03HeartbeatPayload = {
+  "clientId": MosaicPreviewV03ClientId;
   "kind": "ping" | "pong";
   "sequence": number;
 };
 
-export type MosaicPreviewV02MessageType = "previewClientConnected" | "previewClientDisconnected" | "capabilityReport" | "draftUpdated" | "draftAccepted" | "draftRejected" | "validationError" | "renderWarning" | "renderFailure" | "mockCommerceStateChanged" | "previewHeartbeat";
+export type MosaicPreviewV03MessageType = "previewClientConnected" | "previewClientDisconnected" | "capabilityReport" | "draftUpdated" | "draftAccepted" | "draftRejected" | "validationError" | "renderWarning" | "renderFailure" | "mockCommerceStateChanged" | "previewHeartbeat";
 
-export type MosaicPreviewV02Envelope<
-  TType extends MosaicPreviewV02MessageType,
+export type MosaicPreviewV03Envelope<
+  TType extends MosaicPreviewV03MessageType,
   TPayload,
 > = {
-  "previewProtocolVersion": "0.2";
-  "messageId": MosaicPreviewV02MessageId;
-  "sessionId": MosaicPreviewV02SessionId;
-  "sentAt": MosaicPreviewV02UtcTimestamp;
+  "previewProtocolVersion": "0.3";
+  "messageId": MosaicPreviewV03MessageId;
+  "sessionId": MosaicPreviewV03SessionId;
+  "sentAt": MosaicPreviewV03UtcTimestamp;
 } & {
   "type": TType;
   "payload": TPayload;
 };
 
-export type MosaicPreviewV02Message =
-  | MosaicPreviewV02Envelope<"previewClientConnected", MosaicPreviewV02ClientConnectedPayload>
-  | MosaicPreviewV02Envelope<"previewClientDisconnected", MosaicPreviewV02ClientDisconnectedPayload>
-  | MosaicPreviewV02Envelope<"capabilityReport", MosaicPreviewV02CapabilityReportPayload>
-  | MosaicPreviewV02Envelope<"draftUpdated", MosaicPreviewV02DraftUpdatedPayload>
-  | MosaicPreviewV02Envelope<"draftAccepted", MosaicPreviewV02DraftAcceptedPayload>
-  | MosaicPreviewV02Envelope<"draftRejected", MosaicPreviewV02DraftRejectedPayload>
-  | MosaicPreviewV02Envelope<"validationError", MosaicPreviewV02ValidationErrorPayload>
-  | MosaicPreviewV02Envelope<"renderWarning", MosaicPreviewV02RenderWarningPayload>
-  | MosaicPreviewV02Envelope<"renderFailure", MosaicPreviewV02RenderFailurePayload>
-  | MosaicPreviewV02Envelope<"mockCommerceStateChanged", MosaicPreviewV02MockCommerceStateChangedPayload>
-  | MosaicPreviewV02Envelope<"previewHeartbeat", MosaicPreviewV02HeartbeatPayload>;
+export type MosaicPreviewV03Message =
+  | MosaicPreviewV03Envelope<"previewClientConnected", MosaicPreviewV03ClientConnectedPayload>
+  | MosaicPreviewV03Envelope<"previewClientDisconnected", MosaicPreviewV03ClientDisconnectedPayload>
+  | MosaicPreviewV03Envelope<"capabilityReport", MosaicPreviewV03CapabilityReportPayload>
+  | MosaicPreviewV03Envelope<"draftUpdated", MosaicPreviewV03DraftUpdatedPayload>
+  | MosaicPreviewV03Envelope<"draftAccepted", MosaicPreviewV03DraftAcceptedPayload>
+  | MosaicPreviewV03Envelope<"draftRejected", MosaicPreviewV03DraftRejectedPayload>
+  | MosaicPreviewV03Envelope<"validationError", MosaicPreviewV03ValidationErrorPayload>
+  | MosaicPreviewV03Envelope<"renderWarning", MosaicPreviewV03RenderWarningPayload>
+  | MosaicPreviewV03Envelope<"renderFailure", MosaicPreviewV03RenderFailurePayload>
+  | MosaicPreviewV03Envelope<"mockCommerceStateChanged", MosaicPreviewV03MockCommerceStateChangedPayload>
+  | MosaicPreviewV03Envelope<"previewHeartbeat", MosaicPreviewV03HeartbeatPayload>;
 
-export type MosaicLocalProjectV02 = {
-  "fileFormatVersion": "0.2";
-  "editableDocumentId": MosaicPreviewV02EditableDocumentId;
-  "revision": MosaicPreviewV02LocalRevision;
-  "document": MosaicPaywallV02Document;
-  "preview": MosaicPreviewV02Context;
+export type MosaicLocalProjectV03 = {
+  "fileFormatVersion": "0.3";
+  "editableDocumentId": MosaicPreviewV03EditableDocumentId;
+  "revision": MosaicPreviewV03LocalRevision;
+  "document": MosaicPaywallV03Document;
+  "preview": MosaicPreviewV03Context;
   "mockCommerce": {
-    "revision": MosaicPreviewV02LocalRevision;
-    "state": MosaicPreviewV02MockCommerceState;
+    "revision": MosaicPreviewV03LocalRevision;
+    "state": MosaicPreviewV03MockCommerceState;
   };
 };
 
@@ -1662,8 +1800,8 @@ export type MosaicConfigurationDeliveryV1Environment = {
 };
 
 export type MosaicConfigurationDeliveryV1ProtocolCompatibility = {
-  "version": "0.2";
-  "requiredCapabilities": Array<MosaicPaywallV02RequiredCapability>;
+  "version": "0.3";
+  "requiredCapabilities": Array<MosaicPaywallV03RequiredCapability>;
 };
 
 export type MosaicConfigurationDeliveryV1ReleaseCompatibility = {
@@ -1684,9 +1822,9 @@ export type MosaicConfigurationDeliveryV1AssetBinding = {
 export type MosaicConfigurationDeliveryV1PaywallVersion = {
   "id": MosaicConfigurationDeliveryV1Identifier;
   "paywallId": MosaicConfigurationDeliveryV1Identifier;
-  "protocolVersion": "0.2";
+  "protocolVersion": "0.3";
   "documentDigest": MosaicConfigurationDeliveryV1Sha256Digest;
-  "document": MosaicPaywallV02Document;
+  "document": MosaicPaywallV03Document;
   "productReferenceIds": Array<MosaicConfigurationDeliveryV1Identifier>;
   "assetBindings": Array<MosaicConfigurationDeliveryV1AssetBinding>;
 };
@@ -1759,8 +1897,8 @@ export type MosaicConfigurationDeliveryV2DecisionCompatibility = {
 };
 
 export type MosaicConfigurationDeliveryV2PaywallCompatibility = {
-  "version": "0.2";
-  "requiredCapabilities": Array<MosaicPaywallV02RequiredCapability>;
+  "version": "0.3";
+  "requiredCapabilities": Array<MosaicPaywallV03RequiredCapability>;
 };
 
 export type MosaicConfigurationDeliveryV2Compatibility = {
@@ -1789,9 +1927,9 @@ export type MosaicConfigurationDeliveryV2 = {
   "release": MosaicConfigurationDeliveryV2Release;
 };
 
-export type MosaicPaywallDocument = MosaicPaywallV02Document;
-export type MosaicPreviewMessage = MosaicPreviewV02Message;
-export type MosaicLocalProject = MosaicLocalProjectV02;
-export type MosaicPreviewCapabilityReportPayload = MosaicPreviewV02CapabilityReportPayload;
-export type MosaicPreviewCapabilityName = MosaicPreviewV02CapabilityName;
-export type MosaicPreviewValidationDiagnostic = MosaicPreviewV02ValidationDiagnostic;
+export type MosaicPaywallDocument = MosaicPaywallV03Document;
+export type MosaicPreviewMessage = MosaicPreviewV03Message;
+export type MosaicLocalProject = MosaicLocalProjectV03;
+export type MosaicPreviewCapabilityReportPayload = MosaicPreviewV03CapabilityReportPayload;
+export type MosaicPreviewCapabilityName = MosaicPreviewV03CapabilityName;
+export type MosaicPreviewValidationDiagnostic = MosaicPreviewV03ValidationDiagnostic;

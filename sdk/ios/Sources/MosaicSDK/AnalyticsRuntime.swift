@@ -84,7 +84,15 @@ struct MosaicAnalyticsQueueRecord: Codable, Sendable, Equatable {
 
 struct MosaicAnalyticsPersistentState: Codable, Sendable, Equatable {
   var formatVersion = 1
-  var environmentCollectionEnabled = false
+  /// Both gates start enabled: collection is opt-out, matching the Environment's
+  /// server-side default and the Flutter/Compose SDKs. The Environment setting
+  /// still gates ingestion server-side, and a host that must decline collection
+  /// calls `setAnalyticsCollection(hostEnabled: false)`.
+  ///
+  /// A state persisted by an earlier build keeps whatever it recorded; the new
+  /// default is not written over a stored gate, because the SDK cannot tell an
+  /// explicit host opt-out from a value left at the old default.
+  var environmentCollectionEnabled = true
   var hostCollectionEnabled = true
   var queue: [MosaicAnalyticsQueueRecord] = []
   var sessionID: String?
@@ -187,12 +195,14 @@ actor MosaicAnalyticsRuntime {
     self.jitter = jitter
   }
 
-  func setCollection(environmentEnabled: Bool, hostEnabled: Bool) async {
+  /// A `nil` gate is left at its stored value. Only the gates the caller named
+  /// are written, so setting one never fabricates a value for the other.
+  func setCollection(environmentEnabled: Bool?, hostEnabled: Bool?) async {
     var value = await load()
     let wasEnabled = value.environmentCollectionEnabled && value.hostCollectionEnabled
-    value.environmentCollectionEnabled = environmentEnabled
-    value.hostCollectionEnabled = hostEnabled
-    let isEnabled = environmentEnabled && hostEnabled
+    value.environmentCollectionEnabled = environmentEnabled ?? value.environmentCollectionEnabled
+    value.hostCollectionEnabled = hostEnabled ?? value.hostCollectionEnabled
+    let isEnabled = value.environmentCollectionEnabled && value.hostCollectionEnabled
     if wasEnabled && !isEnabled {
       flushTask?.cancel()
       flushTask = nil
@@ -564,7 +574,7 @@ actor MosaicAnalyticsRuntimeRegistry {
         operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersionString
           .split(separator: " ").first(where: { $0.first?.isNumber == true }).map(String.init),
         applicationVersion: applicationVersion,
-        locale: Locale.current.identifier.replacingOccurrences(of: "_", with: "-"),
+        locale: MosaicDeviceLocale.currentContextTag,
         configurationDeliveryVersion: "3", commerceProviderContractVersion: "2"))
     runtimes[namespace] = runtime
     return (runtime, degraded)

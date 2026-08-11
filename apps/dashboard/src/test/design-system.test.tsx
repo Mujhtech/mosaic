@@ -1,7 +1,7 @@
 // biome-ignore lint/performance/noNamespaceImport: the export surface itself is under test, via Object.keys below
 import * as DesignSystem from "@mosaic/design-system";
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { PanelSection, StatusMessage, ToolbarGroup } = DesignSystem;
 
@@ -86,5 +86,59 @@ describe("design system", () => {
     expect(failure).toHaveTextContent("Autosave failed");
     expect(failure).toHaveAttribute("aria-live", "assertive");
     expect(failure).toHaveAttribute("data-tone", "danger");
+  });
+
+  describe("an unrecognized status tone", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("renders without crashing and announces no more quietly than danger", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {
+        // silence the expected dev diagnostic
+      });
+
+      expect(() =>
+        render(
+          // A tone arriving from data is outside the compile-time union, so the
+          // cast reproduces exactly what a JavaScript or server-driven caller does.
+          <StatusMessage tone={"error" as never}>
+            Publish rejected by the backend
+          </StatusMessage>
+        )
+      ).not.toThrow();
+
+      const unknown = screen.getByText("Publish rejected by the backend");
+      expect(unknown).toHaveRole("alert");
+      expect(unknown).toHaveAttribute("aria-live", "assertive");
+      expect(unknown).toHaveAttribute("aria-atomic", "true");
+      // Announcement escalates; visuals do not claim a severity they cannot know.
+      expect(unknown).toHaveAttribute("data-tone", "error");
+      expect(unknown).toHaveClass("mosaic-status-message");
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[0]).toContain('"error"');
+      expect(warn.mock.calls[0]?.[0]).toContain("StatusMessage");
+    });
+
+    it("warns once per unrecognized tone rather than on every render", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {
+        // silence the expected dev diagnostic
+      });
+
+      const { rerender } = render(
+        <StatusMessage tone={"catastrophe" as never}>Retrying</StatusMessage>
+      );
+      rerender(
+        <StatusMessage tone={"catastrophe" as never}>Retrying</StatusMessage>
+      );
+      render(
+        <StatusMessage tone={"catastrophe" as never}>
+          Retrying again
+        </StatusMessage>
+      );
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[0]).toContain('"catastrophe"');
+    });
   });
 });

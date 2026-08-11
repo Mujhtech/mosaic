@@ -54,8 +54,8 @@ import {
 } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { createSeededLocalizedText } from "@/features/paywall-editor/utils/editor-transforms";
 import type {
-  MosaicPaywallV02BaseTypography,
-  MosaicPaywallV02Typography,
+  MosaicPaywallV03BaseTypography,
+  MosaicPaywallV03Typography,
 } from "@/lib/mosaic-protocol";
 
 export function ScrollContainerInspector({
@@ -296,7 +296,7 @@ export function TextInspector({
           current.type === "text"
             ? {
                 ...current,
-                typography: typography as MosaicPaywallV02Typography,
+                typography: typography as MosaicPaywallV03Typography,
               }
             : current
         }
@@ -618,7 +618,7 @@ export function FeatureListInspector({
           current.type === "featureList"
             ? {
                 ...current,
-                typography: typography as MosaicPaywallV02BaseTypography,
+                typography: typography as MosaicPaywallV03BaseTypography,
               }
             : current
         }

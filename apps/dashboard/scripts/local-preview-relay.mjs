@@ -14,7 +14,7 @@ export const PREVIEW_SUBPROTOCOLS = Object.freeze(
     (version) => localPreviewWebSocketProtocols[version]
   )
 );
-export const PREVIEW_SUBPROTOCOL = localPreviewWebSocketProtocols["0.2"];
+export const PREVIEW_SUBPROTOCOL = localPreviewWebSocketProtocols["0.3"];
 const HEARTBEAT_TIMEOUT_MS = 15_000;
 const STUDIO_MESSAGE_TYPES = new Set([
   "draftUpdated",
@@ -93,7 +93,7 @@ function sendCanonical(socket, meta, message) {
 
 function incompatibleDraftDecision(message, peerMeta) {
   const { document } = message.payload;
-  if (document.schemaVersion === "0.2") {
+  if (document.schemaVersion === "0.3") {
     return decideLocalPreviewDraftDelivery({
       capabilityReport: peerMeta.capabilityReport,
       document,

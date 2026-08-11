@@ -63,7 +63,7 @@ class LocalPreviewCodecTest {
 
     private fun canonicalPreviewFlow(): JsonArray = JsonParser.parseString(
         Files.readAllBytes(
-            repositoryFile("protocol/fixtures/local-preview/v0.2/session-flow.messages.json"),
+            repositoryFile("protocol/fixtures/local-preview/v0.3/session-flow.messages.json"),
         ).toString(Charsets.UTF_8),
     ).asJsonArray
 }

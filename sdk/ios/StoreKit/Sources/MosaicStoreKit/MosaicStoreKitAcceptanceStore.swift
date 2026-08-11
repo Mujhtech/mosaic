@@ -6,6 +6,13 @@ public protocol MosaicStoreKitAcceptanceStore: Sendable {
   func insert(_ updateID: String) async throws
 }
 
+public enum MosaicStoreKitAcceptanceStoreError: Error, Equatable {
+  /// No directory that survives an OS purge is available for the acceptance
+  /// set. The caller decides how to degrade; the store will not silently write
+  /// duplicate-suppression state somewhere the system may delete.
+  case durableStorageUnavailable
+}
+
 public actor MosaicStoreKitFileAcceptanceStore: MosaicStoreKitAcceptanceStore {
   private let fileURL: URL
   private var accepted: Set<String>
@@ -23,11 +30,18 @@ public actor MosaicStoreKitFileAcceptanceStore: MosaicStoreKitAcceptanceStore {
   public static func defaultStore(
     identifier: String = Bundle.main.bundleIdentifier ?? "mosaic-host"
   ) throws -> MosaicStoreKitFileAcceptanceStore {
-    let root =
-      FileManager.default.urls(
+    // Deliberately not `temporaryDirectory`. This set is what stops one
+    // transaction being delivered to the host twice, and the OS may purge tmp
+    // at any time, so a purge would silently re-deliver purchases. Application
+    // Support is the only acceptable location; without it the caller is told.
+    guard
+      let root = FileManager.default.urls(
         for: .applicationSupportDirectory,
         in: .userDomainMask
-      ).first ?? FileManager.default.temporaryDirectory
+      ).first
+    else {
+      throw MosaicStoreKitAcceptanceStoreError.durableStorageUnavailable
+    }
     let digest = SHA256.hash(data: Data(identifier.utf8))
       .map { String(format: "%02x", $0) }
       .joined()

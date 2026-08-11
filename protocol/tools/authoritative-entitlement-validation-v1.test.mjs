@@ -62,6 +62,55 @@ test("no reader policy may ever resolve a failure to inactive", () => {
   );
 });
 
+test("an adversarially spelled inactive resolution is still caught", () => {
+  // "whenever" ends in "never", so a bare negative lookbehind would read
+  // `resolveWheneverInactive` as the compliant `...NeverInactive` spelling.
+  for (const adversarial of [
+    "resolveWheneverInactive",
+    "reportUnknownNeverInactiveExceptInactive",
+    "inactiveNeverReported",
+    "never_inactive_then_inactive",
+  ]) {
+    const broken = structuredClone(artifacts);
+    broken.compatibilityManifest = structuredClone(artifacts.compatibilityManifest);
+    broken.compatibilityManifest.readerPolicy.expiredCache = adversarial;
+    const errors = validateAuthoritativeEntitlementV1Artifacts(broken);
+    assert.ok(
+      errors.some((error) => error.includes("may ever resolve to inactive")),
+      `expected ${adversarial} to be rejected, got: ${errors.join("; ")}`,
+    );
+  }
+
+  // The two committed spellings must remain admissible, or the guard is useless.
+  const intact = structuredClone(artifacts);
+  intact.compatibilityManifest = structuredClone(artifacts.compatibilityManifest);
+  assert.deepEqual(
+    validateAuthoritativeEntitlementV1Artifacts(intact).filter((error) =>
+      error.includes("may ever resolve to inactive"),
+    ),
+    [],
+  );
+});
+
+test("a manifest without a reader policy fails validation", () => {
+  // Regression: the guard used to default an absent policy to {}, so a renamed
+  // or dropped key made the never-inactive invariant pass over nothing.
+  for (const replacement of [undefined, {}, null, "reReadSnapshot", []]) {
+    const broken = structuredClone(artifacts);
+    broken.compatibilityManifest = structuredClone(artifacts.compatibilityManifest);
+    if (replacement === undefined) {
+      delete broken.compatibilityManifest.readerPolicy;
+    } else {
+      broken.compatibilityManifest.readerPolicy = replacement;
+    }
+    const errors = validateAuthoritativeEntitlementV1Artifacts(broken);
+    assert.ok(
+      errors.some((error) => error.includes("must declare a non-empty readerPolicy")),
+      `expected a missing-reader-policy error for ${JSON.stringify(replacement)}, got: ${errors.join("; ")}`,
+    );
+  }
+});
+
 test("unavailable can never be persisted in a snapshot entry", () => {
   // unavailable says Mosaic could not answer. Persisting it into an immutable
   // snapshot would record a service failure as customer state.

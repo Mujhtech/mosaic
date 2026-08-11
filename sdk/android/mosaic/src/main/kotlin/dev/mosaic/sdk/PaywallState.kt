@@ -9,7 +9,7 @@ data class MosaicAvailableProduct(
     val reference: MosaicProductReference,
     val storeProduct: MosaicProduct,
     val productCardId: String = reference.id,
-    val card: MosaicProductCardComponent? = null,
+    val card: MosaicProductCardComponent,
 )
 
 data class MosaicProductSelectorState(
@@ -38,8 +38,12 @@ class MosaicPaywallState(
     private val carousels = allNodes
         .filterIsInstance<MosaicCarouselComponent>()
         .associateBy(MosaicCarouselComponent::id)
+    private val tabsComponents = allNodes
+        .filterIsInstance<MosaicTabsComponent>()
+        .associateBy(MosaicTabsComponent::id)
     private val productReferences = document.products.associateBy(MosaicProductReference::id)
     private val reportedRenderingFailures = mutableSetOf<String>()
+    private val reportedDegradations = mutableSetOf<String>()
     private val presentationAcknowledged = AtomicBoolean(false)
 
     var selectorStates: Map<String, MosaicProductSelectorState> by mutableStateOf(
@@ -70,14 +74,32 @@ class MosaicPaywallState(
     )
         private set
 
+    /**
+     * The selected tab of every Tabs component, seeded from each component's authored
+     * `initialTabId`. A new accepted document builds a new state, which is what resets the map.
+     */
+    var tabSelections: Map<String, String> by mutableStateOf(
+        tabsComponents.mapValues { (_, component) -> component.initialTabId },
+    )
+        private set
+
     var currentScreenId: String by mutableStateOf(document.initialScreenId)
         private set
 
     var navigationHistory: List<String> by mutableStateOf(emptyList())
         private set
 
+    /**
+     * The screen currently being presented.
+     *
+     * Prefer [currentScreenOrNull], which lets a caller distinguish "no such screen" from a
+     * substituted one. This property never throws: a dangling screen id degrades to the document's
+     * initial screen (or, failing that, its first screen, which the schema guarantees exists) and
+     * records a diagnostic once. The renderer itself uses [currentScreenOrNull] and reports
+     * `rendering.screen_unavailable` instead of silently showing a different screen.
+     */
     val currentScreen: MosaicPaywallScreen
-        get() = document.screens.first { it.id == currentScreenId }
+        get() = currentScreenOrNull ?: fallbackScreen("current_screen")
 
     internal val currentScreenOrNull: MosaicPaywallScreen?
         get() = document.screens.firstOrNull { it.id == currentScreenId }
@@ -86,13 +108,38 @@ class MosaicPaywallState(
         get() = navigationHistory.asReversed()
             .mapNotNull { id -> document.screens.firstOrNull { it.id == id } }
             .firstOrNull { it.presentation == MosaicScreenPresentation.SCREEN }
-            ?: document.screens.first { it.id == document.initialScreenId }
+            ?: document.screens.firstOrNull { it.id == document.initialScreenId }
+            ?: fallbackScreen("background_screen")
+
+    /** `screens` has `minItems: 1`, so a first screen always exists once decoding has accepted. */
+    private fun fallbackScreen(reason: String): MosaicPaywallScreen {
+        diagnoseOnce(
+            key = "screen_substituted.$reason",
+            code = MosaicDiagnosticCode.RENDERING_FAILED,
+            message = "A referenced Mosaic screen is absent; the first declared screen was used.",
+        )
+        return document.screens.firstOrNull { it.id == document.initialScreenId }
+            ?: document.screens.first()
+    }
+
+    private fun diagnoseOnce(key: String, code: MosaicDiagnosticCode, message: String) {
+        if (!reportedDegradations.add(key)) return
+        diagnostics.record(MosaicDiagnostic(code, message))
+    }
 
     fun switchValue(switchId: String): Boolean = switchValues[switchId] ?: false
 
     fun setSwitchValue(switchId: String, value: Boolean) {
         if (switchId !in switches) return
         switchValues = switchValues + (switchId to value)
+    }
+
+    fun selectedTabId(tabsId: String): String? = tabSelections[tabsId]
+
+    fun selectTab(tabsId: String, tabId: String) {
+        val component = tabsComponents[tabsId] ?: return
+        if (component.tabs.none { it.id == tabId }) return
+        tabSelections = tabSelections + (tabsId to tabId)
     }
 
     fun carouselPageIndex(carouselId: String): Int = carouselPageIndices[carouselId] ?: 0
@@ -103,11 +150,19 @@ class MosaicPaywallState(
         carouselPageIndices = carouselPageIndices + (carouselId to index)
     }
 
-    fun isVisible(visibility: MosaicVisibility): Boolean = when (visibility) {
-        MosaicVisibility.Always -> true
-        MosaicVisibility.Hidden -> false
-        is MosaicVisibility.SwitchValue -> switchValue(visibility.switchId) == visibility.equals
-    }
+    /** The runtime selection every visibility condition on this document reads. */
+    val selectionState: MosaicSelectionState
+        get() = MosaicSelectionState(switches = switchValues, tabs = tabSelections)
+
+    /**
+     * Throws [MosaicVisibilityStateException] when the condition names a controller this state does
+     * not carry. Both maps are built from this document's own Switch and Tabs components and the
+     * decoder rejects a condition naming an undeclared controller, so the throw is unreachable for
+     * an accepted document; resolving it to hidden instead would make a caller bug look like an
+     * authored `hidden`.
+     */
+    fun isVisible(visibility: MosaicVisibility): Boolean =
+        mosaicVisibilityIsSatisfied(visibility, selectionState)
 
     fun isNodeVisible(nodeId: String): Boolean = document.screens.any { screen ->
         screen.layout.content.findVisibility(nodeId, ancestorsVisible = true, ::isVisible) == true
@@ -250,19 +305,26 @@ class MosaicPaywallState(
 
         val events = mutableListOf<MosaicPaywallEvent>()
         selectorStates = selectors.mapValues { (_, selector) ->
-            val bindings = if (selector.cards.isNotEmpty()) {
-                selector.cards.map { card ->
-                    Triple(card.id, card.productReferenceId, card)
+            // `cards` is required with `minItems: 1`, so every option is card-bound. There is no
+            // card-less binding: the shape that needed one belonged to a protocol version this
+            // reader rejects.
+            val options = selector.cards.mapNotNull { card ->
+                val cardId = card.id
+                val referenceId = card.productReferenceId
+                // A card bound to an undeclared Product Reference is a non-conforming document. The
+                // option is skipped, exactly as an unavailable product would be, rather than
+                // throwing out of the whole selector — the remaining plans stay purchasable.
+                val reference = productReferences[referenceId]
+                if (reference == null) {
+                    diagnoseOnce(
+                        key = "product_reference_unavailable.$referenceId",
+                        code = MosaicDiagnosticCode.PRODUCT_LOAD_FAILED,
+                        message = "A Product Card references an undeclared Product; it was skipped.",
+                    )
+                    return@mapNotNull null
                 }
-            } else {
-                selector.productReferenceIds.map { referenceId ->
-                    Triple(referenceId, referenceId, null)
-                }
-            }
-            val options = bindings.mapNotNull { (cardId, referenceId, card) ->
-                val reference = productReferences.getValue(referenceId)
                 loadedProducts[reference.providerProductId]?.let { product ->
-                    val requiresPrice = card == null || cardRequiresPrice(card, localization)
+                    val requiresPrice = cardRequiresPrice(card, localization)
                     product.takeUnless { requiresPrice && it.localizedPrice.isBlank() }?.let {
                         MosaicAvailableProduct(reference, it, cardId, card)
                     }
@@ -659,6 +721,10 @@ private fun MosaicStack.findVisibility(
                 if (page.id == targetId) return nodeVisible
                 page.content.findVisibility(targetId, nodeVisible, visible)?.let { return it }
             }
+            is MosaicTabsComponent -> node.tabs.forEach { tab ->
+                if (tab.id == targetId) return nodeVisible
+                tab.content.findVisibility(targetId, nodeVisible, visible)?.let { return it }
+            }
             is MosaicButtonComponent -> {
                 (node.children + node.inProgressChildren.orEmpty()).forEach { child ->
                     child.findVisibility(targetId, nodeVisible, visible)?.let { return it }
@@ -691,6 +757,9 @@ private fun MosaicNode.findVisibility(
         is MosaicCarouselComponent -> pages.firstNotNullOfOrNull { page ->
             page.content.findVisibility(targetId, nodeVisible, visible)
         }
+        is MosaicTabsComponent -> tabs.firstNotNullOfOrNull { tab ->
+            tab.content.findVisibility(targetId, nodeVisible, visible)
+        }
         is MosaicButtonComponent -> (children + inProgressChildren.orEmpty()).firstNotNullOfOrNull {
             child -> child.findVisibility(targetId, nodeVisible, visible)
         }
@@ -713,15 +782,18 @@ internal fun MosaicNode.visibilityOrAlways(): MosaicVisibility = when (this) {
     is MosaicImageComponent -> visibility
     is MosaicFeatureListComponent -> visibility
     is MosaicProductSelectorComponent -> visibility
-    is MosaicPurchaseButtonComponent -> visibility
-    is MosaicRestoreButtonComponent -> visibility
-    is MosaicCloseButtonComponent -> visibility
-    is MosaicLegalTextComponent -> visibility
     is MosaicCarouselComponent -> visibility
     is MosaicSwitchComponent -> visibility
     is MosaicCountdownComponent -> visibility
     is MosaicButtonComponent -> visibility
     is MosaicIconComponent -> visibility
+    is MosaicTabsComponent -> visibility
+    is MosaicTimelineComponent -> visibility
+    is MosaicAwardComponent -> visibility
+    is MosaicSocialProofComponent -> visibility
+    // Product Cards and Badges declare no `visibility` in `schema/v0.3/paywall.schema.json`: a card
+    // is shown when its Product Selector offers it, and a badge when its card is shown. Always is
+    // therefore their declared visibility, not a substituted default.
     is MosaicProductCardComponent,
     is MosaicProductBadgeComponent,
     -> MosaicVisibility.Always

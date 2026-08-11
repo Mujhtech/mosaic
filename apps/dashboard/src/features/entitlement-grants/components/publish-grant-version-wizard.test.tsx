@@ -45,7 +45,13 @@ function renderWizard(
 ) {
   const onPreview = vi.fn<PreviewFn>(
     overrides.onPreview ??
-      (async () => ({ additiveSuperset: true, impactedActiveSources: 12 }))
+      (async () => ({
+        additiveSuperset: true,
+        impactedActiveSources: 12,
+        impactedCustomers: 9,
+        impactedEntitlements: 1,
+        impactedProducts: 1,
+      }))
   );
   const onPublish = vi.fn<PublishFn>(
     overrides.onPublish ?? (async () => undefined)
@@ -130,6 +136,36 @@ describe("publish grant version wizard", () => {
     expect(
       screen.queryByRole("button", { name: /Publish new version/ })
     ).not.toBeInTheDocument();
+  });
+
+  /**
+   * Protects: an impact response missing a count is never rendered as `0`, and
+   * cannot be confirmed.
+   *
+   * The failure this catches is the wizard telling an operator "0 Billing
+   * Customers citing this Product" for a field the server did not send, and
+   * then letting them publish on it. The pure gate is covered separately; this
+   * asserts the confirmation the operator actually reads.
+   */
+  it("shows an unreported blast-radius count as unknown and blocks the confirmation", async () => {
+    renderWizard({
+      onPreview: async () => ({
+        additiveSuperset: true,
+        impactedActiveSources: 12,
+        impactedEntitlements: 1,
+        impactedProducts: 1,
+      }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview impact" }));
+
+    expect(
+      await screen.findByText("Unknown — not reported")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Continue to publish" })
+    ).toBeDisabled();
   });
 
   it("refuses a retroactive narrowing the publish call would reject", async () => {

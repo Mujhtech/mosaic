@@ -349,8 +349,15 @@ func (r *Repository) CompleteMigration(ctx context.Context, w billingmigration.C
 	if err != nil || !webhookReady {
 		return billingmigration.CompletionReport{}, false, billingmigration.ErrConflict
 	}
+	// A discarded error here left `hold` false, which is the answer that lets
+	// the retention job delete the raw source objects on its due date. A read
+	// failure is not a statement that no legal hold exists, so it aborts the
+	// completion instead: the operator retries, and nothing is scheduled for
+	// deletion on the strength of a query that did not run.
 	var hold bool
-	_ = tx.QueryRow(ctx, `SELECT COALESCE((SELECT command='set' FROM billing_migration_legal_hold_commands WHERE program_id=$1 ORDER BY commanded_at DESC,id DESC LIMIT 1),false)`, w.Report.ProgramID).Scan(&hold)
+	if err = tx.QueryRow(ctx, `SELECT COALESCE((SELECT command='set' FROM billing_migration_legal_hold_commands WHERE program_id=$1 ORDER BY commanded_at DESC,id DESC LIMIT 1),false)`, w.Report.ProgramID).Scan(&hold); err != nil {
+		return billingmigration.CompletionReport{}, false, translate(err, "read legal hold")
+	}
 	w.Report.StabilizationEndedAt = stabilizationEnd
 	w.Report.RollbackWindowEndedAt = rollbackEnd
 	w.Report.CredentialRemovedAt = *removedAt

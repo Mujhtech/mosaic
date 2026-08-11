@@ -30,8 +30,16 @@ var (
 	ErrProviderImportInProgress                    = errors.New("provider import in progress")
 	ErrIdempotencyConflict                         = errors.New("idempotency conflict")
 	ErrProductionConnectionAcknowledgementRequired = errors.New("production provider connection acknowledgement required")
-	ErrMappingAmbiguous                            = errors.New("provider mapping ambiguous")
-	ErrMappingTargetInvalid                        = errors.New("provider mapping target invalid")
+	// ErrProviderNativeActivationRequired refuses a provider connection that
+	// imports a catalog but cannot serve purchases. Publishing such an
+	// assignment used to fail late, inside commerce configuration generation,
+	// with an unexplained readiness error.
+	ErrProviderNativeActivationRequired = errors.New(
+		"App Store Connect connections import the catalog; " +
+			"purchases run through the native App Store activation",
+	)
+	ErrMappingAmbiguous     = errors.New("provider mapping ambiguous")
+	ErrMappingTargetInvalid = errors.New("provider mapping target invalid")
 )
 
 type ConflictError struct {

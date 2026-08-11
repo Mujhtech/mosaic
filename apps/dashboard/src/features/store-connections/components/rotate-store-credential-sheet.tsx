@@ -3,12 +3,6 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from "@/components/ui/field";
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -17,6 +11,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { SecretKeyField } from "@/features/store-connections/components/secret-key-field";
 import {
   validateApplePrivateKey,
   validateGoogleServiceAccount,
@@ -103,36 +98,25 @@ export function RotateStoreCredentialSheet({
               }}
             >
               {(field) => (
-                <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel htmlFor="rotate-store-credential-secret">
-                    {apple
+                <SecretKeyField
+                  accept={apple ? ".p8,.pem" : ".json,application/json"}
+                  description="Entered once and cleared after this attempt. Nothing already recorded is removed: the ledger is the evidence a rotation is usually part of investigating."
+                  errors={field.state.meta.errors.filter(
+                    (message): message is string => typeof message === "string"
+                  )}
+                  fileKindLabel={
+                    apple ? ".p8 key file" : "service-account JSON file"
+                  }
+                  id="rotate-store-credential-secret"
+                  label={
+                    apple
                       ? "Replacement In-App Purchase key (.p8)"
-                      : "Replacement service-account JSON key"}
-                  </FieldLabel>
-                  <textarea
-                    aria-describedby="rotate-store-credential-help"
-                    aria-invalid={field.state.meta.errors.length > 0}
-                    autoComplete="off"
-                    className="min-h-32 w-full rounded border border-input bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40"
-                    id="rotate-store-credential-secret"
-                    onBlur={field.handleBlur}
-                    onChange={(event) =>
-                      field.handleChange(event.currentTarget.value)
-                    }
-                    spellCheck={false}
-                    value={field.state.value}
-                  />
-                  <FieldDescription id="rotate-store-credential-help">
-                    Entered once and cleared after this attempt. Nothing already
-                    recorded is removed: the ledger is the evidence a rotation
-                    is usually part of investigating.
-                  </FieldDescription>
-                  <FieldError
-                    errors={field.state.meta.errors.map((message) => ({
-                      message,
-                    }))}
-                  />
-                </Field>
+                      : "Replacement service-account JSON key"
+                  }
+                  onBlur={field.handleBlur}
+                  onChange={field.handleChange}
+                  value={field.state.value}
+                />
               )}
             </form.Field>
             {submitError ? (

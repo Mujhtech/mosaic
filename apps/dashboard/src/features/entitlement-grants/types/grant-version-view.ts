@@ -132,11 +132,39 @@ export function proposalFingerprint(proposal: GrantProposal) {
 
 export type PublishBlockedReason =
   | "already_publishing"
+  | "impact_incomplete"
   | "incomplete"
   | "narrowing"
   | "no_permission"
   | "preview_stale"
   | "reason_required";
+
+/** The four counts that make up the blast radius of a grant version. */
+const IMPACT_COUNT_FIELDS = [
+  "impactedActiveSources",
+  "impactedCustomers",
+  "impactedEntitlements",
+  "impactedProducts",
+] as const satisfies readonly (keyof GrantVersionImpact)[];
+
+export type GrantImpactCountField = (typeof IMPACT_COUNT_FIELDS)[number];
+
+/**
+ * Whether a previewed impact actually states its blast radius.
+ *
+ * An absent count is not zero. Rendering it as `0` produced the single most
+ * dangerous sentence this wizard can show — "no customer can lose access" —
+ * from a field the server never sent, and that sentence is the whole basis on
+ * which an operator confirms an irreversible publish.
+ */
+export function grantImpactCountsComplete(
+  impact: GrantVersionImpact | undefined
+): boolean {
+  return (
+    impact !== undefined &&
+    IMPACT_COUNT_FIELDS.every((field) => typeof impact[field] === "number")
+  );
+}
 
 export interface PublishGate {
   allowed: boolean;
@@ -146,6 +174,8 @@ export interface PublishGate {
 
 const BLOCKED_EXPLANATIONS: Record<PublishBlockedReason, string> = {
   already_publishing: "Mosaic is publishing this version.",
+  impact_incomplete:
+    "The impact preview did not state its full blast radius, so Mosaic cannot tell you how many customers this would touch. Preview again; publishing on an unknown blast radius is not offered.",
   incomplete:
     "Choose a Product, an Entitlement, and the instant the new version takes effect.",
   narrowing:
@@ -207,6 +237,12 @@ export function evaluatePublishGate(input: {
   if (input.impact.additiveSuperset === false) {
     return gate("narrowing");
   }
+  // Conservative by choice: an impact preview missing any of its four counts
+  // has not answered "how many customers could lose access", and that answer is
+  // the entire justification for the confirmation step existing.
+  if (!grantImpactCountsComplete(input.impact)) {
+    return gate("impact_incomplete");
+  }
 
   return { allowed: true };
 }
@@ -222,7 +258,10 @@ export function impactHeadline(impact: GrantVersionImpact | undefined) {
   if (!impact) {
     return "Nothing has been previewed yet.";
   }
-  const active = impact.impactedActiveSources ?? 0;
+  const active = impact.impactedActiveSources;
+  if (typeof active !== "number") {
+    return "The preview did not report how many purchases currently granting access cite this Product. Mosaic cannot say how many customers this change could touch.";
+  }
   if (active === 0) {
     return "No purchase currently granting access cites this Product, so no customer can lose access from this change.";
   }

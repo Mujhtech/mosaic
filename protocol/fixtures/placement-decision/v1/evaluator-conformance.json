@@ -116,6 +116,340 @@
           }
         },
         {
+          "id": "rule_country_present_but_unusable",
+          "priority": 31,
+          "enabled": true,
+          "safeLabel": "Host-supplied country exists even when it is unusable",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "7.7.4"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "context.country"
+                },
+                "operator": "exists"
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_country_absent",
+          "priority": 32,
+          "enabled": true,
+          "safeLabel": "No country reported by the host application",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "7.7.3"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "context.country"
+                },
+                "operator": "does_not_exist"
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_fallback"
+          }
+        },
+        {
+          "id": "rule_country_equals_unusable",
+          "priority": 33,
+          "enabled": true,
+          "safeLabel": "Unusable country equality is never true",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "7.7.2"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "context.country"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "string",
+                  "value": "DE"
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_country_not_equals_unusable",
+          "priority": 34,
+          "enabled": true,
+          "safeLabel": "Unusable country inequality is never true",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "7.7.1"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "context.country"
+                },
+                "operator": "not_equals",
+                "operand": {
+                  "type": "string",
+                  "value": "DE"
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_platform_out_of_set",
+          "priority": 35,
+          "enabled": true,
+          "safeLabel": "Out-of-set platform equality is never true",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "6.6.6"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "device.platform"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "string",
+                  "value": "ios"
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_platform_out_of_set_negated",
+          "priority": 36,
+          "enabled": true,
+          "safeLabel": "Out-of-set platform equality is never false",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "6.6.5"
+                }
+              },
+              {
+                "type": "not",
+                "child": {
+                  "type": "condition",
+                  "source": {
+                    "kind": "device.platform"
+                  },
+                  "operator": "equals",
+                  "operand": {
+                    "type": "string",
+                    "value": "ios"
+                  }
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_locale_operand_unnormalizable",
+          "priority": 37,
+          "enabled": true,
+          "safeLabel": "Unnormalizable locale operand is never true",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "6.6.4"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.locale"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "string",
+                  "value": "en-US-verylongsubtag"
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_locale_operand_unnormalizable_negated",
+          "priority": 38,
+          "enabled": true,
+          "safeLabel": "Unnormalizable locale operand is never false",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "6.6.3"
+                }
+              },
+              {
+                "type": "not",
+                "child": {
+                  "type": "condition",
+                  "source": {
+                    "kind": "application.locale"
+                  },
+                  "operator": "equals",
+                  "operand": {
+                    "type": "string",
+                    "value": "en-US-verylongsubtag"
+                  }
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_locale_operand_unnormalizable_not_in",
+          "priority": 39,
+          "enabled": true,
+          "safeLabel": "Unnormalizable locale list member is never false",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "6.6.2"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.locale"
+                },
+                "operator": "not_in",
+                "operand": {
+                  "type": "string_list",
+                  "value": [
+                    "pt-BR",
+                    "!!bad"
+                  ]
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
           "id": "rule_ios_rollout",
           "priority": 40,
           "enabled": true,
@@ -161,6 +495,156 @@
           "rollout": {
             "algorithm": "sha256_length_prefixed_v1",
             "thresholdBasisPoints": 7000
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_locale_operand_unnormalizable_in",
+          "priority": 41,
+          "enabled": true,
+          "safeLabel": "Unnormalizable locale list member is never true",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "6.6.1"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.locale"
+                },
+                "operator": "in",
+                "operand": {
+                  "type": "string_list",
+                  "value": [
+                    "pt-BR",
+                    "!!bad"
+                  ]
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_locale_matches_unnormalizable_range",
+          "priority": 42,
+          "enabled": true,
+          "safeLabel": "Unnormalizable locale range is never true",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "7.7.6"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.locale"
+                },
+                "operator": "locale_matches",
+                "operand": {
+                  "type": "string",
+                  "value": "en-AA-BB-CC-DD-EE-FF-GG-HH"
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_locale_matches_unnormalizable_range_negated",
+          "priority": 43,
+          "enabled": true,
+          "safeLabel": "Unnormalizable locale range is never false",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "7.7.5"
+                }
+              },
+              {
+                "type": "not",
+                "child": {
+                  "type": "condition",
+                  "source": {
+                    "kind": "application.locale"
+                  },
+                  "operator": "locale_matches",
+                  "operand": {
+                    "type": "string",
+                    "value": "en-AA-BB-CC-DD-EE-FF-GG-HH"
+                  }
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_locale_present_but_unusable",
+          "priority": 44,
+          "enabled": true,
+          "safeLabel": "Host-supplied locale exists even when it is unusable",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "7.7.7"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.locale"
+                },
+                "operator": "exists"
+              }
+            ]
           },
           "outcome": {
             "type": "paywall",
@@ -335,12 +819,15 @@
         "requiredFeatures": [
           "condition.all",
           "condition.not",
+          "operator.does_not_exist",
           "operator.equals",
+          "operator.exists",
           "operator.greater_than",
           "operator.greater_than_or_equal",
           "operator.in",
           "operator.locale_matches",
           "operator.not_equals",
+          "operator.not_in",
           "outcome.fallback",
           "outcome.no_paywall",
           "outcome.paywall",
@@ -559,6 +1046,277 @@
       }
     },
     {
+      "name": "runtime Unicode extension locale equals authored canonical locale",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "en-US-u-rg-gbzzzz",
+        "applicationVersion": "1.0.0",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_locale_equals",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_student"
+        }
+      }
+    },
+    {
+      "name": "runtime empty locale subtag equals authored canonical locale",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "en--US",
+        "applicationVersion": "1.0.0",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_locale_equals",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_student"
+        }
+      }
+    },
+    {
+      "name": "extension locale membership uses canonical normalization",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "pt-BR-u-nu-latn",
+        "applicationVersion": "1.0.0",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_locale_in",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_fallback"
+        }
+      }
+    },
+    {
+      "name": "private-use locale membership uses canonical normalization",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "de_DE-x-corp",
+        "applicationVersion": "1.0.0",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_locale_in",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_fallback"
+        }
+      }
+    },
+    {
+      "name": "ICU keyword locale equals authored canonical locale",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "en_US@rg=gbzzzz",
+        "applicationVersion": "1.0.0",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_locale_equals",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_student"
+        }
+      }
+    },
+    {
+      "name": "POSIX charset locale equals authored canonical locale",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "en_US.UTF-8",
+        "applicationVersion": "1.0.0",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_locale_equals",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_student"
+        }
+      }
+    },
+    {
+      "name": "Java toString extension-marker locale equals authored canonical locale",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "en_US_#u-rg-gbzzzz",
+        "applicationVersion": "1.0.0",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_locale_equals",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_student"
+        }
+      }
+    },
+    {
+      "name": "an unusable host locale exists rather than being absent",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "!!not-a-locale",
+        "applicationVersion": "7.7.7",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_locale_present_but_unusable",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_ios"
+        }
+      }
+    },
+    {
+      "name": "an absent host locale does not exist",
+      "context": {
+        "platform": "android",
+        "applicationVersion": "7.7.7",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "an unnormalizable authored range is unknown rather than true",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "7.7.6",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "an unnormalizable authored range is unknown rather than false",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "7.7.5",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
       "name": "malformed application version equality remains unknown and defaults",
       "context": {
         "platform": "android",
@@ -627,6 +1385,301 @@
         "matchedRuleId": null,
         "outcome": {
           "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "an unusable host country exists rather than being absent",
+      "context": {
+        "platform": "android",
+        "country": "ZZZ",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "7.7.4",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_country_present_but_unusable",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_ios"
+        }
+      }
+    },
+    {
+      "name": "an absent host country does not exist",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "7.7.4",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "no reported country satisfies does_not_exist",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "7.7.3",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_country_absent",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_fallback"
+        }
+      }
+    },
+    {
+      "name": "an unusable host country does not satisfy does_not_exist",
+      "context": {
+        "platform": "android",
+        "country": "ZZZ",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "7.7.3",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "unusable country equality is unknown rather than true",
+      "context": {
+        "platform": "android",
+        "country": "ZZZ",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "7.7.2",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "unusable country inequality is unknown rather than false",
+      "context": {
+        "platform": "android",
+        "country": "ZZZ",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "7.7.1",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "an out-of-set platform is unknown rather than true",
+      "context": {
+        "platform": "windows",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "6.6.6",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "an out-of-set platform is unknown rather than false",
+      "context": {
+        "platform": "windows",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "6.6.5",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "an unnormalizable authored locale operand is unknown rather than true",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "6.6.4",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "an unnormalizable authored locale operand is unknown rather than false",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "6.6.3",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "an unnormalizable authored locale list member is unknown rather than false",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "6.6.2",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "an unnormalizable authored locale list member is unknown even when another member matches",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "pt-BR",
+        "applicationVersion": "6.6.1",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_locale_in",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_fallback"
         }
       }
     }

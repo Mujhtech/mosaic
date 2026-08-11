@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -265,5 +266,48 @@ func TestSourceIdentityIsStableAndDerivedFromIdentity(t *testing.T) {
 	sum := sha256.Sum256([]byte("unrelated"))
 	if first == hex.EncodeToString(sum[:]) {
 		t.Fatal("source identity collided with an unrelated digest")
+	}
+}
+
+// Fallback-audit backend #5. The contract's storePlatform vocabulary is a
+// closed two-value enum, and the mapping reported everything that was not Apple
+// — including an empty or unrecognised provider — as `google_play`. That is a
+// statement about where a customer bought something, made on no evidence, and a
+// support agent, a refund tool, or an SDK branching on it would act on the lie.
+//
+// The member is optional on a source summary, so an unmappable provider omits
+// it; it is required on a subscription snapshot, so an unmappable provider
+// refuses the payload rather than publishing a fabricated store.
+//
+// Unit test at the wire layer: this is protocol compatibility, decided by a
+// pure serialization function.
+func TestUnmappableStorePlatformIsNeverFabricated(t *testing.T) {
+	for _, provider := range []string{"", "revenuecat", "amazon_appstore", "stripe"} {
+		if platform, ok := wireStorePlatform(provider); ok {
+			t.Fatalf("provider %q mapped to %q; an unknown provider must not be named", provider, platform)
+		}
+	}
+	if platform, ok := wireStorePlatform("google_play"); !ok || platform != "google_play" {
+		t.Fatalf("google_play mapped to (%q,%v)", platform, ok)
+	}
+	if platform, ok := wireStorePlatform("app_store"); !ok || platform != "apple_app_store" {
+		t.Fatalf("app_store mapped to (%q,%v)", platform, ok)
+	}
+
+	// The optional member is omitted rather than guessed.
+	record := sourceRecord(SnapshotSource{
+		RowID: "esr_1", EntitlementID: "ent_pro", ProductID: "prod_pro",
+		GrantVersionID: "pegv_1", SubscriptionInstanceID: "sub_1",
+		SourceType: "subscription", SourceState: "active", StorePlatform: "",
+	}, time.Date(2026, time.August, 2, 0, 0, 0, 0, time.UTC))
+	if _, present := record["storePlatform"]; present {
+		t.Fatalf("a source with no resolvable provider still reported storePlatform=%v", record["storePlatform"])
+	}
+
+	// The required member refuses the payload.
+	if _, err := SubscriptionRecord(SubscriptionView{
+		SnapshotID: "sub_snap_1", StorePlatform: "amazon_appstore",
+	}, "corr"); !errors.Is(err, ErrUnrepresentable) {
+		t.Fatalf("a subscription snapshot with an unmappable store serialized with %v, want ErrUnrepresentable", err)
 	}
 }

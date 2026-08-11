@@ -1267,12 +1267,12 @@ paths:
         - { in: header, name: Mosaic-SDK-Platform, required: true, schema: { type: string, enum: [flutter, ios, android] } }
         - { in: header, name: Mosaic-SDK-Version, required: true, schema: { type: string, minLength: 1, maxLength: 64, pattern: "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:[-+][A-Za-z0-9.-]+)?$" } }
         - { in: header, name: Mosaic-Configuration-Versions, required: true, schema: { type: string, pattern: "^(1|2|3)(, ?(1|2|3))*$" } }
-        - { in: header, name: Mosaic-Paywall-Protocol-Versions, required: true, schema: { type: string, const: "0.2" } }
+        - { in: header, name: Mosaic-Paywall-Protocol-Versions, required: true, schema: { type: string, const: "0.3" } }
         - in: header
           name: Mosaic-Paywall-Capabilities
           required: true
-          description: Comma-separated unique exact Protocol capability pairs (`name@0.2`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
-          schema: { type: string, minLength: 1, maxLength: 16384, example: "component.text@0.2,layout.stack@0.2" }
+          description: Comma-separated unique exact Protocol capability pairs (`name@0.3`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
+          schema: { type: string, minLength: 1, maxLength: 16384, example: "component.text@0.3,layout.stack@0.3" }
         - { in: header, name: Mosaic-Placement-Decision-Versions, required: false, schema: { type: string, pattern: "^1$" } }
         - { in: header, name: Mosaic-Decision-Features, required: false, description: Comma-separated exact Placement Decision v1 feature identifiers., schema: { type: string, maxLength: 16384 } }
         - { in: header, name: Mosaic-Bucketing-Algorithms, required: false, schema: { type: string, enum: [sha256_length_prefixed_v1] } }
@@ -1587,6 +1587,55 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/overview-metrics:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+    get:
+      operationId: getProjectOverviewMetrics
+      tags: [Analytics]
+      summary: Project Environment overview summary.
+      description: >-
+        "Today at a glance" plus totals for one Project Environment, composed from billing projection state,
+        validated Transaction Facts, and the analytics daily aggregates. The window is the UTC calendar day and is
+        not caller-selectable; `windows.today` ends at the request instant because the day is still in progress.
+        Every metric is a tri-state: it carries a value, or it carries `available: false` and a reason. A metric is
+        never reported as zero because a source could not be read. There are no monetary metrics — Mosaic's
+        Transaction Facts carry no price or currency — and `metrics` is a closed object so monetary groups can be
+        added later without breaking consumers.
+      responses:
+        "200": { description: Overview summary., content: { application/json: { schema: { $ref: "#/components/schemas/ProjectOverviewMetricsEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/overview-metrics/series:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+    get:
+      operationId: getProjectOverviewMetricsSeries
+      tags: [Analytics]
+      summary: Project Environment overview daily series.
+      description: >-
+        Per-UTC-day series behind the overview chart, ending with today. Completed days come from the analytics
+        daily aggregates and from live billing facts; today's analytics point is read live from raw events,
+        because the aggregation job has not finished today's bucket, and every source's final point carries
+        `partial: true`. The tri-state is held per series rather than per point: a series either carries a full
+        set of points or carries `available: false` with a reason, because a hole inside a drawn line reads as a
+        collapse rather than as missing data.
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema: { type: integer, minimum: 7, maximum: 90, default: 30 }
+          description: >-
+            Series length in UTC days, inclusive of today. Clamped server-side to 7..90 rather than rejected —
+            the response echoes the length actually served in `days`. A value that is not a whole number is
+            rejected with 422.
+      responses:
+        "200": { description: Overview daily series., content: { application/json: { schema: { $ref: "#/components/schemas/ProjectOverviewMetricsSeriesEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /v1/projects/{projectId}/environments/{environmentId}/analytics/settings:
     parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
     get:
@@ -1604,6 +1653,54 @@ paths:
       tags: [Analytics]
       parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/AnalyticsFrom" }, { $ref: "#/components/parameters/AnalyticsTo" }, { $ref: "#/components/parameters/AnalyticsTimezone" }, { $ref: "#/components/parameters/AnalyticsMetricBasis" }, { $ref: "#/components/parameters/AnalyticsPlatform" }, { $ref: "#/components/parameters/AnalyticsLocale" }, { $ref: "#/components/parameters/AnalyticsApplicationVersion" }]
       responses: { "200": { $ref: "#/components/responses/AnalyticsResult" }, "403": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/analytics/series:
+    get:
+      operationId: getAnalyticsSeries
+      tags: [Analytics]
+      summary: Daily series for the analytics metric vocabulary.
+      description: >-
+        The daily-series variant of the summed analytics query: the same metric identifiers, the same
+        `platform`, `locale`, and `applicationVersion` filters, and the same basis and timezone rules, resolved
+        per UTC calendar day instead of over one window. The instant range is replaced by a clamped `days`
+        count, because the points are whole UTC days and an arbitrary range would have to be silently rounded
+        to serve them; day boundaries are UTC regardless of `timezone`, which the daily aggregates are bucketed
+        by. Completed days come from the daily aggregates and today is read live from raw events, because the
+        aggregation job has not finished today's bucket; today's point — and only today's — carries
+        `partial: true`. The tri-state is held per series rather than per point. Filters are honoured only where
+        the aggregates carry them: `analytics_daily_event_counts` is written at platform, locale, and
+        application-version grain, while the correlated funnel metrics are aggregated undimensioned, so
+        requesting a filter alongside one of them is refused with `analytics_dimension_unsupported` naming the
+        filter and the metrics rather than silently answering with every platform's numbers.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { $ref: "#/components/parameters/EnvironmentID" }
+        - name: metrics
+          in: query
+          required: true
+          schema: { type: string }
+          description: >-
+            Comma-separated metric identifiers from the analytics vocabulary, at most 12. An unknown identifier
+            is rejected; an unbounded series over every metric Mosaic defines is a table scan rather than a chart.
+        - { $ref: "#/components/parameters/AnalyticsTimezone" }
+        - { $ref: "#/components/parameters/AnalyticsMetricBasis" }
+        - { $ref: "#/components/parameters/AnalyticsPlatform" }
+        - { $ref: "#/components/parameters/AnalyticsLocale" }
+        - { $ref: "#/components/parameters/AnalyticsApplicationVersion" }
+        - name: days
+          in: query
+          required: false
+          schema: { type: integer, minimum: 7, maximum: 90, default: 30 }
+          description: >-
+            Series length in UTC days, inclusive of today. Clamped server-side to 7..90 rather than rejected —
+            the response echoes the length actually served in `days`. A value that is not a whole number is
+            rejected with 422.
+      responses:
+        "200": { description: Analytics daily series., content: { application/json: { schema: { $ref: "#/components/schemas/AnalyticsSeriesEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /v1/projects/{projectId}/environments/{environmentId}/analytics/funnels/{funnel}:
     get:
       operationId: getAnalyticsFunnel
@@ -6404,7 +6501,9 @@ components:
       properties:
         projectId: { type: string }
         environmentId: { type: string }
-        collectionEnabled: { type: boolean, default: false }
+        # Collection is on for every Environment from creation. An owner or
+        # admin turns it off through UpdateAnalyticsSettingsRequest.
+        collectionEnabled: { type: boolean, default: true }
         rawRetentionDays: { type: integer, minimum: 30, maximum: 730, default: 180 }
         updatedAt: { $ref: "#/components/schemas/Timestamp" }
     UpdateAnalyticsSettingsRequest:
@@ -6445,6 +6544,49 @@ components:
       properties:
         metrics: { type: array, items: { $ref: "#/components/schemas/AnalyticsMetric" } }
         freshness: { $ref: "#/components/schemas/AnalyticsFreshness" }
+    AnalyticsMetricSeries:
+      type: object
+      additionalProperties: false
+      required: [metricId, kind, authority, scope, available]
+      description: >-
+        One metric's line, tri-state per series rather than per point. `points` is present exactly when
+        `available` is true and covers every day in the window with no gaps, because a hole inside a drawn line
+        reads as a collapse rather than as missing data. When `available` is false, `reason` explains why and no
+        points are given: `provider_confirmed_unavailable` marks a metric Mosaic declares but does not yet
+        compute, the same state the summed query reports as a warning.
+      properties:
+        metricId: { type: string }
+        kind:
+          type: string
+          enum: [count, rate]
+          description: >-
+            Decides what a day with no underlying bucket means. A count's missing day is an explicit zero — a day
+            with no purchases had zero purchases — while a rate's is null, because a day with no denominator was
+            not measured at all.
+        authority: { type: string, enum: [client_observed, trusted_server, provider_confirmed] }
+        scope: { type: string, enum: [environment] }
+        available: { type: boolean }
+        reason: { type: string, enum: [provider_confirmed_unavailable] }
+        points: { type: array, items: { $ref: "#/components/schemas/OverviewSeriesPoint" } }
+    AnalyticsSeries:
+      type: object
+      additionalProperties: false
+      required: [projectId, environmentId, days, window, series, freshness]
+      properties:
+        projectId: { type: string }
+        environmentId: { type: string }
+        days: { type: integer, description: The clamped series length actually served, which may differ from the requested one. }
+        window:
+          allOf: [{ $ref: "#/components/schemas/OverviewWindow" }]
+          description: >-
+            The instants the points cover. `from` is midnight of the oldest day and `to` is the request instant,
+            not tomorrow's midnight, because the last day is still in progress. Day boundaries are UTC.
+        series:
+          type: array
+          items: { $ref: "#/components/schemas/AnalyticsMetricSeries" }
+          description: One entry per requested metric, in request order, de-duplicated.
+        freshness: { $ref: "#/components/schemas/AnalyticsFreshness" }
+    AnalyticsSeriesEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/AnalyticsSeries" } } }
     CreateAnalyticsEventExportRequest:
       type: object
       additionalProperties: false
@@ -6500,6 +6642,220 @@ components:
         expiresAt: { $ref: "#/components/schemas/Timestamp" }
         createdAt: { $ref: "#/components/schemas/Timestamp" }
         updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    OverviewMetric:
+      type: object
+      additionalProperties: false
+      required: [value, available, authority, scope]
+      description: >-
+        A single tri-state measure. `value` is null exactly when `available` is false, and `reason` then explains
+        why. `billing_disabled` and `analytics_collection_disabled` are configuration states the operator chose;
+        `not_measured` means the measure has no denominator in the window — a rate is reported this way when
+        nobody was shown a paywall, which is normal on a new or low-traffic Environment and is not a failure;
+        `metric_unavailable` means the source could not be read and the failure was logged server-side.
+      properties:
+        value: { type: [number, "null"] }
+        available: { type: boolean }
+        reason: { type: string, enum: [billing_disabled, analytics_collection_disabled, not_measured, metric_unavailable] }
+        authority:
+          type: string
+          enum: [provider_validated, projected, client_observed]
+          description: >-
+            Where the number came from. `provider_validated` is derived from validated Transaction Facts,
+            `projected` from committed projection snapshots and pointers, and `client_observed` from
+            SDK-reported analytics events, which Mosaic cannot confirm against a provider.
+        scope: { type: string, enum: [environment] }
+    OverviewWindow:
+      type: object
+      additionalProperties: false
+      required: [from, to, timezone]
+      properties:
+        from: { $ref: "#/components/schemas/Timestamp" }
+        to: { $ref: "#/components/schemas/Timestamp" }
+        timezone: { type: string, const: UTC }
+    OverviewWindows:
+      type: object
+      additionalProperties: false
+      required: [today, yesterday]
+      properties:
+        today:
+          allOf: [{ $ref: "#/components/schemas/OverviewWindow" }]
+          description: The UTC calendar day so far. `to` is the request instant, not tomorrow's midnight.
+        yesterday: { $ref: "#/components/schemas/OverviewWindow" }
+    OverviewCustomerMetrics:
+      type: object
+      additionalProperties: false
+      required: [total, newToday, newYesterday]
+      description: >-
+        Billing Customers holding committed entitlement state in this Environment. A Billing Customer row is
+        Project-scoped identity, so the per-Environment population is the set with a current entitlement pointer
+        here; a customer identified by a trusted server that has never had a purchase projected is not counted.
+      properties:
+        total: { $ref: "#/components/schemas/OverviewMetric" }
+        newToday: { $ref: "#/components/schemas/OverviewMetric" }
+        newYesterday: { $ref: "#/components/schemas/OverviewMetric" }
+    OverviewSubscriptionMetrics:
+      type: object
+      additionalProperties: false
+      required: [active, newToday, newYesterday]
+      description: >-
+        `active` counts Subscription Instances whose current snapshot grants access. `newToday` and `newYesterday`
+        count initial-purchase Transaction Facts, deduplicated by provider transaction identifier so a validator
+        revalidation pass is not reported as a purchase spike.
+      properties:
+        active: { $ref: "#/components/schemas/OverviewMetric" }
+        newToday: { $ref: "#/components/schemas/OverviewMetric" }
+        newYesterday: { $ref: "#/components/schemas/OverviewMetric" }
+    OverviewTrialMetrics:
+      type: object
+      additionalProperties: false
+      required: [active, startedToday, startedYesterday]
+      description: >-
+        `active` counts Subscription Instances in the trialing lifecycle; a trialing subscription that grants
+        access is also counted in `subscriptions.active`, because a trial is an active subscription. The started
+        counts come from offer-redemption Facts, which is exactly the Fact kind the projection engine treats as
+        entering the trialing lifecycle; introductory and promotional offers that are not free trials are included.
+      properties:
+        active: { $ref: "#/components/schemas/OverviewMetric" }
+        startedToday: { $ref: "#/components/schemas/OverviewMetric" }
+        startedYesterday: { $ref: "#/components/schemas/OverviewMetric" }
+    OverviewLifecycleMetrics:
+      type: object
+      additionalProperties: false
+      required: [active]
+      properties:
+        active: { $ref: "#/components/schemas/OverviewMetric" }
+    OverviewWindowedMetrics:
+      type: object
+      additionalProperties: false
+      required: [today, yesterday]
+      properties:
+        today: { $ref: "#/components/schemas/OverviewMetric" }
+        yesterday: { $ref: "#/components/schemas/OverviewMetric" }
+    ProjectOverviewMetrics:
+      type: object
+      additionalProperties: false
+      required: [projectId, environmentId, windows, metrics]
+      properties:
+        projectId: { type: string }
+        environmentId: { type: string }
+        windows: { $ref: "#/components/schemas/OverviewWindows" }
+        metrics:
+          type: object
+          additionalProperties: false
+          required: [customers, subscriptions, trials, billingRetry, gracePeriod, paywallViews, purchaseStarts, purchases, conversionRate]
+          properties:
+            customers: { $ref: "#/components/schemas/OverviewCustomerMetrics" }
+            subscriptions: { $ref: "#/components/schemas/OverviewSubscriptionMetrics" }
+            trials: { $ref: "#/components/schemas/OverviewTrialMetrics" }
+            billingRetry: { $ref: "#/components/schemas/OverviewLifecycleMetrics" }
+            gracePeriod: { $ref: "#/components/schemas/OverviewLifecycleMetrics" }
+            paywallViews:
+              allOf: [{ $ref: "#/components/schemas/OverviewWindowedMetrics" }]
+              description: Accepted paywall_presented events.
+            purchaseStarts:
+              allOf: [{ $ref: "#/components/schemas/OverviewWindowedMetrics" }]
+              description: Accepted purchase_started events.
+            purchases:
+              allOf: [{ $ref: "#/components/schemas/OverviewWindowedMetrics" }]
+              description: >-
+                Accepted purchased purchase_completed_client events. This is client-observed, not
+                provider-confirmed: Mosaic declares provider-confirmed purchase metrics but does not yet compute
+                them, so reporting this tile from them would leave it permanently unavailable.
+            conversionRate:
+              allOf: [{ $ref: "#/components/schemas/OverviewWindowedMetrics" }]
+              description: Presentations with a correlated client-completed purchase divided by presentations, as a ratio between 0 and 1.
+        analyticsFreshness:
+          allOf: [{ $ref: "#/components/schemas/AnalyticsFreshness" }]
+          description: Absent when the analytics read did not happen, so a watermark never appears beside unavailable metrics.
+    ProjectOverviewMetricsEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProjectOverviewMetrics" } } }
+    OverviewSeriesPoint:
+      type: object
+      additionalProperties: false
+      required: [date, value]
+      description: >-
+        One UTC day of one measure, shared by the overview series and the analytics metric series. `value` is
+        null only where "not measured" is the truthful reading. For a count it never is: a day with no purchases
+        had zero purchases and the point says 0, so a chart never shows a gap where a real zero belongs. For a
+        rate it happens whenever the day's denominator is zero — nobody saw the paywall, so there is no rate at
+        all, and reporting 0% would draw a conversion collapse on a day that measured nothing.
+      properties:
+        date: { type: string, format: date, description: The UTC calendar day, as YYYY-MM-DD. }
+        value: { type: [number, "null"] }
+        partial:
+          type: boolean
+          description: >-
+            Present and true on today's point only. The day is still in progress, so its value is not comparable
+            with the completed days beside it.
+    OverviewSeries:
+      type: object
+      additionalProperties: false
+      required: [available, authority, scope]
+      description: >-
+        One tri-state series. `points` is present exactly when `available` is true, and covers every day in the
+        window with no gaps. When `available` is false, `reason` explains why and no points are given at all:
+        `billing_disabled` and `analytics_collection_disabled` are configuration states the operator chose, and
+        `metric_unavailable` means a source could not be read and the failure was logged server-side.
+      properties:
+        points: { type: array, items: { $ref: "#/components/schemas/OverviewSeriesPoint" } }
+        available: { type: boolean }
+        reason: { type: string, enum: [billing_disabled, analytics_collection_disabled, metric_unavailable] }
+        authority: { type: string, enum: [provider_validated, projected, client_observed] }
+        scope: { type: string, enum: [environment] }
+    ProjectOverviewMetricsSeries:
+      type: object
+      additionalProperties: false
+      required: [projectId, environmentId, days, window, metrics]
+      properties:
+        projectId: { type: string }
+        environmentId: { type: string }
+        days: { type: integer, description: The clamped series length actually served, which may differ from the requested one. }
+        window:
+          allOf: [{ $ref: "#/components/schemas/OverviewWindow" }]
+          description: >-
+            The instants the points cover. `from` is midnight of the oldest day and `to` is the request instant,
+            not tomorrow's midnight, because the last day is still in progress.
+        metrics:
+          type: object
+          additionalProperties: false
+          required: [paywallViews, purchaseStarts, purchases, conversionRate, newCustomers, newSubscriptions, trialsStarted]
+          properties:
+            paywallViews:
+              allOf: [{ $ref: "#/components/schemas/OverviewSeries" }]
+              description: Accepted paywall_presented events per day.
+            purchaseStarts:
+              allOf: [{ $ref: "#/components/schemas/OverviewSeries" }]
+              description: Accepted purchase_started events per day.
+            purchases:
+              allOf: [{ $ref: "#/components/schemas/OverviewSeries" }]
+              description: >-
+                Accepted purchased purchase_completed_client events per day. Client-observed, not
+                provider-confirmed — the same caveat the scalar overview's `purchases` carries.
+            conversionRate:
+              allOf: [{ $ref: "#/components/schemas/OverviewSeries" }]
+              description: >-
+                Presentations with a correlated client-completed purchase divided by presentations, as a ratio
+                between 0 and 1. The only series whose points can be null, and they are null exactly on the days
+                with no presentations to divide by.
+            newCustomers:
+              allOf: [{ $ref: "#/components/schemas/OverviewSeries" }]
+              description: >-
+                Billing Customers first seen per day, counted only where they hold committed entitlement state in
+                this Environment — the same population the scalar overview's `customers` group counts.
+            newSubscriptions:
+              allOf: [{ $ref: "#/components/schemas/OverviewSeries" }]
+              description: >-
+                Initial-purchase Transaction Facts per day, deduplicated by provider transaction identifier within
+                the day so a validator revalidation pass is not drawn as a purchase spike.
+            trialsStarted:
+              allOf: [{ $ref: "#/components/schemas/OverviewSeries" }]
+              description: >-
+                Offer-redemption Transaction Facts per day, deduplicated the same way. This is the Fact kind the
+                projection engine treats as entering the trialing lifecycle, so introductory and promotional
+                offers that are not free trials are included.
+        analyticsFreshness:
+          allOf: [{ $ref: "#/components/schemas/AnalyticsFreshness" }]
+          description: Absent when the analytics read did not happen, so a watermark never appears beside unavailable series.
+    ProjectOverviewMetricsSeriesEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProjectOverviewMetricsSeries" } } }
     AnalyticsSettingsEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/AnalyticsSettings" } } }
     AnalyticsResultEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/AnalyticsResult" } } }
     AnalyticsPrivacyPreviewEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/AnalyticsPrivacyPreview" } } }
@@ -6680,9 +7036,9 @@ components:
     ProductType: { type: string, enum: [subscription, one_time_non_consumable] }
     ProductStatus: { type: string, enum: [draft, connected, attention_required, archived] }
     MetadataSource: { type: string, enum: [mock, provider] }
-    ProviderKind: { type: string, enum: [revenuecat, app_store, google_play, custom] }
+    ProviderKind: { type: string, enum: [revenuecat, app_store, app_store_connect, google_play, custom] }
     ProviderActivationKind: { type: string, enum: [provider_connection, native_store] }
-    ProviderConnectionKind: { type: string, enum: [revenuecat, custom] }
+    ProviderConnectionKind: { type: string, enum: [revenuecat, app_store_connect, custom] }
     ProviderIntegrationMode: { type: string, enum: [server_connected, sdk_only] }
     ProviderConnectionMode: { type: string, enum: [sandbox, production] }
     ProviderConnectionStatus: { type: string, enum: [pending, active, revoked] }
@@ -6877,21 +7233,50 @@ components:
         - if:
             properties:
               provider: { const: revenuecat }
+            required: [provider]
           then:
             required: [externalProjectId, credential]
+            properties:
+              credential: { pattern: "^sk_[^\\s]+$" }
+        - if:
+            properties:
+              provider: { const: app_store_connect }
+            required: [provider]
+          then:
+            required: [credential]
+            properties:
+              externalProjectId: { maxLength: 0 }
+              credential: { pattern: "^\\s*\\{[\\s\\S]*\\}\\s*$" }
       properties:
         name: { type: string, minLength: 1, maxLength: 120 }
         provider: { $ref: "#/components/schemas/ProviderConnectionKind" }
         integrationMode: { $ref: "#/components/schemas/ProviderIntegrationMode" }
         mode: { $ref: "#/components/schemas/ProviderConnectionMode" }
-        externalProjectId: { type: string, minLength: 1, maxLength: 255, description: Required RevenueCat v2 Project resource ID. }
+        externalProjectId:
+          type: string
+          maxLength: 255
+          description: >-
+            Required RevenueCat v2 Project resource ID. Must be omitted for
+            app_store_connect: an App Store Connect API key is issued per Apple
+            team and names no second project resource.
         credential:
           type: string
           minLength: 6
           maxLength: 4096
-          pattern: "^sk_[^\\s]+$"
           writeOnly: true
-          description: One-time RevenueCat v2 least-privilege secret key. Never returned or logged.
+          description: >-
+            One-time provider credential. Never returned or logged. Its shape is
+            provider-specific and is validated server side.
+
+
+            revenuecat: the RevenueCat v2 least-privilege secret key
+            (`sk_...`).
+
+
+            app_store_connect: a JSON document
+            `{"privateKey":"<.p8 PEM>","keyId":"<10 chars>","issuerId":"<uuid>","vendorNumber":"<digits, optional>"}`.
+            The vendor number travels inside this document; it is not used for
+            catalog import and is stored for future sales and finance reporting.
         environmentIds: { type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: { type: string } }
         applicationIds: { type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: { type: string } }
     ProviderCredentialRequest:
@@ -6903,8 +7288,13 @@ components:
           type: string
           minLength: 6
           maxLength: 4096
-          pattern: "^sk_[^\\s]+$"
+          pattern: "^(sk_[^\\s]+|\\s*\\{[\\s\\S]*\\}\\s*)$"
           writeOnly: true
+          description: >-
+            Replacement credential in the shape the connection's provider
+            requires. The connection determines the provider, so the accepted
+            shape is not derivable from this payload; the server validates it
+            against the connection's actual provider.
     ReplaceProviderMappingRequest:
       type: object
       additionalProperties: false
@@ -7452,6 +7842,11 @@ components:
         connectionId: { type: string }
         provider: { $ref: "#/components/schemas/ProviderKind" }
         mappingId: { type: string }
+        # Provenance of the mapping that will ship. Under a native App Store
+        # activation this is app_store for an operator-typed mapping and
+        # app_store_connect for one imported from Apple, which is why an
+        # imported mapping carries no observation.
+        mappingProvider: { $ref: "#/components/schemas/ProviderKind" }
         observation: { $ref: "#/components/schemas/ProviderMappingObservation" }
         blockers: { type: array, items: { $ref: "#/components/schemas/ProviderReadinessIssue" } }
         warnings: { type: array, items: { $ref: "#/components/schemas/ProviderReadinessIssue" } }
@@ -7566,7 +7961,7 @@ components:
         status: { type: string, enum: [active, published, archived] }
         revision: { type: integer, minimum: 1 }
         sourceVersionId: { type: string }
-        protocolVersion: { type: string, const: "0.2" }
+        protocolVersion: { type: string, const: "0.3" }
         validationStatus: { type: string, enum: [valid, invalid] }
         validation: { $ref: "#/components/schemas/ValidationSummary" }
         createdByActorId: { type: string }
@@ -7592,7 +7987,7 @@ components:
         versionNumber: { type: integer, minimum: 1 }
         sourceDraftId: { type: string }
         sourceRevision: { type: integer, minimum: 1 }
-        protocolVersion: { type: string, const: "0.2" }
+        protocolVersion: { type: string, const: "0.3" }
         document: { type: object, additionalProperties: true }
         documentHash: { type: string, pattern: "^[0-9a-f]{64}$" }
         validation: { $ref: "#/components/schemas/ValidationSummary" }

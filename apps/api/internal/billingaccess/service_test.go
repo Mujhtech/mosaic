@@ -22,18 +22,21 @@ import (
 // access.
 
 type fakeRepository struct {
-	enabled         map[string]bool
-	tokens          map[string]Token
-	digests         map[string]string
-	customers       map[string]CustomerView
-	snapshots       map[string]SnapshotView
-	touched         int
-	authority       *AuthoritySelection
-	minimum         MinimumSupport
-	observed        map[string]bool
-	observations    []SyncObservation
-	observationErr  error
-	legacyAuthority string
+	// projectionStatusErr makes the projection-health read fail, which is the
+	// condition the served status must report honestly.
+	projectionStatusErr error
+	enabled             map[string]bool
+	tokens              map[string]Token
+	digests             map[string]string
+	customers           map[string]CustomerView
+	snapshots           map[string]SnapshotView
+	touched             int
+	authority           *AuthoritySelection
+	minimum             MinimumSupport
+	observed            map[string]bool
+	observations        []SyncObservation
+	observationErr      error
+	legacyAuthority     string
 }
 
 type accessSignal struct {
@@ -141,6 +144,9 @@ func (f *fakeRepository) CurrentSnapshot(_ context.Context, _, environmentID, cu
 }
 
 func (f *fakeRepository) ProjectionStatusFor(_ context.Context, _, _, _ string) (ProjectionStatus, error) {
+	if f.projectionStatusErr != nil {
+		return ProjectionStatus{}, f.projectionStatusErr
+	}
 	return ProjectionStatus{State: ProjectionCurrent, LastProjectedAt: instant("2026-07-28T11:59:58Z")}, nil
 }
 
@@ -793,5 +799,51 @@ func TestLegacySyncFailsClosedAfterAuthorityCutover(t *testing.T) {
 	authenticated, _ := service.AuthenticateCustomerToken(context.Background(), issued.Value, "pk.one")
 	if _, err := service.Sync(context.Background(), authenticated, SyncRequest{}); err != ErrAuthorityUpgradeRequired {
 		t.Fatalf("v1 sync at Mosaic authority returned %v, want upgrade required", err)
+	}
+}
+
+// Fallback-audit backend #13 (theme T6). The read model initializes the
+// projection status to `current`, and every call site read the real status
+// under `if err == nil`. A failed health read therefore served the snapshot as
+// though the projection were up to date: the one state that asserts freshness
+// was the state published when Mosaic knew nothing about it. An SDK or operator
+// acting on `current` has no way to tell that apart from a genuinely current
+// projection.
+//
+// The snapshot is still served — a projection whose health cannot be read is
+// not a reason to tell a paying customer they have no access — but it is
+// reported degraded, with a diagnostic naming what actually failed.
+func TestUnreadableProjectionStatusIsReportedDegradedRatherThanCurrent(t *testing.T) {
+	repository := newFakeRepository()
+	seedSnapshot(repository)
+	repository.projectionStatusErr = ErrUnavailable
+	service := testService(t, repository, instant("2026-07-28T12:00:00Z"))
+	issued := issue(t, service, 0)
+	authenticated, err := service.AuthenticateCustomerToken(context.Background(), issued.Value, "pk.one")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := service.Sync(context.Background(), authenticated, SyncRequest{CorrelationID: "corr-1"})
+	if err != nil {
+		t.Fatalf("an unreadable projection status failed the sync: %v", err)
+	}
+	var payload struct {
+		Payload struct {
+			ProjectionStatus struct {
+				State          string `json:"state"`
+				DiagnosticCode string `json:"diagnosticCode"`
+			} `json:"projectionStatus"`
+		} `json:"payload"`
+	}
+	if err := json.Unmarshal(result.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	status := payload.Payload.ProjectionStatus
+	if status.State != ProjectionDegraded {
+		t.Fatalf("projection state %q with an unreadable status, want %q", status.State, ProjectionDegraded)
+	}
+	if status.DiagnosticCode != ProjectionStatusUnavailableCode {
+		t.Fatalf("diagnostic code %q, want %q", status.DiagnosticCode, ProjectionStatusUnavailableCode)
 	}
 }

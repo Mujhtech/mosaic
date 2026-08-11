@@ -8,7 +8,7 @@ import 'support/canonical_fixture.dart';
 void main() {
   const codec = MosaicPreviewMessageCodec();
 
-  test('decodes every canonical Local Preview 0.2 flow message', () {
+  test('decodes every canonical Local Preview 0.3 flow message', () {
     final messages = _canonicalFlow();
     final decoded = <MosaicPreviewDecodedMessage>[
       for (final message in messages)
@@ -37,7 +37,7 @@ void main() {
     expect(update.revision.revisionId, 'revision_000002');
     expect(update.preview.locale, 'en');
     expect(update.preview.textScale, 1);
-    expect(update.document['schemaVersion'], '0.2');
+    expect(update.document['schemaVersion'], '0.3');
   });
 
   test('rejects unknown envelope fields, sessions, and binary-like JSON', () {
@@ -107,7 +107,7 @@ void main() {
         .cast<Map<String, Object?>>()
         .map((item) => item['name']);
 
-    expect(supported, unorderedEquals(mosaicProtocolV02Capabilities));
+    expect(supported, unorderedEquals(mosaicProtocolV03Capabilities));
     expect(preview, unorderedEquals(mosaicFlutterPreviewCapabilities));
     expect(
       (payload['limits']! as Map<String, Object?>)['maxDocumentBytes'],
@@ -121,7 +121,9 @@ void main() {
     final previewCapabilities =
         messagePayload['previewCapabilities']! as List<Object?>;
     final first = previewCapabilities.first! as Map<String, Object?>;
-    first['version'] = '0.3';
+    // A version this reader does not implement. It must reject rather than
+    // accept a capability it cannot honour.
+    first['version'] = '0.4';
     expect(
       () => codec.decode(
         jsonEncode(capabilityMessage),
@@ -153,14 +155,14 @@ void main() {
       'type',
       'payload',
     });
-    expect(object['previewProtocolVersion'], '0.2');
+    expect(object['previewProtocolVersion'], '0.3');
     expect(object['sentAt'], '2026-07-17T08:00:00.000Z');
   });
 }
 
 List<Map<String, Object?>> _canonicalFlow() {
   final source = repositoryFile(
-    'protocol/fixtures/local-preview/v0.2/session-flow.messages.json',
+    'protocol/fixtures/local-preview/v0.3/session-flow.messages.json',
   ).readAsStringSync();
   return (jsonDecode(source) as List<Object?>).cast<Map<String, Object?>>();
 }

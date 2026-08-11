@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   LOCAL_PROJECT_STORAGE_KEY,
   MAX_LOCAL_PROJECT_BYTES,
+  RETIRED_LOCAL_PROJECT_STORAGE_KEY,
 } from "@/features/paywall-editor/constants/editor-constants";
 import {
   createLocalProjectFile,
@@ -23,7 +24,7 @@ import type {
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { required } from "@/test/required";
-import canonicalFixture from "../../../../../../protocol/fixtures/v0.2/complete-paywall.json";
+import canonicalFixture from "../../../../../../protocol/fixtures/v0.3/complete-paywall.json";
 
 const canonicalDocument = canonicalFixture as MosaicDocument;
 
@@ -35,83 +36,6 @@ function semanticInvalidDocument(document: MosaicDocument) {
   }
   selector.initialProductCardId = "missing-card";
   return invalid;
-}
-
-function rc2CandidateDocument(document: MosaicDocument) {
-  const candidate = cloneValue(document);
-  const selector = findNode(candidate, "plans");
-  if (selector?.type !== "productSelector") {
-    throw new Error("Canonical fixture is missing its product selector");
-  }
-  const initialCard = selector.cards.find(
-    (card) => card.id === selector.initialProductCardId
-  );
-  if (!initialCard) {
-    throw new Error("Canonical fixture is missing its initial Product Card");
-  }
-
-  const rc2Selector = selector as unknown as Record<string, unknown>;
-  const yearlyProduct = candidate.products.find(
-    (product) => product.id === "yearly-plan"
-  );
-  const lifetimeProduct = candidate.products.find(
-    (product) => product.id === "lifetime-plan"
-  );
-  if (!(yearlyProduct && lifetimeProduct)) {
-    throw new Error("Canonical fixture is missing its badged products");
-  }
-  (yearlyProduct as unknown as Record<string, unknown>).badge = {
-    default: "Best value",
-    localizationKey: "paywall.products.best_value",
-  };
-  (lifetimeProduct as unknown as Record<string, unknown>).badge = {
-    default: "Own it forever",
-    localizationKey: "paywall.products.lifetime_badge",
-  };
-  for (const locale of Object.values(candidate.localization.locales)) {
-    for (const key of Object.keys(locale.strings)) {
-      if (
-        key.startsWith("mosaic.migration.product_card_") ||
-        key.endsWith("_name_template") ||
-        key.endsWith("_price_template") ||
-        key.endsWith("_accessibility_template")
-      ) {
-        delete locale.strings[key];
-      }
-    }
-  }
-  rc2Selector.productReferenceIds = selector.cards.map(
-    (card) => card.productReferenceId
-  );
-  rc2Selector.initiallySelectedProductReferenceId =
-    initialCard.productReferenceId;
-  rc2Selector.cardStyles = {
-    default: {
-      background: "surface.elevated",
-      border: { color: "border.default", width: 1 },
-      cornerRadius: 12,
-      padding: { top: 12, start: 12, bottom: 12, end: 12 },
-      contentGap: 8,
-      contentAlignment: "spaceBetween",
-      productLabelColor: "text.primary",
-      runtimePriceColor: "text.secondary",
-      badge: {
-        background: "surface.default",
-        textColor: "text.primary",
-        border: { color: "border.default", width: 1 },
-        cornerRadius: 999,
-        padding: { top: 4, start: 8, bottom: 4, end: 8 },
-      },
-    },
-    selected: {
-      background: "surface.default",
-      border: { color: "action.primary", width: 2 },
-    },
-  };
-  delete rc2Selector.cards;
-  delete rc2Selector.initialProductCardId;
-  delete rc2Selector.crossAxisAlignment;
-  return candidate as unknown;
 }
 
 function project(document: MosaicDocument = canonicalDocument) {
@@ -136,35 +60,6 @@ describe("local project import and export", () => {
     const imported = parseImportedJson(exported);
     expect(imported.project).toBeNull();
     expect(imported.document).toEqual(canonicalFixture);
-  });
-
-  it("recovers superseded RC2 Product Selectors in raw imports and local autosaves", () => {
-    const candidate = rc2CandidateDocument(canonicalDocument);
-    const imported = parseImportedJson(JSON.stringify(candidate));
-    const importedSelector = findNode(imported.document, "plans");
-    expect(importedSelector?.type).toBe("productSelector");
-    if (importedSelector?.type !== "productSelector") {
-      return;
-    }
-    expect(
-      importedSelector.cards.map((card) => card.productReferenceId)
-    ).toEqual(["monthly-plan", "yearly-plan", "lifetime-plan"]);
-    expect(
-      importedSelector.cards.find(
-        (card) => card.id === importedSelector.initialProductCardId
-      )?.productReferenceId
-    ).toBe("yearly-plan");
-
-    const autosave = project();
-    (autosave as unknown as Record<string, unknown>).document = candidate;
-    window.localStorage.setItem(
-      LOCAL_PROJECT_STORAGE_KEY,
-      JSON.stringify(autosave)
-    );
-    expect(readLocalProjectResult()).toMatchObject({
-      status: "valid",
-      project: { document: imported.document },
-    });
   });
 
   it("rejects the autosave-only local project wrapper as a portable import", () => {
@@ -267,7 +162,7 @@ describe("local project import and export", () => {
 
     window.localStorage.setItem(
       LOCAL_PROJECT_STORAGE_KEY,
-      JSON.stringify({ fileFormatVersion: "0.2", document: {} })
+      JSON.stringify({ fileFormatVersion: "0.3", document: {} })
     );
     expect(readLocalProjectResult()).toMatchObject({ status: "corrupt" });
   });
@@ -318,5 +213,45 @@ describe("local project import and export", () => {
     expect(mockCommerceState("alreadyEntitled", []).entitlement).toEqual({
       status: "none",
     });
+  });
+
+  // Protocol 0.3 replaced 0.2 outright, so a 0.2 autosave is unreadable rather
+  // than recoverable. Reporting it as empty would look like the author's work
+  // was never saved, and reporting it as recoverable would promise a resume
+  // that cannot happen; both hide a hard cutover behind a shrug.
+  it("rejects a retired Protocol 0.2 autosave by naming the version", () => {
+    window.localStorage.setItem(
+      RETIRED_LOCAL_PROJECT_STORAGE_KEY,
+      JSON.stringify({
+        fileFormatVersion: "0.2",
+        document: { schemaVersion: "0.2" },
+      })
+    );
+    const retired = readLocalProjectResult();
+    expect(retired.status).toBe("corrupt");
+    expect(retired.status === "corrupt" && retired.message).toContain("0.2");
+    expect(retired.status === "corrupt" && retired.message).toContain(
+      "no migration path"
+    );
+
+    window.localStorage.setItem(
+      LOCAL_PROJECT_STORAGE_KEY,
+      JSON.stringify({
+        fileFormatVersion: "0.2",
+        document: { schemaVersion: "0.2" },
+      })
+    );
+    const underCurrentKey = readLocalProjectResult();
+    expect(underCurrentKey.status).toBe("corrupt");
+    expect(
+      underCurrentKey.status === "corrupt" && underCurrentKey.message
+    ).toContain("Protocol 0.3 replaced 0.2");
+  });
+
+  it("rejects an imported Protocol 0.2 document by naming the version", () => {
+    const retired = { ...cloneValue(canonicalDocument), schemaVersion: "0.2" };
+    expect(() => parseImportedJson(JSON.stringify(retired))).toThrow(
+      /Protocol 0\.2/
+    );
   });
 });

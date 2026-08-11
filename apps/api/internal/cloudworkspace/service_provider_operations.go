@@ -32,6 +32,31 @@ var revenueCatCapabilities = []ProviderCapability{
 	{Name: "providerDiagnostics", Support: "supported"},
 }
 
+// appStoreConnectCapabilities describes what the App Store Connect API can tell
+// Mosaic, not what StoreKit can do at runtime. App Store Connect is a catalog
+// API: it publishes the products and subscription groups a team has configured
+// and knows nothing about a purchase, a restore, or who holds what. Anything
+// that depends on runtime StoreKit or on a host-side entitlement decision is
+// therefore reported as host-managed rather than claimed.
+var appStoreConnectCapabilities = []ProviderCapability{
+	{Name: "productLoading", Support: "supported"},
+	{Name: "subscriptions", Support: "supported"},
+	{Name: "oneTimeNonConsumables", Support: "supported"},
+	{Name: "trials", Support: "conditional", ReasonCode: "provider.runtimeEligibilityRequired"},
+	{Name: "introductoryOffers", Support: "conditional", ReasonCode: "provider.runtimeEligibilityRequired"},
+	{Name: "promotionalOffers", Support: "conditional", ReasonCode: "provider.runtimeEligibilityRequired"},
+	{Name: "restore", Support: "conditional", ReasonCode: "host.implementationRequired"},
+	// App Store Connect has no entitlement resource. Mapping a Mosaic
+	// Entitlement to an Apple product is a decision the host makes; Apple
+	// cannot answer "who holds this entitlement".
+	{Name: "activeEntitlementLookup", Support: "conditional", ReasonCode: "host.implementationRequired"},
+	{Name: "pendingPurchases", Support: "conditional", ReasonCode: "host.implementationRequired"},
+	{Name: "deferredPurchases", Support: "conditional", ReasonCode: "host.implementationRequired"},
+	{Name: "serverConfirmedTransactions", Support: "unsupported", ReasonCode: "provider.catalogOnly"},
+	{Name: "productSynchronization", Support: "supported"},
+	{Name: "providerDiagnostics", Support: "supported"},
+}
+
 var revenueCatReadPermissions = []string{
 	"project_configuration:apps:read",
 	"project_configuration:products:read",
@@ -40,19 +65,47 @@ var revenueCatReadPermissions = []string{
 	"project_configuration:entitlements:read",
 }
 
+// appStoreConnectReadPermissions names the reads a catalog import performs.
+// App Store Connect grants access by team role rather than by scope and has no
+// permission-introspection endpoint, so this is the operator-facing statement
+// of what the key must be able to do, not a list Apple returns.
+var appStoreConnectReadPermissions = []string{
+	"appStoreConnect:apps:read",
+	"appStoreConnect:inAppPurchases:read",
+	"appStoreConnect:subscriptionGroups:read",
+	"appStoreConnect:subscriptions:read",
+}
+
 const providerImportInProgressTTL = 15 * time.Minute
 
 func providerCapabilities(provider ProviderKind) []ProviderCapability {
-	if provider != ProviderRevenueCat {
+	switch provider {
+	case ProviderRevenueCat:
+		return append([]ProviderCapability(nil), revenueCatCapabilities...)
+	case ProviderAppStoreConnect:
+		return append([]ProviderCapability(nil), appStoreConnectCapabilities...)
+	default:
 		return []ProviderCapability{
 			{Name: "productLoading", Support: "conditional", ReasonCode: "host.implementationRequired"},
 		}
 	}
-	return append([]ProviderCapability(nil), revenueCatCapabilities...)
+}
+
+// providerReadPermissions lists the provider-side reads a connection needs, or
+// nil for a provider that has no server-side permission surface.
+func providerReadPermissions(provider ProviderKind) []string {
+	switch provider {
+	case ProviderRevenueCat:
+		return append([]string(nil), revenueCatReadPermissions...)
+	case ProviderAppStoreConnect:
+		return append([]string(nil), appStoreConnectReadPermissions...)
+	default:
+		return nil
+	}
 }
 
 func (s *Service) requireProviderOperations() error {
-	if s.credentialCipher == nil || s.providerCatalog == nil {
+	if s.credentialCipher == nil || len(s.providerCatalogs) == 0 {
 		return ErrProviderFeatureDisabled
 	}
 	return nil
@@ -138,8 +191,11 @@ func (s *Service) credentialForConnection(ctx context.Context, actor Actor, conn
 		if scopeErr != nil {
 			return scopeErr
 		}
-		if connection.Provider != ProviderRevenueCat || connection.IntegrationMode != ProviderServerConnected {
+		if connection.IntegrationMode != ProviderServerConnected {
 			return ErrProviderUnsupported
+		}
+		if _, clientErr := s.catalogClient(connection.Provider); clientErr != nil {
+			return clientErr
 		}
 		if connection.Status == ProviderConnectionRevoked {
 			return ErrConnectionRevoked
@@ -179,7 +235,11 @@ func (s *Service) fetchProviderCatalog(ctx context.Context, actor Actor, connect
 		return ProviderConnection{}, Project{}, providercatalog.Catalog{}, err
 	}
 	defer zero(credential)
-	catalog, err := s.providerCatalog.FetchCatalog(ctx, providercatalog.Credential{
+	client, err := s.catalogClient(connection.Provider)
+	if err != nil {
+		return ProviderConnection{}, Project{}, providercatalog.Catalog{}, err
+	}
+	catalog, err := client.FetchCatalog(ctx, providercatalog.Credential{
 		Secret: credential, ExternalProjectID: connection.ExternalProjectID,
 	})
 	return connection, project, catalog, err
@@ -238,7 +298,7 @@ func (s *Service) TestProviderConnection(ctx context.Context, actor Actor, conne
 			ConnectionID: current.ID, Status: current.HealthStatus,
 			LastSuccessfulAt:    current.LastSuccessfulTestAt,
 			Capabilities:        providerCapabilities(current.Provider),
-			RequiredPermissions: append([]string(nil), revenueCatReadPermissions...),
+			RequiredPermissions: providerReadPermissions(current.Provider),
 		}
 		return nil
 	})
@@ -260,9 +320,7 @@ func (s *Service) ProviderConnectionHealth(ctx context.Context, actor Actor, con
 			LastSuccessfulAt: connection.LastSuccessfulTestAt, LastErrorCode: connection.LastErrorCode,
 			Capabilities: providerCapabilities(connection.Provider),
 		}
-		if connection.Provider == ProviderRevenueCat {
-			result.RequiredPermissions = append([]string(nil), revenueCatReadPermissions...)
-		}
+		result.RequiredPermissions = providerReadPermissions(connection.Provider)
 		return nil
 	})
 	return result, err
@@ -349,9 +407,6 @@ func (s *Service) replaceProviderCredential(ctx context.Context, actor Actor, co
 	if err := s.requireProviderOperations(); err != nil {
 		return ProviderConnection{}, err
 	}
-	if !validRevenueCatCredential(plaintext) {
-		return ProviderConnection{}, ErrProviderCredentialInvalid
-	}
 	var connection ProviderConnection
 	var project Project
 	err := s.repository.View(ctx, func(reader Reader) error {
@@ -365,8 +420,11 @@ func (s *Service) replaceProviderCredential(ctx context.Context, actor Actor, co
 		if scopeErr != nil {
 			return scopeErr
 		}
-		if connection.Provider != ProviderRevenueCat || connection.IntegrationMode != ProviderServerConnected {
+		if connection.IntegrationMode != ProviderServerConnected {
 			return ErrProviderUnsupported
+		}
+		if _, clientErr := s.catalogClient(connection.Provider); clientErr != nil {
+			return clientErr
 		}
 		if connection.Status == ProviderConnectionRevoked && !allowRevoked {
 			return ErrConnectionRevoked
@@ -376,8 +434,17 @@ func (s *Service) replaceProviderCredential(ctx context.Context, actor Actor, co
 	if err != nil {
 		return ProviderConnection{}, err
 	}
+	// The credential shape is checked after the connection is resolved: the
+	// rules differ per provider and are not knowable from the payload alone.
+	if !validProviderCredential(connection.Provider, plaintext) {
+		return ProviderConnection{}, ErrProviderCredentialInvalid
+	}
+	client, err := s.catalogClient(connection.Provider)
+	if err != nil {
+		return ProviderConnection{}, err
+	}
 	secret := []byte(plaintext)
-	_, providerErr := s.providerCatalog.FetchCatalog(ctx, providercatalog.Credential{
+	_, providerErr := client.FetchCatalog(ctx, providercatalog.Credential{
 		Secret: secret, ExternalProjectID: connection.ExternalProjectID,
 	})
 	zero(secret)
@@ -390,7 +457,7 @@ func (s *Service) replaceProviderCredential(ctx context.Context, actor Actor, co
 		if !ok || current.ProjectID != project.ID {
 			return ErrNotFound
 		}
-		credential, err := s.encryptProviderCredential(project, current.ID, plaintext)
+		credential, err := s.encryptProviderCredential(project, current.ID, current.Provider, plaintext)
 		if err != nil {
 			return err
 		}
@@ -856,7 +923,7 @@ func (s *Service) ImportProviderProducts(ctx context.Context, actor Actor, proje
 				ID: tx.NextID("mapping"), ProjectID: projectID, ProductID: product.ID,
 				ConnectionID: connectionID, EnvironmentID: environment.ID,
 				ApplicationID: application.ID, Platform: application.Platform,
-				Provider: ProviderRevenueCat, ProviderProductIdentifier: providerProduct.ID,
+				Provider: connection.Provider, ProviderProductIdentifier: providerProduct.ID,
 				ProviderPackageIdentifier:  item.ProviderPackageIdentifier,
 				ProviderOfferingIdentifier: item.ProviderOfferingIdentifier,
 				ExpectedStoreProductID:     providerProduct.StoreIdentifier,
@@ -977,7 +1044,7 @@ func (s *Service) ReplaceProviderMapping(ctx context.Context, actor Actor, mappi
 	if original.Provider == ProviderAppStore || original.Provider == ProviderGooglePlay {
 		return s.replaceNativeProviderMapping(ctx, actor, original, input)
 	}
-	if !validProviderMappingTarget(ProviderRevenueCat, CreateProviderMappingDraftInput{
+	if !validProviderMappingTarget(original.Provider, CreateProviderMappingDraftInput{
 		ProviderProductIdentifier:  input.ProviderProductIdentifier,
 		ProviderPackageIdentifier:  input.ProviderPackageIdentifier,
 		ProviderOfferingIdentifier: input.ProviderOfferingIdentifier,
@@ -1048,7 +1115,7 @@ func (s *Service) ReplaceProviderMapping(ctx context.Context, actor Actor, mappi
 			ID: tx.NextID("mapping"), ProjectID: project.ID, ProductID: product.ID,
 			ConnectionID: current.ConnectionID, EnvironmentID: current.EnvironmentID,
 			ApplicationID: current.ApplicationID, Platform: current.Platform,
-			Provider: ProviderRevenueCat, ProviderProductIdentifier: providerProduct.ID,
+			Provider: connection.Provider, ProviderProductIdentifier: providerProduct.ID,
 			ProviderPackageIdentifier: packageLookupKey, ProviderOfferingIdentifier: offeringLookupKey,
 			ExpectedStoreProductID: providerProduct.StoreIdentifier,
 			ReplacesMappingID:      current.ID,

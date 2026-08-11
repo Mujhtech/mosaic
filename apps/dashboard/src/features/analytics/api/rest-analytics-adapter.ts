@@ -16,6 +16,7 @@ import {
   getAnalyticsOverview,
   getAnalyticsProductAvailabilityFailures,
   getAnalyticsProviderErrors,
+  getAnalyticsSeries,
   getAnalyticsSettings,
   previewAnalyticsPrivacyRequest,
   updateAnalyticsSettings,
@@ -33,7 +34,29 @@ import type {
   MetricValue,
   PaywallComparisonRow,
 } from "../types/analytics";
+import { deriveFreshness } from "../types/analytics-freshness";
 import type { AnalyticsAdapter } from "./analytics-adapter";
+
+/**
+ * The daily series takes the same dimension filters as the summed query, but
+ * not its instants: its points are whole UTC days, so the range is a clamped
+ * day count the server echoes back.
+ */
+function seriesQuery(
+  metricIds: readonly string[],
+  filters: AnalyticsFilters,
+  days: number
+) {
+  return {
+    applicationVersion: filters.applicationVersion,
+    days,
+    locale: filters.locale,
+    metricBasis: filters.basis,
+    metrics: metricIds.join(","),
+    platform: filters.platform,
+    timezone: filters.timezone,
+  };
+}
 
 function query(filters: AnalyticsFilters) {
   return {
@@ -62,26 +85,7 @@ function normalizeSettings(settings: AnalyticsSettings) {
 }
 
 function normalizeFreshness(freshness: AnalyticsFreshness): Freshness {
-  const latestReceived = freshness.latestReceivedAt
-    ? new Date(freshness.latestReceivedAt).getTime()
-    : undefined;
-  const latestAggregated = freshness.latestAggregatedAt
-    ? new Date(freshness.latestAggregatedAt).getTime()
-    : undefined;
-  return {
-    latestReceivedAt: freshness.latestReceivedAt,
-    latestAggregatedAt: freshness.latestAggregatedAt,
-    lateEventPolicy: freshness.lateEventPolicy,
-    aggregateState: (() => {
-      if (latestAggregated === undefined) {
-        return "unavailable";
-      }
-      if (latestReceived !== undefined && latestReceived > latestAggregated) {
-        return "delayed";
-      }
-      return "current";
-    })(),
-  };
+  return deriveFreshness(freshness);
 }
 
 function normalizeMetric(metric: AnalyticsMetric): MetricValue {
@@ -317,6 +321,21 @@ export function createGeneratedAnalyticsAdapter(
         throwOnError: true,
       });
       return comparisonRows(result.data.data);
+    },
+    getSeries: async (scope, metricIds, filters, days, signal) => {
+      const result = await getAnalyticsSeries({
+        client: generatedDashboardClient,
+        path: scope,
+        query: seriesQuery(metricIds, filters, days),
+        signal,
+        throwOnError: true,
+      });
+      const response = result.data.data;
+      return {
+        days: response.days,
+        freshness: normalizeFreshness(response.freshness),
+        series: response.series,
+      };
     },
     getIssues: async (scope, filters, signal) => {
       const options = {

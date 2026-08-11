@@ -22,7 +22,7 @@ data class MosaicAnalyticsContext(
     val sdkVersion: String = MOSAIC_ANDROID_SDK_VERSION,
     val operatingSystemVersion: String? = Build.VERSION.RELEASE?.takeIf(String::isNotBlank),
     val applicationVersion: String? = null,
-    val locale: String? = Locale.getDefault().toLanguageTag().takeIf(String::isNotBlank),
+    val locale: String? = MosaicDeviceLocale.currentForEventContext,
     val configurationDeliveryVersion: String? = null,
     val commerceProviderContractVersion: String? = null,
 )

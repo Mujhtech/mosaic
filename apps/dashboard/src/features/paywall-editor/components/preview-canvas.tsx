@@ -68,6 +68,7 @@ import type {
   MosaicDocument,
   ProtocolNode,
   Screen,
+  StackComponent,
 } from "@/features/paywall-editor/types/editor";
 import type {
   StudioCanvasFramePosition,
@@ -86,7 +87,10 @@ import {
 } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { updateLocalizedProperty } from "@/features/paywall-editor/utils/editor-transforms";
 import {
-  evaluateVisibility,
+  type PaywallSelectionState,
+  resolveNodeVisibility,
+} from "@/features/paywall-editor/utils/protocol-component-rules";
+import {
   paywallRuntimeDiagnostics,
   runtimeStateForAcceptedRevision,
 } from "@/lib/mosaic-protocol";
@@ -109,6 +113,7 @@ interface PreviewRuntimeState {
   readonly document: MosaicDocument | null;
   readonly selectedProducts: Readonly<Record<string, string>>;
   readonly switchValues: Readonly<Record<string, boolean>>;
+  readonly tabSelections: Readonly<Record<string, string>>;
 }
 
 interface TransientFramePositions {
@@ -125,6 +130,7 @@ function previewRuntimeState(
       switchValues: {},
       carouselPages: {},
       selectedProducts: {},
+      tabSelections: {},
     };
   }
   const runtime = runtimeStateForAcceptedRevision(document);
@@ -133,7 +139,24 @@ function previewRuntimeState(
     switchValues: runtime.switches,
     carouselPages: runtime.carousels,
     selectedProducts: runtime.selectedProducts,
+    // Each accepted revision resets every Tabs component to its authored
+    // initialTabId, exactly as switches reset to their initialValue.
+    tabSelections: runtime.tabs,
   };
+}
+
+/**
+ * A root content Stack is hidden only when its condition resolves to false. An
+ * unresolvable condition is not "hidden": the screen keeps rendering so the
+ * per-node failure notice and the validation panel can name the broken
+ * reference instead of the whole screen quietly going blank.
+ */
+function rootContentIsConditionallyHidden(
+  visibility: StackComponent["visibility"],
+  selectionState: PaywallSelectionState
+) {
+  const resolved = resolveNodeVisibility(visibility, selectionState);
+  return resolved.status === "resolved" && !resolved.visible;
 }
 
 interface CanvasDeviceNodeData extends Record<string, unknown> {
@@ -267,7 +290,8 @@ export function PreviewCanvas({
     activeRuntime = previewRuntimeState(document);
     setRuntime(activeRuntime);
   }
-  const { carouselPages, selectedProducts, switchValues } = activeRuntime;
+  const { carouselPages, selectedProducts, switchValues, tabSelections } =
+    activeRuntime;
 
   const lockedIds = useMemo(
     () => new Set(layerMetadata.lockedIds),
@@ -294,14 +318,17 @@ export function PreviewCanvas({
     () =>
       new Set(
         document
-          ? paywallRuntimeDiagnostics(document, switchValues)
+          ? paywallRuntimeDiagnostics(document, {
+              switches: switchValues,
+              tabs: tabSelections,
+            })
               .map((diagnostic) => diagnostic.componentId)
               .filter((componentId): componentId is string =>
                 Boolean(componentId)
               )
           : []
       ),
-    [document, switchValues]
+    [document, switchValues, tabSelections]
   );
 
   const syncViewport = useCallback(
@@ -386,7 +413,7 @@ export function PreviewCanvas({
       setDropNotice({
         tone: "danger",
         message:
-          "That component is not supported. Drag a Protocol 0.2 component from Add content.",
+          "That component is not supported. Drag a Protocol 0.3 component from Add content.",
       });
       return;
     }
@@ -598,12 +625,24 @@ export function PreviewCanvas({
             : previewRuntimeState(document);
         return { ...base, switchValues: { ...base.switchValues, [id]: value } };
       }),
+    onTabSelect: (id: string, tabId: string) =>
+      setRuntime((current) => {
+        const base =
+          current.document === document
+            ? current
+            : previewRuntimeState(document);
+        return {
+          ...base,
+          tabSelections: { ...base.tabSelections, [id]: tabId },
+        };
+      }),
     onUpdateEdit: updateInlineEdit,
     purchaseDisabledIds,
     productLayerPreview,
     selectedComponentId,
     selectedProducts,
     switchValues,
+    tabSelections,
   } satisfies Omit<PreviewNodeProps, "inheritedLocked" | "node">;
 
   const deviceNodeIdByScreenId = new Map(
@@ -680,7 +719,10 @@ export function PreviewCanvas({
           preset,
           rootHidden:
             hiddenIds.has(screen.layout.content.id) ||
-            !evaluateVisibility(screen.layout.content.visibility, switchValues),
+            rootContentIsConditionallyHidden(screen.layout.content.visibility, {
+              switches: switchValues,
+              tabs: tabSelections,
+            }),
           screenLabel:
             layerMetadata.labels[screen.id]?.trim() ||
             screen.accessibilityLabel?.default ||

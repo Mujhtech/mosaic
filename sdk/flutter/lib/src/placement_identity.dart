@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:path_provider/path_provider.dart';
 
+import 'presentation.dart';
 import 'sha256.dart';
 
 /// Safe diagnostic code reported when identity persistence is unavailable.
@@ -164,10 +165,17 @@ final class MosaicFileIdentityStorage implements MosaicIdentityStorage {
 }
 
 final class MosaicIdentityController {
-  MosaicIdentityController({required this.storage, required this.namespace});
+  MosaicIdentityController({
+    required this.storage,
+    required this.namespace,
+    this.onDiagnostic,
+  });
 
   final MosaicIdentityStorage storage;
   final String namespace;
+
+  /// Host channel for identity events that change how the install is bucketed.
+  final MosaicDiagnosticCallback? onDiagnostic;
   MosaicIdentityState? _state;
   Future<MosaicIdentityState>? _operation;
   Future<void> _mutations = Future<void>.value();
@@ -184,12 +192,25 @@ final class MosaicIdentityController {
 
   Future<MosaicIdentityState> _load() async {
     try {
+      var unreadable = false;
       try {
         final source = await storage.read(namespace);
         if (source != null) _state = _decode(source);
       } on Object {
         _state = null;
+        unreadable = true;
         _lastSafeCode = mosaicIdentityStorageUnavailableCode;
+      }
+      if (_state == null && unreadable) {
+        // Minting is the only way to keep serving, but it is not free: a new
+        // installation id re-buckets every Experiment this install is in, and
+        // the previous assignments are unrecoverable. That must be reportable,
+        // not merely inferable from a persisted safe code.
+        _diagnose(
+          'identity.installation.reminted',
+          'Stored identity could not be read; a new installation identity was '
+              'created and Experiment assignments were re-bucketed.',
+        );
       }
       final state = _state ??
           MosaicIdentityState(
@@ -265,6 +286,20 @@ final class MosaicIdentityController {
     await _persistSafely(state);
     _state = state;
     return state;
+  }
+
+  void _diagnose(String code, String message) {
+    try {
+      onDiagnostic?.call(
+        MosaicDiagnostic(
+          code: code,
+          message: message,
+          severity: MosaicDiagnosticSeverity.error,
+        ),
+      );
+    } on Object {
+      // A host diagnostic handler must never break identity resolution.
+    }
   }
 
   /// Writes identity state, degrading to a safe diagnostic code when the

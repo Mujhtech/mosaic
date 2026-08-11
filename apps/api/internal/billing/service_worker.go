@@ -289,6 +289,16 @@ func (s *Service) validateApple(ctx context.Context, job ValidationJob, input Ra
 			Permanent(CategoryInvalid, "unsupported_transaction_type"), QuarantineUnsupportedTransaction, "warning")
 	}
 
+	factKind, classified := appleFactKind(input.NotificationKind, transaction, renewal)
+	if !classified {
+		// The payload was authentic; Mosaic simply has no honest word for what
+		// Apple said happened. Guessing wrote `initial_purchase` into an
+		// append-only ledger and granted the Entitlement.
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "unclassified_apple_transaction_reason"),
+			QuarantineUnclassifiedProviderState, "warning")
+	}
+
 	fact := TransactionFact{
 		ProjectID:                     input.ProjectID,
 		EnvironmentID:                 input.EnvironmentID,
@@ -299,7 +309,7 @@ func (s *Service) validateApple(ctx context.Context, job ValidationJob, input Ra
 		ProviderTransactionID:         transaction.TransactionID,
 		ProviderOriginalTransactionID: transaction.OriginalTransactionID,
 		TransactionType:               transactionType,
-		FactKind:                      appleFactKind(input.NotificationKind, transaction, renewal),
+		FactKind:                      factKind,
 		IsTestTransaction:             storeEnvironment == StoreSandbox,
 		ProviderProductIdentifier:     transaction.ProductID,
 		ValidatorVersion:              ValidatorVersion,
@@ -415,43 +425,53 @@ func appleTransactionType(value string) (string, bool) {
 }
 
 // appleFactKind classifies what happened. The notification type is the best
-// signal when present; the transaction alone falls back to purchase semantics.
-func appleFactKind(notificationType string, transaction appstorejws.TransactionPayload, renewal *appstorejws.RenewalPayload) string {
+// signal when present; otherwise the transaction's own reason decides.
+//
+// The second result is false when neither names a kind Mosaic can state. It
+// used to default to KindInitialPurchase, which is the one Fact Kind that
+// grants an Entitlement: any transactionReason Apple introduces after this code
+// was written would have been written into the append-only ledger as a purchase
+// and would have granted access. Apple documents exactly two reasons, PURCHASE
+// and RENEWAL, so anything else — including an absent one — is a statement
+// Mosaic has not seen before and must quarantine rather than guess.
+func appleFactKind(notificationType string, transaction appstorejws.TransactionPayload, renewal *appstorejws.RenewalPayload) (string, bool) {
 	switch notificationType {
 	case "SUBSCRIBED":
-		return KindInitialPurchase
+		return KindInitialPurchase, true
 	case "DID_RENEW":
-		return KindRenewal
+		return KindRenewal, true
 	case "EXPIRED":
-		return KindExpiration
+		return KindExpiration, true
 	case "REFUND":
-		return KindRefund
+		return KindRefund, true
 	case "REVOKE":
-		return KindRevocation
+		return KindRevocation, true
 	case "ONE_TIME_CHARGE":
-		return KindOneTimePurchase
+		return KindOneTimePurchase, true
 	case "OFFER_REDEEMED":
-		return KindOfferRedeemed
+		return KindOfferRedeemed, true
 	case "DID_CHANGE_RENEWAL_PREF":
-		return KindPlanChange
+		return KindPlanChange, true
 	case "DID_CHANGE_RENEWAL_STATUS":
 		if renewal != nil && renewal.AutoRenewStatus == 1 {
-			return KindAutoRenewEnabled
+			return KindAutoRenewEnabled, true
 		}
-		return KindAutoRenewDisabled
+		return KindAutoRenewDisabled, true
 	case "DID_FAIL_TO_RENEW":
-		return KindBillingRetryStart
+		return KindBillingRetryStart, true
 	case "GRACE_PERIOD_EXPIRED":
-		return KindExpiration
+		return KindExpiration, true
 	}
 	switch transaction.TransactionReason {
-	case "RENEWAL":
-		return KindRenewal
-	default:
+	case appstorejws.TransactionReasonRenewal:
+		return KindRenewal, true
+	case appstorejws.TransactionReasonPurchase:
 		if transaction.Type == appstorejws.ProductTypeNonConsumable {
-			return KindOneTimePurchase
+			return KindOneTimePurchase, true
 		}
-		return KindInitialPurchase
+		return KindInitialPurchase, true
+	default:
+		return "", false
 	}
 }
 
@@ -695,13 +715,23 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 				Permanent(CategoryInvalid, "subscription_has_no_line_items"), QuarantineMalformedReference, "error")
 		}
-		applyGoogleSubscription(&fact, purchase)
+		unclassifiedState := applyGoogleSubscription(&fact, purchase)
 		if purchase.ExternalAccountIdentifiers != nil {
 			obfuscatedAccountID = purchase.ExternalAccountIdentifiers.ObfuscatedExternalAccountID
 		}
 		if !applyGoogleVoid(&fact, work, input.ProviderOccurredAt) {
 			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 				Permanent(CategoryInvalid, "void_event_time_unavailable"), QuarantineMissingProviderTimestamp, "error")
+		}
+		// Checked after the void so a refund is still recorded when the state
+		// itself is unclassifiable: the void restates the kind, and losing the
+		// refund to a quarantine is what review finding I-4 forbade. Without a
+		// void there is no kind to write, so the input quarantines rather than
+		// being recorded as a purchase.
+		if unclassifiedState != "" && !work.voided {
+			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+				Permanent(CategoryInvalid, unclassifiedState),
+				QuarantineUnclassifiedProviderState, "warning")
 		}
 		linkedPurchaseToken = purchase.LinkedPurchaseToken
 	} else {
@@ -842,12 +872,18 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 // Google fact from the authoritative subscriptionsv2 resource. It is a pure
 // assembly step, split out so the fact-kind and supersession behaviour is
 // testable without provider plumbing.
-func applyGoogleSubscription(fact *TransactionFact, purchase googleplay.SubscriptionPurchase) {
+// It returns the diagnostic code for an unclassifiable subscription state, or
+// the empty string when the state was classified. The fact is still populated
+// in the unclassified case so that a voided purchase — whose refund kind is
+// restated by applyGoogleVoid regardless of the subscription state — is not
+// lost to the quarantine.
+func applyGoogleSubscription(fact *TransactionFact, purchase googleplay.SubscriptionPurchase) string {
 	item := purchase.LineItems[0]
 	fact.TransactionType = TypeAutoRenewableSubscription
 	fact.ProviderProductIdentifier = item.ProductID
 	fact.ProviderTransactionID = purchase.LatestOrderID
-	fact.FactKind = googleSubscriptionKind(purchase.SubscriptionState)
+	kind, unclassified := googleSubscriptionKind(purchase.SubscriptionState)
+	fact.FactKind = kind
 	fact.IsTestTransaction = purchase.TestPurchase != nil
 	if purchase.SubscriptionState == "SUBSCRIPTION_STATE_ON_HOLD" {
 		retrying := true
@@ -885,6 +921,7 @@ func applyGoogleSubscription(fact *TransactionFact, purchase googleplay.Subscrip
 		// fact_kind above is deliberately not overwritten (9A defect B1).
 		fact.SupersedesChainDigest = TokenDigest(purchase.LinkedPurchaseToken)
 	}
+	return unclassified
 }
 
 // applyGoogleOneTime populates the one-time-purchase fields of a Google fact
@@ -1147,24 +1184,34 @@ func decodeGoogleWork(body []byte) (googleWork, bool) {
 	}, true
 }
 
-func googleSubscriptionKind(state string) string {
+// googleSubscriptionKind maps a Play subscription state onto a Fact Kind.
+//
+// The second result is the diagnostic code for the quarantine the caller must
+// raise, and is empty when the state was classified. Both unmapped arms used to
+// return KindInitialPurchase, which grants an Entitlement: every state Google
+// has added since — and SUBSCRIPTION_STATE_PENDING, which is a *signup awaiting
+// payment*, i.e. an explicitly unpaid subscription — was recorded as a
+// completed purchase. Mosaic has no Fact Kind meaning "pending", and inventing
+// one is a protocol change, so both quarantine and the purchase projects as
+// `unknown` rather than `owned`.
+func googleSubscriptionKind(state string) (string, string) {
 	switch state {
 	case "SUBSCRIPTION_STATE_ACTIVE":
-		return KindRenewal
+		return KindRenewal, ""
 	case "SUBSCRIPTION_STATE_CANCELED":
-		return KindCancellationScheduled
+		return KindCancellationScheduled, ""
 	case "SUBSCRIPTION_STATE_EXPIRED":
-		return KindExpiration
+		return KindExpiration, ""
 	case "SUBSCRIPTION_STATE_IN_GRACE_PERIOD":
-		return KindGracePeriodStart
+		return KindGracePeriodStart, ""
 	case "SUBSCRIPTION_STATE_ON_HOLD":
-		return KindBillingRetryStart
+		return KindBillingRetryStart, ""
 	case "SUBSCRIPTION_STATE_PAUSED":
-		return KindPaused
+		return KindPaused, ""
 	case "SUBSCRIPTION_STATE_PENDING":
-		return KindInitialPurchase
+		return "", "unpaid_google_subscription_state_pending"
 	default:
-		return KindInitialPurchase
+		return "", "unclassified_google_subscription_state"
 	}
 }
 

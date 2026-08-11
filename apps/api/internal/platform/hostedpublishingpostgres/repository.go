@@ -282,20 +282,45 @@ func (r reader) ProviderMappingsForCommerce(connectionID, environmentID, applica
 	}, connectionID, environmentID, applicationID, platform, productIDs)
 }
 
+// ProviderMappingsForNativeCommerce returns every mapping that can back a
+// native store activation for the requested Products.
+//
+// For iOS that is two provenances: hand-created app_store mappings, which
+// never carry a connection, and App Store Connect imports, which always do.
+// Both describe the same Apple catalog, so both are returned here and reduced
+// to one row per Product by hostedpublishing.nativeCommerceMappings, which
+// owns the precedence rule and the shape normalization.
+//
+// Connection health is deliberately not required for an imported mapping. A
+// native activation makes no runtime call to App Store Connect, so a credential
+// that has expired since the import does not invalidate the App Store product
+// identifiers it produced; staleness is reported through the metadata snapshot
+// instead of silently removing the mapping.
 func (r reader) ProviderMappingsForNativeCommerce(provider, environmentID, applicationID, platform string, productIDs []string) []hostedpublishing.CommerceProductMapping {
-	return many(r, `SELECT id,product_id,provider_product_identifier,provider_base_plan_identifier,provider_offer_identifier
+	return many(r, `SELECT id,product_id,provider,provider_product_identifier,expected_store_product_id,provider_base_plan_identifier,provider_offer_identifier,current_snapshot_id
 		FROM provider_product_mappings
-		WHERE provider=$1 AND connection_id IS NULL AND environment_id=$2 AND application_id=$3
-		  AND platform=$4 AND product_id=ANY($5::text[]) AND status='active'
+		WHERE environment_id=$2 AND application_id=$3 AND platform=$4
+		  AND product_id=ANY($5::text[]) AND status='active'
+		  AND (
+		    (provider=$1 AND connection_id IS NULL) OR
+		    ($1::text='app_store' AND provider='app_store_connect' AND connection_id IS NOT NULL)
+		  )
 		ORDER BY product_id,id`, func(row pgx.Row) (hostedpublishing.CommerceProductMapping, error) {
 		var value hostedpublishing.CommerceProductMapping
-		var basePlanID, offerID *string
-		err := row.Scan(&value.ID, &value.ProductID, &value.ProviderProductIdentifier, &basePlanID, &offerID)
+		var storeID, basePlanID, offerID, snapshotID *string
+		err := row.Scan(&value.ID, &value.ProductID, &value.Provider, &value.ProviderProductIdentifier,
+			&storeID, &basePlanID, &offerID, &snapshotID)
+		if storeID != nil {
+			value.ExpectedStoreProductID = *storeID
+		}
 		if basePlanID != nil {
 			value.ProviderBasePlanIdentifier = *basePlanID
 		}
 		if offerID != nil {
 			value.ProviderOfferIdentifier = *offerID
+		}
+		if snapshotID != nil {
+			value.CurrentSnapshotID = *snapshotID
 		}
 		return value, err
 	}, provider, environmentID, applicationID, platform, productIDs)

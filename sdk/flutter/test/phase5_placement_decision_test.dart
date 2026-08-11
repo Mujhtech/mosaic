@@ -297,6 +297,81 @@ void main() {
     expect(rotated.userId, isNull);
     expect(rotated.attributes, isEmpty);
   });
+
+  test('a source this SDK cannot read is unknown, never reported absent', () {
+    // `does_not_exist` asserts that the host reported nothing. A source the
+    // resolver does not implement — a vocabulary the decoder accepts but this
+    // build has no arm for, or a leaf a caller built directly — is not that: it
+    // means Mosaic cannot read what the host reported. Answering yes there
+    // silently matches a Rule that targets the absence of data the device may
+    // well have, and does it at that Rule's priority.
+    MosaicPlacementRuleSet ruleSetFor(String sourceKind) =>
+        MosaicPlacementRuleSet(
+          id: 'set_unreadable',
+          version: 1,
+          projectId: 'project_alpha',
+          environmentId: 'env_alpha',
+          environmentKey: 'production',
+          placementId: 'placement_alpha',
+          placementKey: 'export_pdf',
+          enabled: true,
+          assignmentPolicy: MosaicAssignmentPolicy.installation,
+          attributeDefinitions: const <MosaicAttributeDefinition>[],
+          fallbacks: const <MosaicDecisionFallback>[],
+          rules: <MosaicPlacementRule>[
+            MosaicPlacementRule(
+              id: 'rule_absent',
+              priority: 1,
+              enabled: true,
+              conditions: MosaicConditionLeaf(
+                sourceKind: sourceKind,
+                operator: 'does_not_exist',
+              ),
+              outcome: const MosaicPaywallDecisionOutcome(
+                paywallVersionId: 'paywall_version_alpha',
+              ),
+            ),
+          ],
+          defaultOutcome: const MosaicNoPaywallDecisionOutcome(),
+          qaOverrides: const <MosaicQaOverride>[],
+        );
+    const evaluator = MosaicPlacementDecisionEvaluator();
+    final context = MosaicDecisionContext(now: DateTime.utc(2026, 8, 5));
+
+    final unreadable = evaluator.evaluate(
+      ruleSet: ruleSetFor('context.source_this_build_cannot_read'),
+      context: context,
+      assignment: const MosaicAssignmentKey(
+        type: 'installation',
+        value: 'install_alpha',
+      ),
+    );
+    expect(
+      unreadable,
+      isA<MosaicNoPaywallSelected>(),
+      reason: 'An unreadable source must not satisfy does_not_exist.',
+    );
+    expect(unreadable.matchedRuleId, isNull);
+    expect(
+      unreadable.trace
+          .firstWhere((step) => step.code == 'rule.evaluated')
+          .truth,
+      MosaicTruthValue.unknown,
+    );
+
+    // The genuinely absent case still answers yes, so the fix narrows nothing
+    // it should not: the host reported no country here.
+    final absent = evaluator.evaluate(
+      ruleSet: ruleSetFor('context.country'),
+      context: context,
+      assignment: const MosaicAssignmentKey(
+        type: 'installation',
+        value: 'install_alpha',
+      ),
+    );
+    expect(absent, isA<MosaicPaywallSelected>());
+    expect(absent.matchedRuleId, 'rule_absent');
+  });
 }
 
 const List<String> _invalidDeliveryV2Fixtures = <String>[

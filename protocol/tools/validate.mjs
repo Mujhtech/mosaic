@@ -1,16 +1,18 @@
-import { protocolV02Paths, protocolV02Root } from "./validation-v0.2.mjs";
+import { protocolV03Paths, protocolV03Root } from "./validation-v0.3.mjs";
 import { validateBrowserContractGeneration } from "./browser-contract-validation.mjs";
 import {
-  loadProtocolV02Artifacts,
-  validateCanonicalV02Coverage,
-  validateProtocolV02,
-  validateV02JsonFormatting,
-} from "./validation-v0.2.mjs";
+  loadProtocolV03Artifacts,
+  validateCanonicalV03Coverage,
+  validateRatingAnnouncementVectors,
+  validateAccessibilityAnnouncementVectors,
+  validateProtocolV03,
+  validateV03JsonFormatting,
+} from "./validation-v0.3.mjs";
 import {
-  loadPreviewV02Artifacts,
-  validatePreviewV02Artifacts,
-  validatePreviewV02JsonFormatting,
-} from "./preview-validation-v0.2.mjs";
+  loadPreviewV03Artifacts,
+  validatePreviewV03Artifacts,
+  validatePreviewV03JsonFormatting,
+} from "./preview-validation-v0.3.mjs";
 import { relative } from "node:path";
 import {
   loadDeliveryV1Artifacts,
@@ -87,8 +89,14 @@ import {
   validateBillingStateWebhookV1Artifacts,
   validateBillingStateWebhookV1JsonFormatting,
 } from "./billing-state-webhook-validation-v1.mjs";
+import {
+  loadLocaleResolutionV03Artifacts,
+  validateLocaleResolutionV03Artifacts,
+  validateLocaleResolutionV03JsonFormatting,
+} from "./locale-resolution-v0.3.mjs";
 import { validateAnalyticsMinimizationProjection } from "./generate-analytics-minimization.mjs";
 import { validateRejectionLayers } from "./generate-rejection-layers.mjs";
+import { checkGuardVacuity } from "./check-guard-vacuity.mjs";
 import {
   loadPhase9CArtifacts,
   validatePhase9CArtifacts,
@@ -96,8 +104,9 @@ import {
 } from "./phase9c-contract-validation.mjs";
 
 try {
-  const artifactsV02 = loadProtocolV02Artifacts();
-  const previewArtifactsV02 = loadPreviewV02Artifacts();
+  const artifactsV03 = loadProtocolV03Artifacts();
+  const previewArtifactsV03 = loadPreviewV03Artifacts();
+  const localeResolutionArtifactsV03 = loadLocaleResolutionV03Artifacts();
   const deliveryArtifactsV1 = loadDeliveryV1Artifacts();
   const commerceProviderArtifactsV1 = loadCommerceProviderV1Artifacts();
   const commerceConfigurationArtifactsV1 =
@@ -127,27 +136,31 @@ try {
   );
   const errors = [
     ...validateBrowserContractGeneration(),
-    ...validateProtocolV02(artifactsV02),
-    ...validateProtocolV02({
-      ...artifactsV02,
-      document: artifactsV02.edgeDocument,
+    ...validateProtocolV03(artifactsV03),
+    ...validateProtocolV03({
+      ...artifactsV03,
+      document: artifactsV03.edgeDocument,
     }),
-    ...validateProtocolV02({
-      ...artifactsV02,
-      document: artifactsV02.expiredCountdownDocument,
+    ...validateProtocolV03({
+      ...artifactsV03,
+      document: artifactsV03.expiredCountdownDocument,
     }),
-    ...validateProtocolV02({
-      ...artifactsV02,
-      document: artifactsV02.hiddenPurchaseTargetDocument,
+    ...validateProtocolV03({
+      ...artifactsV03,
+      document: artifactsV03.hiddenPurchaseTargetDocument,
     }),
-    ...validateProtocolV02({
-      ...artifactsV02,
-      document: artifactsV02.navigationOnlyDocument,
+    ...validateProtocolV03({
+      ...artifactsV03,
+      document: artifactsV03.navigationOnlyDocument,
     }),
-    ...validateCanonicalV02Coverage(artifactsV02.document),
-    ...validateV02JsonFormatting(),
-    ...validatePreviewV02Artifacts(previewArtifactsV02),
-    ...validatePreviewV02JsonFormatting(),
+    ...validateCanonicalV03Coverage(artifactsV03.document),
+    ...validateRatingAnnouncementVectors(),
+    ...validateAccessibilityAnnouncementVectors(),
+    ...validateV03JsonFormatting(),
+    ...validateLocaleResolutionV03Artifacts(localeResolutionArtifactsV03),
+    ...validateLocaleResolutionV03JsonFormatting(),
+    ...validatePreviewV03Artifacts(previewArtifactsV03),
+    ...validatePreviewV03JsonFormatting(),
     ...validateDeliveryV1Artifacts(deliveryArtifactsV1),
     ...validateDeliveryV1JsonFormatting(),
     ...validateCommerceProviderV1Artifacts(commerceProviderArtifactsV1),
@@ -190,6 +203,7 @@ try {
     ...validatePhase9CJsonFormatting(),
     ...validateAnalyticsMinimizationProjection(),
     ...validateRejectionLayers(),
+    ...checkGuardVacuity(),
   ];
 
   if (errors.length > 0) {
@@ -199,9 +213,9 @@ try {
     process.exitCode = 1;
   } else {
     console.log(
-      `Validated ${relative(protocolV02Root, protocolV02Paths.canonicalFixture)} ` +
-        "against the Mosaic Protocol 0.2 schema and compatibility manifest; " +
-        "validated Local Preview 0.2 fixtures, Configuration Delivery v1, " +
+      `Validated ${relative(protocolV03Root, protocolV03Paths.canonicalFixture)} ` +
+        "against the Mosaic Protocol 0.3 schema and compatibility manifest; " +
+        "validated Local Preview 0.3 fixtures, Configuration Delivery v1, " +
         "Commerce Provider Contracts v1/v2, Commerce Configurations v1/v2, " +
         "Placement Decision v1, Configuration Delivery v2, Analytics Event " +
         "v1/v2, Experiment Assignment v1, Configuration Delivery v3, Billing " +
@@ -213,6 +227,18 @@ try {
     );
   }
 } catch (error) {
-  console.error(error instanceof Error ? error.message : error);
+  // A typed refusal already says everything useful, and a missing artifact names
+  // its own path. Anything else is a bug in the tools, and a bug reported as one
+  // line of message is a bug that takes an afternoon to locate.
+  console.error(isExpectedValidationFailure(error) ? error.message : (error?.stack ?? error));
   process.exitCode = 1;
+}
+
+function isExpectedValidationFailure(error) {
+  if (!(error instanceof Error)) return false;
+  // Typed refusals raised deliberately by the validators themselves.
+  if (error.name === "DecisionEvaluationError") return true;
+  // A committed artifact that is missing or unreadable: the message carries the
+  // path, which is the whole diagnosis.
+  return typeof error.code === "string" && ["ENOENT", "EACCES", "EISDIR"].includes(error.code);
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   evaluatePublishGate,
   type GrantProposal,
+  impactHeadline,
   isGrantVersionEditable,
   narrowingCodeExplanation,
   proposalFingerprint,
@@ -20,6 +21,15 @@ const proposal: GrantProposal = {
 };
 
 const previewed = proposalFingerprint(proposal);
+
+/** A preview that states its whole blast radius, as a real one does. */
+const completeImpact = {
+  additiveSuperset: true,
+  impactedActiveSources: 3,
+  impactedCustomers: 3,
+  impactedEntitlements: 1,
+  impactedProducts: 1,
+};
 
 /**
  * These tests protect the confirmation contract of the only Mosaic operation
@@ -47,7 +57,7 @@ describe("grant version publish gate", () => {
     const widened: GrantProposal = { ...proposal, grantsInBillingRetry: true };
     const gate = evaluatePublishGate({
       canManage: true,
-      impact: { additiveSuperset: true, impactedActiveSources: 3 },
+      impact: completeImpact,
       isSubmitting: false,
       previewedFingerprint: previewed,
       proposal: widened,
@@ -60,12 +70,58 @@ describe("grant version publish gate", () => {
     expect(
       evaluatePublishGate({
         canManage: true,
-        impact: { additiveSuperset: true, impactedActiveSources: 3 },
+        impact: completeImpact,
         isSubmitting: false,
         previewedFingerprint: previewed,
         proposal,
       }).allowed
     ).toBe(true);
+  });
+
+  /**
+   * Protects: publish stays blocked when the preview did not state its full
+   * blast radius.
+   *
+   * The failure this catches: an impact response missing a count is rendered as
+   * `0`, the confirmation reads "no customer can lose access", and an operator
+   * publishes an irreversible version on a number nobody measured. Each field is
+   * asserted separately because the gate has to fail on *any* of them, not just
+   * the one the headline happens to use.
+   */
+  it("refuses to publish when any blast-radius count is missing", () => {
+    for (const missing of [
+      "impactedActiveSources",
+      "impactedCustomers",
+      "impactedEntitlements",
+      "impactedProducts",
+    ] as const) {
+      const impact = { ...completeImpact };
+      delete impact[missing];
+      const gate = evaluatePublishGate({
+        canManage: true,
+        impact,
+        isSubmitting: false,
+        previewedFingerprint: previewed,
+        proposal,
+      });
+      expect(gate.allowed).toBe(false);
+      expect(gate.blockedBy).toBe("impact_incomplete");
+    }
+  });
+
+  /**
+   * Protects: the headline never claims safety from an unreported count.
+   *
+   * "No customer can lose access" is the sentence an operator acts on. It must
+   * come from a measured zero, never from an absent field.
+   */
+  it("never states a safe blast radius from an unreported count", () => {
+    expect(impactHeadline({ additiveSuperset: true })).not.toContain(
+      "no customer can lose access"
+    );
+    expect(
+      impactHeadline({ additiveSuperset: true, impactedActiveSources: 0 })
+    ).toContain("no customer can lose access");
   });
 
   it("refuses a retroactive narrowing the publish call would reject anyway", () => {
@@ -88,7 +144,7 @@ describe("grant version publish gate", () => {
     expect(
       evaluatePublishGate({
         canManage: true,
-        impact: { additiveSuperset: true },
+        impact: completeImpact,
         isSubmitting: false,
         previewedFingerprint: previewed,
         proposal: { ...proposal, reason: "   " },
@@ -98,7 +154,7 @@ describe("grant version publish gate", () => {
     expect(
       evaluatePublishGate({
         canManage: false,
-        impact: { additiveSuperset: true },
+        impact: completeImpact,
         isSubmitting: false,
         previewedFingerprint: previewed,
         proposal,

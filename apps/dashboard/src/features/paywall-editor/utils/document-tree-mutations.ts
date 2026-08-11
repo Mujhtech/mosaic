@@ -168,6 +168,7 @@ export function resolveLegacyInsertionLocation(
       "productSelector",
       "switch",
       "carousel",
+      "tabs",
     ]);
     if (!(incomingType && interactiveTypes.has(incomingType))) {
       return { parentId: selected.id, index: selected.children.length };
@@ -420,6 +421,9 @@ export function duplicateSubtree(
   const identifiers = identifierSet(document);
   const keys = localizationKeySet(document);
   const nodeIdMap = new Map<string, string>();
+  // Tab ids are not node ids, but a tab-conditional visibility compares
+  // against one, so a duplicated subtree has to remap them too.
+  const duplicatedTabIds = new Map<string, string>();
   const localizationKeyCopies: Array<{
     sourceKey: string;
     duplicateKey: string;
@@ -480,6 +484,32 @@ export function duplicateSubtree(
             duplicateTreeNode
           ) as typeof node.children,
         };
+      case "tabs": {
+        const tabs = node.tabs.map((tab) => {
+          const tabId = allocateIdentifier(identifiers, `${tab.id}-copy`);
+          duplicatedTabIds.set(tab.id, tabId);
+          const content = duplicateTreeNode(tab.content);
+          return {
+            ...cloneValue(tab),
+            id: tabId,
+            label: duplicateText(tab.label),
+            content: content.type === "stack" ? content : tab.content,
+          };
+        });
+        const initialTabId = duplicatedTabIds.get(node.initialTabId);
+        if (!initialTabId) {
+          throw new Error(
+            `Tabs ${node.id} initialTabId ${node.initialTabId} names no declared tab.`
+          );
+        }
+        return {
+          ...cloneValue(node),
+          id,
+          tabs,
+          initialTabId,
+          accessibility: duplicateControl(node.accessibility),
+        };
+      }
       case "carousel":
         return {
           ...cloneValue(node),
@@ -592,6 +622,36 @@ export function duplicateSubtree(
           label: duplicateText(node.label),
           accessibility: duplicateControl(node.accessibility),
         };
+      case "timeline":
+        return {
+          ...cloneValue(node),
+          id,
+          entries: node.entries.map((entry) => ({
+            ...cloneValue(entry),
+            id: allocateIdentifier(identifiers, `${entry.id}-copy`),
+            title: duplicateText(entry.title),
+            ...(entry.description
+              ? { description: duplicateText(entry.description) }
+              : {}),
+          })),
+          accessibility: duplicateControl(node.accessibility),
+        };
+      case "award":
+        return {
+          ...cloneValue(node),
+          id,
+          title: duplicateText(node.title),
+          ...(node.subtitle ? { subtitle: duplicateText(node.subtitle) } : {}),
+          accessibility: duplicateControl(node.accessibility),
+        };
+      case "socialProof":
+        return {
+          ...cloneValue(node),
+          id,
+          quote: duplicateText(node.quote),
+          attribution: duplicateText(node.attribution),
+          accessibility: duplicateControl(node.accessibility),
+        };
       default: {
         const unhandled: never = node;
         throw new Error(`Unhandled node.type: ${JSON.stringify(unhandled)}`);
@@ -647,6 +707,17 @@ export function duplicateSubtree(
           };
         }),
       };
+    } else if (node.type === "tabs") {
+      repaired = {
+        ...node,
+        tabs: node.tabs.map((tab) => {
+          const content = repairInternalReferences(tab.content);
+          return {
+            ...tab,
+            content: content.type === "stack" ? content : tab.content,
+          };
+        }),
+      };
     } else if (node.type === "productSelector") {
       repaired = {
         ...node,
@@ -676,6 +747,16 @@ export function duplicateSubtree(
         repaired = {
           ...repaired,
           visibility: { ...repaired.visibility, switchId },
+        };
+      }
+    }
+    if ("visibility" in repaired && repaired.visibility?.mode === "tab") {
+      const tabsId = nodeIdMap.get(repaired.visibility.tabsId);
+      const equals = duplicatedTabIds.get(repaired.visibility.equals);
+      if (tabsId && equals) {
+        repaired = {
+          ...repaired,
+          visibility: { ...repaired.visibility, tabsId, equals },
         };
       }
     }

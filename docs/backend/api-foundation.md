@@ -164,7 +164,7 @@ variables take precedence because `.env` loading does not overwrite them.
 | `MOSAIC_AUTH_REQUESTS_PER_MINUTE` | `12`                                 | Refill rate for each authentication IP and hashed-account bucket.                                           |
 | `MOSAIC_AUTH_BURST`               | `4`                                  | Burst size for each authentication limiter bucket.                                                          |
 | `MOSAIC_AUTH_LIMITER_ENTRIES`     | `10000`                              | Bound on in-process authentication limiter keys.                                                            |
-| `MOSAIC_PROTOCOL_V02_SCHEMA_PATH` | repository canonical schema path     | Canonical Protocol 0.2 JSON Schema compiled at startup.                                                      |
+| `MOSAIC_PROTOCOL_V03_SCHEMA_PATH` | repository canonical schema path     | Canonical Protocol 0.3 JSON Schema compiled at startup.                                                      |
 | `MOSAIC_COMMERCE_PROVIDER_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Provider v1 JSON Schema compiled at API startup.                                          |
 | `MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Configuration v1 JSON Schema compiled at API startup.                              |
 | `MOSAIC_COMMERCE_PROVIDER_V2_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Provider v2 JSON Schema compiled at API startup. |

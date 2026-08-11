@@ -12,10 +12,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
-	"github.com/Mujhtech/mosaic/apps/api/migrations"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/pgtest"
 )
 
 func authorityTestPool(t *testing.T) (*pgxpool.Pool, context.Context) {
@@ -24,20 +23,18 @@ func authorityTestPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	if url == "" {
 		t.Skip("DATABASE_TEST_URL is required")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	t.Cleanup(cancel)
 	db, err := sql.Open("pgx", url)
 	if err != nil {
 		t.Fatal(err)
 	}
-	goose.SetBaseFS(migrations.Files)
-	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatal(err)
-	}
-	if err := goose.UpContext(ctx, db, "."); err != nil {
+	if err := pgtest.Migrate(db, 0); err != nil {
 		t.Fatal(err)
 	}
 	_ = db.Close()
+	// The assertion clock starts after the schema is up: a deadline created
+	// before migration is spent by migration.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	t.Cleanup(cancel)
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
 		t.Fatal(err)

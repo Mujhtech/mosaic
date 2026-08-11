@@ -11,11 +11,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/experimentpostgres"
-	"github.com/Mujhtech/mosaic/apps/api/migrations"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/pgtest"
 )
 
 // seedSQL builds the minimum valid tenant chain an Experiment version needs.
@@ -38,14 +37,14 @@ INSERT INTO paywall_drafts(
 	id,project_id,paywall_id,environment_id,status,current_revision,current_protocol_version,
 	validation_status,created_by_actor_id,updated_by_actor_id,created_at,updated_at
 ) VALUES(
-	'xp_paywall_draft','xp_project','xp_paywall','xp_env','published',1,'0.2',
+	'xp_paywall_draft','xp_project','xp_paywall','xp_env','published',1,'0.3',
 	'valid','xp_actor','xp_actor',now(),now()
 );
 INSERT INTO paywall_draft_revisions(
 	draft_id,revision,project_id,protocol_version,document,document_hash,
 	validation_status,mutation_key_hash,request_hash,actor_id,created_at
 ) VALUES(
-	'xp_paywall_draft',1,'xp_project','0.2','{}'::jsonb,repeat('a',64),
+	'xp_paywall_draft',1,'xp_project','0.3','{}'::jsonb,repeat('a',64),
 	'valid',repeat('b',64),repeat('c',64),'xp_actor',now()
 );
 INSERT INTO paywall_versions(
@@ -53,7 +52,7 @@ INSERT INTO paywall_versions(
 	protocol_version,document,document_hash,created_by_actor_id,created_at
 ) VALUES(
 	'xp_paywall_version','xp_project','xp_paywall','xp_env',1,'xp_paywall_draft',1,
-	'0.2','{}'::jsonb,repeat('a',64),'xp_actor',now()
+	'0.3','{}'::jsonb,repeat('a',64),'xp_actor',now()
 );
 
 INSERT INTO experiment_metric_definitions(
@@ -111,9 +110,6 @@ func setup(t *testing.T) (*pgxpool.Pool, context.Context) {
 	if databaseURL == "" {
 		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	t.Cleanup(cancel)
-
 	config, err := pgx.ParseConfig(databaseURL)
 	if err != nil {
 		t.Fatalf("parse DATABASE_TEST_URL: %v", err)
@@ -121,23 +117,25 @@ func setup(t *testing.T) (*pgxpool.Pool, context.Context) {
 	db := stdlib.OpenDB(*config)
 	db.SetMaxOpenConns(1)
 	defer db.Close()
-	if err := db.PingContext(ctx); err != nil {
+	// Connectivity is part of setup, so it is checked against the setup budget
+	// rather than the assertion budget it would otherwise consume.
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), pgtest.MigrationBudget)
+	err = db.PingContext(pingCtx)
+	pingCancel()
+	if err != nil {
 		t.Fatalf("connect to PostgreSQL: %v", err)
 	}
 	// Immutability triggers correctly refuse to delete published Experiment
 	// versions, so the fixture cannot be torn down row by row. Resetting the
 	// schema is the only reliable isolation, and DATABASE_TEST_URL is documented
 	// as a throwaway database.
-	if _, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`); err != nil {
-		t.Fatalf("reset the test schema (DATABASE_TEST_URL must be a throwaway database): %v", err)
-	}
-	goose.SetBaseFS(migrations.Files)
-	if err := goose.SetDialect("postgres"); err != nil {
+	if err := pgtest.ResetAndMigrate(db, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := goose.UpContext(ctx, db, "."); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
+	// The assertion clock starts after the schema is up: a deadline created
+	// before migration is spent by migration.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
 	if _, err := db.ExecContext(ctx, seedSQL); err != nil {
 		t.Fatalf("seed Experiment fixture: %v", err)
 	}

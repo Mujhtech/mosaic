@@ -5,7 +5,7 @@
   "capabilityRequestSchema": "../../schema/configuration-delivery/v1/capability-request.schema.json",
   "canonicalFixture": "../../fixtures/configuration-delivery/v1/valid-release.json",
   "supportedPaywallProtocols": [
-    "0.2"
+    "0.3"
   ],
   "readerPolicy": {
     "unknownDeliveryVersion": "rejectRelease",

@@ -2,7 +2,7 @@
 
 Configuration Delivery `3` retains the complete immutable Delivery `2`
 snapshot and atomically adds Experiment Assignment Contract `1` definitions.
-Delivery `1`/`2`, Placement Decision `1`, and Paywall Protocol `0.2` remain
+Delivery `1`/`2`, Placement Decision `1`, and Paywall Protocol `0.3` remain
 unchanged.
 
 Canonical artifacts are under

@@ -764,6 +764,7 @@ export function createEditorStore(
         node?.type !== "stack" &&
         node?.type !== "button" &&
         node?.type !== "carousel" &&
+        node?.type !== "tabs" &&
         node?.type !== "productSelector" &&
         node?.type !== "productCard" &&
         node?.type !== "productBadge"

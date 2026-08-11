@@ -98,6 +98,65 @@ void main() {
     expect(resolved.textDirection, TextDirection.ltr);
   });
 
+  // The cross-SDK corpus for the 2026-08-05 Paywall Protocol 0.3 ruling that
+  // requested-locale matching is case-insensitive. It is bound here rather than
+  // restated: the failure it guards is a renderer quietly disagreeing with the
+  // other SDKs about which catalog a device's own locale denotes.
+  test('matches the canonical Protocol 0.3 locale-resolution corpus', () {
+    final corpus = jsonDecode(
+      repositoryFile('protocol/fixtures/v0.3/locale-resolution.json')
+          .readAsStringSync(),
+    )! as Map<String, Object?>;
+    final localization =
+        (corpus['localization']! as Map).cast<String, Object?>();
+    final declared = (localization['locales']! as List).cast<String>();
+    final decoded = decodeCanonicalFixture();
+    final document = MosaicPaywallDocument(
+      schemaVersion: decoded.schemaVersion,
+      id: decoded.id,
+      revision: decoded.revision,
+      compatibility: decoded.compatibility,
+      localization: MosaicLocalization(
+        defaultLocale: localization['defaultLocale']! as String,
+        fallbackLocale: localization['fallbackLocale']! as String,
+        locales: <String, MosaicLocaleCatalog>{
+          for (final locale in declared)
+            locale: MosaicLocaleCatalog(
+              direction: MosaicLocaleDirection.ltr,
+              strings: <String, String>{'paywall.headline': locale},
+            ),
+        },
+      ),
+      assets: decoded.assets,
+      products: decoded.products,
+      layout: decoded.layout,
+    );
+
+    for (final raw in corpus['cases']! as List<Object?>) {
+      final testCase = (raw! as Map).cast<String, Object?>();
+      final name = testCase['name']! as String;
+      final resolved = const MosaicLocaleResolver().resolve(
+        document,
+        requestedLocale: testCase['requested'] as String?,
+      );
+      // The corpus lists every candidate, including keys no catalog declares.
+      // Per its own `normativeScope`, the order is normative and the public
+      // shape is not: this binding reports the declared subset, in that order.
+      expect(
+        resolved.candidates,
+        (testCase['expectedCandidates']! as List)
+            .cast<String>()
+            .where(declared.contains),
+        reason: name,
+      );
+      expect(
+        resolved.resolve(headline(document)).locale,
+        testCase['expectedCatalog'],
+        reason: name,
+      );
+    }
+  });
+
   test('uses inline default only after every declared catalog candidate', () {
     final decoded = decodeCanonicalFixture();
     final emptyCatalog = MosaicLocaleCatalog(

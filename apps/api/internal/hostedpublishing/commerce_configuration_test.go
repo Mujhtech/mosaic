@@ -187,6 +187,94 @@ func TestNativeCommerceConfigurationContainsExactMappingsGrantsAndObservation(t 
 	}
 }
 
+// TestNativeCommerceConfigurationServesAppStoreConnectImports proves that an
+// iOS Release whose Product mappings came from an App Store Connect import
+// publishes under the native App Store activation, and that it emits exactly
+// what a hand-created native mapping emits.
+//
+// Three failures are in scope, all of which would ship a broken paywall:
+// refusing to publish an imported catalog at all; shipping Apple's opaque
+// resource ID as the purchase identifier, which StoreKit cannot buy; and
+// deriving a revenueCatPackage adapter from the subscription-group provenance
+// an import stores, which Commerce Configuration v2 rejects for a non-
+// RevenueCat identity. The build path runs the canonical protocol schemas, so
+// a shape regression fails here rather than in an SDK.
+func TestNativeCommerceConfigurationServesAppStoreConnectImports(t *testing.T) {
+	now := time.Date(2026, time.August, 3, 12, 0, 0, 0, time.UTC)
+	importedMapping := CommerceProductMapping{
+		ID: "mapping_imported", ProductID: "product_1", Provider: "app_store_connect",
+		// Apple's opaque resource ID, its subscription group, and the App Store
+		// product ID a purchase actually names.
+		ProviderProductIdentifier:  "sub_resource_id",
+		ProviderOfferingIdentifier: "grp_pro", ProviderPackageIdentifier: "grp_pro",
+		ExpectedStoreProductID: "com.example.pro.monthly",
+		CurrentSnapshotID:      "snapshot_1",
+	}
+	nativeMapping := CommerceProductMapping{
+		ID: "mapping_native", ProductID: "product_1", Provider: "app_store",
+		ProviderProductIdentifier: "com.example.typed.monthly",
+	}
+	for _, test := range []struct {
+		name     string
+		mappings []CommerceProductMapping
+	}{
+		{name: "imported_only", mappings: []CommerceProductMapping{importedMapping}},
+		// Both provenances describe the Product. The import wins: it is
+		// provider-verified and refreshed by synchronization, while the
+		// hand-created mapping is an unverified transcription.
+		{name: "import_wins_over_native", mappings: []CommerceProductMapping{importedMapping, nativeMapping}},
+		{name: "import_wins_regardless_of_order", mappings: []CommerceProductMapping{nativeMapping, importedMapping}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			tx := &commerceTestTransaction{
+				assignment: ProviderAssignment{Provider: "app_store", ActivationKind: "native_store"},
+				mappings:   test.mappings,
+				products: map[string]Product{
+					"product_1": {ID: "product_1", ProjectID: "project_1", Type: "subscription"},
+				},
+				entitlementKeys: map[string][]string{"product_1": {"pro"}},
+			}
+			service := &Service{commerceValidator: commerceValidatorForTest(t)}
+			snapshot, err := service.buildCommerceConfiguration(
+				tx,
+				Release{
+					ID: "release_1", ProjectID: "project_1", EnvironmentID: "environment_1",
+					Payload: json.RawMessage(`{"release":{"contentDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}`),
+				},
+				Environment{ID: "environment_1", ProjectID: "project_1"},
+				Application{ID: "application_1", ProjectID: "project_1", Platform: "ios"},
+				[]string{"product_1"},
+				now,
+			)
+			if err != nil {
+				t.Fatalf("publish an App Store Connect backed iOS Release: %v", err)
+			}
+			var envelope commerceConfigurationEnvelope
+			if err := json.Unmarshal(snapshot.Payload, &envelope); err != nil {
+				t.Fatal(err)
+			}
+			if len(envelope.Configuration.ProductMappings) != 1 {
+				t.Fatalf("product mappings = %#v", envelope.Configuration.ProductMappings)
+			}
+			mapping := envelope.Configuration.ProductMappings[0]
+			if envelope.Version != "2" ||
+				envelope.Configuration.ActiveProvider.Identity.ID != "app_store" ||
+				envelope.Configuration.ActiveProvider.Activation.Source != "nativeStore" ||
+				envelope.Configuration.ActiveProvider.Activation.ProviderConnectionID != "" ||
+				envelope.Configuration.ActiveProvider.RecoveryMode != "storeSynchronization" ||
+				envelope.Configuration.Freshness.Source != "nativeStoreConfiguration" {
+				t.Fatalf("active provider = %#v", envelope.Configuration.ActiveProvider)
+			}
+			if mapping.MappingID != "mapping_imported" ||
+				mapping.ProviderProductReference != "com.example.pro.monthly" ||
+				mapping.AdapterMapping != (commerceAdapterMapping{Kind: "storeKitProduct"}) ||
+				len(mapping.EntitlementKeys) != 1 || mapping.EntitlementKeys[0] != "pro" {
+				t.Fatalf("imported product mapping = %#v", mapping)
+			}
+		})
+	}
+}
+
 func TestCommerceConfigurationUsesStoreAndCanonicalSDKLookupReferences(t *testing.T) {
 	now := time.Date(2026, time.July, 23, 12, 0, 0, 0, time.UTC)
 	for _, test := range []struct {

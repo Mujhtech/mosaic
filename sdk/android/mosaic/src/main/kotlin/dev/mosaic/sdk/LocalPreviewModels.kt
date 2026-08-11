@@ -2,9 +2,9 @@ package dev.mosaic.sdk
 
 import java.net.URI
 
-const val MOSAIC_LOCAL_PREVIEW_VERSION: String = "0.2"
+const val MOSAIC_LOCAL_PREVIEW_VERSION: String = "0.3"
 const val MOSAIC_LOCAL_PREVIEW_LATEST_VERSION: String = MOSAIC_LOCAL_PREVIEW_VERSION
-const val MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL: String = "mosaic.local-preview.v0.2"
+const val MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL: String = "mosaic.local-preview.v0.3"
 const val MOSAIC_LOCAL_PREVIEW_MAX_FRAME_BYTES: Int = 2 * 1024 * 1024
 const val MOSAIC_LOCAL_PREVIEW_DEFAULT_MAX_DOCUMENT_BYTES: Int = 1024 * 1024
 const val MOSAIC_LOCAL_PREVIEW_HEARTBEAT_MILLIS: Long = 5_000

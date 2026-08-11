@@ -157,6 +157,30 @@ type AnalyticsResult struct {
 	Freshness Freshness `json:"freshness"`
 }
 
+// DailyMetricPoint is one metric's completed UTC-day aggregate bucket.
+//
+// The numerator and denominator are carried rather than a computed value on
+// purpose. A rate whose denominator is zero has no value at all, and only a
+// caller holding both halves can tell that apart from a rate of zero; folding
+// the division in here would force every consumer to read 0% as a measurement.
+type DailyMetricPoint struct {
+	// Date is the bucket's UTC midnight.
+	Date        time.Time
+	MetricID    string
+	Numerator   int64
+	Denominator *int64
+}
+
+// DailySeriesResult is the per-day read over completed daily buckets.
+//
+// It never falls back to raw events: the caller decides what to do about a day
+// the aggregation job has not finished, because only the caller knows whether
+// it wants a live partial reading or nothing at all.
+type DailySeriesResult struct {
+	Points    []DailyMetricPoint
+	Freshness Freshness
+}
+
 type PrivacyPreview struct {
 	Kind                   string   `json:"kind"`
 	AffectedEvents         int64    `json:"affectedEvents"`

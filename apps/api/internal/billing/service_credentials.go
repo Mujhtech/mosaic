@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rs/zerolog"
+
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/googleplay"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
@@ -62,7 +64,7 @@ func (s *Service) CreateCredential(ctx context.Context, actor Actor, input Crede
 	if err != nil {
 		return StoreServerCredential{}, err
 	}
-	_ = s.repository.RecordCredentialEvent(ctx, input.ProjectID, created.ID, "created", "succeeded", "", actor.ID, now)
+	s.recordCredentialEvent(ctx, input.ProjectID, created.ID, "created", "succeeded", "", actor.ID, now)
 	// The full endpoint URL exists exactly twice in the system's lifetime: in
 	// this response and in the equivalent rotate response. No read ever returns
 	// it, because the token it embeds is stored only as a digest.
@@ -109,7 +111,7 @@ func (s *Service) RotateCredential(ctx context.Context, actor Actor, projectID, 
 	if err != nil {
 		return StoreServerCredential{}, err
 	}
-	_ = s.repository.RecordCredentialEvent(ctx, projectID, credentialID, "rotated", "succeeded", "", actor.ID, now)
+	s.recordCredentialEvent(ctx, projectID, credentialID, "rotated", "succeeded", "", actor.ID, now)
 	rotated.NotificationEndpointURL = s.endpointURL(token)
 	return rotated, nil
 }
@@ -126,7 +128,7 @@ func (s *Service) RevokeCredential(ctx context.Context, actor Actor, projectID, 
 	if err != nil {
 		return StoreServerCredential{}, err
 	}
-	_ = s.repository.RecordCredentialEvent(ctx, projectID, credentialID, "revoked", "succeeded", "", actor.ID, now)
+	s.recordCredentialEvent(ctx, projectID, credentialID, "revoked", "succeeded", "", actor.ID, now)
 	return revoked, nil
 }
 
@@ -193,7 +195,7 @@ func (s *Service) TestCredential(ctx context.Context, actor Actor, projectID, cr
 	if health != "healthy" {
 		outcome = "failed"
 	}
-	_ = s.repository.RecordCredentialEvent(ctx, projectID, credentialID, "tested", outcome, code, actor.ID, now)
+	s.recordCredentialEvent(ctx, projectID, credentialID, "tested", outcome, code, actor.ID, now)
 	return s.repository.GetCredential(ctx, actor, projectID, credentialID)
 }
 
@@ -300,4 +302,27 @@ func (s *Service) organizationFor(ctx context.Context, projectID string) (string
 		return "", ErrNotFound
 	}
 	return organizationID, nil
+}
+
+// recordCredentialEvent appends the Store Server Credential lifecycle event and
+// reports a failed append loudly rather than discarding it.
+//
+// The credential mutation has already committed at every call site, so failing
+// the operation would tell an operator to retry a rotation or a revocation that
+// has already taken effect — and re-rotating mints a second intake token,
+// invalidating the one the first response just handed out exactly once. What is
+// lost instead is the credential's audit trail, which is usually being read
+// during an investigation into the very compromise a rotation responds to, so
+// the failure is raised at error level where an alert can see it.
+//
+// No secret, envelope, or intake token is ever a field here.
+func (s *Service) recordCredentialEvent(ctx context.Context, projectID, credentialID, event, outcome, diagnostic, actorID string, now time.Time) {
+	if err := s.repository.RecordCredentialEvent(ctx, projectID, credentialID, event, outcome, diagnostic, actorID, now); err != nil {
+		zerolog.Ctx(ctx).Error().Err(err).
+			Str("project_id", projectID).
+			Str("store_server_credential_id", credentialID).
+			Str("credential_event", event).
+			Str("outcome", outcome).
+			Msg("store server credential event was not recorded")
+	}
 }

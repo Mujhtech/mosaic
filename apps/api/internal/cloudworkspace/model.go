@@ -206,9 +206,16 @@ type ProviderKind string
 
 const (
 	ProviderRevenueCat ProviderKind = "revenuecat"
+	// ProviderAppStore is the native, SDK-side StoreKit mapping. It never has a
+	// connection: it describes a Product an operator wired up in their own app.
 	ProviderAppStore   ProviderKind = "app_store"
 	ProviderGooglePlay ProviderKind = "google_play"
-	ProviderCustom     ProviderKind = "custom"
+	// ProviderAppStoreConnect is the server-connected App Store Connect API
+	// integration. It is distinct from ProviderAppStore: a mapping created by an
+	// App Store Connect import always carries the connection it was imported
+	// through, and Mosaic reads Apple's catalog on the operator's behalf.
+	ProviderAppStoreConnect ProviderKind = "app_store_connect"
+	ProviderCustom          ProviderKind = "custom"
 )
 
 type ProviderIntegrationMode string
@@ -688,18 +695,23 @@ type ProviderReadinessIssue struct {
 }
 
 type ProviderReadiness struct {
-	State         ProviderReadinessState      `json:"state"`
-	ProductID     string                      `json:"productId"`
-	EnvironmentID string                      `json:"environmentId"`
-	ApplicationID string                      `json:"applicationId"`
-	Platform      Platform                    `json:"platform"`
-	ConnectionID  string                      `json:"connectionId,omitempty"`
-	Provider      ProviderKind                `json:"provider,omitempty"`
-	MappingID     string                      `json:"mappingId,omitempty"`
-	Observation   *ProviderMappingObservation `json:"observation,omitempty"`
-	Blockers      []ProviderReadinessIssue    `json:"blockers"`
-	Warnings      []ProviderReadinessIssue    `json:"warnings"`
-	EvaluatedAt   time.Time                   `json:"evaluatedAt"`
+	State         ProviderReadinessState `json:"state"`
+	ProductID     string                 `json:"productId"`
+	EnvironmentID string                 `json:"environmentId"`
+	ApplicationID string                 `json:"applicationId"`
+	Platform      Platform               `json:"platform"`
+	ConnectionID  string                 `json:"connectionId,omitempty"`
+	Provider      ProviderKind           `json:"provider,omitempty"`
+	MappingID     string                 `json:"mappingId,omitempty"`
+	// MappingProvider is the provenance of the mapping that will ship. Under a
+	// native App Store activation it is app_store for an operator-typed
+	// mapping and app_store_connect for one imported from Apple, which is why
+	// no SDK observation accompanies it.
+	MappingProvider ProviderKind                `json:"mappingProvider,omitempty"`
+	Observation     *ProviderMappingObservation `json:"observation,omitempty"`
+	Blockers        []ProviderReadinessIssue    `json:"blockers"`
+	Warnings        []ProviderReadinessIssue    `json:"warnings"`
+	EvaluatedAt     time.Time                   `json:"evaluatedAt"`
 }
 
 type ProductUsage struct {

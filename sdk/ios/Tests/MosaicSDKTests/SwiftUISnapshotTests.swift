@@ -11,14 +11,14 @@
     ///
     /// This previously had a sibling that rendered `canonicalDocument()`
     /// against a separate `complete-paywall.png` baseline. Both helpers resolve
-    /// to `protocol/fixtures/v0.2/complete-paywall.json`, so the two tests
+    /// to `protocol/fixtures/v0.3/complete-paywall.json`, so the two tests
     /// rendered the same document and produced byte-identical output; the
     /// sibling's baseline was a stale Protocol 0.1-era recording. They are now
     /// one test with one baseline.
     ///
     /// The clock is pinned because the fixture's Countdown resolves against it.
-    func testProtocolV02CompleteFixtureMatchesDeterministicSwiftUIGolden() async throws {
-      let document = try v02Document()
+    func testProtocolV03CompleteFixtureMatchesDeterministicSwiftUIGolden() async throws {
+      let document = try v03Document()
       let model = MosaicPaywallModel(
         document: document,
         requestedLocale: "en",
@@ -37,7 +37,7 @@
           .background(Color.white),
         size: CGSize(width: 390, height: 844)
       )
-      let snapshotURL = sourceSnapshotURL(named: "complete-paywall-v02.png")
+      let snapshotURL = sourceSnapshotURL(named: "complete-paywall-v03.png")
 
       if ProcessInfo.processInfo.environment["MOSAIC_RECORD_SNAPSHOTS"] == "1" {
         try FileManager.default.createDirectory(
@@ -50,7 +50,7 @@
 
       guard FileManager.default.fileExists(atPath: snapshotURL.path) else {
         throw XCTSkip(
-          "The Protocol 0.2 iOS golden has not been recorded. "
+          "The Protocol 0.3 iOS golden has not been recorded. "
             + "Run the documented MOSAIC_RECORD_SNAPSHOTS=1 simulator command first."
         )
       }
@@ -59,12 +59,66 @@
       XCTAssertLessThanOrEqual(
         comparison.differentPixelRatio,
         0.005,
-        "Protocol 0.2 SwiftUI golden changed: \(comparison.differentPixelRatio * 100)% pixels differ."
+        "Protocol 0.3 SwiftUI golden changed: \(comparison.differentPixelRatio * 100)% pixels differ."
       )
     }
 
-    func testProtocolV02HorizontalProductSelectorPlacesCardsSideBySide() async throws {
-      let document = try v02DocumentWithProductSelectorFirst()
+    /// A second golden covering the four Protocol 0.3 components.
+    ///
+    /// The full-paywall golden renders into a fixed 390-by-844 frame, so it
+    /// captures only the top of the scroll view — the new components sit below
+    /// the fold and appear in none of its pixels. A golden that does not
+    /// contain a component cannot detect a regression in it, so this one hoists
+    /// them to the top of the root stack and uses a taller frame.
+    func testProtocolV03PresentationComponentsMatchDeterministicSwiftUIGolden() async throws {
+      let document = try v03DocumentWithPresentationComponentsFirst()
+      let model = MosaicPaywallModel(
+        document: document,
+        requestedLocale: "en",
+        purchaseProvider: MockMosaicPurchaseProvider(
+          products: MosaicProduct.phase1MockProducts
+        ),
+        clock: { Date(timeIntervalSince1970: 1_893_455_998) },
+        onResult: { _ in }
+      )
+      await model.prepare()
+
+      let image = render(
+        MosaicPaywall(model: model, imageResolver: .missing)
+          .environment(\.colorScheme, .light)
+          .environment(\.sizeCategory, .large)
+          .background(Color.white),
+        size: CGSize(width: 390, height: 1_000)
+      )
+      let snapshotURL = sourceSnapshotURL(named: "presentation-components-v03.png")
+
+      if ProcessInfo.processInfo.environment["MOSAIC_RECORD_SNAPSHOTS"] == "1" {
+        try FileManager.default.createDirectory(
+          at: snapshotURL.deletingLastPathComponent(),
+          withIntermediateDirectories: true
+        )
+        try XCTUnwrap(image.pngData()).write(to: snapshotURL, options: .atomic)
+        return
+      }
+
+      guard FileManager.default.fileExists(atPath: snapshotURL.path) else {
+        throw XCTSkip(
+          "The Protocol 0.3 presentation-component golden has not been recorded. "
+            + "Run the documented MOSAIC_RECORD_SNAPSHOTS=1 simulator command first."
+        )
+      }
+      let expected = try XCTUnwrap(UIImage(contentsOfFile: snapshotURL.path))
+      let comparison = try compare(actual: image, expected: expected)
+      XCTAssertLessThanOrEqual(
+        comparison.differentPixelRatio,
+        0.005,
+        "Protocol 0.3 presentation-component golden changed: "
+          + "\(comparison.differentPixelRatio * 100)% pixels differ."
+      )
+    }
+
+    func testProtocolV03HorizontalProductSelectorPlacesCardsSideBySide() async throws {
+      let document = try v03DocumentWithProductSelectorFirst()
       let selector = try XCTUnwrap(document.productSelectors.first)
       XCTAssertEqual(selector.direction, .horizontal)
 
@@ -102,7 +156,7 @@
     }
 
     func testHorizontalStackChildWidthFillFallsBackToFitWithDiagnostic() async throws {
-      let document = try v02DocumentWithHorizontalCloseButton(width: "fill")
+      let document = try v03DocumentWithHorizontalCloseButton(width: "fill")
       let model = MosaicPaywallModel(
         document: document,
         requestedLocale: "en",
@@ -128,7 +182,7 @@
     }
 
     func testNestedFixedWidthStackReestablishesBoundedWidthForItsChildren() async throws {
-      let document = try v02DocumentWithFixedWidthNestedStackInHorizontalStack()
+      let document = try v03DocumentWithFixedWidthNestedStackInHorizontalStack()
       let model = MosaicPaywallModel(
         document: document,
         requestedLocale: "en",
@@ -152,8 +206,8 @@
       )
     }
 
-    func testProtocolV02NavigateToSheetUsesNativeModalOverTheBaseScreen() async throws {
-      let document = try v02DocumentWithBundledSheetVideo()
+    func testProtocolV03NavigateToSheetUsesNativeModalOverTheBaseScreen() async throws {
+      let document = try v03DocumentWithBundledSheetVideo()
       let model = MosaicPaywallModel(
         document: document,
         requestedLocale: "en",
@@ -218,8 +272,8 @@
       )
     }
 
-    func testProtocolV02ArabicRTLAtAccessibilityTextSizeRendersWithoutFailure() async throws {
-      let document = try v02Document()
+    func testProtocolV03ArabicRTLAtAccessibilityTextSizeRendersWithoutFailure() async throws {
+      let document = try v03Document()
       let model = MosaicPaywallModel(
         document: document,
         requestedLocale: "ar-EG",
@@ -242,7 +296,7 @@
       XCTAssertEqual(image.size, CGSize(width: 390, height: 844))
       XCTAssertTrue(
         try rgbaPixels(image).contains { $0 < 240 },
-        "The Protocol 0.2 RTL accessibility-size renderer should produce visible content."
+        "The Protocol 0.3 RTL accessibility-size renderer should produce visible content."
       )
     }
 
@@ -329,8 +383,8 @@
       return pixels
     }
 
-    private func v02DocumentWithProductSelectorFirst() throws -> MosaicPaywallDocument {
-      let data = try v02FixtureData()
+    private func v03DocumentWithProductSelectorFirst() throws -> MosaicPaywallDocument {
+      let data = try v03FixtureData()
       var object = try XCTUnwrap(
         JSONSerialization.jsonObject(with: data) as? [String: Any]
       )
@@ -357,11 +411,19 @@
         defaultStyle["background"] = ["type": "color", "value": color]
         defaultStyle["border"] = ["color": color, "width": 1]
         defaultStyle["cornerRadius"] = 0
+        // The probe measures pure-colour pixels, so the card must be fully
+        // opaque. The fixture authors an unselected opacity below 1, which
+        // composites the marker colour into something the probe cannot see:
+        // the measurement would then report a one-pixel border row instead of
+        // the card, and the layout assertion would fail for a reason that has
+        // nothing to do with layout.
+        defaultStyle["opacity"] = 1
         styles["default"] = defaultStyle
         var selectedStyle = try XCTUnwrap(styles["selected"] as? [String: Any])
         selectedStyle["background"] = ["type": "color", "value": color]
         selectedStyle["border"] = ["color": color, "width": 1]
         selectedStyle["cornerRadius"] = 0
+        selectedStyle["opacity"] = 1
         styles["selected"] = selectedStyle
         cards[index]["styles"] = styles
       }
@@ -377,9 +439,42 @@
       )
     }
 
-    private func v02DocumentWithBundledSheetVideo() throws -> MosaicPaywallDocument {
+    /// Hoists the Tabs, Timeline, Award, and Social Proof components to the top
+    /// of the initial screen so a fixed-frame render contains them. Only child
+    /// order changes; every component keeps its authored content and styling.
+    private func v03DocumentWithPresentationComponentsFirst() throws -> MosaicPaywallDocument {
       var object = try XCTUnwrap(
-        JSONSerialization.jsonObject(with: v02FixtureData()) as? [String: Any]
+        JSONSerialization.jsonObject(with: v03FixtureData()) as? [String: Any]
+      )
+      let initialScreenID = try XCTUnwrap(object["initialScreenId"] as? String)
+      var screens = try XCTUnwrap(object["screens"] as? [[String: Any]])
+      let index = try XCTUnwrap(
+        screens.firstIndex { $0["id"] as? String == initialScreenID }
+      )
+      var screen = screens[index]
+      var layout = try XCTUnwrap(screen["layout"] as? [String: Any])
+      var content = try XCTUnwrap(layout["content"] as? [String: Any])
+      let children = try XCTUnwrap(content["children"] as? [[String: Any]])
+      let hoisted = Set(["tabs", "timeline", "award", "socialProof"])
+      // A node conditioned on tab selection must stay with its Tabs component,
+      // and the whole reorder must remain a valid document, so the partition
+      // preserves relative order within each group.
+      let promoted = children.filter { hoisted.contains($0["type"] as? String ?? "") }
+      let remainder = children.filter { !hoisted.contains($0["type"] as? String ?? "") }
+      XCTAssertEqual(promoted.count, 7, "Expected the fixture's seven 0.3 components.")
+      content["children"] = promoted + remainder
+      layout["content"] = content
+      screen["layout"] = layout
+      screens[index] = screen
+      object["screens"] = screens
+      return try MosaicProtocolDecoder.decode(
+        JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+      )
+    }
+
+    private func v03DocumentWithBundledSheetVideo() throws -> MosaicPaywallDocument {
+      var object = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: v03FixtureData()) as? [String: Any]
       )
       var screens = try XCTUnwrap(object["screens"] as? [[String: Any]])
       let sheetIndex = try XCTUnwrap(
@@ -398,13 +493,13 @@
       )
     }
 
-    private func v02DocumentWithHorizontalCloseButton(width: String) throws
+    private func v03DocumentWithHorizontalCloseButton(width: String) throws
       -> MosaicPaywallDocument
     {
       var object = try XCTUnwrap(
-        JSONSerialization.jsonObject(with: v02FixtureData()) as? [String: Any]
+        JSONSerialization.jsonObject(with: v03FixtureData()) as? [String: Any]
       )
-      try mutateV02Node(id: "close", in: &object) { close in
+      try mutateV03Node(id: "close", in: &object) { close in
         close["sizing"] = ["width": width, "height": "fit"]
       }
       return try MosaicProtocolDecoder.decode(
@@ -412,13 +507,13 @@
       )
     }
 
-    private func v02DocumentWithFixedWidthNestedStackInHorizontalStack() throws
+    private func v03DocumentWithFixedWidthNestedStackInHorizontalStack() throws
       -> MosaicPaywallDocument
     {
       var object = try XCTUnwrap(
-        JSONSerialization.jsonObject(with: v02FixtureData()) as? [String: Any]
+        JSONSerialization.jsonObject(with: v03FixtureData()) as? [String: Any]
       )
-      try mutateV02Node(id: "close-actions", in: &object) { closeActions in
+      try mutateV03Node(id: "close-actions", in: &object) { closeActions in
         guard var close = (closeActions["children"] as? [[String: Any]])?.first else {
           return
         }

@@ -445,7 +445,7 @@ describe("property inspector safety", () => {
       ],
     ],
   ] as const)(
-    "renders contextual Protocol 0.2 property coverage for %s",
+    "renders contextual Protocol 0.3 property coverage for %s",
     async (selection, templateIndex, expectedAddresses) => {
       renderInspector(selection, templateIndex);
       await waitFor(() =>
@@ -534,7 +534,7 @@ describe("property inspector safety", () => {
       templateIndex: 0,
     },
   ])(
-    "progressively discloses Protocol 0.2 fields for $selection",
+    "progressively discloses Protocol 0.3 fields for $selection",
     async ({
       advancedAddress,
       advancedValue,

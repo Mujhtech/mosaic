@@ -72,7 +72,11 @@ func run(args []string) error {
 	// The old command wrapped the entire run in a fixed 10s context, which
 	// aborted any real migration on a populated database mid-flight. The
 	// timeout is now generous, configurable, and applied per Goose call.
-	stepTimeout := flags.Duration("timeout", stepTimeoutFromEnvironment(), "maximum duration for a single migration step")
+	environmentTimeout, timeoutErr := stepTimeoutFromEnvironment()
+	if timeoutErr != nil {
+		return timeoutErr
+	}
+	stepTimeout := flags.Duration("timeout", environmentTimeout, "maximum duration for a single migration step")
 	lockTimeout := flags.Duration("lock-timeout", 5*time.Minute, "maximum time to wait for the migration advisory lock")
 	if err := flags.Parse(flagArguments); err != nil {
 		return err
@@ -189,13 +193,27 @@ func single(result *goose.MigrationResult) []*goose.MigrationResult {
 	return []*goose.MigrationResult{result}
 }
 
-func stepTimeoutFromEnvironment() time.Duration {
-	if raw := os.Getenv("MOSAIC_MIGRATION_TIMEOUT"); raw != "" {
-		if parsed, err := time.ParseDuration(raw); err == nil && parsed > 0 {
-			return parsed
-		}
+// stepTimeoutFromEnvironment reads the per-step timeout override.
+//
+// A malformed or non-positive value is an error rather than a silent fall back
+// to the default. An operator who sets MOSAIC_MIGRATION_TIMEOUT is usually
+// doing it because a long migration was cut short on a populated database;
+// answering a typo with the default meant the migration was cut short again, at
+// a duration nobody asked for, and the only evidence was the same failure they
+// were trying to avoid.
+func stepTimeoutFromEnvironment() (time.Duration, error) {
+	raw := strings.TrimSpace(os.Getenv("MOSAIC_MIGRATION_TIMEOUT"))
+	if raw == "" {
+		return defaultStepTimeout, nil
 	}
-	return defaultStepTimeout
+	parsed, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("MOSAIC_MIGRATION_TIMEOUT %q is not a duration (for example 30m or 2h): %w", raw, err)
+	}
+	if parsed <= 0 {
+		return 0, fmt.Errorf("MOSAIC_MIGRATION_TIMEOUT %q must be a positive duration", raw)
+	}
+	return parsed, nil
 }
 
 func runWithTimeout(timeout time.Duration, fn func(context.Context) ([]*goose.MigrationResult, error)) ([]*goose.MigrationResult, error) {

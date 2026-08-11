@@ -1,7 +1,7 @@
 # Mosaic iOS local preview and hosted delivery example
 
 This native SwiftUI application has separate Local Studio and Hosted modes.
-Local Studio renders Protocol 0.2 revisions immediately without an account.
+Local Studio renders Protocol 0.3 revisions immediately without an account.
 Hosted mode prefers Configuration Delivery v3 (with Delivery v2/v1 compatibility)
 using an Environment-scoped public SDK key, evaluates a Placement locally,
 caches the last valid release, and falls
@@ -15,7 +15,7 @@ Open `MosaicExample.xcodeproj`, select the `MosaicExample` scheme, and run on an
 iOS 15-or-newer simulator. With Studio running at the default local endpoint,
 the app:
 
-- connects using `mosaic.local-preview.v0.2`
+- connects using `mosaic.local-preview.v0.3`
 - reports its renderer, application, device, protocol, and preview capabilities
 - rerenders valid document revisions without rebuilding the app
 - shows connected, reconnecting, and disconnected states
@@ -23,10 +23,15 @@ the app:
   recovery instruction
 - applies Studio locale, RTL, long-copy, text-scale, mock-product, purchase,
   restore, and entitlement states
-- demonstrates Protocol 0.2 RC4 native Screen/Sheet navigation, unified
+- demonstrates Protocol 0.3 native Screen/Sheet navigation, unified
   content buttons, direction-relative icons, document design tokens,
   gradient/media backgrounds, shadows, two-axis sizing, a system-browser HTTPS
   action, and authored Product Cards with nested and overlay Product Badges
+- demonstrates the Protocol 0.3 components: a Tabs component whose authored
+  `initialTabId` is deliberately not the first tab, a note conditioned on the
+  selected tab, Timelines covering all three marker kinds and both connector
+  styles, Awards with an icon and an image emblem, and Social Proof with
+  half-step, whole-step, and unrated variants
 - keeps the last accepted paywall visible when a later revision is unsafe
 - validates complete hosted releases before atomically replacing the cache
 - rejects stale or cross-Environment hosted releases
@@ -108,7 +113,6 @@ MOSAIC_PUBLIC_SDK_KEY=<environment public SDK key>
 MOSAIC_SDK_BASE_URL=http://127.0.0.1:8080
 MOSAIC_PLACEMENT=export_pdf
 MOSAIC_APPLICATION_ID=<Mosaic Application ID>
-MOSAIC_ANALYTICS_ENABLED=1
 REVENUECAT_PUBLIC_SDK_KEY=<platform public SDK key>
 ```
 
@@ -181,16 +185,18 @@ cd StoreKit && swift test --filter MosaicStoreKitProviderTests
 
 ## Analytics offline/restart demonstration
 
-Analytics remains disabled unless both the Environment owner/admin setting and
-the host opt-in are enabled. `MOSAIC_ANALYTICS_ENABLED=1` represents that
-Environment setting in this development example. Local Studio and bundled
-fallback paywalls never emit hosted analytics.
+Collection is on by default, matching the SDK default, so no environment
+variable is needed to demonstrate it. Set `MOSAIC_ANALYTICS_ENABLED=0` to
+demonstrate a host that explicitly opts out. Ingestion is still gated
+server-side by the Environment's collection setting, and a real host
+application is responsible for whatever end-user consent it owes. Local Studio
+and bundled fallback paywalls never emit hosted analytics.
 
 For a reproducible non-production queue demonstration:
 
 1. Run the local API with an Application-bound development public SDK key and
    enable Analytics for that Environment.
-2. Launch Hosted mode with `MOSAIC_ANALYTICS_ENABLED=1`, stop the API, and use
+2. Launch Hosted mode, stop the API, and use
    **Analytics → Queue demo events**. The status reports persistent queue depth.
 3. Terminate and relaunch without deleting app data. The queue is restored from
    backup-excluded Application Support storage.
@@ -207,7 +213,7 @@ swift test --filter AnalyticsTests/testPersistentQueueReconstructionAndExactPart
 
 ## Canonical fixture ownership
 
-The canonical fixture at `protocol/fixtures/v0.2/complete-paywall.json` remains
+The canonical fixture at `protocol/fixtures/v0.3/complete-paywall.json` remains
 the repository contract example. Local Preview does not render it when Studio
 is unavailable; the example shows a clear loading or connection state instead.
 
@@ -257,7 +263,7 @@ xcodebuild -project examples/ios-example/MosaicExample.xcodeproj \
   test
 ```
 
-One reviewed 390-by-844 golden covers the canonical Protocol 0.2 RC4 paywall.
+One reviewed 390-by-844 golden covers the canonical Protocol 0.3 paywall.
 The Simulator suite also verifies native Sheet presentation, deterministic
 video fallback diagnostics, horizontal Product Card placement, RTL at
 accessibility text sizes, and preview status.
@@ -276,7 +282,7 @@ TEST_RUNNER_MOSAIC_RECORD_SNAPSHOTS=1 xcodebuild \
   -destination 'platform=iOS Simulator,id=<SIMULATOR_ID>' \
   -derivedDataPath examples/ios-example/.build/DerivedData \
   -clonedSourcePackagesDirPath sdk/ios/RevenueCat/.build/checkouts \
-  -only-testing:MosaicExampleTests/SwiftUISnapshotTests/testProtocolV02CompleteFixtureMatchesDeterministicSwiftUIGolden \
+  -only-testing:MosaicExampleTests/SwiftUISnapshotTests/testProtocolV03CompleteFixtureMatchesDeterministicSwiftUIGolden \
   test
 ```
 

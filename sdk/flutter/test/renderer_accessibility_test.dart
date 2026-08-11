@@ -189,7 +189,14 @@ void main() {
     await _pump(tester, imageResolver: (_) => MemoryImage(png));
 
     expect(find.text('Premium illustration unavailable'), findsNothing);
-    final image = tester.widget<Image>(find.byType(Image));
+    // The canonical fixture also draws an Award emblem and a Social Proof
+    // avatar, so the hero image is addressed through its own subtree.
+    final image = tester.widget<Image>(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('mosaic-hero')),
+        matching: find.byType(Image),
+      ),
+    );
     expect(image.fit, BoxFit.cover);
     final validSize = tester.getSize(
       find.byKey(const ValueKey<String>('mosaic-hero')),

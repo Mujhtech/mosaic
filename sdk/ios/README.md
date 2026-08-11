@@ -1,6 +1,6 @@
 # Mosaic Apple SDK — native rendering and local Placement decisions
 
-The SDK strictly decodes Mosaic Protocol 0.2 and renders it with native
+The SDK strictly decodes Mosaic Protocol 0.3 and renders it with native
 SwiftUI, and can receive validated draft and mock-commerce revisions from a
 local Mosaic Studio session over WebSockets. It preserves the Phase 1 bundled
 fallback and adds hosted Configuration Delivery v1–v3 plus the provider-neutral
@@ -46,11 +46,23 @@ Paywall lifecycle events.
 ## Analytics identity and privacy
 
 Hosted clients implement the closed Analytics Event v1/v2 contracts with immutable
-event-time identity, session, correlation, and attribution. Collection starts
-disabled. The Environment setting and host override must both permit it:
+event-time identity, session, correlation, and attribution. Collection is enabled
+by default: a hosted client wires the analytics runtime and begins queueing
+Mosaic's own product events without the host touching a flag. Hosts opt *out*
+explicitly, and a host override may disable collection but can never override a
+disabled Environment. The host application is responsible for obtaining whatever
+end-user consent its jurisdiction and app-store policies require before leaving
+collection enabled. The Environment's server-side collection setting still gates
+ingestion regardless of the client setting, so events are only accepted once
+Mosaic is configured to collect them.
 
 ```swift
-await mosaic.setAnalyticsCollection(environmentEnabled: true, hostEnabled: true)
+// Nothing to call for the enabled default. Opt out explicitly:
+await mosaic.setAnalyticsCollection(hostEnabled: false)
+// Or mirror the Environment setting the host already knows:
+await mosaic.setAnalyticsCollection(
+  environmentEnabled: environmentSetting.collectionEnabled,
+  hostEnabled: consentAllowsCollection)
 let diagnostics = await mosaic.analyticsDiagnostics()
 let result = await mosaic.flushAnalytics()
 ```
@@ -234,9 +246,9 @@ development-host test process. Mosaic does not expose a macOS renderer.
   the analytics queue then do not survive relaunch, and
   `configurationStatus()` reports `delivery_persistence_unavailable`.
 
-## Protocol 0.2 RC4 rendering
+## Protocol 0.3 rendering
 
-Protocol 0.2 RC4 uses one to ten named screens.
+Protocol 0.3 uses one to ten named screens.
 The renderer starts at `initialScreenId`, keeps a presentation-local history,
 pushes Screen destinations, presents Sheet destinations with SwiftUI's native
 modal surface over the most recent Screen, and safely pops or dismisses with
@@ -257,7 +269,62 @@ clips visual overflow without replacing its accessibility value. Fill on the
 vertically unbounded Scroll Container axis resolves to Fit and records
 `layout.unboundedFill` instead of producing infinite SwiftUI layout.
 
-Protocol 0.2 also replaces the specialized action components with one native
+### Tabs, Timeline, Award, and Social Proof
+
+`0.3` adds four components. `tabs` presents two through eight labelled panels
+with exactly one visible at a time, rendered as a native `Button` bar over a
+panel. The selected panel comes from the authored `initialTabId` — there is no
+positional default, so reordering the `tabs` array cannot change which panel
+opens — and the tab controls resolve their Default and Selected appearance
+through the same `selectionStyles` overlay Product Card uses, with the required
+`selectedLabelColor` applied to the selected label. The component is exposed as
+a tab list, each control as a tab carrying its selected state, and the visible
+panel as a tab panel named by the same authored label as its tab.
+
+`timeline` renders two through twelve vertical entries with an authored
+connector in `solid` or `dashed`, and a closed `dot`/`ordinal`/`icon` marker
+union; an unrecognised kind rejects the document rather than drawing a
+substitute glyph. An entry with no `marker` draws no glyph and lets the
+connector run unbroken through its position, and an entry with no `description`
+draws no second line and reserves no space for one. `markerColor`, `markerSize`,
+and `descriptionTypography` are required exactly when an entry consumes them and
+rejected when none does. Ordinal markers use the resolved locale's number
+formatting. Markers and connectors are decorative; the component is exposed as a
+labelled ordered list whose items announce title then description in authored
+order.
+
+`award` renders a localized title with an optional subtitle — mutually required
+with `subtitleTypography` — and an optional emblem drawn from the existing image
+asset or icon vocabulary. The emblem is always decorative, because the title
+already carries the award's meaning.
+
+`socialProof` renders a required quote and attribution with an optional avatar
+and an optional integer-only rating. `value` counts steps against a
+`whole`/`half` `step` and a `1...10` `maximum`, and nothing converts it to a
+floating-point intermediate: `MosaicSocialProofRating.steps(atSymbol:)` picks
+each symbol's fill with integer arithmetic. An absent rating draws and announces
+nothing — it is neither zero nor unknown. VoiceOver announces the rating in
+points rather than steps, so a `value` of 9 against a `maximum` of 5 is
+announced as "4.5 out of 5" rather than the literal "9 out of 5".
+
+### Tab selection state and visibility
+
+Runtime state gains a `tabs` map alongside product selection, Switch values,
+Carousel pages, and navigation history. It is reset from each Tabs component's
+`initialTabId` whenever a revision is accepted. `visibility` gains a
+`{ "mode": "tab", "tabsId": …, "equals": … }` condition with the same semantics
+as a false Switch condition: the node leaves layout, the accessibility tree, and
+focus order rather than merely being hidden.
+
+`mosaicEvaluateVisibility(_:in:)` takes a `MosaicSelectionState` of
+`{ switches, tabs }` and **throws** `MosaicVisibilityEvaluationError` when a
+condition names a controller the supplied state does not carry. Resolving that
+to "hidden" would read back as a component that silently disappears instead of a
+caller that is told it has a bug. `MosaicPaywallModel.isVisible(_:)` seeds its
+state from the accepted document, so the failure is unreachable there and traps
+rather than erasing an authored node.
+
+Protocol 0.3 also replaces the specialized action components with one native
 SwiftUI `Button` whose vertical or horizontal label may contain noninteractive
 protocol content. Purchase and restore buttons may supply
 `inProgressChildren`; while the provider is running, the button swaps content
@@ -291,6 +358,45 @@ absolute HTTPS URLs and delegates to SwiftUI's system `openURL` action. The
 paywall and navigation history stay mounted, and an unsuccessful handoff adds
 the safe `external_url_open_failed` rendering diagnostic.
 
+## Degradation diagnostics
+
+Every recovery the renderer performs is observable through
+`MosaicPaywallModel.diagnostics`. Each code is recorded once per subject, so a
+malformed value diagnoses once rather than once per frame.
+
+| Code | Recovery |
+| --- | --- |
+| `style_color_token_unresolved` | Content colours recover to the primary content colour so text stays legible; decoration stays transparent. |
+| `style_color_literal_malformed` | Same recovery as an unresolved token. |
+| `style_background_token_unresolved` | The background is omitted; the parent surface shows through. |
+| `style_gradient_stop_unresolved` | The gradient renders with the stops that resolved instead of the whole background being erased. |
+| `style_shadow_token_unresolved` | The shadow is omitted. |
+| `countdown_ends_at_invalid` | An `endsAt` that is not in the canonical protocol form renders nothing. It is never presented as the localized completed text, which would state an expiry the document never authored. The semantic validator rejects such a document outright; this is the renderer's defence for documents that reach it anyway. |
+| `media_image_unavailable`, `media_image_asset_missing`, `media_image_fallback_text_missing` | The declared asset fallback is shown, matching the media-background paths. |
+| `product_selection_default_substituted` | The authored default product was unavailable and the first available option was selected. The `product_selected` payload still reports `source: "default"` because that field's protocol enum admits only `default` and `user`. |
+| `placement_analytics_metadata_unavailable` | The paywall renders, but no presentation, purchase, or conversion event carries attribution. |
+| `localization_direction_unresolved` | No locale in the requested, fallback, or default chain declares a direction, so layout defaults to left to right. |
+
+Hosts rendering `MosaicPaywall` directly can seed presentation-level codes with
+the `presentationDiagnostics:` initializer parameter.
+
+`MosaicPlacementPaywall` shows a placeholder when a Placement resolves to no
+safe configuration. The SDK has no access to host localization catalogs, so the
+copy defaults to English and is overridable:
+
+```swift
+MosaicPlacementPaywall(
+  mosaic: mosaic,
+  placement: "export_pdf",
+  unavailableCopy: MosaicPlacementUnavailableCopy(
+    title: NSLocalizedString("paywall.unavailable.title", comment: ""),
+    message: NSLocalizedString("paywall.unavailable.message", comment: ""),
+    diagnosticHintPrefix: NSLocalizedString("paywall.unavailable.hint", comment: "")
+  ),
+  onResult: { _ in }
+)
+```
+
 ## Connect a native preview
 
 Create one stable identity for the running application process, configure a
@@ -308,7 +414,7 @@ struct PaywallPreview: View {
     let identity = MosaicPreviewClientIdentity(
       clientId: "client_ios_example",
       displayName: "iOS local preview",
-      renderer: .init(id: "mosaic.ios", version: "0.2.0"),
+      renderer: .init(id: "mosaic.ios", version: "0.3.0"),
       application: .init(
         id: "dev.example.app",
         displayName: "Example",
@@ -340,7 +446,7 @@ struct PaywallPreview: View {
 ```
 
 The default endpoint is `ws://127.0.0.1:4317/preview`, the default session is
-`session_local_01`, and the client uses `mosaic.local-preview.v0.2`. A custom endpoint must remain local: localhost,
+`session_local_01`, and the client uses `mosaic.local-preview.v0.3`. A custom endpoint must remain local: localhost,
 loopback, private LAN, `.local`, IPv6 ULA, and IPv6 link-local hosts are
 accepted; public remote hosts are rejected.
 
@@ -369,7 +475,7 @@ preview overrides without rebuilding the application.
 
 The client reports the exact capabilities for the negotiated Protocol version
 without adding SwiftUI concepts to the platform-neutral contract. Tests consume
-the canonical Local Preview 0.2 flow directly from the repository.
+the canonical Local Preview 0.3 flow directly from the repository.
 
 ## Mock commerce
 
@@ -459,6 +565,33 @@ Restore normalizes an existing entitlement to `.restored`; it does not expose
 a separate already-entitled restore result. Active Entitlement lookup returns
 exactly `.available`, `.unknown`, `.providerUnavailable`, or `.failed`.
 Provider failures never imply an empty or inactive Entitlement set.
+
+The StoreKit and RevenueCat adapters classify provider errors the same way.
+Cancellation, pending payment, an unavailable product, and a transport or
+system outage each map to their own normalized result, and only transport and
+system outages are marked retryable. An error neither adapter can classify
+stays a non-retryable failure rather than being optimistically retried.
+
+Both adapters omit a subscription period whose unit they cannot name, and
+record `commerce.unsupportedSubscriptionPeriod`. The product stays purchasable
+and only the period text is dropped, because presenting an unknown renewal
+cadence as daily would misstate the commercial terms. RevenueCat additionally
+records `commerce.unsupportedIntroductoryOffer` when it reports an offer type
+Mosaic cannot classify, instead of silently stripping the trial.
+
+`MosaicStoreKitFileAcceptanceStore.defaultStore()` stores its duplicate-delivery
+set in Application Support, excluded from backup. It throws
+`MosaicStoreKitAcceptanceStoreError.durableStorageUnavailable` when that
+directory is unavailable rather than falling back to the temporary directory,
+which the system may purge and which would cause accepted transactions to be
+delivered to the host a second time. `MosaicStoreKitProvider.init` propagates
+that error.
+
+The Placement decision context reports provider capabilities from
+`mosaicExperimentCapabilities` on the installed provider. The default protocol
+extension declares the full set, so adapters that do not override it are
+unchanged; an adapter that declares a subset is no longer reported as capable
+of what it does not implement.
 
 ## Transaction observations (optional)
 
@@ -804,7 +937,7 @@ or full-screen cover. Bundled images and videos remain host-resolved through
 declared placeholder, poster, or colour fallback.
 
 The packaged resource is a byte-identical checked-in copy of the current
-`protocol/fixtures/v0.2/complete-paywall.json`. SwiftPM copies symbolic links
+`protocol/fixtures/v0.3/complete-paywall.json`. SwiftPM copies symbolic links
 without rebasing their targets, so using a repository-relative symlink would
 produce a broken fallback in a built package. A package test prevents the copy
 from drifting; it is not an SDK-owned schema or fixture fork.

@@ -219,6 +219,21 @@ const (
 	// investigate a broken input. Access for the purchase reads `unknown`
 	// meanwhile, never `owned`.
 	QuarantineVoidProductUnresolved = "void_product_unresolved"
+	// QuarantineUnclassifiedProviderState marks an input whose provider payload
+	// was authentic and well-formed but named a lifecycle state Mosaic cannot
+	// state as one of its Fact Kinds — an Apple transactionReason outside
+	// {PURCHASE, RENEWAL}, or a Google subscriptionState outside the mapped set
+	// (including SUBSCRIPTION_STATE_PENDING, which is an unpaid signup).
+	//
+	// It is deliberately distinct from `unsupported_transaction_type`: that one
+	// says Mosaic does not model this *product*, while this one says Mosaic does
+	// model the product but the provider described something it has no honest
+	// word for. Both quarantine rather than guess, because the historical guess
+	// was `initial_purchase` — the one Fact Kind that grants access — so every
+	// state Google or Apple added after this code was written silently granted
+	// an Entitlement. Access for the purchase reads `unknown` meanwhile, never
+	// `owned`.
+	QuarantineUnclassifiedProviderState = "unclassified_provider_state"
 )
 
 // Quarantine statuses. There is no status meaning "operator declared this

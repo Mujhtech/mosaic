@@ -3,17 +3,15 @@ part of 'renderer.dart';
 extension on _MosaicPaywallState {
   Widget _buildStack(
     BuildContext context,
-    MosaicStackNode stack, {
+    MosaicStackComponent stack, {
     _AvailableProductOption? productOption,
   }) {
+    final horizontal = stack.direction == MosaicStackDirection.horizontal;
     final children = <Widget>[];
     for (var index = 0; index < stack.children.length; index += 1) {
-      if (index > 0 && stack.spacing > 0) {
+      if (index > 0 && stack.gap > 0) {
         children.add(
-          stack is MosaicStackComponent &&
-                  stack.direction == MosaicStackDirection.horizontal
-              ? SizedBox(width: stack.spacing)
-              : SizedBox(height: stack.spacing),
+          horizontal ? SizedBox(width: stack.gap) : SizedBox(height: stack.gap),
         );
       }
       final child = _buildNode(
@@ -21,16 +19,10 @@ extension on _MosaicPaywallState {
         stack.children[index],
         productOption: productOption,
       );
-      children.add(
-        stack is MosaicStackComponent &&
-                stack.direction == MosaicStackDirection.horizontal
-            ? Flexible(child: child)
-            : child,
-      );
+      children.add(horizontal ? Flexible(child: child) : child);
     }
     final Widget stackWidget;
-    if (stack is MosaicStackComponent &&
-        stack.direction == MosaicStackDirection.horizontal) {
+    if (horizontal) {
       final row = Row(
         mainAxisSize: stack.sizing?.width.mode == MosaicSizingMode.fill
             ? MainAxisSize.max
@@ -44,18 +36,12 @@ extension on _MosaicPaywallState {
               ? IntrinsicHeight(child: row)
               : row;
     } else {
-      final alignment = stack is MosaicStackComponent
-          ? stack.crossAxisAlignment
-          : (stack as MosaicVerticalStack).horizontalAlignment;
       stackWidget = Column(
-        mainAxisSize: stack is MosaicStackComponent &&
-                stack.sizing?.height.mode == MosaicSizingMode.fixed
+        mainAxisSize: stack.sizing?.height.mode == MosaicSizingMode.fixed
             ? MainAxisSize.max
             : MainAxisSize.min,
-        mainAxisAlignment: stack is MosaicStackComponent
-            ? _mainAxisAlignment(stack.mainAxisDistribution)
-            : MainAxisAlignment.start,
-        crossAxisAlignment: _crossAxisAlignment(alignment),
+        mainAxisAlignment: _mainAxisAlignment(stack.mainAxisDistribution),
+        crossAxisAlignment: _crossAxisAlignment(stack.crossAxisAlignment),
         children: children,
       );
     }
@@ -69,17 +55,15 @@ extension on _MosaicPaywallState {
       ),
       child: stackWidget,
     );
-    return stack is MosaicStackComponent
-        ? _decorateNode(
-            context,
-            stack,
-            padded,
-            appearance: stack.appearance,
-            sizing: stack.sizing,
-            outerInsets: stack.outerInsets,
-            visibility: stack.visibility,
-          )
-        : padded;
+    return _decorateNode(
+      context,
+      stack,
+      padded,
+      appearance: stack.appearance,
+      sizing: stack.sizing,
+      outerInsets: stack.outerInsets,
+      visibility: stack.visibility,
+    );
   }
 
   Widget _buildNode(
@@ -88,8 +72,6 @@ extension on _MosaicPaywallState {
     _AvailableProductOption? productOption,
   }) {
     final content = switch (node) {
-      MosaicVerticalStack() =>
-        _buildStack(context, node, productOption: productOption),
       MosaicStackComponent() =>
         _buildStack(context, node, productOption: productOption),
       MosaicTextComponent() =>
@@ -97,19 +79,23 @@ extension on _MosaicPaywallState {
       MosaicImageComponent() => _buildImage(context, node),
       MosaicFeatureListComponent() => _buildFeatureList(context, node),
       MosaicProductSelectorComponent() => _buildProductSelector(context, node),
-      MosaicPurchaseButtonComponent() => _buildPurchaseButton(context, node),
-      MosaicRestoreButtonComponent() => _buildRestoreButton(context, node),
-      MosaicCloseButtonComponent() => _buildCloseButton(context, node),
-      MosaicLegalTextComponent() => _buildLegalText(context, node),
       MosaicCarouselComponent() => _buildCarousel(context, node),
       MosaicSwitchComponent() => _buildSwitch(context, node),
       MosaicCountdownComponent() => _buildCountdown(context, node),
       MosaicButtonComponent() => _buildButton(context, node),
       MosaicIconComponent() => _buildIcon(context, node),
+      MosaicTabsComponent() => _buildTabs(context, node),
+      MosaicTimelineComponent() => _buildTimeline(context, node),
+      MosaicAwardComponent() => _buildAward(context, node),
+      MosaicSocialProofComponent() => _buildSocialProof(context, node),
+      // A Product Card or Product Badge only renders through its owning Product
+      // Selector, and a Scroll Container only exists as a Screen root. Reaching
+      // any of them here means the node is authored in a position this renderer
+      // cannot draw, so it collapses — but never silently.
       MosaicProductCardComponent() ||
-      MosaicProductBadgeComponent() =>
-        const SizedBox.shrink(),
-      MosaicScrollContainer() => const SizedBox.shrink(),
+      MosaicProductBadgeComponent() ||
+      MosaicScrollContainer() =>
+        _unrenderableNode(node),
     };
     if (node is MosaicStackNode || node is MosaicScrollContainer) {
       return content;
@@ -144,42 +130,6 @@ extension on _MosaicPaywallState {
           visibility: node.visibility,
         ),
       MosaicProductSelectorComponent() => _decorateNode(
-          context,
-          node,
-          content,
-          appearance: node.appearance,
-          sizing: node.sizing,
-          outerInsets: node.outerInsets,
-          visibility: node.visibility,
-        ),
-      MosaicPurchaseButtonComponent() => _decorateNode(
-          context,
-          node,
-          content,
-          appearance: node.appearance,
-          sizing: node.sizing,
-          outerInsets: node.outerInsets,
-          visibility: node.visibility,
-        ),
-      MosaicRestoreButtonComponent() => _decorateNode(
-          context,
-          node,
-          content,
-          appearance: node.appearance,
-          sizing: node.sizing,
-          outerInsets: node.outerInsets,
-          visibility: node.visibility,
-        ),
-      MosaicCloseButtonComponent() => _decorateNode(
-          context,
-          node,
-          content,
-          appearance: node.appearance,
-          sizing: node.sizing,
-          outerInsets: node.outerInsets,
-          visibility: node.visibility,
-        ),
-      MosaicLegalTextComponent() => _decorateNode(
           context,
           node,
           content,
@@ -242,8 +192,74 @@ extension on _MosaicPaywallState {
           outerInsets: node.outerInsets,
           visibility: node.visibility,
         ),
-      _ => content,
+      MosaicTabsComponent() => _decorateNode(
+          context,
+          node,
+          content,
+          appearance: node.appearance,
+          sizing: node.sizing,
+          outerInsets: node.outerInsets,
+          visibility: node.visibility,
+        ),
+      MosaicTimelineComponent() => _decorateNode(
+          context,
+          node,
+          content,
+          appearance: node.appearance,
+          sizing: node.sizing,
+          outerInsets: node.outerInsets,
+          visibility: node.visibility,
+        ),
+      MosaicAwardComponent() => _decorateNode(
+          context,
+          node,
+          content,
+          appearance: node.appearance,
+          sizing: node.sizing,
+          outerInsets: node.outerInsets,
+          visibility: node.visibility,
+        ),
+      MosaicSocialProofComponent() => _decorateNode(
+          context,
+          node,
+          content,
+          appearance: node.appearance,
+          sizing: node.sizing,
+          outerInsets: node.outerInsets,
+          visibility: node.visibility,
+        ),
+      // Product Cards and Product Badges carry authored sizing but style
+      // themselves through their state-aware styles, which the Product Selector
+      // path applies. Both already collapsed above, so there is nothing left to
+      // decorate. Enumerated rather than matched by a wildcard so a new node
+      // type cannot silently lose its authored appearance, sizing, outer
+      // insets, or visibility.
+      MosaicProductCardComponent() || MosaicProductBadgeComponent() => content,
+      // Handled by the early return above.
+      MosaicStackComponent() || MosaicScrollContainer() => content,
     };
+  }
+
+  Widget _unrenderableNode(
+    MosaicNode node, {
+    String code = 'rendering.unsupportedNodePlacement',
+    String? message,
+  }) {
+    if (_notifiedUnrenderableNodes.add(node.id)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.onDiagnostic?.call(
+          MosaicDiagnostic(
+            code: code,
+            message: message ??
+                '${node.type} ${node.id} cannot be rendered in this '
+                    'position and is omitted.',
+            severity: MosaicDiagnosticSeverity.error,
+          ),
+        );
+      });
+    }
+    return const SizedBox.shrink();
   }
 
   Widget _buildText(
@@ -448,14 +464,12 @@ extension on _MosaicPaywallState {
             );
           }
           final option = options[index];
-          final rendered = option.card == null
-              ? _buildLegacyProductOption(context, component, option)
-              : _buildProductCard(
-                  context,
-                  component,
-                  option,
-                  shrinkWrap: scrollHorizontally,
-                );
+          final rendered = _buildProductCard(
+            context,
+            component,
+            option,
+            shrinkWrap: scrollHorizontally,
+          );
           renderedOptions.add(
             component.direction == MosaicProductSelectorDirection.horizontal &&
                     !scrollHorizontally
@@ -512,116 +526,13 @@ extension on _MosaicPaywallState {
         : content;
   }
 
-  Widget _buildLegacyProductOption(
-    BuildContext context,
-    MosaicProductSelectorComponent selector,
-    _AvailableProductOption option,
-  ) {
-    final reference = option.reference;
-    final product = option.product;
-    final selected = _selectedProductCardIds[selector.id] == option.selectionId;
-    final enabled = _busyActionId == null;
-    final label = <String>[
-      _localization.text(reference.label),
-      if (reference.badge case final badge?) _localization.text(badge),
-      if (product.localizedPrice case final price?) price,
-      if (product.localizedPeriod case final period?) period,
-    ].join(', ');
-    final colorScheme = Theme.of(context).colorScheme;
-    return Semantics(
-      key: ValueKey<String>('mosaic-${selector.id}-${reference.id}'),
-      button: true,
-      selected: selected,
-      checked: selected,
-      inMutuallyExclusiveGroup: true,
-      enabled: enabled,
-      label: label,
-      child: ExcludeSemantics(
-        child: Material(
-          color: selected
-              ? colorScheme.primaryContainer
-              : colorScheme.surfaceContainerLow,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color:
-                  selected ? colorScheme.primary : colorScheme.outlineVariant,
-              width: selected ? 2 : 1,
-            ),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: enabled
-                ? () => _selectProduct(
-                      selector.id,
-                      option.selectionId,
-                      reference.id,
-                    )
-                : null,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 56),
-              child: Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 12),
-                child: Row(
-                  children: <Widget>[
-                    Icon(
-                      selected
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_unchecked,
-                      color:
-                          selected ? colorScheme.primary : colorScheme.outline,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            _localization.text(reference.label),
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          if (reference.badge case final badge?)
-                            Text(
-                              _localization.text(badge),
-                              style: Theme.of(context).textTheme.labelMedium,
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: <Widget>[
-                        Text(
-                          product.localizedPrice ?? '',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        if (product.localizedPeriod case final period?)
-                          Text(
-                            period,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildProductCard(
     BuildContext context,
     MosaicProductSelectorComponent selector,
     _AvailableProductOption option, {
     required bool shrinkWrap,
   }) {
-    final card = option.card!;
+    final card = option.card;
     final selected = _selectedProductCardIds[selector.id] == option.selectionId;
     final enabled = _busyActionId == null;
     final style = card.styles.resolve(selected: selected);

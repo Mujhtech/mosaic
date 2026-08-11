@@ -670,7 +670,7 @@ void main() {
           'context': <String, Object?>{
             'platform': 'ios',
             'sdkFamily': 'flutter',
-            'sdkVersion': '0.2.0-dev.11',
+            'sdkVersion': '0.3.0-dev.1',
           },
           'correlation': <String, Object?>{
             'paywallPresentationId': 'presentation_1',

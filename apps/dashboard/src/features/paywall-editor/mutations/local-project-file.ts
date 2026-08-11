@@ -5,6 +5,7 @@ import {
   LOCAL_EDITOR_UI_STORAGE_KEY,
   LOCAL_PROJECT_STORAGE_KEY,
   MAX_LOCAL_PROJECT_BYTES,
+  RETIRED_LOCAL_PROJECT_STORAGE_KEY,
 } from "@/features/paywall-editor/constants/editor-constants";
 import type {
   LocalProjectFile,
@@ -14,69 +15,20 @@ import type {
   MosaicDocument,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import type {
-  MosaicPaywallV02RC2Candidate,
-  MosaicPaywallV02RC3Candidate,
-} from "@/lib/mosaic-protocol";
 import {
   canonicalSchemasByVersion,
-  migrateV02RC2CandidateToRC3,
-  migrateV02RC3CandidateToRC4,
   parsePortablePaywallJson,
   serializePortablePaywallJson,
   validateLocalProject,
   validatePaywallDocument,
 } from "@/lib/mosaic-protocol";
 
-function containsRC2ProductSelector(value: unknown): boolean {
-  if (Array.isArray(value)) {
-    return value.some(containsRC2ProductSelector);
-  }
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  if (
-    record.type === "productSelector" &&
-    Array.isArray(record.productReferenceIds) &&
-    record.cardStyles !== undefined
-  ) {
-    return true;
-  }
-  return Object.values(record).some(containsRC2ProductSelector);
-}
-
-function migrateLegacyV02Document(value: unknown): MosaicDocument | null {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    (value as Record<string, unknown>).schemaVersion !== "0.2"
-  ) {
-    return null;
-  }
-  try {
-    const rc3 = containsRC2ProductSelector(value)
-      ? migrateV02RC2CandidateToRC3(value as MosaicPaywallV02RC2Candidate)
-          .document
-      : value;
-    const migrated = migrateV02RC3CandidateToRC4(
-      rc3 as MosaicPaywallV02RC3Candidate
-    ).document;
-    const validation = validatePaywallDocument(migrated);
-    return validation.ok
-      ? (cloneValue(validation.value) as MosaicDocument)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 let validateRecoverableProject: ReturnType<Ajv2020["compile"]> | null = null;
 
 function isRecoverableLocalProject(value: unknown): value is LocalProjectFile {
   if (!validateRecoverableProject) {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
-    const schemas = canonicalSchemasByVersion["0.2"];
+    const schemas = canonicalSchemasByVersion["0.3"];
     ajv.addSchema(schemas.paywall);
     ajv.addSchema(schemas.previewMessage);
     validateRecoverableProject = ajv.compile(schemas.localProject);
@@ -203,7 +155,7 @@ export function createLocalProjectFile(options: {
     options.mockProducts ?? DEFAULT_MOCK_PRODUCTS
   );
   return {
-    fileFormatVersion: "0.2",
+    fileFormatVersion: "0.3",
     editableDocumentId: options.editableDocumentId,
     revision,
     document: cloneValue(options.document),
@@ -217,7 +169,7 @@ export function createLocalProjectFile(options: {
 
 export function isLocalProjectFile(value: unknown): value is LocalProjectFile {
   const result = validateLocalProject(value);
-  return result.ok && result.value.fileFormatVersion === "0.2";
+  return result.ok && result.value.fileFormatVersion === "0.3";
 }
 
 function importFailure(
@@ -274,9 +226,15 @@ export function parseImportedJson(json: string): {
       "Import a raw Mosaic paywall JSON file. Local autosaves can only be resumed from this browser."
     );
   }
-  const migratedV02 = migrateLegacyV02Document(parsed);
-  if (migratedV02) {
-    return { document: migratedV02, project: null };
+  const retiredVersion = retiredAutosaveVersion(
+    parsed && typeof parsed === "object" && "schemaVersion" in parsed
+      ? { document: parsed }
+      : parsed
+  );
+  if (retiredVersion) {
+    throw new Error(
+      `This file declares Mosaic Paywall Protocol ${retiredVersion}, which this Studio does not support. Protocol 0.3 replaced ${retiredVersion} and there is no migration path. Export the paywall again from a Protocol 0.3 Studio.`
+    );
   }
   throw new Error(importFailure(documentResult.diagnostics));
 }
@@ -342,11 +300,62 @@ export function readLocalMockPurchaseState(
   }
 }
 
+/**
+ * The 0.3 storage key is deliberately distinct from the retired 0.2 one, so a
+ * 0.2 autosave is not read as an empty editor. It is reported, then left in
+ * place: this read path does not delete an author's only copy of their work.
+ */
+function readRetiredLocalProject(): LocalProjectReadResult | null {
+  const stored = window.localStorage.getItem(RETIRED_LOCAL_PROJECT_STORAGE_KEY);
+  if (!stored) {
+    return null;
+  }
+  let version = "0.2";
+  try {
+    version = retiredAutosaveVersion(JSON.parse(stored) as unknown) ?? version;
+  } catch {
+    // An unparseable retired autosave is still a retired autosave; the key it
+    // was written under already names the protocol version.
+  }
+  return {
+    status: "corrupt",
+    message: retiredProtocolAutosaveMessage(version),
+  };
+}
+
 export type LocalProjectReadResult =
   | { status: "empty" }
   | { status: "valid"; project: LocalProjectFile }
   | { status: "recoverable"; project: LocalProjectFile; message: string }
   | { status: "corrupt"; message: string };
+
+/**
+ * Protocol 0.3 replaces 0.2 outright: there is no migration path and no
+ * compatibility shim, so a 0.2 autosave is an unreadable document rather than
+ * a recoverable one. Studio names the version it found instead of discarding
+ * the entry quietly or presenting it as recoverable, because an author whose
+ * work vanished is owed the reason.
+ */
+export function retiredProtocolAutosaveMessage(version: string) {
+  return `This autosave was written for Mosaic Paywall Protocol ${version}, which this Studio does not support. Protocol 0.3 replaced ${version} and there is no migration path. Your current editor remains unchanged; start from a template or import a Protocol 0.3 file.`;
+}
+
+function retiredAutosaveVersion(value: unknown): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const { document, fileFormatVersion } = value as Record<string, unknown>;
+  if (typeof fileFormatVersion === "string" && fileFormatVersion !== "0.3") {
+    return fileFormatVersion;
+  }
+  if (document && typeof document === "object") {
+    const { schemaVersion } = document as Record<string, unknown>;
+    if (typeof schemaVersion === "string" && schemaVersion !== "0.3") {
+      return schemaVersion;
+    }
+  }
+  return null;
+}
 
 export function readLocalProjectResult(): LocalProjectReadResult {
   if (typeof window === "undefined") {
@@ -354,26 +363,20 @@ export function readLocalProjectResult(): LocalProjectReadResult {
   }
   try {
     const stored = window.localStorage.getItem(LOCAL_PROJECT_STORAGE_KEY);
+    const retired = readRetiredLocalProject();
     if (!stored) {
-      return { status: "empty" };
+      return retired ?? { status: "empty" };
     }
     const parsed: unknown = JSON.parse(stored);
     if (isLocalProjectFile(parsed)) {
       return { status: "valid", project: parsed };
     }
-    if (parsed && typeof parsed === "object") {
-      const record = parsed as Record<string, unknown>;
-      const migratedDocument = migrateLegacyV02Document(record.document);
-      if (record.fileFormatVersion === "0.2" && migratedDocument) {
-        const migratedProject = { ...record, document: migratedDocument };
-        const validation = validateLocalProject(migratedProject);
-        if (validation.ok) {
-          return {
-            status: "valid",
-            project: cloneValue(validation.value) as LocalProjectFile,
-          };
-        }
-      }
+    const retiredVersion = retiredAutosaveVersion(parsed);
+    if (retiredVersion) {
+      return {
+        status: "corrupt",
+        message: retiredProtocolAutosaveMessage(retiredVersion),
+      };
     }
     if (isRecoverableLocalProject(parsed)) {
       return {
@@ -386,7 +389,7 @@ export function readLocalProjectResult(): LocalProjectReadResult {
     return {
       status: "corrupt",
       message:
-        "The autosave does not match the Mosaic local-project 0.2 contract. Your current editor remains unchanged.",
+        "The autosave does not match the Mosaic local-project 0.3 contract. Your current editor remains unchanged.",
     };
   } catch {
     return {

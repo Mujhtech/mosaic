@@ -391,6 +391,10 @@ function TokenPalette({
             );
           })}
         </div>
+        <p className="mt-2 text-[11px] text-muted-foreground leading-snug">
+          Semantic colours follow each host app theme, so Studio cannot verify
+          their contrast. Use Custom for a literal colour with a contrast check.
+        </p>
       </div>
     </div>
   );

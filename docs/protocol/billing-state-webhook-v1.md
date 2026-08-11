@@ -241,6 +241,39 @@ separate pinned blocks in the manifest, so the exception stays an exception
 rather than becoming a habit. See
 [compatibility policy](compatibility-policy.md#webhook-consumer-tolerance-is-a-documented-exception).
 
+### Conformance requirements for a consumer implementation
+
+The tolerance above is not a licence to guess. It is safe only because of the
+re-read, so the two halves are stated here as normative requirements and pinned
+by `validateAuthoritativeReReadPolicy` in
+`protocol/tools/billing-state-webhook-validation-v1.mjs`. Dropping or rewording
+`consumerTolerance.authoritativeState` fails protocol validation.
+
+A conforming consumer:
+
+1. **MUST** verify the signature over the raw body before parsing it. An
+   unverified body is not a Mosaic event and is not tolerated at all.
+2. **MUST** re-read the authoritative Customer Entitlement Snapshot before
+   acting on anything the event implies about a customer.
+3. **MUST NOT** project, cache, or persist entitlement state from a webhook
+   payload. `stateSummary` and `changedEntitlements` are a *notification of
+   change* and a debugging aid, never a source of truth. In particular, a
+   consumer must not write `currentState` into its own store, must not grant or
+   revoke access from an event alone, and must not treat the absence of a
+   changed entitlement as evidence that it did not change.
+4. **MUST** deduplicate by `eventId` and order by `snapshotVersion`, discarding
+   an event whose `snapshotVersion` is older than the state it already holds.
+   Delivery is at-least-once and unordered.
+5. **MUST** ignore unknown fields, unknown event types, and unknown enumeration
+   members rather than rejecting the delivery — and, because it ignored them,
+   **MUST** treat the subsequent snapshot read as the only account of what
+   actually changed.
+
+The failure this forbids is concrete: a consumer that projected state from the
+payload would, on receiving an event from a newer contract version carrying an
+enumeration member it ignored, record a *stale or wrong* entitlement state and
+never learn otherwise. Re-reading is what makes the ignored bytes harmless.
+
 ## Fixtures
 
 `protocol/fixtures/billing-state-webhook/v1/` — 13 canonical fixtures across

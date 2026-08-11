@@ -9,9 +9,24 @@
 
 export interface WorkspaceScope {
   environmentId?: string;
+  /**
+   * The Environment as an address names it — `prod`, `staging`, `dev` — which is
+   * what every route under `/env` carries. It is deliberately separate from
+   * `environmentId`: `environmentForAlias` refuses to resolve an id, so a link
+   * built from one would not land.
+   */
+  environmentKey?: string;
   organizationId?: string;
   projectId?: string;
 }
+
+/**
+ * The fragment the analytics-collection control on Environment settings answers
+ * to. Both `analytics_collection_disabled` recovery paths — the coded API error
+ * and the tri-state overview metric — point at that one control, so the anchor
+ * is named once here and consumed by the panel that renders it.
+ */
+export const ANALYTICS_COLLECTION_ANCHOR = "analytics-collection";
 
 /**
  * Adds search parameters to an internal href. External or relative values are
@@ -79,9 +94,33 @@ export function providersHref(scope: WorkspaceScope) {
   return base ? `${base}/catalog/providers` : undefined;
 }
 
+/**
+ * Environment settings, which is where analytics collection is turned on and
+ * off. Settings moved under `/env/$environmentKey` with the rest of the
+ * Environment-scoped workspace; this helper kept building the pre-move shape and
+ * produced an address that no longer resolves.
+ *
+ * The Environment segment is required rather than defaulted. Defaulting would
+ * send an operator whose Production metrics are dark to the Development
+ * Environment's settings, where the toggle they are looking for is already on.
+ */
 export function environmentSettingsHref(scope: WorkspaceScope) {
   const base = projectBase(scope);
-  return base ? `${base}/settings/environments` : undefined;
+  if (!(base && scope.environmentKey)) {
+    return;
+  }
+  return `${base}/env/${encodeURIComponent(scope.environmentKey)}/settings/environments`;
+}
+
+/**
+ * Environment settings, addressed at the analytics-collection control rather
+ * than at the top of the page. A recovery link that lands an operator on a page
+ * containing the fix, without saying which control it is, is only half a
+ * recovery.
+ */
+export function analyticsCollectionSettingsHref(scope: WorkspaceScope) {
+  const base = environmentSettingsHref(scope);
+  return base ? `${base}#${ANALYTICS_COLLECTION_ANCHOR}` : undefined;
 }
 
 /**

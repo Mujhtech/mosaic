@@ -3323,6 +3323,44 @@ export type AnalyticsResult = {
     freshness: AnalyticsFreshness;
 };
 
+/**
+ * One metric's line, tri-state per series rather than per point. `points` is present exactly when `available` is true and covers every day in the window with no gaps, because a hole inside a drawn line reads as a collapse rather than as missing data. When `available` is false, `reason` explains why and no points are given: `provider_confirmed_unavailable` marks a metric Mosaic declares but does not yet compute, the same state the summed query reports as a warning.
+ */
+export type AnalyticsMetricSeries = {
+    metricId: string;
+    /**
+     * Decides what a day with no underlying bucket means. A count's missing day is an explicit zero — a day with no purchases had zero purchases — while a rate's is null, because a day with no denominator was not measured at all.
+     */
+    kind: 'count' | 'rate';
+    authority: 'client_observed' | 'trusted_server' | 'provider_confirmed';
+    scope: 'environment';
+    available: boolean;
+    reason?: 'provider_confirmed_unavailable';
+    points?: Array<OverviewSeriesPoint>;
+};
+
+export type AnalyticsSeries = {
+    projectId: string;
+    environmentId: string;
+    /**
+     * The clamped series length actually served
+     */
+    days: number;
+    /**
+     * The instants the points cover. `from` is midnight of the oldest day and `to` is the request instant, not tomorrow's midnight, because the last day is still in progress. Day boundaries are UTC.
+     */
+    window: OverviewWindow;
+    /**
+     * One entry per requested metric, in request order, de-duplicated.
+     */
+    series: Array<AnalyticsMetricSeries>;
+    freshness: AnalyticsFreshness;
+};
+
+export type AnalyticsSeriesEnvelope = {
+    data: AnalyticsSeries;
+};
+
 export type CreateAnalyticsEventExportRequest = {
     from: Timestamp;
     to: Timestamp;
@@ -3366,6 +3404,184 @@ export type AnalyticsJob = {
     expiresAt?: Timestamp;
     createdAt: Timestamp;
     updatedAt: Timestamp;
+};
+
+/**
+ * A single tri-state measure. `value` is null exactly when `available` is false, and `reason` then explains why. `billing_disabled` and `analytics_collection_disabled` are configuration states the operator chose; `not_measured` means the measure has no denominator in the window — a rate is reported this way when nobody was shown a paywall, which is normal on a new or low-traffic Environment and is not a failure; `metric_unavailable` means the source could not be read and the failure was logged server-side.
+ */
+export type OverviewMetric = {
+    value: number | null;
+    available: boolean;
+    reason?: 'billing_disabled' | 'analytics_collection_disabled' | 'not_measured' | 'metric_unavailable';
+    /**
+     * Where the number came from. `provider_validated` is derived from validated Transaction Facts, `projected` from committed projection snapshots and pointers, and `client_observed` from SDK-reported analytics events, which Mosaic cannot confirm against a provider.
+     */
+    authority: 'provider_validated' | 'projected' | 'client_observed';
+    scope: 'environment';
+};
+
+export type OverviewWindow = {
+    from: Timestamp;
+    to: Timestamp;
+    timezone: 'UTC';
+};
+
+export type OverviewWindows = {
+    /**
+     * The UTC calendar day so far. `to` is the request instant, not tomorrow's midnight.
+     */
+    today: OverviewWindow;
+    yesterday: OverviewWindow;
+};
+
+/**
+ * Billing Customers holding committed entitlement state in this Environment. A Billing Customer row is Project-scoped identity, so the per-Environment population is the set with a current entitlement pointer here; a customer identified by a trusted server that has never had a purchase projected is not counted.
+ */
+export type OverviewCustomerMetrics = {
+    total: OverviewMetric;
+    newToday: OverviewMetric;
+    newYesterday: OverviewMetric;
+};
+
+/**
+ * `active` counts Subscription Instances whose current snapshot grants access. `newToday` and `newYesterday` count initial-purchase Transaction Facts, deduplicated by provider transaction identifier so a validator revalidation pass is not reported as a purchase spike.
+ */
+export type OverviewSubscriptionMetrics = {
+    active: OverviewMetric;
+    newToday: OverviewMetric;
+    newYesterday: OverviewMetric;
+};
+
+/**
+ * `active` counts Subscription Instances in the trialing lifecycle; a trialing subscription that grants access is also counted in `subscriptions.active`, because a trial is an active subscription. The started counts come from offer-redemption Facts, which is exactly the Fact kind the projection engine treats as entering the trialing lifecycle; introductory and promotional offers that are not free trials are included.
+ */
+export type OverviewTrialMetrics = {
+    active: OverviewMetric;
+    startedToday: OverviewMetric;
+    startedYesterday: OverviewMetric;
+};
+
+export type OverviewLifecycleMetrics = {
+    active: OverviewMetric;
+};
+
+export type OverviewWindowedMetrics = {
+    today: OverviewMetric;
+    yesterday: OverviewMetric;
+};
+
+export type ProjectOverviewMetrics = {
+    projectId: string;
+    environmentId: string;
+    windows: OverviewWindows;
+    metrics: {
+        customers: OverviewCustomerMetrics;
+        subscriptions: OverviewSubscriptionMetrics;
+        trials: OverviewTrialMetrics;
+        billingRetry: OverviewLifecycleMetrics;
+        gracePeriod: OverviewLifecycleMetrics;
+        /**
+         * Accepted paywall_presented events.
+         */
+        paywallViews: OverviewWindowedMetrics;
+        /**
+         * Accepted purchase_started events.
+         */
+        purchaseStarts: OverviewWindowedMetrics;
+        /**
+         * Accepted purchased purchase_completed_client events. This is client-observed, not provider-confirmed: Mosaic declares provider-confirmed purchase metrics but does not yet compute them, so reporting this tile from them would leave it permanently unavailable.
+         */
+        purchases: OverviewWindowedMetrics;
+        /**
+         * Presentations with a correlated client-completed purchase divided by presentations, as a ratio between 0 and 1.
+         */
+        conversionRate: OverviewWindowedMetrics;
+    };
+    /**
+     * Absent when the analytics read did not happen, so a watermark never appears beside unavailable metrics.
+     */
+    analyticsFreshness?: AnalyticsFreshness;
+};
+
+export type ProjectOverviewMetricsEnvelope = {
+    data: ProjectOverviewMetrics;
+};
+
+/**
+ * One UTC day of one measure, shared by the overview series and the analytics metric series. `value` is null only where "not measured" is the truthful reading. For a count it never is: a day with no purchases had zero purchases and the point says 0, so a chart never shows a gap where a real zero belongs. For a rate it happens whenever the day's denominator is zero — nobody saw the paywall, so there is no rate at all, and reporting 0% would draw a conversion collapse on a day that measured nothing.
+ */
+export type OverviewSeriesPoint = {
+    /**
+     * The UTC calendar day
+     */
+    date: string;
+    value: number | null;
+    /**
+     * Present and true on today's point only. The day is still in progress, so its value is not comparable with the completed days beside it.
+     */
+    partial?: boolean;
+};
+
+/**
+ * One tri-state series. `points` is present exactly when `available` is true, and covers every day in the window with no gaps. When `available` is false, `reason` explains why and no points are given at all: `billing_disabled` and `analytics_collection_disabled` are configuration states the operator chose, and `metric_unavailable` means a source could not be read and the failure was logged server-side.
+ */
+export type OverviewSeries = {
+    points?: Array<OverviewSeriesPoint>;
+    available: boolean;
+    reason?: 'billing_disabled' | 'analytics_collection_disabled' | 'metric_unavailable';
+    authority: 'provider_validated' | 'projected' | 'client_observed';
+    scope: 'environment';
+};
+
+export type ProjectOverviewMetricsSeries = {
+    projectId: string;
+    environmentId: string;
+    /**
+     * The clamped series length actually served
+     */
+    days: number;
+    /**
+     * The instants the points cover. `from` is midnight of the oldest day and `to` is the request instant, not tomorrow's midnight, because the last day is still in progress.
+     */
+    window: OverviewWindow;
+    metrics: {
+        /**
+         * Accepted paywall_presented events per day.
+         */
+        paywallViews: OverviewSeries;
+        /**
+         * Accepted purchase_started events per day.
+         */
+        purchaseStarts: OverviewSeries;
+        /**
+         * Accepted purchased purchase_completed_client events per day. Client-observed, not provider-confirmed — the same caveat the scalar overview's `purchases` carries.
+         */
+        purchases: OverviewSeries;
+        /**
+         * Presentations with a correlated client-completed purchase divided by presentations, as a ratio between 0 and 1. The only series whose points can be null, and they are null exactly on the days with no presentations to divide by.
+         */
+        conversionRate: OverviewSeries;
+        /**
+         * Billing Customers first seen per day, counted only where they hold committed entitlement state in this Environment — the same population the scalar overview's `customers` group counts.
+         */
+        newCustomers: OverviewSeries;
+        /**
+         * Initial-purchase Transaction Facts per day, deduplicated by provider transaction identifier within the day so a validator revalidation pass is not drawn as a purchase spike.
+         */
+        newSubscriptions: OverviewSeries;
+        /**
+         * Offer-redemption Transaction Facts per day, deduplicated the same way. This is the Fact kind the projection engine treats as entering the trialing lifecycle, so introductory and promotional offers that are not free trials are included.
+         */
+        trialsStarted: OverviewSeries;
+    };
+    /**
+     * Absent when the analytics read did not happen, so a watermark never appears beside unavailable series.
+     */
+    analyticsFreshness?: AnalyticsFreshness;
+};
+
+export type ProjectOverviewMetricsSeriesEnvelope = {
+    data: ProjectOverviewMetricsSeries;
 };
 
 export type AnalyticsSettingsEnvelope = {
@@ -3653,11 +3869,11 @@ export type ProductStatus = 'draft' | 'connected' | 'attention_required' | 'arch
 
 export type MetadataSource = 'mock' | 'provider';
 
-export type ProviderKind = 'revenuecat' | 'app_store' | 'google_play' | 'custom';
+export type ProviderKind = 'revenuecat' | 'app_store' | 'app_store_connect' | 'google_play' | 'custom';
 
 export type ProviderActivationKind = 'provider_connection' | 'native_store';
 
-export type ProviderConnectionKind = 'revenuecat' | 'custom';
+export type ProviderConnectionKind = 'revenuecat' | 'app_store_connect' | 'custom';
 
 export type ProviderIntegrationMode = 'server_connected' | 'sdk_only';
 
@@ -3806,7 +4022,7 @@ export type CreateProviderConnectionRequest = unknown & {
     integrationMode: ProviderIntegrationMode;
     mode: ProviderConnectionMode;
     /**
-     * Required RevenueCat v2 Project resource ID.
+     * Required RevenueCat v2 Project resource ID. Must be omitted for app_store_connect: an App Store Connect API key is issued per Apple team and names no second project resource.
      */
     externalProjectId?: string;
     environmentIds: Array<string>;
@@ -3814,6 +4030,9 @@ export type CreateProviderConnectionRequest = unknown & {
 };
 
 export type ProviderCredentialRequest = {
+    /**
+     * Replacement credential in the shape the connection's provider requires. The connection determines the provider, so the accepted shape is not derivable from this payload; the server validates it against the connection's actual provider.
+     */
     credential: string;
 };
 
@@ -4312,6 +4531,7 @@ export type ProviderReadiness = {
     connectionId?: string;
     provider?: ProviderKind;
     mappingId?: string;
+    mappingProvider?: ProviderKind;
     observation?: ProviderMappingObservation;
     blockers: Array<ProviderReadinessIssue>;
     warnings: Array<ProviderReadinessIssue>;
@@ -4413,7 +4633,7 @@ export type Draft = {
     status: 'active' | 'published' | 'archived';
     revision: number;
     sourceVersionId?: string;
-    protocolVersion: '0.2';
+    protocolVersion: '0.3';
     validationStatus: 'valid' | 'invalid';
     validation: ValidationSummary;
     createdByActorId: string;
@@ -4437,7 +4657,7 @@ export type PaywallVersion = {
     versionNumber: number;
     sourceDraftId: string;
     sourceRevision: number;
-    protocolVersion: '0.2';
+    protocolVersion: '0.3';
     document: {
         [key: string]: unknown;
     };
@@ -4901,11 +5121,15 @@ export type CreateProviderConnectionRequestWritable = unknown & {
     integrationMode: ProviderIntegrationMode;
     mode: ProviderConnectionMode;
     /**
-     * Required RevenueCat v2 Project resource ID.
+     * Required RevenueCat v2 Project resource ID. Must be omitted for app_store_connect: an App Store Connect API key is issued per Apple team and names no second project resource.
      */
     externalProjectId?: string;
     /**
-     * One-time RevenueCat v2 least-privilege secret key. Never returned or logged.
+     * One-time provider credential. Never returned or logged. Its shape is provider-specific and is validated server side.
+     *
+     * revenuecat: the RevenueCat v2 least-privilege secret key (`sk_...`).
+     *
+     * app_store_connect: a JSON document `{"privateKey":"<.p8 PEM>","keyId":"<10 chars>","issuerId":"<uuid>","vendorNumber":"<digits, optional>"}`. The vendor number travels inside this document; it is not used for catalog import and is stored for future sales and finance reporting.
      */
     credential?: string;
     environmentIds: Array<string>;
@@ -8220,9 +8444,9 @@ export type GetSdkConfigurationData = {
         'Mosaic-SDK-Platform': 'flutter' | 'ios' | 'android';
         'Mosaic-SDK-Version': string;
         'Mosaic-Configuration-Versions': string;
-        'Mosaic-Paywall-Protocol-Versions': '0.2';
+        'Mosaic-Paywall-Protocol-Versions': '0.3';
         /**
-         * Comma-separated unique exact Protocol capability pairs (`name@0.2`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
+         * Comma-separated unique exact Protocol capability pairs (`name@0.3`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
          */
         'Mosaic-Paywall-Capabilities': string;
         'Mosaic-Placement-Decision-Versions'?: string;
@@ -9520,6 +9744,95 @@ export type IngestAnalyticsEventBatchResponses = {
 
 export type IngestAnalyticsEventBatchResponse = IngestAnalyticsEventBatchResponses[keyof IngestAnalyticsEventBatchResponses];
 
+export type GetProjectOverviewMetricsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/overview-metrics';
+};
+
+export type GetProjectOverviewMetricsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type GetProjectOverviewMetricsError = GetProjectOverviewMetricsErrors[keyof GetProjectOverviewMetricsErrors];
+
+export type GetProjectOverviewMetricsResponses = {
+    /**
+     * Overview summary.
+     */
+    200: ProjectOverviewMetricsEnvelope;
+};
+
+export type GetProjectOverviewMetricsResponse = GetProjectOverviewMetricsResponses[keyof GetProjectOverviewMetricsResponses];
+
+export type GetProjectOverviewMetricsSeriesData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: {
+        /**
+         * Series length in UTC days, inclusive of today. Clamped server-side to 7..90 rather than rejected — the response echoes the length actually served in `days`. A value that is not a whole number is rejected with 422.
+         */
+        days?: number;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/overview-metrics/series';
+};
+
+export type GetProjectOverviewMetricsSeriesErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type GetProjectOverviewMetricsSeriesError = GetProjectOverviewMetricsSeriesErrors[keyof GetProjectOverviewMetricsSeriesErrors];
+
+export type GetProjectOverviewMetricsSeriesResponses = {
+    /**
+     * Overview daily series.
+     */
+    200: ProjectOverviewMetricsSeriesEnvelope;
+};
+
+export type GetProjectOverviewMetricsSeriesResponse = GetProjectOverviewMetricsSeriesResponses[keyof GetProjectOverviewMetricsSeriesResponses];
+
 export type GetAnalyticsSettingsData = {
     body?: never;
     path: {
@@ -9623,6 +9936,64 @@ export type GetAnalyticsOverviewResponses = {
 };
 
 export type GetAnalyticsOverviewResponse = GetAnalyticsOverviewResponses[keyof GetAnalyticsOverviewResponses];
+
+export type GetAnalyticsSeriesData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query: {
+        /**
+         * Comma-separated metric identifiers from the analytics vocabulary, at most 12. An unknown identifier is rejected; an unbounded series over every metric Mosaic defines is a table scan rather than a chart.
+         */
+        metrics: string;
+        timezone: string;
+        metricBasis: 'event_count';
+        platform?: 'ios' | 'android';
+        locale?: string;
+        applicationVersion?: string;
+        /**
+         * Series length in UTC days, inclusive of today. Clamped server-side to 7..90 rather than rejected — the response echoes the length actually served in `days`. A value that is not a whole number is rejected with 422.
+         */
+        days?: number;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/analytics/series';
+};
+
+export type GetAnalyticsSeriesErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type GetAnalyticsSeriesError = GetAnalyticsSeriesErrors[keyof GetAnalyticsSeriesErrors];
+
+export type GetAnalyticsSeriesResponses = {
+    /**
+     * Analytics daily series.
+     */
+    200: AnalyticsSeriesEnvelope;
+};
+
+export type GetAnalyticsSeriesResponse = GetAnalyticsSeriesResponses[keyof GetAnalyticsSeriesResponses];
 
 export type GetAnalyticsFunnelData = {
     body?: never;

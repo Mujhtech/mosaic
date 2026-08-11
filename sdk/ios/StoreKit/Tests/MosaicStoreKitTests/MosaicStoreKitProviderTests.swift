@@ -1,5 +1,6 @@
 import Foundation
 import MosaicSDK
+import StoreKit
 import XCTest
 
 @testable import MosaicStoreKit
@@ -328,6 +329,94 @@ final class MosaicStoreKitProviderTests: XCTestCase {
     XCTAssertTrue(sink.captured().isEmpty)
   }
 
+  /// Every purchase error except cancellation used to flatten to one
+  /// non-retryable `storekit_error`, so a transient network outage was reported
+  /// to the host as a permanent purchase failure and never retried, and an
+  /// unavailable product was reported as a failure rather than as unavailable.
+  func testPurchaseErrorsAreClassifiedRatherThanFlattened() async throws {
+    let cases: [(any Error, MosaicPurchaseResult)] = [
+      (
+        StoreKitError.networkError(URLError(.notConnectedToInternet)),
+        .providerUnavailable(
+          productID: mapping.mosaicProductID,
+          diagnosticCode: "commerce.providerUnavailable",
+          diagnostic: .init(
+            code: "commerce.providerUnavailable",
+            safeMessage: "StoreKit is temporarily unreachable.",
+            severity: .error, retryable: true, correlationID: "ios_storekit_1",
+            providerCode: "network_error", mosaicProductID: mapping.mosaicProductID,
+            recoveryAction: .retry))
+      ),
+      (StoreKitError.userCancelled, .cancelled(productID: mapping.mosaicProductID)),
+      (
+        StoreKitError.notAvailableInStorefront,
+        .productUnavailable(productID: mapping.mosaicProductID)
+      ),
+    ]
+
+    for (error, expected) in cases {
+      let order = OrderRecorder()
+      let provider = MosaicStoreKitProvider(
+        client: StoreKitClientStub(
+          order: order, purchase: .cancelled, purchaseError: error),
+        acceptor: AcceptorStub(order: order),
+        acceptanceStore: AcceptanceStoreStub(order: order))
+      try await provider.install(configuration: configuration, mappings: [mapping])
+      _ = await provider.loadProducts(mappings: [mapping])
+
+      let result = await provider.purchase(mosaicProductID: mapping.mosaicProductID)
+      XCTAssertEqual(result, expected)
+    }
+
+    // A failure Mosaic cannot classify stays non-retryable rather than being
+    // optimistically retried.
+    let order = OrderRecorder()
+    let provider = MosaicStoreKitProvider(
+      client: StoreKitClientStub(
+        order: order, purchase: .cancelled, purchaseError: StoreKitTestError.failed),
+      acceptor: AcceptorStub(order: order),
+      acceptanceStore: AcceptanceStoreStub(order: order))
+    try await provider.install(configuration: configuration, mappings: [mapping])
+    _ = await provider.loadProducts(mappings: [mapping])
+    guard
+      case .failed(_, _, let diagnostic) = await provider.purchase(
+        mosaicProductID: mapping.mosaicProductID)
+    else { return XCTFail("An unclassifiable StoreKit error must remain a failure.") }
+    XCTAssertEqual(diagnostic.providerCode, "storekit_error")
+    XCTAssertFalse(diagnostic.retryable)
+  }
+
+  /// An introductory offer whose payment mode this SDK version cannot classify
+  /// is dropped from the product, so the paywall never states terms Mosaic
+  /// could not read. Dropping it without a diagnostic would hide a trial or
+  /// introductory price the customer is entitled to see, and would leave this
+  /// adapter reporting healthy while the RevenueCat adapter reports the same
+  /// condition. The product must stay purchasable either way.
+  func testUnclassifiableIntroductoryOfferIsReportedRatherThanSilentlyStripped() async throws {
+    let order = OrderRecorder()
+    let provider = MosaicStoreKitProvider(
+      client: StoreKitClientStub(order: order, purchase: .cancelled, unknownOfferType: true),
+      acceptor: AcceptorStub(order: order),
+      acceptanceStore: AcceptanceStoreStub(order: order))
+    try await provider.install(configuration: configuration, mappings: [mapping])
+
+    let products = await provider.loadProducts(mappings: [mapping])
+    XCTAssertEqual(products.count, 1)
+    let product = try XCTUnwrap(products.first?.product)
+    XCTAssertNil(product.introductoryOffer)
+    XCTAssertNil(product.trial)
+
+    let diagnostics = await provider.providerDiagnostics()
+    XCTAssertEqual(diagnostics.health, .degraded)
+    let reported = diagnostics.diagnostics.filter {
+      $0.code == "commerce.unsupportedIntroductoryOffer"
+    }
+    XCTAssertEqual(reported.count, 1)
+    XCTAssertEqual(reported.first?.providerCode, "unknown_offer_type")
+    XCTAssertEqual(reported.first?.mosaicProductID, mapping.mosaicProductID)
+    XCTAssertFalse(reported.first?.retryable ?? true)
+  }
+
   private var configuration: MosaicCommerceConfigurationReference {
     .init(
       configurationID: "commerce_configuration_storekit_42",
@@ -439,18 +528,25 @@ private actor StoreKitClientStub: StoreKitClient {
   nonisolated let unfinished: [StoreKitTransactionEvent]
   let entitlements: [StoreKitTransactionEvent]
 
+  let unknownPeriodUnit: Bool
+  let unknownOfferType: Bool
+
   init(
     order: OrderRecorder,
     purchase: StoreKitPurchaseEvent,
     purchaseError: Error? = nil,
     unfinished: [StoreKitTransactionEvent] = [],
-    entitlements: [StoreKitTransactionEvent] = []
+    entitlements: [StoreKitTransactionEvent] = [],
+    unknownPeriodUnit: Bool = false,
+    unknownOfferType: Bool = false
   ) {
     self.order = order
     purchaseEvent = purchase
     self.purchaseError = purchaseError
     self.unfinished = unfinished
     self.entitlements = entitlements
+    self.unknownPeriodUnit = unknownPeriodUnit
+    self.unknownOfferType = unknownOfferType
   }
 
   func products(identifiers: [String]) -> [StoreKitProductSnapshot] {
@@ -465,7 +561,9 @@ private actor StoreKitClientStub: StoreKitClient {
         billingPeriod: .init(unit: .month, value: 1),
         localizedPeriod: "1 month",
         trial: nil,
-        introductoryOffer: nil
+        introductoryOffer: nil,
+        unknownPeriodUnit: unknownPeriodUnit,
+        unknownOfferType: unknownOfferType
       )
     }
   }

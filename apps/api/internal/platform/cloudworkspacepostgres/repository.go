@@ -655,6 +655,20 @@ func (t *transaction) SaveApplication(v cloudworkspace.Application) {
 }
 func (t *transaction) SaveEnvironment(v cloudworkspace.Environment) {
 	t.exec(`INSERT INTO environments(id,project_id,key,name,mode,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO UPDATE SET name=excluded.name,mode=excluded.mode,updated_at=excluded.updated_at`, v.ID, v.ProjectID, v.Key, v.Name, v.Mode, v.CreatedAt, v.UpdatedAt)
+	// An Environment without an analytics settings row is not "collection
+	// disabled" — the repository reports it as ErrNotFound, and every analytics
+	// read and the overview surface degrade to an unavailable metric. Seeding it
+	// in the same transaction as the Environment keeps that state unreachable
+	// rather than merely unlikely, so the absent-row error stays honest.
+	//
+	// Migration 00012's AFTER INSERT trigger already inserts this row, and from
+	// 00066 it does so enabled. This statement is deliberately redundant with the
+	// trigger: it states the guarantee where the Environment is written, so a
+	// future migration that retires the trigger cannot quietly take the
+	// guarantee with it. `collection_enabled` is named explicitly for the same
+	// reason; `raw_retention_days` is left to the column default so the
+	// retention window is stated in one place.
+	t.exec(`INSERT INTO analytics_environment_settings(environment_id,project_id,collection_enabled) VALUES($1,$2,true) ON CONFLICT(environment_id) DO NOTHING`, v.ID, v.ProjectID)
 }
 func (t *transaction) SaveAPIKey(v cloudworkspace.APIKeyRecord) {
 	t.exec(`INSERT INTO api_keys(id,environment_id,application_id,application_project_id,kind,prefix,secret_digest,created_by_actor_id,created_at,rotated_at,revoked_at,last_used_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(id) DO UPDATE SET secret_digest=excluded.secret_digest,rotated_at=excluded.rotated_at,revoked_at=COALESCE(api_keys.revoked_at,excluded.revoked_at),last_used_at=excluded.last_used_at`, v.ID, v.EnvironmentID, nullable(v.ApplicationID), nullable(v.ApplicationProjectID), v.Kind, v.Prefix, v.SecretDigest[:], v.CreatedByActorID, v.CreatedAt, v.RotatedAt, v.RevokedAt, v.LastUsedAt)

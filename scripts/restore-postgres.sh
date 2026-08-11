@@ -124,7 +124,18 @@ inTarget() {
   fi
 }
 
-exists="$(administer "SELECT 1 FROM pg_database WHERE datname = '${target_database}'" || true)"
+# A failed probe is not a "no". Treating it as one drops and recreates whatever
+# the target name refers to, so the status is captured apart from the output.
+set +e
+exists="$(administer "SELECT 1 FROM pg_database WHERE datname = '${target_database}'")"
+exists_status=$?
+set -e
+if [[ "${exists_status}" -ne 0 ]]; then
+  echo "could not determine whether database ${target_database} already exists" >&2
+  echo "(the probe failed with status ${exists_status}); nothing was changed." >&2
+  echo "Fix the connection to the maintenance database and re-run." >&2
+  exit 1
+fi
 if [[ "${exists}" == "1" && "${force}" != "true" ]]; then
   echo "database ${target_database} already exists; pass --force to overwrite it" >&2
   exit 1

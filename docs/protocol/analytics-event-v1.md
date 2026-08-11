@@ -2,7 +2,7 @@
 
 Analytics Event Contract `1` is Mosaic's closed, platform-neutral product
 analytics contract. It describes monetization observations and batch ingestion;
-it does not change Paywall Protocol `0.2`, Placement Decision `1`, Configuration
+it does not change Paywall Protocol `0.3`, Placement Decision `1`, Configuration
 Delivery `1`/`2`, or Commerce Provider `1`/`2`.
 
 Canonical artifacts:

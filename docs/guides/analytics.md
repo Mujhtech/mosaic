@@ -1,13 +1,14 @@
 # Analytics
 
 Mosaic collects a closed set of monetization events from the SDKs and turns
-them into per-Environment reports. Collection is off by default and analytics
+them into per-Environment reports. Collection is on by default and analytics
 delivery never blocks rendering or purchasing.
 
-## Enabling collection
+## Enabling and disabling collection
 
-Collection is disabled for every Environment until an owner or admin turns it
-on. Dashboard:
+Collection is enabled for every Environment from the moment it is created, so a
+new Project reports its funnel without an operator step. An owner or admin can
+turn it off per Environment at any time. Dashboard:
 `/organizations/{organizationId}/projects/{projectId}/analytics/{environmentId}/data-privacy`.
 API: `PUT /v1/projects/{projectId}/environments/{environmentId}/analytics/settings`
 with `collectionEnabled` and `rawRetentionDays` (30–730 days, default 180).

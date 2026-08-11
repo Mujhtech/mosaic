@@ -19,6 +19,7 @@ import 'customer_entitlements.dart';
 import 'customer_restore_sync.dart';
 import 'experiment_analytics.dart';
 import 'experiment_assignment_store.dart';
+import 'locale_tag.dart';
 import 'placement_decision.dart';
 import 'placement_identity.dart';
 import 'presentation.dart';
@@ -149,7 +150,9 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     MosaicExperimentAssignmentStore? experimentAssignmentStore,
     MosaicTransactionObservationRuntime? transactionObservationRuntime,
     MosaicCustomerEntitlementRuntime? customerEntitlementRuntime,
-  })  : _configurationClient = configurationClient,
+    MosaicDiagnosticCallback? onDiagnostic,
+  })  : _onDiagnostic = onDiagnostic,
+        _configurationClient = configurationClient,
         _customerEntitlements = customerEntitlementRuntime,
         _identityController = identityController,
         _analyticsRuntime = analyticsRuntime,
@@ -197,6 +200,21 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
+  /// Configures an isolated Mosaic client.
+  ///
+  /// Analytics collection is **on by default**: a client configured with a base
+  /// URL (or an explicit [analyticsTransport]) wires the analytics runtime and
+  /// begins queueing Mosaic's own product events. Hosts opt *out* by passing
+  /// `analyticsEnvironmentSettings: MosaicAnalyticsEnvironmentSettings(
+  /// collectionEnabled: false)` or `analyticsHostEnabled: false`, or later by
+  /// calling [setAnalyticsCollection]; disabling clears anything already
+  /// queued. The host application remains responsible for obtaining whatever
+  /// end-user consent its jurisdiction and app-store policies require before
+  /// leaving collection enabled. Collection is additionally gated server-side:
+  /// the Environment's collection setting must also be enabled for Mosaic to
+  /// ingest what the SDK sends.
+  ///
+  /// Transaction observation stays opt-in and is unaffected by this default.
   factory Mosaic.configure({
     String? publicSdkKey,
     String? apiKey,
@@ -216,8 +234,10 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     MosaicAnalyticsStorage analyticsStorage =
         const MosaicFileAnalyticsStorage(),
     MosaicAnalyticsTransport? analyticsTransport,
+    // On by default. Hosts opt out here or through `setAnalyticsCollection`;
+    // the Environment's server-side setting still gates ingestion.
     MosaicAnalyticsEnvironmentSettings analyticsEnvironmentSettings =
-        const MosaicAnalyticsEnvironmentSettings(collectionEnabled: false),
+        const MosaicAnalyticsEnvironmentSettings(collectionEnabled: true),
     bool analyticsHostEnabled = true,
     String analyticsSdkVersion = mosaicFlutterSdkVersion,
     String? operatingSystemVersion,
@@ -284,6 +304,7 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
         resolvedBaseUrl ?? Uri.parse('mosaic://local'),
         configuration.publicSdkKey,
       ),
+      onDiagnostic: onDiagnostic,
     );
     final resolvedAnalyticsTransport = analyticsTransport ??
         (resolvedBaseUrl == null
@@ -306,12 +327,17 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
               sdkVersion: analyticsSdkVersion,
               operatingSystemVersion: operatingSystemVersion,
               applicationVersion: configuration.applicationVersion,
-              locale: locale,
+              // Hosts pass whatever their platform produced. An unnormalized
+              // POSIX or ICU-keyword identifier fails the closed locale codec,
+              // and the event codec rejects the whole event, so a single bad
+              // shape would drop all analytics on the affected devices.
+              locale: mosaicNormalizeLocaleTag(locale),
             ),
             transport: resolvedAnalyticsTransport,
             storage: analyticsStorage,
             environmentEnabled: analyticsEnvironmentSettings.collectionEnabled,
             hostEnabled: analyticsHostEnabled,
+            onDiagnostic: onDiagnostic,
           );
     // Authoritative entitlements require an application backend to mint a
     // Customer Access Token. Without a token provider the subsystem is never
@@ -387,8 +413,79 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
             ),
             settings: transactionObservation,
             storage: transactionObservationStorage,
+            onDiagnostic: onDiagnostic,
           );
+    // A subsystem that quietly resolves to null looks identical to a subsystem
+    // that is working: no analytics arrive, no commerce configuration loads, no
+    // observation is submitted, and nothing says why. Each one that could not be
+    // auto-wired is named once here, at configuration time.
+    void reportDisabled(String subsystem, String code, String requirement) {
+      onDiagnostic?.call(
+        MosaicDiagnostic(
+          code: code,
+          message: '$subsystem is disabled because $requirement.',
+          severity: MosaicDiagnosticSeverity.warning,
+        ),
+      );
+    }
+
+    if (resolvedBaseUrl == null) {
+      reportDisabled(
+        'Hosted configuration',
+        'configuration.subsystem.disabled',
+        'no base URL was resolved',
+      );
+    }
+    if (runtime == null) {
+      reportDisabled(
+        'Analytics',
+        'analytics.subsystem.disabled',
+        analyticsTransport == null && resolvedBaseUrl == null
+            ? 'no base URL and no analytics transport were provided'
+            : 'no analytics transport could be constructed',
+      );
+    }
+    if (resolvedCommerceTransport == null &&
+        commerceConfigurationLoader == null) {
+      reportDisabled(
+        'Commerce configuration delivery',
+        'commerce.configuration.subsystem.disabled',
+        'a base URL, an Application, and a Store Platform are all required',
+      );
+    }
+    if (transactionObservation != null && observationRuntime == null) {
+      reportDisabled(
+        'Transaction observation',
+        'transactions.subsystem.disabled',
+        resolvedStorePlatform == null
+            ? 'no Store Platform was configured'
+            : 'no observation transport could be constructed',
+      );
+    }
+    if (runtime != null && !_analyticsPlatformIsNameable) {
+      // Collection is on by default, so an unnameable target now emits events
+      // continuously. `context.platform` admits only `ios` and `android`, so
+      // every one of them is filed under `android`. Naming it here is what
+      // keeps a desktop or web install from reading as Android traffic with no
+      // trace of the substitution.
+      onDiagnostic?.call(
+        const MosaicDiagnostic(
+          code: mosaicAnalyticsPlatformSubstitutedCode,
+          message: 'The analytics event contract names only ios and android, '
+              'so events from this target are reported as android.',
+          severity: MosaicDiagnosticSeverity.warning,
+        ),
+      );
+    }
+    if (customerTokenProvider != null && customerEntitlements == null) {
+      reportDisabled(
+        'Authoritative entitlements',
+        'entitlements.subsystem.disabled',
+        'no base URL was resolved',
+      );
+    }
     return Mosaic._(
+      onDiagnostic: onDiagnostic,
       configuration: configuration,
       purchaseProvider: resolvedPurchaseProvider,
       customerEntitlementRuntime: customerEntitlements,
@@ -450,9 +547,29 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
   final MosaicCommerceProviderRouter? _commerceProviderRouter;
   final MosaicTransactionObservationRuntime? _transactionObservationRuntime;
   final MosaicCustomerEntitlementRuntime? _customerEntitlements;
+  final MosaicDiagnosticCallback? _onDiagnostic;
+  final Set<String> _reportedDiagnosticCodes = <String>{};
   MosaicTransactionObservationSink? _purchaseSink;
   StreamSubscription<MosaicCommerceUpdate>? _commerceUpdateSubscription;
   bool _observingLifecycle = false;
+
+  /// Reports one SDK diagnostic to the host at most once per code.
+  ///
+  /// Extensions on [Mosaic] outside this file use it to surface assumptions and
+  /// degraded subsystems that would otherwise be invisible.
+  void diagnoseOnce(String code, String message) =>
+      _diagnoseOnce(code, message);
+
+  void _diagnoseOnce(String code, String message) {
+    if (!_reportedDiagnosticCodes.add(code)) return;
+    _onDiagnostic?.call(
+      MosaicDiagnostic(
+        code: code,
+        message: message,
+        severity: MosaicDiagnosticSeverity.warning,
+      ),
+    );
+  }
 
   void _observeLifecycleIfAvailable() {
     if (_observingLifecycle) return;
@@ -513,6 +630,17 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
         in acceptedConfiguration?.envelope.release.placementDecisions.values ??
             const Iterable<MosaicPlacementRuleSet>.empty()) {
       definitions.addAll(decision.attributeDefinitions);
+    }
+    if (definitions.isEmpty && attributes.isNotEmpty) {
+      // No accepted release means no allow-list to check against. The
+      // attributes are still stored so targeting works once a release lands,
+      // but the host is told that nothing validated them, rather than being
+      // left to assume they passed.
+      _diagnoseOnce(
+        'identity.attributes.unvalidated',
+        'No accepted release declares attribute definitions, so user '
+            'attributes were stored without allow-list validation.',
+      );
     }
     for (final entry in attributes.entries) {
       final definition = definitions[entry.key];
@@ -877,10 +1005,23 @@ final class _MosaicPurchaseSignalSink
   }
 }
 
-String get _analyticsPlatform => switch (defaultTargetPlatform) {
-      TargetPlatform.iOS => 'ios',
-      _ => 'android',
-    };
+/// Whether the analytics event contract can name the running target honestly.
+///
+/// `context.platform` is a closed `ios | android` enum and is required, so a
+/// Flutter host running on desktop or web has no truthful value. The SDK still
+/// reports `android` to keep the batch schema-valid, but the substitution is
+/// named through [mosaicAnalyticsPlatformSubstitutedCode] rather than left to
+/// silently mislabel every event from those devices.
+bool get _analyticsPlatformIsNameable =>
+    defaultTargetPlatform == TargetPlatform.iOS ||
+    defaultTargetPlatform == TargetPlatform.android;
+
+/// Reported once when analytics events carry a substituted `context.platform`.
+const String mosaicAnalyticsPlatformSubstitutedCode =
+    'analytics.platform.substituted';
+
+String get _analyticsPlatform =>
+    defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android';
 
 final class MosaicConfigurationException implements Exception {
   const MosaicConfigurationException(this.message);

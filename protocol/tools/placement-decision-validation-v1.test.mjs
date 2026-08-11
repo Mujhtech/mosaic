@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DecisionEvaluationError,
   evaluateDecisionV1,
   loadDecisionV1Artifacts,
+  normalizeLocale,
   rolloutV1,
   validateDecisionV1,
   validateDecisionV1Detailed,
@@ -23,6 +25,126 @@ test("priority, canonical locales, unknown inputs, fallback, typed values, and s
       testCase.name,
     );
   }
+});
+
+test("a shrunken conformance corpus fails instead of conforming over nothing", () => {
+  // Regression: every corpus loop here reports no errors over an empty array,
+  // so a corpus that failed to load or was truncated would read as perfect
+  // conformance -- for the evaluator cases, the rollout vectors, and the
+  // invalid fixtures alike.
+  const artifacts = loadDecisionV1Artifacts();
+  const shrink = [
+    (broken) => {
+      broken.evaluatorFixture.cases = [];
+    },
+    (broken) => {
+      broken.evaluatorFixture.cases = broken.evaluatorFixture.cases.slice(0, 3);
+    },
+    (broken) => {
+      broken.rolloutFixture.vectors = [];
+    },
+    (broken) => {
+      broken.invalidFixtures = [];
+    },
+  ];
+  for (const [index, mutate] of shrink.entries()) {
+    const broken = {
+      ...artifacts,
+      evaluatorFixture: structuredClone(artifacts.evaluatorFixture),
+      rolloutFixture: structuredClone(artifacts.rolloutFixture),
+      invalidFixtures: [...artifacts.invalidFixtures],
+    };
+    mutate(broken);
+    const errors = validateDecisionV1Artifacts(broken);
+    assert.ok(
+      errors.some((error) => error.includes("below the floor")),
+      `expected a corpus-floor error for mutation ${index}, got: ${errors.join("; ")}`,
+    );
+  }
+
+  // A duplicated case name silently collapses two cases the corpus meant to
+  // keep distinct, without changing the count.
+  const duplicated = {
+    ...artifacts,
+    evaluatorFixture: structuredClone(artifacts.evaluatorFixture),
+  };
+  duplicated.evaluatorFixture.cases[1].name = duplicated.evaluatorFixture.cases[0].name;
+  assert.ok(
+    validateDecisionV1Artifacts(duplicated).some((error) => error.includes("must be unique")),
+  );
+});
+
+test("targeting reads an ICU identifier as the locale it denotes, and never recovers a language", () => {
+  // The three shapes hosts actually hand the SDKs. Targeting stops here: unlike
+  // catalog lookup, it must not retarget a malformed tag onto a broader
+  // language, because that changes which users match a Rule.
+  for (const identifier of ["en_US@rg=gbzzzz", "en_US.UTF-8", "en_US_#u-rg-gbzzzz", "en-US-u-rg-gbzzzz"]) {
+    assert.equal(normalizeLocale(identifier), "en-US", identifier);
+  }
+  assert.equal(normalizeLocale("en-US-verylongsubtag"), null);
+});
+
+const QA_OVERRIDE = Object.freeze({
+  id: "override_qa",
+  selectorDigest: `sha256:${"a".repeat(64)}`,
+  safeLabel: "qa override",
+  startsAt: "2026-08-01T00:00:00Z",
+  expiresAt: "2026-08-01T12:00:00Z",
+  outcome: { type: "no_paywall" },
+});
+
+test("a QA override window is never evaluated against an assumed clock", () => {
+  // Regression: `context.now ?? epoch` made every override window silently
+  // inactive, so a QA override could look expired on a caller that forgot the
+  // clock rather than surfacing the omission.
+  const fixture = loadDecisionV1Artifacts().evaluatorFixture;
+  const withOverride = structuredClone(fixture.decision);
+  withOverride.ruleSet.qaOverrides = [structuredClone(QA_OVERRIDE)];
+  const context = {
+    ...fixture.cases[0].context,
+    qaOverrideSelectorDigest: QA_OVERRIDE.selectorDigest,
+  };
+
+  for (const now of [undefined, "not a timestamp"]) {
+    assert.throws(
+      () => evaluateDecisionV1(withOverride, { ...context, now }),
+      (error) =>
+        error instanceof DecisionEvaluationError && error.code === "now_required",
+      `expected now_required for ${JSON.stringify(now)}`,
+    );
+  }
+
+  // Inside the window the override wins; outside it, the rules run.
+  assert.deepEqual(
+    evaluateDecisionV1(withOverride, { ...context, now: "2026-08-01T06:00:00Z" }),
+    { matchedRuleId: null, overrideId: "override_qa", outcome: { type: "no_paywall" } },
+  );
+  assert.equal(
+    evaluateDecisionV1(withOverride, { ...context, now: "2026-08-02T06:00:00Z" })
+      .overrideId,
+    undefined,
+  );
+
+  // A rule set with no override windows never needed a clock in the first place.
+  assert.deepEqual(
+    evaluateDecisionV1(fixture.decision, fixture.cases[0].context),
+    fixture.cases[0].expected,
+  );
+});
+
+test("an unresolvable fallback key is named rather than crashing the evaluator", () => {
+  // The evaluator is reachable from callers that have not validated the
+  // document. A dangling fallback reference used to surface as a bare
+  // "cannot read properties of undefined".
+  const decision = structuredClone(loadDecisionV1Artifacts().evaluatorFixture.decision);
+  decision.ruleSet.defaultOutcome = { type: "fallback", key: "not_defined" };
+  assert.throws(
+    () => evaluateDecisionV1(decision, { entitlements: {}, products: {} }),
+    (error) =>
+      error instanceof DecisionEvaluationError &&
+      error.code === "unknown_fallback_key" &&
+      error.message.includes("not_defined"),
+  );
 });
 
 test("length-prefixed UTF-8 rollout is stable at exact threshold boundaries", () => {

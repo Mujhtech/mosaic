@@ -614,7 +614,7 @@ actor MosaicConfigurationClient {
       ].joined(separator: ","),
       "Mosaic-Experiment-Schedule-Policies": mosaicExperimentSchedulePolicy,
       "Mosaic-Paywall-Protocol-Versions": mosaicSupportedProtocolVersions.joined(separator: ","),
-      "Mosaic-Paywall-Capabilities": MosaicCapabilityCatalog.v02.map {
+      "Mosaic-Paywall-Capabilities": MosaicCapabilityCatalog.v03.map {
         "\($0.rawValue)@\(mosaicProtocolVersion)"
       }.joined(separator: ","),
     ]
@@ -824,7 +824,7 @@ private enum MosaicPackagedConfigurationRelease {
       let url = MosaicResourceBundle.bundle.url(
         forResource: "complete-paywall",
         withExtension: "json",
-        subdirectory: "v0.2"
+        subdirectory: "v0.3"
       )
         ?? MosaicResourceBundle.bundle.url(
           forResource: "complete-paywall",

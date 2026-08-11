@@ -24,14 +24,18 @@ active entitlement states.
 
 The app includes the SDK module from `sdk/android`. During every build that
 module generates `build/generated/mosaic/canonical-assets/mosaic/complete-paywall.json`
-from `protocol/fixtures/v0.2/complete-paywall.json`; there is no committed
+from `protocol/fixtures/v0.3/complete-paywall.json`; there is no committed
 Android fixture copy. Android's resource merger then packages that generated
 asset into the example APK.
 
-Until the first valid live revision arrives, the canonical Protocol 0.2
+Until the first valid live revision arrives, the canonical Protocol 0.3
 fixture is the bundled fallback, including its three structurally authored
 Product Cards, nested and logical-overlay Product Badges, and horizontal
-Product Selector. It also demonstrates native design-system gradients and
+Product Selector. It also exercises the four components Protocol 0.3 adds: a
+three-tab Tabs whose authored `initialTabId` is not its first entry, a Text
+conditioned on that tab selection, Timelines with all three marker arms and
+with none at all, Awards with an image emblem, an icon emblem, and no emblem,
+and Social Proof with half-step, whole-step, and absent ratings. It also demonstrates native design-system gradients and
 shadows, fixed/fit/fill sizing, and a button-driven Material 3 details sheet.
 Bundled video intentionally has no example resolver, so its declared fallback
 is visible and the recoverable media diagnostic can be inspected. A stale,
@@ -108,9 +112,12 @@ adb shell am start -n dev.mosaic.example/.MainActivity \
 Omit `mosaic.sdk.endpoint` to use Mosaic's hosted API. A Delivery v3 release can
 assign and present an Experiment through the same `mosaic.placement` extra; no
 Experiment-specific application code or Paywall ID is required. Google Play remains optional.
-Hosted analytics is disabled by default; pass
-`--ez mosaic.analytics.enabled true` only after an owner enables analytics for
-the Environment. The on-screen status reports persistent queue depth. The
+Hosted analytics is enabled by default, matching the SDK default; pass
+`--ez mosaic.analytics.enabled false` to demonstrate the opt-out path. The
+Environment-level analytics setting in Mosaic settings still gates ingestion
+server-side whatever the build passes, and hosts remain responsible for the
+end-user consent requirements of the jurisdictions they ship in. The on-screen
+status reports persistent queue depth. The
 optional Transaction Observation handoff is likewise off unless
 `--ez mosaic.observations.enabled true` is passed.
 

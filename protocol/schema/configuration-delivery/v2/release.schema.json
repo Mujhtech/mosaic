@@ -185,14 +185,14 @@
       ],
       "properties": {
         "version": {
-          "const": "0.2"
+          "const": "0.3"
         },
         "requiredCapabilities": {
           "type": "array",
           "maxItems": 128,
           "uniqueItems": true,
           "items": {
-            "$ref": "urn:mosaic:protocol:schema:v0.2:paywall#/$defs/requiredCapability"
+            "$ref": "urn:mosaic:protocol:schema:v0.3:paywall#/$defs/requiredCapability"
           }
         }
       }

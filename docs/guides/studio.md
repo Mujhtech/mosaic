@@ -50,7 +50,7 @@ connected catalog.
 
 ## Validation
 
-The Validation panel checks the document against the canonical Protocol 0.2
+The Validation panel checks the document against the canonical Protocol 0.3
 schema continuously and lists issues; clicking an issue selects the offending
 component. A valid document shows "ready to send to native previews or
 export". Hosted publishing runs the same validation server-side.
@@ -58,13 +58,13 @@ export". Hosted publishing runs the same validation server-side.
 ## Preview on devices
 
 Local Studio streams the document to the example apps over the Local Preview
-0.2 relay (`ws://127.0.0.1:4317/preview`, subprotocol
-`mosaic.local-preview.v0.2`). Each example app's README documents how to
-connect. See [docs/protocol/local-preview-v0.2.md](../protocol/local-preview-v0.2.md).
+0.3 relay (`ws://127.0.0.1:4317/preview`, subprotocol
+`mosaic.local-preview.v0.3`). Each example app's README documents how to
+connect. See [docs/protocol/local-preview-v0.3.md](../protocol/local-preview-v0.3.md).
 
 ## Export and import
 
-The Export button downloads the Paywall as raw Protocol 0.2 JSON
+The Export button downloads the Paywall as raw Protocol 0.3 JSON
 (`<id>.mosaic.json`). Import accepts the same format. Exports are exact-version
 documents; clients accept only the current protocol version. Local autosave
 uses a separate local-project envelope in browser storage and is not the

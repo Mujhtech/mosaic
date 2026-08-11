@@ -8,8 +8,19 @@ data class MosaicConfiguration(
     val endpoint: URI? = null,
     val applicationVersion: String? = null,
     val applicationId: String? = null,
-    /** Must mirror the accepted Environment setting; false is the privacy-safe default. */
-    val analyticsCollectionEnabled: Boolean = false,
+    /**
+     * Hosted analytics collection. True is the default: a host that does nothing gets the
+     * Placement, Paywall, and commerce analytics Mosaic is built around. Hosts opt **out** with
+     * `analyticsCollectionEnabled = false`, which stops new collection and clears the unsent queue.
+     *
+     * This flag is a client-side switch, not an authorization. The Environment-level analytics
+     * setting in Mosaic settings still gates ingestion server-side, so an owner can disable
+     * collection for an Environment regardless of what any shipped build passes here.
+     *
+     * Hosts remain responsible for satisfying the end-user consent requirements of the
+     * jurisdictions they ship in, and should pass `false` until any required consent is granted.
+     */
+    val analyticsCollectionEnabled: Boolean = true,
     /**
      * Opt in to the Transaction Observation handoff: after a purchase is finalized locally, Mosaic
      * reports a bounded, irreversible provider reference so server-side validation can start sooner.
@@ -67,14 +78,28 @@ class Mosaic private constructor(
         bundledFallback: MosaicPaywallDocumentSource? = MosaicCanonicalBundleSource(context),
         diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
     ): MosaicHostedConfigurationClient {
+        // An unknowable application version stays absent. Substituting "0" would be a claim, not a
+        // default: `application.version` targeting Rules would compare against a real version and
+        // match every "less than" Rule, and the authority handshake would advertise v0 to the
+        // server. Absent instead makes version conditions evaluate UNKNOWN through the three-valued
+        // evaluator, and leaves the authority context unbuildable, which reports authority unknown.
         val detectedAppVersion = configuration.applicationVersion ?: runCatching {
             context.applicationContext.packageManager
                 .getPackageInfo(context.applicationContext.packageName, 0).versionName
-        }.getOrNull()?.takeIf { Regex("^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$").matches(it) } ?: "0"
+        }.getOrNull()?.takeIf { Regex("^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$").matches(it) }
+        if (detectedAppVersion == null) {
+            diagnostics.record(
+                MosaicDiagnostic(
+                    MosaicDiagnosticCode.CONFIGURATION_APPLICATION_VERSION_UNAVAILABLE,
+                    "The application version is unknown; version targeting and authority support are unknown.",
+                ),
+            )
+        }
         val runtimeConfiguration = configuration.copy(applicationVersion = detectedAppVersion)
         val namespace = mosaicConfigurationCacheNamespace(runtimeConfiguration)
         val identityStore = MosaicIdentityStore(context, namespace)
         val experimentStore = MosaicExperimentAssignmentStoreRegistry.store(context, namespace)
+            .also { it.diagnostics = diagnostics }
         val analytics = (context.applicationContext as? android.app.Application)?.let { application ->
             MosaicAnalyticsRuntimeRegistry.runtime(application, namespace, runtimeConfiguration, identityStore)
         }
@@ -115,7 +140,11 @@ class Mosaic private constructor(
                     val release = clientReference.get()?.acceptedConfiguration?.release
                     val projectId = release?.projectId
                     val applicationId = runtimeConfiguration.applicationId
-                    if (release == null || projectId == null || applicationId == null) {
+                    // Without a real application version the minimum-support handshake cannot be
+                    // answered honestly, so no context is built and authority stays unknown.
+                    if (release == null || projectId == null || applicationId == null ||
+                        detectedAppVersion == null
+                    ) {
                         null
                     } else {
                         MosaicCustomerAuthorityRequestContext(
@@ -184,7 +213,8 @@ class Mosaic private constructor(
             endpoint: URI? = null,
             applicationVersion: String? = null,
             applicationId: String? = null,
-            analyticsCollectionEnabled: Boolean = false,
+            /** On by default; pass `false` to opt out. See [MosaicConfiguration.analyticsCollectionEnabled]. */
+            analyticsCollectionEnabled: Boolean = true,
             transactionObservationEnabled: Boolean = false,
             customerAccessTokenProvider: MosaicCustomerAccessTokenProvider? = null,
         ): Mosaic = Mosaic(

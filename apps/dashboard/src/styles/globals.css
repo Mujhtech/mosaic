@@ -5,6 +5,40 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/**
+ * Chart series colours.
+ *
+ * Two slots, because two count series is the most any Mosaic plot draws at
+ * once. Each mode's steps were validated against that mode's card surface for
+ * lightness band, chroma, protan/deutan separation and contrast — the dark
+ * values are the same two hues re-stepped for the dark surface, not an
+ * automatic inversion.
+ */
+:root {
+  --mosaic-chart-series-1: #2a78d6;
+  --mosaic-chart-series-2: #eb6834;
+}
+
+.dark {
+  --mosaic-chart-series-1: #3987e5;
+  --mosaic-chart-series-2: #d95926;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mosaic-chart-reveal {
+    animation: mosaic-chart-reveal 520ms ease-out both;
+  }
+}
+
+@keyframes mosaic-chart-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
 @theme inline {
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);

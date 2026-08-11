@@ -96,21 +96,56 @@ extension on _MosaicPaywallState {
     for (final selector
         in widget.document.nodes.whereType<MosaicProductSelectorComponent>()) {
       final availableOptions = _availableOptions(selector);
-      final configuredInitial = selector.cards.isEmpty
-          ? selector.initiallySelectedProductReferenceId
-          : selector.initialProductCardId;
+      final configuredInitial = selector.initialProductCardId;
       final candidate = _selectedProductCardIds.containsKey(selector.id)
           ? _selectedProductCardIds[selector.id]
           : configuredInitial;
+      final retained =
+          availableOptions.any((option) => option.selectionId == candidate);
       final selection =
-          availableOptions.any((option) => option.selectionId == candidate)
-              ? candidate
-              : availableOptions.firstOrNull?.selectionId;
+          retained ? candidate : availableOptions.firstOrNull?.selectionId;
       _selectedProductCardIds[selector.id] = selection;
+      // The Protocol sanctions the substitution itself — a Product Selector's
+      // `unavailableFallback.selection` is `firstAvailable` — so the first
+      // available option is the correct choice. It is still not what the
+      // author (or the customer) picked, and the `product_selected` payload's
+      // `source` enum is Protocol-owned and admits only `default` and `user`,
+      // so there is no wire value that can say "substituted". Reporting one of
+      // the two it does admit would misattribute the selection, so the
+      // substitution is surfaced as an SDK diagnostic instead. See the open
+      // Protocol decision on `product_selected.source`.
+      if (candidate != null && !retained && selection != null) {
+        _notifySubstitutedSelection(selector, replaced: candidate);
+      }
       if (selection != null) {
         _notifiedUnavailableSelectors.remove(selector.id);
       }
     }
+  }
+
+  /// Reports, once per Product Selector, that the authored or current selection
+  /// was unavailable and the first available option took its place.
+  ///
+  /// The code matches the Swift SDK's `PaywallState` so one diagnostic name
+  /// means one thing on every platform.
+  void _notifySubstitutedSelection(
+    MosaicProductSelectorComponent selector, {
+    required String replaced,
+  }) {
+    if (!_notifiedSubstitutedSelections.add(selector.id)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onDiagnostic?.call(
+        MosaicDiagnostic(
+          code: 'product_selection_default_substituted',
+          message: 'Product Selector ${selector.id} could not keep selection '
+              '$replaced, so the first available option was selected. The '
+              'product_selected event still reports source "default" because '
+              'that field admits no substituted value.',
+          severity: MosaicDiagnosticSeverity.warning,
+        ),
+      );
+    });
   }
 
   void _notifyUnavailableSelections() {
@@ -125,21 +160,6 @@ extension on _MosaicPaywallState {
   List<_AvailableProductOption> _availableOptions(
     MosaicProductSelectorComponent selector,
   ) {
-    if (selector.cards.isEmpty) {
-      return <_AvailableProductOption>[
-        for (final referenceId in selector.productReferenceIds)
-          if (widget.document.productReference(referenceId)
-              case final reference?)
-            if (_availableProducts[reference.productId] case final product?)
-              if (_hasLocalizedPrice(product))
-                (
-                  selectionId: reference.id,
-                  card: null,
-                  reference: reference,
-                  product: product,
-                ),
-      ];
-    }
     return <_AvailableProductOption>[
       for (final card in selector.cards)
         if (widget.document.productReference(card.productReferenceId)
@@ -217,12 +237,10 @@ extension on _MosaicPaywallState {
     );
     _notifyProductUnavailable(
       selector.id,
-      referenceId: selector.cards.isEmpty
-          ? selector.initiallySelectedProductReferenceId
-          : selector.cards
-              .where((card) => card.id == selector.initialProductCardId)
-              .firstOrNull
-              ?.productReferenceId,
+      referenceId: selector.cards
+          .where((card) => card.id == selector.initialProductCardId)
+          .firstOrNull
+          ?.productReferenceId,
       reportPresentationResult: false,
     );
   }
@@ -315,12 +333,10 @@ extension on _MosaicPaywallState {
     if (selectedOption == null) {
       _notifyProductUnavailable(
         selectorId,
-        referenceId: selector.cards.isEmpty
-            ? selector.initiallySelectedProductReferenceId
-            : selector.cards
-                .where((card) => card.id == selector.initialProductCardId)
-                .firstOrNull
-                ?.productReferenceId,
+        referenceId: selector.cards
+            .where((card) => card.id == selector.initialProductCardId)
+            .firstOrNull
+            ?.productReferenceId,
       );
       return;
     }

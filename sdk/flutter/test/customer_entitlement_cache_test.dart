@@ -63,11 +63,15 @@ void main() {
     Uri.parse('https://api.mosaic.test'),
     'public_key',
     'user-a',
+    'app_example',
+    'ios',
   );
   final namespaceB = mosaicCustomerEntitlementCacheNamespace(
     Uri.parse('https://api.mosaic.test'),
     'public_key',
     'user-b',
+    'app_example',
+    'ios',
   );
 
   test('a namespace is per customer, not per environment alone', () {
@@ -80,9 +84,34 @@ void main() {
         Uri.parse('https://api.mosaic.test/'),
         'public_key',
         'user-a',
+        'app_example',
+        'ios',
       ),
       namespaceA,
       reason: 'A trailing slash is not a different Environment.',
+    );
+    // Application and Store Platform scope the authority, so two installs that
+    // differ only there must not share a file. There is no default that could
+    // collapse them.
+    expect(
+      mosaicCustomerEntitlementCacheNamespace(
+        Uri.parse('https://api.mosaic.test'),
+        'public_key',
+        'user-a',
+        'app_other',
+        'ios',
+      ),
+      isNot(namespaceA),
+    );
+    expect(
+      mosaicCustomerEntitlementCacheNamespace(
+        Uri.parse('https://api.mosaic.test'),
+        'public_key',
+        'user-a',
+        'app_example',
+        'android',
+      ),
+      isNot(namespaceA),
     );
   });
 

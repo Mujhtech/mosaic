@@ -31,6 +31,20 @@ export const analyticsKeys = {
       funnel,
       filterKey(filters),
     ] as const,
+  series: (
+    scope: AnalyticsScope,
+    metricIds: readonly string[],
+    filters: AnalyticsFilters,
+    days: number
+  ) =>
+    [
+      ...analyticsKeys.all,
+      ...scopeKey(scope),
+      "series",
+      [...metricIds].join(","),
+      days,
+      filterKey(filters),
+    ] as const,
   comparison: (scope: AnalyticsScope, filters: AnalyticsFilters) =>
     [
       ...analyticsKeys.all,
@@ -82,6 +96,33 @@ export function funnelQueryOptions(
   return queryOptions({
     queryKey: [...analyticsKeys.funnel(scope, funnel, filters), adapter],
     queryFn: ({ signal }) => adapter.getFunnel(scope, funnel, filters, signal),
+  });
+}
+
+/**
+ * The daily series behind a trend chart, for one metric set and window.
+ *
+ * Every filter is part of the key: a platform-filtered series is a different
+ * answer, not the same answer redrawn, and the 422 a filter can provoke belongs
+ * to that combination alone. Completed days do not change, so a minute of
+ * staleness costs nothing while still refreshing today's accruing point often
+ * enough to stay honest.
+ */
+export function seriesQueryOptions(
+  scope: AnalyticsScope,
+  metricIds: readonly string[],
+  filters: AnalyticsFilters,
+  days: number,
+  adapter: AnalyticsAdapter
+) {
+  return queryOptions({
+    queryKey: [
+      ...analyticsKeys.series(scope, metricIds, filters, days),
+      adapter,
+    ],
+    queryFn: ({ signal }) =>
+      adapter.getSeries(scope, metricIds, filters, days, signal),
+    staleTime: 60_000,
   });
 }
 

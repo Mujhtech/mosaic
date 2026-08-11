@@ -297,9 +297,19 @@ func (s *Service) buildCommerceConfiguration(tx Transaction, release Release, en
 		if !ok {
 			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
 		}
+		// The adapter kind is derived from the connection's provider, never from
+		// the mere presence of offering and package identifiers. Commerce
+		// Configuration v2 rejects a revenueCatPackage mapping unless the active
+		// provider identity is revenuecat
+		// (protocol/tools/commerce-configuration-validation-v2.mjs:393-396), and
+		// offering/package columns are no longer RevenueCat's alone: an App
+		// Store Connect import stores an Apple subscription group there as
+		// provenance. Selecting the kind by shape would let such a provider
+		// silently emit a schema-invalid mapping.
 		adapter := commerceAdapterMapping{Kind: "directProduct"}
 		if mapping.ProviderPackageIdentifier != "" || mapping.ProviderOfferingIdentifier != "" {
-			if mapping.ProviderPackageIdentifier == "" || mapping.ProviderOfferingIdentifier == "" {
+			if connection.Provider != "revenuecat" ||
+				mapping.ProviderPackageIdentifier == "" || mapping.ProviderOfferingIdentifier == "" {
 				return CommerceConfigurationSnapshot{}, ErrProviderReadiness
 			}
 			adapter = commerceAdapterMapping{
@@ -407,6 +417,65 @@ func nativeObservationEnvironment(storeContext string) string {
 	}
 }
 
+// importedNativeProvider is the server-connected provider whose imported
+// mappings also describe a native store catalog. App Store Connect reads
+// Apple's catalog; purchases still run through the native App Store
+// activation, so its mappings feed the native delivery path.
+const importedNativeProvider = "app_store_connect"
+
+// nativeCommerceMappings reduces the mapping rows that can back one native
+// store activation to exactly one row per Product, in the shape the native
+// builder emits.
+//
+// Two provenances can describe the same iOS Product. A native app_store
+// mapping carries the StoreKit identifier an operator typed. An
+// app_store_connect mapping was imported from Apple, records Apple's opaque
+// resource ID in provider_product_identifier and the purchasable App Store
+// product ID in expected_store_product_id, and is refreshed by the
+// synchronization worker.
+//
+// Precedence: the imported mapping wins. It is provider-verified and kept
+// fresh, while the hand-created mapping is an unverified transcription that
+// nothing re-checks against Apple. Ties inside one provenance are broken by
+// the caller's ordering (product_id, id), so the winner is deterministic.
+//
+// Offering and package identifiers on an imported mapping are subscription
+// group provenance, not purchase selectors, and are dropped here. Together
+// with the explicit provider check in the server-connected branch this makes
+// it impossible to derive a revenueCatPackage adapter from App Store Connect
+// data, which Commerce Configuration v2 would reject
+// (protocol/tools/commerce-configuration-validation-v2.mjs:393-396).
+func nativeCommerceMappings(provider string, mappings []CommerceProductMapping) []CommerceProductMapping {
+	result := make([]CommerceProductMapping, 0, len(mappings))
+	positions := make(map[string]int, len(mappings))
+	for _, mapping := range mappings {
+		imported := provider == "app_store" && mapping.Provider == importedNativeProvider
+		if imported {
+			if mapping.ExpectedStoreProductID == "" {
+				// StoreKit buys the App Store product ID. An import that never
+				// recorded one cannot serve a purchase, so it must not displace
+				// a native mapping that can.
+				continue
+			}
+			mapping.ProviderProductIdentifier = mapping.ExpectedStoreProductID
+			mapping.ProviderPackageIdentifier, mapping.ProviderOfferingIdentifier = "", ""
+			mapping.ProviderBasePlanIdentifier, mapping.ProviderOfferIdentifier = "", ""
+		} else if mapping.Provider == importedNativeProvider {
+			continue
+		}
+		position, seen := positions[mapping.ProductID]
+		if !seen {
+			positions[mapping.ProductID] = len(result)
+			result = append(result, mapping)
+			continue
+		}
+		if imported && result[position].Provider != importedNativeProvider {
+			result[position] = mapping
+		}
+	}
+	return result
+}
+
 func (s *Service) buildNativeCommerceConfiguration(tx Transaction, release Release, environment Environment, application Application, productIDs []string, now time.Time, assignment ProviderAssignment) (CommerceConfigurationSnapshot, error) {
 	identity, capabilities, recoveryMode, err := nativeProviderIdentity(assignment.Provider)
 	if err != nil {
@@ -418,9 +487,9 @@ func (s *Service) buildNativeCommerceConfiguration(tx Transaction, release Relea
 	}
 	expectedProducts := append([]string(nil), productIDs...)
 	sort.Strings(expectedProducts)
-	mappings := tx.ProviderMappingsForNativeCommerce(
+	mappings := nativeCommerceMappings(assignment.Provider, tx.ProviderMappingsForNativeCommerce(
 		assignment.Provider, environment.ID, application.ID, application.Platform, expectedProducts,
-	)
+	))
 	if len(mappings) != len(expectedProducts) {
 		return CommerceConfigurationSnapshot{}, ErrProviderReadiness
 	}

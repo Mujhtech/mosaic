@@ -6,20 +6,20 @@ import 'package:mosaic_sdk/mosaic_sdk.dart';
 import 'support/canonical_fixture.dart';
 
 void main() {
-  test('decodes the repository canonical Protocol 0.2 fixture', () {
+  test('decodes the repository canonical Protocol 0.3 fixture', () {
     final document = decodeCanonicalFixture();
 
-    expect(document.schemaVersion, '0.2');
+    expect(document.schemaVersion, '0.3');
     expect(document.id, 'phase1-complete-paywall');
     expect(document.revision, 1);
     expect(document.layout.id, 'paywall-scroll');
     expect(document.layout.showsIndicators, isTrue);
     expect(document.layout.content.id, 'paywall-content');
-    expect(document.layout.content.spacing, 20);
+    expect(document.layout.content.gap, 20);
     expect(document.layout.content.padding.start, 24);
     expect(
       document.compatibility.requiredCapabilities.map((item) => item.name),
-      unorderedEquals(mosaicProtocolV02Capabilities),
+      unorderedEquals(mosaicProtocolV03Capabilities),
     );
     expect(document.nodes.map((node) => node.type).toSet(), isNotEmpty);
     expect(document.assets.map((asset) => asset.id), contains('hero-image'));
@@ -77,13 +77,13 @@ void main() {
     expect(mosaicFlutterCapabilityReport.sdkVersion, mosaicFlutterSdkVersion);
     expect(
       mosaicFlutterCapabilityReport.supportedSchemaVersions,
-      <String>{'0.2'},
+      <String>{'0.3'},
     );
     expect(
       mosaicFlutterCapabilityReport.supportedCapabilities.keys,
       unorderedEquals(
         <String>{
-          ...mosaicProtocolV02Capabilities,
+          ...mosaicProtocolV03Capabilities,
         },
       ),
     );
@@ -93,6 +93,6 @@ void main() {
   test('canonical source remains direct JSON rather than an SDK copy', () {
     final value = jsonDecode(canonicalFixtureSource()) as Map<String, Object?>;
     expect(value['id'], 'phase1-complete-paywall');
-    expect(canonicalFixtureFile().path, contains('/protocol/fixtures/v0.2/'));
+    expect(canonicalFixtureFile().path, contains('/protocol/fixtures/v0.3/'));
   });
 }

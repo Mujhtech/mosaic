@@ -191,7 +191,15 @@ a retention expiry still contain the encrypted bodies. See
 ## Disabling collection
 
 Set `collectionEnabled: false` for an Environment (same settings surface) to
-stop ingestion for it. Collection is off by default for every Environment.
+stop ingestion for it. Collection is on by default for every Environment;
+disabling is a per-Environment decision an owner or admin makes, and it is
+recorded in the analytics privacy audit trail with the actor who made it.
+
+The SDKs apply their own gate on top of this. Collection is on by default in
+the SDKs as well; a host app can opt out at configure time or at runtime, and
+an Environment with collection enabled still sends nothing from hosts that
+have opted out. Host apps remain responsible for any end-user consent their
+jurisdictions require.
 
 ## Backup implications
 

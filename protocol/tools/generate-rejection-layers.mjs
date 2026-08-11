@@ -56,7 +56,7 @@ function pureSchemaValidator(target, supporting = []) {
   return ajv.compile(schemaAt(target));
 }
 
-const PAYWALL = "schema/v0.2/paywall.schema.json";
+const PAYWALL = "schema/v0.3/paywall.schema.json";
 const DECISION = "schema/placement-decision/v1/decision.schema.json";
 const EXPERIMENT = "schema/experiment-assignment/v1/assignment.schema.json";
 const DELIVERY_V1 = [
@@ -142,9 +142,14 @@ function unionValidator(schemas) {
  */
 export const rejectionLayerTargets = Object.freeze([
   {
-    contract: "Paywall Protocol 0.2",
-    directory: "fixtures/v0.2/invalid",
+    contract: "Paywall Protocol 0.3",
+    directory: "fixtures/v0.3/invalid",
     validator: () => pureSchemaValidator(PAYWALL),
+    // 9 carried forward from 0.2 plus one per rejection 0.3 introduces:
+    // tab-visibility that names no such tab, a timeline that styles a marker
+    // no entry uses, and a rating above what its own scale can express. Raise
+    // this when a corpus grows; never lower it to make a check pass.
+    minimumCases: 12,
   },
   {
     contract: "Configuration Delivery v1",
@@ -292,6 +297,20 @@ export function validateRejectionLayers() {
   const registered = new Set(
     rejectionLayerTargets.map((target) => target.directory),
   );
+  // A corpus that has silently emptied still reconciles perfectly against a
+  // recorded map of zero fixtures, and reports success over nothing. Every
+  // corpus therefore states a floor, and an empty directory fails outright even
+  // when no floor was declared.
+  for (const target of rejectionLayerTargets) {
+    const observed = fixtureNames(target.directory).length;
+    const floor = target.minimumCases ?? 1;
+    if (observed < floor) {
+      errors.push(
+        `${target.directory} holds ${observed} invalid fixtures but ` +
+          `${target.contract} declares a floor of ${floor}`,
+      );
+    }
+  }
   for (const directory of discoverInvalidDirectories()) {
     if (!registered.has(directory)) {
       errors.push(

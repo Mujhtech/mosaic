@@ -125,6 +125,7 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
 
   String _customerBinding = '';
   String? _namespace;
+  bool _reportedUnscopedCache = false;
   MosaicCustomerEntitlementCacheRecord? _record;
   MosaicCustomerEntitlementSnapshot? _snapshot;
   MosaicCustomerAuthority? _authority;
@@ -244,13 +245,7 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
     _authority = null;
     _minimumSupport = null;
     _authorityUnavailable = true;
-    _namespace = mosaicCustomerEntitlementCacheNamespace(
-      baseUrl,
-      publicSdkKey,
-      binding,
-      applicationId,
-      platform?.wireValue,
-    );
+    _namespace = _cacheNamespaceFor(binding);
     if (hadState) _emitCleared('entitlements.identity.changed');
     await _forgetOtherCustomers(previousNamespace);
     await load();
@@ -271,17 +266,38 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
     _authority = null;
     _minimumSupport = null;
     _authorityUnavailable = true;
-    _namespace = mosaicCustomerEntitlementCacheNamespace(
-      baseUrl,
-      publicSdkKey,
-      '',
-      applicationId,
-      platform?.wireValue,
-    );
+    _namespace = _cacheNamespaceFor('');
     _lastReasonCode = 'entitlements.token.signed_out';
     _lastOutcomeUnavailable = true;
     if (hadState) _emitCleared('entitlements.customer.signed_out');
     await _forgetOtherCustomers(previousNamespace);
+  }
+
+  /// The cache namespace for one binding, or `null` when the authority scope is
+  /// not fully known.
+  ///
+  /// Application and platform are part of what scopes a snapshot. Folding an
+  /// unknown one into the hash as a shared sentinel would give two
+  /// differently-scoped installs the same file, so an incomplete scope disables
+  /// the cache instead: authoritative reads then degrade to unavailable rather
+  /// than risk reading another scope's access.
+  String? _cacheNamespaceFor(String binding) {
+    final application = applicationId;
+    final store = platform?.wireValue;
+    if (application == null || store == null) {
+      if (!_reportedUnscopedCache) {
+        _reportedUnscopedCache = true;
+        _report(mosaicCustomerEntitlementCacheUnavailableCode, severe: false);
+      }
+      return null;
+    }
+    return mosaicCustomerEntitlementCacheNamespace(
+      baseUrl,
+      publicSdkKey,
+      binding,
+      application,
+      store,
+    );
   }
 
   Future<void> _forgetOtherCustomers(String? previousNamespace) async {
@@ -316,13 +332,11 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
 
   Future<void> _performLoad() async {
     final generation = _generation;
-    final namespace = _namespace ??= mosaicCustomerEntitlementCacheNamespace(
-      baseUrl,
-      publicSdkKey,
-      _customerBinding,
-      applicationId,
-      platform?.wireValue,
-    );
+    final namespace = _namespace ??= _cacheNamespaceFor(_customerBinding);
+    if (namespace == null) {
+      _load = null;
+      return;
+    }
     try {
       final pendingInvalidation = _pendingPolicyInvalidationNamespace;
       if (pendingInvalidation != null) {

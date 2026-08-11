@@ -3,6 +3,7 @@ package cloudworkspace
 import (
 	"context"
 	"encoding/hex"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/nativecommerce"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreconnect"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providerreadiness"
 )
@@ -117,7 +119,14 @@ func validProviderObservationMetadata(metadata ProviderMappingObservationMetadat
 
 func supportedProviderIntegration(provider ProviderKind, mode ProviderIntegrationMode) bool {
 	return provider == ProviderRevenueCat && mode == ProviderServerConnected ||
+		provider == ProviderAppStoreConnect && mode == ProviderServerConnected ||
 		provider == ProviderCustom && mode == ProviderSDKOnly
+}
+
+// serverConnectedProvider reports whether provider is one Mosaic reads a
+// catalog from over the network.
+func serverConnectedProvider(provider ProviderKind) bool {
+	return provider == ProviderRevenueCat || provider == ProviderAppStoreConnect
 }
 
 func validProviderMappingTarget(provider ProviderKind, input CreateProviderMappingDraftInput) bool {
@@ -140,6 +149,16 @@ func validProviderMappingTarget(provider ProviderKind, input CreateProviderMappi
 	}
 	if provider == ProviderRevenueCat {
 		return true
+	}
+	if provider == ProviderAppStoreConnect {
+		// Apple has no base plan or offer resource, and the expected store
+		// identifier is the App Store product ID, which Apple restricts to
+		// alphanumerics, periods, and underscores. The product identifier
+		// itself is Apple's opaque resource ID and stays under the shared
+		// length and non-blank rules above.
+		return input.ProviderBasePlanIdentifier == "" && input.ProviderOfferIdentifier == "" &&
+			(input.ExpectedStoreProductID == "" ||
+				appleProductIdentifierPattern.MatchString(input.ExpectedStoreProductID))
 	}
 	if hasPackage || input.ExpectedStoreProductID != "" {
 		return false
@@ -184,13 +203,43 @@ func publicProviderCredential(record ProviderCredentialRecord) *ProviderCredenti
 	}
 }
 
+// appleProductIdentifierPattern is the character set Apple allows in an App
+// Store product ID. It is shared by the native app_store mapping rules and the
+// App Store Connect import.
+var appleProductIdentifierPattern = regexp.MustCompile(`^[A-Za-z0-9._]+$`)
+
 func validRevenueCatCredential(value string) bool {
 	return strings.HasPrefix(value, "sk_") && len(value) >= 6 && len(value) <= 4096 &&
 		strings.TrimSpace(value) == value && !strings.ContainsAny(value, "\r\n\t ")
 }
 
-func (s *Service) encryptProviderCredential(project Project, connectionID string, plaintext string) (ProviderCredentialRecord, error) {
-	if s.credentialCipher == nil || !validRevenueCatCredential(plaintext) {
+// validAppStoreConnectCredential accepts the JSON credential document Mosaic
+// seals for an App Store Connect connection. The document is validated here so
+// an unusable key is refused before it is encrypted and stored, rather than at
+// the first background sync hours later.
+func validAppStoreConnectCredential(value string) bool {
+	if len(value) == 0 || len(value) > 4096 {
+		return false
+	}
+	_, err := appstoreconnect.ParseCredential([]byte(value))
+	return err == nil
+}
+
+// validProviderCredential applies the shape rules of one provider. A provider
+// with no credential shape of its own is refused rather than accepted blindly.
+func validProviderCredential(provider ProviderKind, value string) bool {
+	switch provider {
+	case ProviderRevenueCat:
+		return validRevenueCatCredential(value)
+	case ProviderAppStoreConnect:
+		return validAppStoreConnectCredential(value)
+	default:
+		return false
+	}
+}
+
+func (s *Service) encryptProviderCredential(project Project, connectionID string, provider ProviderKind, plaintext string) (ProviderCredentialRecord, error) {
+	if s.credentialCipher == nil || !validProviderCredential(provider, plaintext) {
 		return ProviderCredentialRecord{}, ErrProviderCredentialInvalid
 	}
 	envelope, err := s.credentialCipher.Encrypt([]byte(plaintext), providercredential.Scope{
@@ -247,14 +296,25 @@ func (s *Service) CreateProviderConnection(ctx context.Context, actor Actor, pro
 		if !supportedProviderIntegration(input.Provider, input.IntegrationMode) {
 			return ErrProviderUnsupported
 		}
-		if input.Provider == ProviderRevenueCat &&
-			(strings.TrimSpace(input.ExternalProjectID) == "" ||
+		switch input.Provider {
+		case ProviderRevenueCat:
+			// RevenueCat scopes every read to one Project resource.
+			if strings.TrimSpace(input.ExternalProjectID) == "" ||
 				strings.TrimSpace(input.ExternalProjectID) != input.ExternalProjectID ||
-				len(input.ExternalProjectID) > 255) {
-			return ErrProviderProjectInvalid
+				len(input.ExternalProjectID) > 255 {
+				return ErrProviderProjectInvalid
+			}
+		case ProviderAppStoreConnect:
+			// An App Store Connect API key is issued per team and already names
+			// every app it can read. There is no second project identifier to
+			// supply, so accepting one would persist configuration nothing
+			// reads and imply a scope the credential does not have.
+			if input.ExternalProjectID != "" {
+				return ErrProviderProjectInvalid
+			}
 		}
-		if input.Provider == ProviderRevenueCat && s.providerCatalog != nil {
-			if input.Credential == "" {
+		if serverConnectedProvider(input.Provider) && s.hasCatalogClient(input.Provider) {
+			if input.Credential == "" || !validProviderCredential(input.Provider, input.Credential) {
 				return ErrProviderCredentialInvalid
 			}
 		} else if input.Credential != "" {
@@ -288,8 +348,8 @@ func (s *Service) CreateProviderConnection(ctx context.Context, actor Actor, pro
 		}
 		tx.SaveProviderConnection(result)
 		tx.ReplaceProviderConnectionScopes(result.ID, projectID, environmentIDs, applicationIDs, now)
-		if input.Provider == ProviderRevenueCat && s.providerCatalog != nil {
-			credential, err := s.encryptProviderCredential(project, result.ID, input.Credential)
+		if serverConnectedProvider(input.Provider) && s.hasCatalogClient(input.Provider) {
+			credential, err := s.encryptProviderCredential(project, result.ID, input.Provider, input.Credential)
 			if err != nil {
 				return err
 			}
@@ -477,6 +537,14 @@ func (s *Service) SetActiveProviderAssignment(ctx context.Context, actor Actor, 
 				return ErrScopeMismatch
 			}
 			provider = connection.Provider
+			// App Store Connect is read-only catalog access. It has no
+			// purchase, restore, or entitlement-lookup surface, so activating
+			// it as the provider that serves purchases can never publish.
+			// Refuse here, with the remedy, instead of letting the operator
+			// discover it at the next release.
+			if provider == ProviderAppStoreConnect {
+				return ErrProviderNativeActivationRequired
+			}
 			if connection.Status == ProviderConnectionRevoked {
 				return ErrConnectionRevoked
 			}
@@ -888,6 +956,41 @@ func readinessIssue(code ProviderErrorCode, resourceType, resourceID string, rec
 	return ProviderReadinessIssue{Code: code, ResourceType: resourceType, ResourceID: resourceID, RecoveryAction: recoveryAction}
 }
 
+// metadataSnapshotIssue grades the provider-verified metadata behind one
+// mapping. Expired metadata always blocks; merely stale metadata blocks only
+// in a production Environment, where shipping a Product whose price or
+// availability may have moved is a customer-visible risk.
+//
+// It is shared by the server-connected branch and by App Store Connect
+// mappings serving a native activation, so the same staleness means the same
+// thing whichever activation delivers the Product.
+func metadataSnapshotIssue(reader Reader, mapping ProviderProductMapping, evaluatedAt time.Time, mode EnvironmentMode) (ProviderReadinessIssue, bool, bool) {
+	expired := false
+	stale := mapping.SyncState != ProviderSyncCurrent || mapping.CurrentSnapshotID == ""
+	if !stale {
+		snapshot, ok := reader.ProviderMetadataSnapshot(mapping.CurrentSnapshotID)
+		switch {
+		case !ok:
+			stale = true
+		case snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(evaluatedAt):
+			expired = true
+		case snapshot.StaleAt.IsZero() || !snapshot.StaleAt.After(evaluatedAt):
+			stale = true
+		}
+	}
+	switch {
+	case expired:
+		return readinessIssue(
+			ProviderErrorProductUnavailable, "provider_mapping", mapping.ID, "syncProviderMetadata",
+		), true, false
+	case stale:
+		return readinessIssue(
+			ProviderErrorMetadataStale, "provider_mapping", mapping.ID, "syncProviderMetadata",
+		), mode == EnvironmentProduction, false
+	}
+	return ProviderReadinessIssue{}, false, true
+}
+
 func (s *Service) ProviderReadiness(ctx context.Context, actor Actor, productID, environmentID, applicationID string) (ProviderReadiness, error) {
 	ctx, span := s.operation(ctx, "provider_readiness.evaluate", actor,
 		attribute.String("mosaic.product.id", productID),
@@ -946,13 +1049,29 @@ func (s *Service) ProviderReadiness(ctx context.Context, actor Actor, productID,
 				result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorScopeMismatch, "provider_assignment", environment.ID+":"+application.ID, "selectCompatibleProvider"))
 				return nil
 			}
+			// A native activation is served by two mapping provenances. An
+			// App Store Connect import wins over a hand-created app_store
+			// mapping for the same Product: it is provider-verified and kept
+			// fresh by synchronization. hostedpublishing applies the same rule
+			// when it builds the Commerce Configuration, so readiness and
+			// delivery agree on which mapping ships.
 			activeMappings := make([]ProviderProductMapping, 0, 1)
+			importedMappings := make([]ProviderProductMapping, 0, 1)
 			for _, mapping := range reader.ProviderMappings(product.ID) {
-				if mapping.ConnectionID == "" && mapping.Provider == assignment.Provider &&
-					mapping.EnvironmentID == environment.ID && mapping.ApplicationID == application.ID &&
-					mapping.Platform == application.Platform && mapping.Status == ProviderMappingActive {
-					activeMappings = append(activeMappings, mapping)
+				if mapping.EnvironmentID != environment.ID || mapping.ApplicationID != application.ID ||
+					mapping.Platform != application.Platform || mapping.Status != ProviderMappingActive {
+					continue
 				}
+				switch {
+				case mapping.ConnectionID == "" && mapping.Provider == assignment.Provider:
+					activeMappings = append(activeMappings, mapping)
+				case mapping.ConnectionID != "" && assignment.Provider == ProviderAppStore &&
+					mapping.Provider == ProviderAppStoreConnect && mapping.ExpectedStoreProductID != "":
+					importedMappings = append(importedMappings, mapping)
+				}
+			}
+			if len(importedMappings) != 0 {
+				activeMappings = importedMappings
 			}
 			switch len(activeMappings) {
 			case 0:
@@ -960,6 +1079,25 @@ func (s *Service) ProviderReadiness(ctx context.Context, actor Actor, productID,
 			case 1:
 				mapping := activeMappings[0]
 				result.MappingID = mapping.ID
+				result.MappingProvider = mapping.Provider
+				if mapping.Provider == ProviderAppStoreConnect {
+					// An imported mapping cannot carry an SDK observation;
+					// observations are refused for connection-backed mappings.
+					// Its metadata snapshot is the equivalent evidence.
+					if issue, blocking, ok := metadataSnapshotIssue(reader, mapping, result.EvaluatedAt, environment.Mode); !ok {
+						if blocking {
+							result.Blockers = append(result.Blockers, issue)
+						} else {
+							result.Warnings = append(result.Warnings, issue)
+						}
+					}
+					if len(result.Blockers) != 0 {
+						result.State = ProviderReadinessAttentionRequired
+					} else {
+						result.State = ProviderReadinessConfigured
+					}
+					return nil
+				}
 				if mapping.Provider == ProviderGooglePlay && product.Type == ProductSubscription && mapping.ProviderBasePlanIdentifier == "" {
 					result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorMappingMissing, "provider_mapping", mapping.ID, "addGoogleBasePlan"))
 				}
@@ -1066,25 +1204,10 @@ func (s *Service) ProviderReadiness(ctx context.Context, actor Actor, productID,
 			if mapping.Availability != ProviderAvailabilityAvailable {
 				result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorProductUnavailable, "provider_mapping", mapping.ID, "reviewProviderProduct"))
 			}
-			metadataStale := false
-			metadataExpired := false
-			if mapping.SyncState != ProviderSyncCurrent || mapping.CurrentSnapshotID == "" {
-				metadataStale = true
-			} else {
-				snapshot, ok := reader.ProviderMetadataSnapshot(mapping.CurrentSnapshotID)
-				if !ok {
-					metadataStale = true
-				} else if snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(result.EvaluatedAt) {
-					metadataExpired = true
-				} else if snapshot.StaleAt.IsZero() || !snapshot.StaleAt.After(result.EvaluatedAt) {
-					metadataStale = true
-				}
-			}
-			if metadataExpired {
-				result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorProductUnavailable, "provider_mapping", mapping.ID, "syncProviderMetadata"))
-			} else if metadataStale {
-				issue := readinessIssue(ProviderErrorMetadataStale, "provider_mapping", mapping.ID, "syncProviderMetadata")
-				if environment.Mode == EnvironmentProduction {
+			if issue, blocking, fresh := metadataSnapshotIssue(
+				reader, mapping, result.EvaluatedAt, environment.Mode,
+			); !fresh {
+				if blocking {
 					result.Blockers = append(result.Blockers, issue)
 				} else {
 					result.Warnings = append(result.Warnings, issue)

@@ -2,11 +2,22 @@ import { describe, expect, it } from "vitest";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { collectEditorValidation } from "@/features/paywall-editor/hooks/use-editor-validation";
 import { validateEditorDocument } from "@/features/paywall-editor/schema/editor-validation";
+import { createEditorStore } from "@/features/paywall-editor/stores/editor-store";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { required } from "@/test/required";
 
 describe("editor validation", () => {
+  it("accepts every editor template with nothing to fix", () => {
+    for (const template of EDITOR_TEMPLATES) {
+      const { issues, contractValid } = collectEditorValidation(
+        template.document
+      );
+      expect(contractValid).toBe(true);
+      expect(issues.filter((issue) => issue.severity !== "info")).toEqual([]);
+    }
+  });
+
   it("reports the exact recursive JSON pointer for a nested component", () => {
     const template = EDITOR_TEMPLATES.find((entry) => entry.id === "focused");
     if (!template) {
@@ -87,19 +98,20 @@ describe("editor validation", () => {
     purchase.direction = "horizontal";
     purchase.sizing = { width: { mode: "fixed", value: 100 }, height: "fit" };
 
-    const warnings = validateEditorDocument(document).filter(
-      (issue) => issue.severity === "warning"
-    );
+    const issues = validateEditorDocument(document);
+    const warnings = issues.filter((issue) => issue.severity === "warning");
     expect(warnings.map((issue) => issue.code)).toEqual(
       expect.arrayContaining([
         "appearance.indistinguishableProductStates",
         "appearance.lowContrast",
         "appearance.lowBoundaryContrast",
-        "appearance.contrastCannotVerify",
         "typography.truncationRisk",
         "layout.horizontalOverflow",
       ])
     );
+    expect(
+      issues.filter((issue) => issue.code === "appearance.contrastCannotVerify")
+    ).toEqual([]);
     expect(warnings).toContainEqual(
       expect.objectContaining({
         componentId: "monthly-card",
@@ -146,6 +158,65 @@ describe("editor validation", () => {
       expect.objectContaining({
         componentId: "headline",
         property: "sizing.width",
+      })
+    );
+  });
+
+  // These four rules reject the whole document atomically in the protocol, so
+  // Studio has to name the specific one rather than let an author publish and
+  // discover the paywall was refused wholesale.
+  it("rejects a tab condition whose target the protocol would refuse", () => {
+    const store = createEditorStore();
+    store.loadTemplate(
+      cloneValue(required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document)
+    );
+    const tabsId = required(store.insertComponent("tabs"), "tabs id");
+    const siblingId = required(store.insertComponent("text"), "sibling id");
+    const tabs = findNode(
+      required(store.getSnapshot().document, "document"),
+      tabsId
+    );
+    if (tabs?.type !== "tabs") {
+      throw new Error("Expected the inserted node to be a Tabs component");
+    }
+    const legalTabId = required(tabs.tabs[0], "tabs.tabs[0]").id;
+
+    store.updateComponent(siblingId, (node) => ({
+      ...node,
+      visibility: { mode: "tab", tabsId, equals: legalTabId },
+    }));
+    expect(
+      validateEditorDocument(
+        required(store.getSnapshot().document, "document")
+      ).filter((issue) => issue.componentId === siblingId)
+    ).toEqual([]);
+
+    store.updateComponent(siblingId, (node) => ({
+      ...node,
+      visibility: { mode: "tab", tabsId, equals: "no-such-tab" },
+    }));
+    expect(
+      validateEditorDocument(required(store.getSnapshot().document, "document"))
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "visibility.invalidTabValue",
+        componentId: siblingId,
+      })
+    );
+
+    // Rule 4: a node inside a panel is already decided by that panel.
+    store.selectComponent(required(tabs.tabs[0], "tabs.tabs[0]").content.id);
+    const insideId = required(store.insertComponent("text"), "inside id");
+    store.updateComponent(insideId, (node) => ({
+      ...node,
+      visibility: { mode: "tab", tabsId, equals: legalTabId },
+    }));
+    expect(
+      validateEditorDocument(required(store.getSnapshot().document, "document"))
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "visibility.invalidTabController",
+        componentId: insideId,
       })
     );
   });

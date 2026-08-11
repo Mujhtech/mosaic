@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ES2020",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false,
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "preserveSymlinks": true,
+    "types": ["@figma/plugin-typings", "node"]
+  },
+  "include": ["src", "scripts", "vitest.config.ts"]
+}

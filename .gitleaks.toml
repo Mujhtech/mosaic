@@ -26,3 +26,14 @@ targetRules = ["generic-api-key"]
 regexes = [
   '''(?i)^(idempotency|correlation|redelivery|fixture|expected|request)[-_][a-z0-9-]+$''',
 ]
+
+# Protocol key identifiers (`mosaic.a11y.rating`, capability and localization
+# names) clear the same entropy bar as soon as documentation mentions them.
+# Anchored to the whole value for the same reason as above: a value has to
+# *be* a dotted mosaic identifier end to end to be exempt.
+[[allowlists]]
+description = "Dotted mosaic protocol identifiers, matched only by the generic entropy rule"
+targetRules = ["generic-api-key"]
+regexes = [
+  '''^mosaic\.[a-z0-9]+(?:[._][a-z0-9]+)+$''',
+]

@@ -2,6 +2,174 @@
 
 ## Unreleased
 
+- Adopt Paywall Protocol `0.3`, which replaces `0.2` outright. There is no `0.2`
+  support, no migration, and no dual-version code: a `0.2` document is an
+  unknown version to this reader and is rejected atomically, resolving through
+  last accepted, then bundled fallback, then configuration unavailable. Every
+  `0.2` artifact is gone from the SDK — the version constants, the `V02`
+  validator symbols and their files, `MosaicCapabilityCatalog.v02`, the bundled
+  `Resources/v0.2` fixture, and the Local Preview subprotocol are all `0.3`.
+- Add the four `0.3` components. **Tabs** renders two through eight labelled
+  panels with one visible at a time, selected from the required authored
+  `initialTabId` rather than from array position, and resolves its Default and
+  Selected control appearance through the neutral `selectionStyles` overlay that
+  `productCardStyles` now aliases. **Timeline** renders two through twelve
+  ordered vertical entries with a required connector and a closed
+  `dot`/`ordinal`/`icon` marker union. **Award** renders a title with an optional
+  subtitle and an always-decorative image or icon emblem. **Social Proof**
+  renders a required quote and attribution with an optional avatar and an
+  integer-only bounded rating whose symbol fills are computed with integer
+  arithmetic, never a rounded fraction.
+- Add tab selection to runtime state and `{ "mode": "tab" }` to `visibility`,
+  with the same remove-from-layout-accessibility-and-focus semantics as a false
+  Switch condition. Visibility evaluation now takes a `MosaicSelectionState` of
+  `{ switches, tabs }` and **throws** when a condition names a controller that
+  state does not carry. Resolving it to "hidden" instead would read back as a
+  component that silently disappears rather than a caller that is told it has a
+  bug.
+- Enforce both directions of the `0.3` co-presence rules rather than only the
+  missing-value direction: Timeline `markerColor`, `markerSize`, and
+  `descriptionTypography` are required when an entry consumes them and rejected
+  when none does, Award `subtitle` and `subtitleTypography` are mutually
+  required, and a Social Proof `value` above `maximum × stepsPerPoint` rejects
+  the document. A style nothing reads is how a stale field survives a redesign.
+- Announce composed accessibility content as separate elements inside a
+  labelled container rather than one joined string. Timeline titles and
+  descriptions, Award titles and subtitles, and Social Proof ratings, quotes,
+  and attributions are each their own element, in the authored order, and the
+  platform supplies the pause. Joining them invented script-specific
+  punctuation. An absent optional segment produces no element rather than an
+  empty one, and the Social Proof avatar, Award emblem, Timeline markers, and
+  Timeline connector are never announced or focusable.
+- Announce a busy Button's progress state in the value slot, from the reserved
+  `mosaic.a11y.in_progress` string, leaving the authored `accessibility.label`
+  as the name in both states. The Button's children and in-progress children are
+  never announced in either state. iOS previously announced no progress state at
+  all for a composable Button, so a screen-reader user had no signal that a
+  purchase or restore was running.
+- Read the invalid-fixture corpus from the canonical directory with a declared
+  case-count floor instead of from a list copied into the test file. The list
+  had drifted to eight of the twelve fixtures, and a loop over a list can report
+  success over cases it never saw. The `rating-announcement` and
+  `accessibility-announcement` corpora are consumed the same way, byte-exact,
+  with their own floors — without them nothing forces this SDK to read the
+  reserved keys instead of composing its own string, and a composed string reads
+  as correct under inspection.
+- Delete the retired Protocol `0.1` node types the branch still carried:
+  `verticalStack`, `purchaseButton`, `restoreButton`, `closeButton`, and
+  `legalText`, their `MosaicLayoutNodeKind` and `MosaicNode` cases, their
+  capability names (`layout.verticalStack`, `component.purchaseButton`,
+  `component.restoreButton`, `component.closeButton`, `component.legalText`),
+  their component models and SwiftUI views, the `MosaicPaywallModel` methods and
+  busy-button state that only they used, the `MosaicVerticalStack` alias, and
+  the `MosaicStack` decoder branch that read a `verticalStack`'s `spacing` and
+  `horizontalAlignment`. The `0.3` schema names none of them in its node union
+  or its capability enum, and the single decode path runs shape validation
+  first, which rejects every one of them as an unsupported component — so no
+  accepted document could contain one. Roughly two dozen exhaustive-switch arms
+  existed only to satisfy the compiler, including two that threw
+  `protocol_0_1_node_in_0_3_document` for a case the reader can never construct.
+
+- Apply the contract's uniform presence rule to every host-supplied targeting
+  source. An unrecognized `context.country` is now present with unknown
+  comparisons instead of absent, so a "no country reported" Rule no longer fires
+  on a device that reported one, and an out-of-set `device.platform` compares
+  unknown instead of false, so `not (platform equals "ios")` no longer matches a
+  platform the Rule was never written for.
+- Canonicalize the authored side of a locale comparison, not only the host side,
+  for `equals`, `not_equals`, `in`, and `not_in`. An operand with no canonical
+  form makes the condition unknown rather than false, and one unusable member
+  makes a whole `in`/`not_in` list unknown even when another member matches.
+- Accept a released Rule whose locale operand has no canonical form. Only a
+  `locale_matches` range is bound by the authored grammar; rejecting the others
+  discarded whole releases the contract considers valid.
+- Treat a host-supplied locale that cannot be normalized as present rather than
+  absent in Placement targeting: `exists` is true, every comparison is unknown,
+  and an authored range that cannot be normalized makes `locale_matches`
+  unknown rather than false. A `does_not_exist` Rule no longer matches users who
+  do have a locale.
+- Cut a locale at the first `@`, `.`, or `#` before canonicalizing, so the ICU
+  keyword, POSIX charset, and Java `Locale.toString` forms (`en_US@rg=gbzzzz`,
+  `en_US.UTF-8`, `en_US_#u-rg-gbzzzz`) all denote `en-US`. Catalog lookup also
+  recovers the leading language subtag when the whole tag cannot be
+  canonicalized; targeting deliberately does not, because recovery there would
+  change which users match a Rule.
+- Omit the analytics context locale entirely when the device reports nothing
+  representable, instead of substituting `en`.
+- Canonicalize every locale through one shared rule, per the Protocol 0.3
+  locale-resolution rulings. Catalog lookup canonicalizes the requested tag
+  before an exact match (`_`→`-`, empty subtags dropped, truncation at the first
+  singleton subtag, lowercase language, title-case script, uppercase alpha-2 or
+  numeric-3 region), and `application.locale` targeting applies the identical
+  rule, so the two subsystems cannot disagree about what "the same locale" is.
+  A host that passes the platform's own identifier (`en_US`, `PT_br`, or
+  `en-US-u-rg-gbzzzz` under a region override) previously matched no catalog key
+  and silently rendered the document's default language; an RTL request in that
+  form also fell through to an LTR default and mirrored the layout. A tag that
+  canonicalizes to nothing contributes no candidate rather than matching
+  anything. `0.3` still defines no language+region reduction: `zh-Hans-CN`
+  reduces to `zh`, never to `zh-CN`.
+- Normalize the device locale to a strict BCP-47 tag before it reaches the
+  analytics event context or the Placement decision context. `Locale.current`
+  reports an ICU identifier, so a region override (`en_US@rg=gbzzzz`) or a
+  non-Gregorian calendar (`zh_Hans_CN@calendar=chinese`) previously produced a
+  context the closed event codec rejects: every event on those devices was
+  dropped as invalid, and `application.locale` rules evaluated to unknown. Both
+  contexts now share one normalization, which drops Unicode extension subtags
+  and falls back to the language subtag rather than emitting a rejected value.
+- Enable analytics collection by default. A hosted client now queues Mosaic's
+  own product events without the host calling `setAnalyticsCollection`, matching
+  the Flutter SDK and the Environment's server-side default. Hosts opt out
+  explicitly with `setAnalyticsCollection(hostEnabled: false)`, whose
+  `environmentEnabled` argument now defaults to `true`. The Environment's
+  server-side collection setting still gates ingestion regardless, and the host
+  application remains responsible for whatever end-user consent its jurisdiction
+  requires. Transaction observations remain opt-in and are unaffected. A queue
+  state persisted by an earlier build keeps the gates it recorded.
+
+- Diagnose every style-resolution failure instead of rendering transparently.
+  Unresolved colour tokens and malformed colour literals now recover by role:
+  content colours fall back to the primary content colour so authored text stays
+  legible, decoration stays transparent, and both record a rendering diagnostic
+  once per subject. One unresolvable gradient stop no longer erases the whole
+  background; the gradient renders with its resolvable stops.
+- Resolve design tokens in legacy Product Cards. They previously rendered
+  through a document-less resolution path, so no authored token could resolve.
+- Distinguish a malformed countdown `endsAt` from a completed countdown. A date
+  outside the canonical protocol form renders nothing and records
+  `countdown_ends_at_invalid` rather than presenting the localized completed
+  text. The renderer now shares the semantic validator's single definition of a
+  parseable `endsAt`, so the two cannot disagree about what a valid countdown
+  is.
+- Reject a document whose `initialScreenId` references no declared screen at
+  decode time, matching the `invalidReference` reader policy, instead of falling
+  back to the first screen.
+- Guard the macOS Carousel page index instead of subscripting it directly.
+- Record `product_selection_default_substituted` when an unavailable authored
+  default product is replaced by the first available option.
+- Record `placement_analytics_metadata_unavailable` when a Placement resolves
+  without analytics metadata and therefore renders untracked, and make the
+  Placement-unavailable placeholder copy host-overridable through
+  `MosaicPlacementUnavailableCopy`.
+- Resolve layout direction through the requested, fallback, and default locale
+  chain and record `localization_direction_unresolved` when it is exhausted,
+  instead of defaulting an RTL document to left to right.
+- Record diagnostics on component-image fallback paths, matching the existing
+  media-background behaviour.
+- Report Placement decision-context provider capabilities from the installed
+  provider's declared Experiment capabilities instead of assuming availability.
+- Classify StoreKit purchase and restore errors into cancelled, pending,
+  product-unavailable, retryable provider-unavailable, and failed, matching the
+  RevenueCat adapter, instead of flattening everything to one non-retryable
+  code.
+- Omit a subscription period whose unit the SDK cannot name in both native-store
+  adapters and record `commerce.unsupportedSubscriptionPeriod`, instead of
+  presenting it as daily. RevenueCat records
+  `commerce.unsupportedIntroductoryOffer` for an unclassifiable offer type.
+- Throw `MosaicStoreKitAcceptanceStoreError.durableStorageUnavailable` rather
+  than storing StoreKit purchase-acceptance state in the purgeable temporary
+  directory.
+
 - Add Authoritative Entitlement v2 support with automatic Application,
   platform, app-version, SDK-version, and capability reporting. The SDK accepts
   server-directed authority epochs before snapshot versions, atomically binds

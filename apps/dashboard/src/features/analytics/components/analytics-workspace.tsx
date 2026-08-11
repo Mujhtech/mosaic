@@ -38,6 +38,7 @@ const tabs: Array<{ surface: AnalyticsSurface; label: string }> = [
 
 export function AnalyticsWorkspace({
   environmentId,
+  environmentKey,
   filters,
   organizationId,
   projectId,
@@ -50,7 +51,21 @@ export function AnalyticsWorkspace({
   const environment = environments.data?.items.find(
     (item) => item.id === environmentId
   );
-  const scope = { environmentId, organizationId, projectId };
+  const scope = { environmentId, environmentKey, organizationId, projectId };
+  // The filter row and the surfaces below it change the same search params, so
+  // a chart that refuses a filter can offer to clear exactly that filter
+  // without owning a second copy of the state.
+  const applyFilters = (next: AnalyticsFilters) =>
+    navigate({
+      params: (prev) => ({
+        ...prev,
+        ...workspaceScopeParams(prev),
+        surface,
+      }),
+      replace: true,
+      search: next,
+      to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface",
+    });
   const state = resolveHostedQueryState({
     emptyDescription: "Choose a valid Environment before inspecting analytics.",
     emptyTitle: "Environment unavailable",
@@ -63,7 +78,7 @@ export function AnalyticsWorkspace({
       environments.refetch();
     },
     permissionDescription: "Project membership is required to read analytics.",
-    scope: { environmentId, organizationId, projectId },
+    scope,
   });
 
   return (
@@ -118,24 +133,11 @@ export function AnalyticsWorkspace({
           </nav>
         </div>
         {surface === "data-privacy" ? null : (
-          <FilterBar
-            filters={filters}
-            onChange={(next) =>
-              navigate({
-                params: (prev) => ({
-                  ...prev,
-                  ...workspaceScopeParams(prev),
-                  surface,
-                }),
-                replace: true,
-                search: next,
-                to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface",
-              })
-            }
-          />
+          <FilterBar filters={filters} onChange={applyFilters} />
         )}
         <AnalyticsSurfaceContent
           filters={filters}
+          onFiltersChange={applyFilters}
           role={role}
           scope={scope}
           surface={surface}
@@ -147,11 +149,13 @@ export function AnalyticsWorkspace({
 
 function AnalyticsSurfaceContent({
   filters,
+  onFiltersChange,
   role,
   scope,
   surface,
 }: {
   filters: AnalyticsFilters;
+  onFiltersChange: (filters: AnalyticsFilters) => void;
   role?: "owner" | "admin" | "member";
   scope: AnalyticsScope;
   surface: AnalyticsSurface;
@@ -161,6 +165,7 @@ function AnalyticsSurfaceContent({
       <OverviewPanel
         adapter={restAnalyticsAdapter}
         filters={filters}
+        onFiltersChange={onFiltersChange}
         scope={scope}
       />
     );
@@ -185,6 +190,7 @@ function AnalyticsSurfaceContent({
             adapter={restAnalyticsAdapter}
             filters={filters}
             funnel="paywalls"
+            onFiltersChange={onFiltersChange}
             scope={scope}
           />
         </WorkflowPanel>
@@ -212,6 +218,7 @@ function AnalyticsSurfaceContent({
             adapter={restAnalyticsAdapter}
             filters={filters}
             funnel="products"
+            onFiltersChange={onFiltersChange}
             scope={scope}
           />
         </WorkflowPanel>
@@ -244,6 +251,7 @@ function AnalyticsSurfaceContent({
           adapter={restAnalyticsAdapter}
           filters={filters}
           funnel="purchases"
+          onFiltersChange={onFiltersChange}
           scope={scope}
         />
       </div>
@@ -254,6 +262,7 @@ function AnalyticsSurfaceContent({
       adapter={restAnalyticsAdapter}
       filters={filters}
       funnel="placements"
+      onFiltersChange={onFiltersChange}
       scope={scope}
     />
   );

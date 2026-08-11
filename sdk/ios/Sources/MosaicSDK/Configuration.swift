@@ -400,7 +400,7 @@ public struct Mosaic: Sendable {
         operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersionString
           .split(separator: " ").first(where: { $0.first?.isNumber == true }).map(String.init),
         applicationVersion: configuration.applicationVersion,
-        applicationLocale: Locale.current.identifier.replacingOccurrences(of: "_", with: "-")
+        applicationLocale: MosaicDeviceLocale.currentTargetingLocale
       )
     if suppliedContext == nil {
       let requirements = await configurationClient.decisionRequirements(placement: placement)
@@ -421,10 +421,13 @@ public struct Mosaic: Sendable {
         context.entitlements = await entitlementDecisionStates(
           for: requirements.entitlementKeys)
       }
-      context.providerCapabilities = [
-        "product_loading": .available, "purchase": .available, "restore": .available,
-        "entitlement_lookup": .available,
-      ]
+      // The adapter is the only thing that knows what it implements. The
+      // default protocol extension still reports the full set, so an adapter
+      // that does not override this keeps the previous optimistic answer;
+      // adapters that do override it can no longer be reported as capable of
+      // something they cannot do.
+      context.providerCapabilities = Self.decisionCapabilities(
+        await purchaseProvider.mosaicExperimentCapabilities)
     }
     let evaluation = await configurationClient.decideForPresentation(
       placement: placement, context: context, identity: identity)
@@ -444,6 +447,24 @@ public struct Mosaic: Sendable {
     return await configurationClient.finalizeExperiment(
       evaluation, productsReady: productsReady,
       providerCapabilities: await purchaseProvider.mosaicExperimentCapabilities)
+  }
+
+  /// Maps the adapter's declared Experiment capabilities onto the Placement
+  /// decision-context keys. A capability the adapter does not declare is
+  /// reported `unavailable`, never assumed available.
+  static func decisionCapabilities(
+    _ capabilities: Set<MosaicExperimentProviderCapability>
+  ) -> [String: MosaicProviderCapabilityState] {
+    let keys: [(String, MosaicExperimentProviderCapability)] = [
+      ("product_loading", .productLoad),
+      ("purchase", .purchase),
+      ("restore", .restore),
+      ("entitlement_lookup", .entitlementLookup),
+    ]
+    return Dictionary(
+      uniqueKeysWithValues: keys.map {
+        ($0.0, capabilities.contains($0.1) ? .available : .unavailable)
+      })
   }
 
   /// One authority-aware decision-context seam. Keeping this outside the
@@ -541,9 +562,24 @@ public struct Mosaic: Sendable {
   /// Applies the Environment owner/admin collection setting and a host-app
   /// runtime override. Both must be true. Turning either off cancels delivery
   /// and clears all unsent events; the host cannot override a disabled Environment.
+  ///
+  /// Collection is enabled by default, so this is the explicit opt-out path:
+  /// `setAnalyticsCollection(hostEnabled: false)` declines collection without
+  /// the host having to know the Environment setting. The Environment's
+  /// server-side collection setting still gates ingestion regardless of what is
+  /// set here. The host application remains responsible for obtaining whatever
+  /// end-user consent its jurisdiction and app-store policies require before
+  /// leaving collection enabled.
+  ///
+  /// The two gates are independent. An omitted argument leaves that gate at
+  /// whatever was last set, because there is no value the SDK could substitute
+  /// for it: writing `true` over an unmentioned gate would let
+  /// `setAnalyticsCollection(hostEnabled: false)` silently re-enable a
+  /// disabled Environment, contradicting "the host cannot override a disabled
+  /// Environment" above.
   public func setAnalyticsCollection(
-    environmentEnabled: Bool,
-    hostEnabled: Bool = true
+    environmentEnabled: Bool? = nil,
+    hostEnabled: Bool? = nil
   ) async {
     await analyticsRuntime?.setCollection(
       environmentEnabled: environmentEnabled,

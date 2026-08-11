@@ -84,6 +84,22 @@ export function migrationRequiresDistinctApprover(
   );
 }
 
+/**
+ * The outcome of inspecting completion prerequisites.
+ *
+ * Completion inspection is the one lifecycle call that is legitimately allowed
+ * to be absent: a program that has not reached the completion stage has no
+ * report yet, and the server answers 404. Every other failure class — 500, 403,
+ * a dropped connection — has to stay distinguishable from that, because they
+ * lead to opposite operator actions. Collapsing them all into `undefined` made
+ * a broken backend read as "not produced yet", which an operator resolves by
+ * waiting for a report that is never coming.
+ */
+export type MigrationCompletionInspection =
+  | { error: unknown; status: "error" }
+  | { prerequisites: BillingMigrationCompletionPrerequisites; status: "ok" }
+  | { status: "absent" };
+
 export function migrationCompletionBlockers(
   prerequisites: BillingMigrationCompletionPrerequisites | undefined
 ): string[] {
@@ -193,6 +209,23 @@ export type ReadinessView = BillingMigrationReadiness;
 export type MigrationImportBatch = BillingMigrationImportBatch;
 export type MigrationRunJob = BillingMigrationRunJob;
 
+/**
+ * A command could not be bound to the evidence it is supposed to reference.
+ *
+ * Every migration command carries an `expectedStateVersion` and the digests of
+ * the manifest and mapping set it was reviewed against. When the program detail
+ * has not loaded there is no version to bind to, and substituting `0` (or an
+ * empty digest) sends a command nobody reviewed against state nobody saw. The
+ * CTA is disabled in that case; this class is the second line of defence that
+ * keeps an unbound command from ever reaching the wire.
+ */
+export class MigrationCommandBindingError extends Error {
+  constructor() {
+    super("Migration command binding is incomplete.");
+    this.name = "MigrationCommandBindingError";
+  }
+}
+
 export function migrationErrorCopy(
   error: unknown,
   command:
@@ -204,6 +237,9 @@ export function migrationErrorCopy(
     | "readiness"
     | "lifecycle"
 ) {
+  if (error instanceof MigrationCommandBindingError) {
+    return "Mosaic could not read this Migration Program's current state version, manifest, or mapping set, so it did not send the command. A command has to name the exact state it was reviewed against. Reload the Program and try again.";
+  }
   if (isStaleMigrationConflict(error)) {
     return "This Migration Program changed after you loaded it. Mosaic refreshed the latest state; review the command before trying again.";
   }
