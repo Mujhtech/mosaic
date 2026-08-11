@@ -85,15 +85,13 @@ import {
   initialScreen,
   screenContainingNode,
 } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { documentRuntimeState } from "@/features/paywall-editor/utils/document-version";
 import { updateLocalizedProperty } from "@/features/paywall-editor/utils/editor-transforms";
 import {
   type PaywallSelectionState,
   resolveNodeVisibility,
 } from "@/features/paywall-editor/utils/protocol-component-rules";
-import {
-  paywallRuntimeDiagnostics,
-  runtimeStateForAcceptedRevision,
-} from "@/lib/mosaic-protocol";
+import { paywallRuntimeDiagnostics } from "@/lib/mosaic-protocol";
 
 const DEVICE_NODE_ID = "studio-device-preview";
 const selectCanvasPreferences = (snapshot: StudioWorkspaceSnapshot) =>
@@ -133,7 +131,7 @@ function previewRuntimeState(
       tabSelections: {},
     };
   }
-  const runtime = runtimeStateForAcceptedRevision(document);
+  const runtime = documentRuntimeState(document);
   return {
     document,
     switchValues: runtime.switches,

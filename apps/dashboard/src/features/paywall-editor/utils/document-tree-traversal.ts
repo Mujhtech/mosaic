@@ -9,6 +9,11 @@ import type {
   TreeOperationRejected,
   TreeOperationRejectionReason,
 } from "@/features/paywall-editor/types/editor";
+import {
+  withDocumentParts,
+  withNodeParts,
+  withScreenParts,
+} from "@/features/paywall-editor/utils/document-version";
 
 export interface NodeEntry {
   readonly collection: NodeCollection;
@@ -683,43 +688,30 @@ export function mapNode(
 ): ProtocolNode {
   let nested: ProtocolNode = node;
   if (node.type === "stack") {
-    nested = {
-      ...node,
-      children: node.children.map((child) =>
-        mapNode(child, id, updater)
-      ) as typeof node.children,
-    };
+    nested = withNodeParts(node, {
+      children: node.children.map((child) => mapNode(child, id, updater)),
+    });
   } else if (node.type === "productCard") {
-    nested = {
-      ...node,
-      children: node.children.map((child) =>
-        mapNode(child, id, updater)
-      ) as typeof node.children,
-    };
+    nested = withNodeParts(node, {
+      children: node.children.map((child) => mapNode(child, id, updater)),
+    });
   } else if (node.type === "productBadge") {
-    nested = {
-      ...node,
-      children: node.children.map((child) =>
-        mapNode(child, id, updater)
-      ) as typeof node.children,
-    };
+    nested = withNodeParts(node, {
+      children: node.children.map((child) => mapNode(child, id, updater)),
+    });
   } else if (node.type === "button") {
-    nested = {
-      ...node,
-      children: node.children.map((child) =>
-        mapNode(child, id, updater)
-      ) as typeof node.children,
+    nested = withNodeParts(node, {
+      children: node.children.map((child) => mapNode(child, id, updater)),
       ...(node.inProgressChildren
         ? {
             inProgressChildren: node.inProgressChildren.map((child) =>
               mapNode(child, id, updater)
-            ) as typeof node.inProgressChildren,
+            ),
           }
         : {}),
-    };
+    });
   } else if (node.type === "carousel") {
-    nested = {
-      ...node,
+    nested = withNodeParts(node, {
       pages: node.pages.map((page) => {
         const content: ProtocolNode = mapNode(page.content, id, updater);
         return {
@@ -727,10 +719,9 @@ export function mapNode(
           content: content.type === "stack" ? content : page.content,
         };
       }),
-    };
+    });
   } else if (node.type === "tabs") {
-    nested = {
-      ...node,
+    nested = withNodeParts(node, {
       tabs: node.tabs.map((tab) => {
         const content: ProtocolNode = mapNode(tab.content, id, updater);
         return {
@@ -738,15 +729,14 @@ export function mapNode(
           content: content.type === "stack" ? content : tab.content,
         };
       }),
-    };
+    });
   } else if (node.type === "productSelector") {
-    nested = {
-      ...node,
+    nested = withNodeParts(node, {
       cards: node.cards.map((card) => {
         const mapped = mapNode(card, id, updater);
         return mapped.type === "productCard" ? mapped : card;
       }),
-    };
+    });
   }
   return nested.id === id ? updater(nested) : nested;
 }
@@ -763,9 +753,11 @@ export function updateNode(
       return screen;
     }
     changed = true;
-    return { ...screen, layout: { ...screen.layout, content } };
+    return withScreenParts(screen, {
+      layout: { ...screen.layout, content },
+    });
   });
-  return changed ? { ...document, screens } : document;
+  return changed ? withDocumentParts(document, { screens }) : document;
 }
 
 export function replaceContainerChildren(
@@ -779,33 +771,27 @@ export function replaceContainerChildren(
       if (node.type !== "button") {
         return node;
       }
-      const next = { ...node };
-      if (children.length === 0) {
-        next.inProgressChildren = undefined;
-      } else {
-        next.inProgressChildren = [
-          ...children,
-        ] as typeof next.inProgressChildren;
-      }
-      return next;
+      return withNodeParts(node, {
+        inProgressChildren: children.length === 0 ? undefined : [...children],
+      });
     }
     if (collection === "cards") {
       return node.type === "productSelector" &&
         children.every((child) => child.type === "productCard")
-        ? { ...node, cards: [...children] as typeof node.cards }
+        ? withNodeParts(node, { cards: [...children] })
         : node;
     }
     if (node.type === "stack") {
-      return { ...node, children: [...children] as typeof node.children };
+      return withNodeParts(node, { children: [...children] });
     }
     if (node.type === "button") {
-      return { ...node, children: [...children] as typeof node.children };
+      return withNodeParts(node, { children: [...children] });
     }
     if (node.type === "productCard") {
-      return { ...node, children: [...children] as typeof node.children };
+      return withNodeParts(node, { children: [...children] });
     }
     if (node.type === "productBadge") {
-      return { ...node, children: [...children] as typeof node.children };
+      return withNodeParts(node, { children: [...children] });
     }
     return node;
   });

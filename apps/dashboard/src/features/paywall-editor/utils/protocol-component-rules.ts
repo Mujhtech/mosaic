@@ -56,9 +56,9 @@ function reservedKeyEntries(document: MosaicDocument) {
  * fields follow. A locale with no authored translation falls back to the
  * default catalog's string, which is what the resolver would reach anyway.
  */
-export function reconcileReservedAccessibilityStrings(
-  document: MosaicDocument
-): MosaicDocument {
+export function reconcileReservedAccessibilityStrings<
+  TDocument extends MosaicDocument,
+>(document: TDocument): TDocument {
   const entries = reservedKeyEntries(document);
   const { defaultLocale, locales } = document.localization;
   return {

@@ -47,6 +47,7 @@ import {
   localizationKeySet,
   localized,
 } from "@/features/paywall-editor/utils/document-tree-dependencies";
+import { withNodeParts } from "@/features/paywall-editor/utils/document-version";
 
 const MINIMUM_TABS = 2;
 const MAXIMUM_TABS = 8;
@@ -73,7 +74,7 @@ export function TabsInspector({ node }: { node: TabsComponent }) {
     };
     editor.updateComponent(node.id, (current) =>
       current.type === "tabs"
-        ? { ...current, tabs: [...current.tabs, tab] }
+        ? withNodeParts(current, { tabs: [...current.tabs, tab] })
         : current
     );
   }
@@ -90,13 +91,12 @@ export function TabsInspector({ node }: { node: TabsComponent }) {
       }
       // Removing the opening panel forces a new authored choice rather than
       // leaving `initialTabId` naming a tab that no longer exists.
-      return {
-        ...current,
+      return withNodeParts(current, {
         tabs,
         initialTabId: tabs.some((tab) => tab.id === current.initialTabId)
           ? current.initialTabId
           : firstTab.id,
-      };
+      });
     });
   }
 

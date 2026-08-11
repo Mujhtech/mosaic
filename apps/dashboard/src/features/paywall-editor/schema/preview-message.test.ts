@@ -68,7 +68,10 @@ describe("preview message adapter", () => {
     }
 
     expect(PREVIEW_WEBSOCKET_SUBPROTOCOL).toBe("mosaic.local-preview.v0.3");
+    // Local Preview 0.4 landed, so Studio offers both and prefers the newer:
+    // a 0.4 client renders motion, a 0.3 client still connects.
     expect(PREVIEW_WEBSOCKET_SUBPROTOCOLS).toEqual([
+      "mosaic.local-preview.v0.4",
       "mosaic.local-preview.v0.3",
     ]);
     expect(validatePreviewMessage(draft).ok).toBe(true);

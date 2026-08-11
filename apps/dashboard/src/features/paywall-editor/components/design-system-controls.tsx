@@ -19,6 +19,8 @@ import { InspectorColorControl } from "@/features/paywall-editor/components/insp
 import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
 import type {
   MosaicDocument,
+  MotionEasing,
+  MotionValue,
   PaywallDesignSystem,
   ProtocolBackground,
   ProtocolColor,
@@ -36,12 +38,14 @@ import type {
   MosaicPaywallV03BackgroundToken,
   MosaicPaywallV03ColorToken,
   MosaicPaywallV03ShadowToken,
+  MosaicPaywallV04MotionToken,
 } from "@/lib/mosaic-protocol";
 
 export type DesignToken =
   | MosaicPaywallV03ColorToken
   | MosaicPaywallV03BackgroundToken
-  | MosaicPaywallV03ShadowToken;
+  | MosaicPaywallV03ShadowToken
+  | MosaicPaywallV04MotionToken;
 
 export interface PendingDelete {
   readonly category: DesignCategory;
@@ -120,7 +124,28 @@ export function tokensFor(
   if (category === "backgrounds") {
     return system.backgrounds;
   }
+  if (category === "motions") {
+    return "motions" in system ? system.motions : [];
+  }
   return system.shadows;
+}
+
+/**
+ * Drop a token from one catalog, leaving the other three untouched.
+ *
+ * Written once over `DesignCategory` rather than as a branch per catalog: the
+ * filter is identical for all four, and a fourth copy of it was the shape the
+ * motions catalog would otherwise have added.
+ */
+export function withoutToken(
+  system: PaywallDesignSystem,
+  category: DesignCategory,
+  id: string
+): PaywallDesignSystem {
+  return {
+    ...system,
+    [category]: tokensFor(system, category).filter((token) => token.id !== id),
+  } as PaywallDesignSystem;
 }
 
 export function SectionHeading({
@@ -696,4 +721,172 @@ export function ShadowEditor({
       </div>
     </div>
   );
+}
+
+/** The four normative easing presets, in the contract's own order. */
+export const MOTION_EASING_OPTIONS: readonly {
+  readonly description: string;
+  readonly label: string;
+  readonly value: MotionEasing;
+}[] = [
+  { description: "No shaping", label: "Linear", value: "linear" },
+  {
+    description: "Starts and ends on screen",
+    label: "Standard",
+    value: "standard",
+  },
+  {
+    description: "Something entering; fast in, settles",
+    label: "Decelerate",
+    value: "decelerate",
+  },
+  {
+    description: "Something leaving; slow out, speeds up",
+    label: "Accelerate",
+    value: "accelerate",
+  },
+];
+
+/** Durations are whole milliseconds, bounded by the contract at 0 to 2000. */
+export const MOTION_DURATION_MINIMUM = 0;
+export const MOTION_DURATION_MAXIMUM = 2000;
+
+export function MotionEditor({
+  id,
+  onChange,
+  value,
+}: {
+  id: string;
+  onChange: (value: MotionValue) => void;
+  value: MotionValue;
+}) {
+  if (value.type === "motionToken") {
+    return (
+      <p className="text-[11px] text-muted-foreground">
+        Linked to motion {value.id}
+      </p>
+    );
+  }
+  return (
+    <div className="grid grid-cols-2 gap-1.5">
+      <label className="grid gap-1 text-[11px]" htmlFor={`${id}-duration`}>
+        <span className="text-muted-foreground">Duration (ms)</span>
+        <input
+          className={FIELD_CLASS}
+          id={`${id}-duration`}
+          max={MOTION_DURATION_MAXIMUM}
+          min={MOTION_DURATION_MINIMUM}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              // Integers only: the contract keeps Dart, Swift, Kotlin and
+              // JavaScript from disagreeing about a rounded fraction.
+              durationMilliseconds: clampMotionDuration(
+                event.target.valueAsNumber
+              ),
+            })
+          }
+          step={10}
+          type="number"
+          value={value.durationMilliseconds}
+        />
+      </label>
+      <label className="grid gap-1 text-[11px]" htmlFor={`${id}-easing`}>
+        <span className="text-muted-foreground">Easing</span>
+        <select
+          className={FIELD_CLASS}
+          id={`${id}-easing`}
+          onChange={(event) =>
+            onChange({ ...value, easing: event.target.value as MotionEasing })
+          }
+          value={value.easing}
+        >
+          {MOTION_EASING_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+/**
+ * A duration the contract will accept.
+ *
+ * An empty number input reads back as NaN, which would otherwise reach the
+ * document and fail schema validation with a message about a type rather than
+ * about the field the author was editing.
+ */
+export function clampMotionDuration(candidate: number): number {
+  if (!Number.isFinite(candidate)) {
+    return MOTION_DURATION_MINIMUM;
+  }
+  return Math.min(
+    MOTION_DURATION_MAXIMUM,
+    Math.max(MOTION_DURATION_MINIMUM, Math.round(candidate))
+  );
+}
+
+/** The id stem new tokens in a catalog are numbered from. */
+export function tokenIdPrefix(category: DesignCategory) {
+  if (category === "colors") {
+    return "colour";
+  }
+  if (category === "backgrounds") {
+    return "background";
+  }
+  return category === "motions" ? "motion" : "shadow";
+}
+
+/**
+ * Append a copy of one token, leaving the other catalogs untouched.
+ *
+ * Generic over the category for the same reason `withoutToken` is: the four
+ * catalogs duplicate identically, and a per-catalog branch was the shape that
+ * made adding a fourth catalog a four-place edit.
+ */
+export function withDuplicatedToken(
+  system: PaywallDesignSystem,
+  category: DesignCategory,
+  id: string
+): PaywallDesignSystem {
+  const tokens = tokensFor(system, category);
+  const source = tokens.find((token) => token.id === id);
+  if (!source) {
+    return system;
+  }
+  return {
+    ...system,
+    [category]: [
+      ...tokens,
+      {
+        ...cloneValue(source),
+        id: nextTokenId(tokens, tokenIdPrefix(category)),
+        name: `${source.name} copy`,
+      },
+    ],
+  } as PaywallDesignSystem;
+}
+
+/** Move one token within its catalog, clamped at both ends. */
+export function withMovedToken(
+  system: PaywallDesignSystem,
+  category: DesignCategory,
+  id: string,
+  offset: -1 | 1
+): PaywallDesignSystem {
+  const tokens = tokensFor(system, category);
+  const index = tokens.findIndex((token) => token.id === id);
+  const target = index + offset;
+  if (index < 0 || target < 0 || target >= tokens.length) {
+    return system;
+  }
+  const next = [...tokens];
+  const [moved] = next.splice(index, 1);
+  if (moved) {
+    next.splice(target, 0, moved);
+  }
+  return { ...system, [category]: next } as PaywallDesignSystem;
 }

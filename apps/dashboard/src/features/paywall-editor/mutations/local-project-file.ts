@@ -15,25 +15,53 @@ import type {
   MosaicDocument,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
+import { documentSchemaVersion } from "@/features/paywall-editor/utils/document-version";
 import {
   canonicalSchemasByVersion,
+  localPreviewContractVersion,
+  localPreviewContractVersions,
+  localPreviewV04ContractVersion,
   parsePortablePaywallJson,
   serializePortablePaywallJson,
   validateLocalProject,
   validatePaywallDocument,
 } from "@/lib/mosaic-protocol";
 
-let validateRecoverableProject: ReturnType<Ajv2020["compile"]> | null = null;
+const recoverableProjectValidators = new Map<
+  string,
+  ReturnType<Ajv2020["compile"]>
+>();
 
+/**
+ * Whether a value is shaped like a local project, ignoring semantic rules.
+ *
+ * This is the "recoverable draft" check: a file that matches the schema but
+ * fails a semantic rule is offered back to the author rather than discarded.
+ * It has to compile the schema for the version the file claims -- validating a
+ * 0.4 file against the 0.3 local-project schema fails on the document's
+ * `schemaVersion` const, which would report a recoverable 0.4 draft as
+ * corruption and lose it.
+ */
 function isRecoverableLocalProject(value: unknown): value is LocalProjectFile {
-  if (!validateRecoverableProject) {
+  const version =
+    isRecord(value) &&
+    value.fileFormatVersion === localPreviewV04ContractVersion
+      ? localPreviewV04ContractVersion
+      : localPreviewContractVersion;
+  let validate = recoverableProjectValidators.get(version);
+  if (!validate) {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
-    const schemas = canonicalSchemasByVersion["0.3"];
+    const schemas = canonicalSchemasByVersion[version];
     ajv.addSchema(schemas.paywall);
     ajv.addSchema(schemas.previewMessage);
-    validateRecoverableProject = ajv.compile(schemas.localProject);
+    validate = ajv.compile(schemas.localProject);
+    recoverableProjectValidators.set(version, validate);
   }
-  return validateRecoverableProject(value) as boolean;
+  return validate(value) as boolean;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function localRevision(document: MosaicDocument, sequence = document.revision) {
@@ -154,8 +182,13 @@ export function createLocalProjectFile(options: {
     options.document,
     options.mockProducts ?? DEFAULT_MOCK_PRODUCTS
   );
+  // The local project file version tracks the document it carries: a 0.4 draft
+  // is only readable by a Local Preview 0.4 client, and `validateLocalProject`
+  // dispatches on exactly this member. `LocalProjectFile` is discriminated on
+  // it, and the pairing of a computed version with a union-typed document is
+  // the correlation TypeScript cannot follow, so the branch is named once here.
   return {
-    fileFormatVersion: "0.3",
+    fileFormatVersion: documentSchemaVersion(options.document),
     editableDocumentId: options.editableDocumentId,
     revision,
     document: cloneValue(options.document),
@@ -164,12 +197,17 @@ export function createLocalProjectFile(options: {
       revision,
       state: mockCommerceState(options.mockPurchaseState, products),
     },
-  };
+  } as LocalProjectFile;
 }
 
 export function isLocalProjectFile(value: unknown): value is LocalProjectFile {
   const result = validateLocalProject(value);
-  return result.ok && result.value.fileFormatVersion === "0.3";
+  return (
+    result.ok &&
+    (localPreviewContractVersions as readonly string[]).includes(
+      result.value.fileFormatVersion
+    )
+  );
 }
 
 function importFailure(

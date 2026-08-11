@@ -22,6 +22,7 @@ import {
 } from "@/features/paywall-editor/components/canvas-preview-node-primitives";
 import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
 import type {
+  Marker,
   MockProductDefinition,
   MockPurchaseState,
   MosaicDocument,
@@ -29,6 +30,14 @@ import type {
 } from "@/features/paywall-editor/types/editor";
 import { getEditableCanvasText } from "@/features/paywall-editor/utils/canvas-preview-interactions";
 import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
+import {
+  resolveBadgeStyle,
+  resolveCardStyle,
+} from "@/features/paywall-editor/utils/document-version";
+import {
+  resolvedItemMarker,
+  resolvedMarker,
+} from "@/features/paywall-editor/utils/marker";
 import {
   announcementFor,
   ratingPointOffsets,
@@ -40,10 +49,6 @@ import {
   resolvedBackground,
   resolvedProtocolColor,
 } from "@/features/paywall-editor/utils/protocol-styles";
-import {
-  resolveProductBadgeStyle,
-  resolveProductCardStyle,
-} from "@/lib/mosaic-protocol";
 
 export interface PreviewNodeProps {
   readonly carouselPages: Readonly<Record<string, number>>;
@@ -256,6 +261,12 @@ function renderIcon(
   );
 }
 
+/**
+ * The Feature List marker box. Timeline authors its own marker size; a Feature
+ * List does not, so the canvas draws it at the size the templates already use.
+ */
+const FEATURE_LIST_MARKER_SIZE = 20;
+
 function renderFeatureList(
   node: Extract<ProtocolNode, { type: "featureList" }>,
   context: PreviewNodeContext
@@ -275,21 +286,44 @@ function renderFeatureList(
         gap: node.gap,
       }}
     >
-      {node.items.map((item) => (
-        <li
-          className="flex items-start gap-2"
-          key={item.id}
-          style={typographyStyle(document, node.typography)}
-        >
-          <CheckIcon
-            aria-hidden
-            className="mt-0.5 shrink-0"
-            color={resolvedProtocolColor(document, node.markerColor)}
-            weight="bold"
-          />
-          <span>{resolveLocalizedText(document, item.text, locale)}</span>
-        </li>
-      ))}
+      {node.items.map((item, index) => {
+        // markerColor is required on a Feature List, but resolution returns
+        // undefined for a token that no longer exists; the glyph then inherits
+        // the list's text colour rather than disappearing.
+        const markerColor =
+          resolvedProtocolColor(document, node.markerColor) ?? "currentColor";
+        const marker = resolvedItemMarker(node, item);
+        return (
+          <li
+            className="flex items-start gap-2"
+            key={item.id}
+            style={typographyStyle(document, node.typography)}
+          >
+            {marker.kind === "icon" && marker.name === "checkmark" ? (
+              <CheckIcon
+                aria-hidden
+                className="mt-0.5 shrink-0"
+                color={markerColor}
+                weight="bold"
+              />
+            ) : (
+              <span
+                className="mt-0.5 flex shrink-0 items-center justify-center"
+                style={{
+                  color: markerColor,
+                  minWidth: FEATURE_LIST_MARKER_SIZE,
+                }}
+              >
+                {markerGlyph(marker, index, {
+                  color: markerColor,
+                  size: FEATURE_LIST_MARKER_SIZE,
+                })}
+              </span>
+            )}
+            <span>{resolveLocalizedText(document, item.text, locale)}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -412,7 +446,7 @@ function renderProductCard(
   if (!product) {
     return null;
   }
-  const style = resolveProductCardStyle(node, product.visualSelected);
+  const style = resolveCardStyle(node, product.visualSelected);
   const cardBackground = resolvedBackground(document, style.background);
   const accessibleLabel = node.accessibility
     ? resolveProductTemplate(
@@ -492,7 +526,7 @@ function renderProductBadge(
     productLayerPreview?.nodeId === node.id
       ? productLayerPreview.state === "selected"
       : product.visualSelected;
-  const style = resolveProductBadgeStyle(node, visualSelected);
+  const style = resolveBadgeStyle(node, visualSelected);
   const badgeBackground = resolvedBackground(document, style.background);
   return (
     <span
@@ -867,6 +901,39 @@ interface TimelineMarkerStyle {
   readonly size: number;
 }
 
+/**
+ * One marker glyph, for either component that draws one.
+ *
+ * 0.4 consolidated Feature List and Timeline onto a single marker union, so
+ * they draw through a single renderer here too. A 0.3 Feature List reaches this
+ * with its `"checkmark"` constant already resolved to the union form, which is
+ * how one path serves both contract versions without rewriting the document.
+ */
+function markerGlyph(
+  marker: Marker,
+  index: number,
+  style: TimelineMarkerStyle
+): ReactNode {
+  if (marker.kind === "dot") {
+    return (
+      <span
+        aria-hidden
+        style={{
+          background: style.color,
+          borderRadius: "50%",
+          display: "block",
+          height: style.size / 2,
+          width: style.size / 2,
+        }}
+      />
+    );
+  }
+  if (marker.kind === "ordinal") {
+    return <span aria-hidden>{index + 1}</span>;
+  }
+  return <span aria-hidden>{PROTOCOL_ICON_GLYPHS[marker.name]}</span>;
+}
+
 function timelineMarkerContent(
   entry: Extract<ProtocolNode, { type: "timeline" }>["entries"][number],
   index: number,
@@ -875,24 +942,7 @@ function timelineMarkerContent(
   if (!entry.marker) {
     return null;
   }
-  if (entry.marker.kind === "dot") {
-    return (
-      <span
-        aria-hidden
-        style={{
-          background: marker.color,
-          borderRadius: "50%",
-          display: "block",
-          height: marker.size / 2,
-          width: marker.size / 2,
-        }}
-      />
-    );
-  }
-  if (entry.marker.kind === "ordinal") {
-    return <span aria-hidden>{index + 1}</span>;
-  }
-  return <span aria-hidden>{PROTOCOL_ICON_GLYPHS[entry.marker.name]}</span>;
+  return markerGlyph(resolvedMarker(entry.marker), index, marker);
 }
 
 function renderTimeline(

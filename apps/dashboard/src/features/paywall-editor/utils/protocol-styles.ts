@@ -8,11 +8,11 @@ import type {
   ProtocolShadow,
 } from "@/features/paywall-editor/types/editor";
 import {
-  resolveAxisSizing,
-  resolveBackgroundToken,
-  resolveColorToken,
-  resolveShadowToken,
-} from "@/lib/mosaic-protocol";
+  resolveDocumentBackgroundToken,
+  resolveDocumentColorToken,
+  resolveDocumentShadowToken,
+} from "@/features/paywall-editor/utils/document-version";
+import { resolveAxisSizing } from "@/lib/mosaic-protocol";
 
 const SEMANTIC_COLORS: Readonly<Record<string, string>> = {
   "text.primary": "var(--foreground)",
@@ -51,7 +51,7 @@ export function resolvedProtocolColor(
   if (!color) {
     return;
   }
-  const resolved = resolveColorToken(document, color);
+  const resolved = resolveDocumentColorToken(document, color);
   if (!resolved) {
     return;
   }
@@ -99,7 +99,7 @@ export function resolvedBackground(
   if (!background) {
     return { style: {} };
   }
-  const resolved = resolveBackgroundToken(document, background);
+  const resolved = resolveDocumentBackgroundToken(document, background);
   if (!resolved) {
     return {
       style: {},
@@ -186,7 +186,7 @@ export function resolvedShadow(
   if (!shadow) {
     return;
   }
-  const value = resolveShadowToken(document, shadow);
+  const value = resolveDocumentShadowToken(document, shadow);
   if (!value) {
     return;
   }

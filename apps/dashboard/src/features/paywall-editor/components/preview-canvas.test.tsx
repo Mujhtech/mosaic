@@ -21,6 +21,7 @@ import {
   useStudioWorkspaceActions,
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { withNodeParts } from "@/features/paywall-editor/utils/document-version";
 import { required } from "@/test/required";
 import { chooseSelectOption } from "@/test/select";
 
@@ -77,12 +78,11 @@ function InitializePreview({ mode }: { mode: MetadataMode }) {
     if (mode === "name-only-missing-price") {
       editor.updateComponent("monthly-card", (node) =>
         node.type === "productCard"
-          ? {
-              ...node,
+          ? withNodeParts(node, {
               children: node.children.filter(
                 (child) => child.id !== "monthly-price"
               ),
-            }
+            })
           : node
       );
     }

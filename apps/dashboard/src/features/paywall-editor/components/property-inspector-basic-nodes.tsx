@@ -52,6 +52,10 @@ import {
   findNode,
   updateNode,
 } from "@/features/paywall-editor/utils/document-tree-traversal";
+import {
+  withDocumentParts,
+  withScreenParts,
+} from "@/features/paywall-editor/utils/document-version";
 import { createSeededLocalizedText } from "@/features/paywall-editor/utils/editor-transforms";
 import type {
   MosaicPaywallV03BaseTypography,
@@ -90,17 +94,17 @@ export function ScrollContainerInspector({
             if (!screen || (isInitial && type === "sheet")) {
               return;
             }
-            editor.updateDocument((current) => ({
-              ...current,
-              screens: current.screens.map((candidate) =>
-                candidate.id === screen.id
-                  ? ({
-                      ...candidate,
-                      presentation: { type },
-                    } as typeof candidate)
-                  : candidate
-              ),
-            }));
+            editor.updateDocument((current) =>
+              withDocumentParts(current, {
+                screens: current.screens.map((candidate) =>
+                  candidate.id === screen.id
+                    ? withScreenParts(candidate, {
+                        presentation: { type },
+                      })
+                    : candidate
+                ),
+              })
+            );
           }}
           value={presentation}
         >

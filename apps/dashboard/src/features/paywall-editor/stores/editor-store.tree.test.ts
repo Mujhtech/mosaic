@@ -8,9 +8,6 @@ import {
 } from "@/features/paywall-editor/stores/editor-store";
 import { createStudioWorkspaceStore } from "@/features/paywall-editor/stores/studio-workspace-store";
 import type {
-  DocumentNode,
-  MosaicDocument,
-  StackComponent,
   TreeOperationAccepted,
   TreeOperationResult,
 } from "@/features/paywall-editor/types/editor";
@@ -20,6 +17,11 @@ import {
   findStack,
   flattenDocument,
 } from "@/features/paywall-editor/utils/document-tree-traversal";
+import type {
+  MosaicPaywallV03Document,
+  MosaicPaywallV03Node,
+  MosaicPaywallV03Stack,
+} from "@/lib/mosaic-protocol";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
 import { required } from "@/test/required";
 
@@ -31,7 +33,7 @@ function template(id: "focused" | "benefits" = "focused") {
   return cloneValue(match.document);
 }
 
-function takeNode(document: MosaicDocument, id: string) {
+function takeNode(document: MosaicPaywallV03Document, id: string) {
   const node = required(
     document.screens[0],
     "document.screens[0]"
@@ -47,7 +49,10 @@ function takeNode(document: MosaicDocument, id: string) {
   return node;
 }
 
-function stack(id: string, children: DocumentNode[]): StackComponent {
+function stack(
+  id: string,
+  children: MosaicPaywallV03Node[]
+): MosaicPaywallV03Stack {
   return {
     type: "stack",
     id,

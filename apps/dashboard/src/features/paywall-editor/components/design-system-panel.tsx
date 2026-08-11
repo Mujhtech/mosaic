@@ -13,8 +13,8 @@ import {
   BackgroundEditor,
   ColorControl,
   countTokenReferences,
-  type DesignToken,
   FIELD_CLASS,
+  MotionEditor,
   nextTokenId,
   type PendingDelete,
   replaceTokenReferences,
@@ -23,16 +23,27 @@ import {
   TokenActions,
   TokenSummary,
   tokensFor,
+  withDuplicatedToken,
+  withMovedToken,
+  withoutToken,
 } from "@/features/paywall-editor/components/design-system-controls";
+import { UpgradeToV04Dialog } from "@/features/paywall-editor/components/upgrade-to-v04-dialog";
+import { upgradeDocumentToV04 } from "@/features/paywall-editor/mutations/upgrade-to-v04";
 import {
   useEditorActions,
   useEditorStore,
 } from "@/features/paywall-editor/stores/editor-store-context";
 import type {
   MosaicDocument,
+  MotionToken,
   PaywallDesignSystem,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
+import {
+  documentMotionTokens,
+  isMotionCapableDocument,
+  withDocumentParts,
+} from "@/features/paywall-editor/utils/document-version";
 import type { DesignCategory } from "@/features/paywall-editor/utils/style-authoring";
 import {
   appendBackgroundAsset,
@@ -81,20 +92,28 @@ export function DesignSystemPanel() {
     null
   );
   const [replacementId, setReplacementId] = useState("detach");
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [openEditor, setOpenEditor] = useState<PendingDelete | null>(null);
 
   if (!document) {
     return null;
   }
   const { designSystem } = document;
+  // The motions catalog exists only on 0.4. A 0.3 document shows the three
+  // catalogs it has always shown, and the Motion section is absent rather than
+  // present-and-empty: an empty section would read as "no motions authored"
+  // when the truth is "this contract version cannot carry them".
+  const motions = documentMotionTokens(document);
+  const supportsMotion = isMotionCapableDocument(document);
 
   function updateSystem(
     updater: (current: PaywallDesignSystem) => PaywallDesignSystem
   ) {
-    editor.updateDocument((current) => ({
-      ...current,
-      designSystem: updater(current.designSystem),
-    }));
+    editor.updateDocument((current) =>
+      withDocumentParts(current, {
+        designSystem: updater(current.designSystem),
+      })
+    );
   }
 
   function updateColor(
@@ -134,24 +153,7 @@ export function DesignSystemPanel() {
   }
 
   function deleteNow(category: DesignCategory, id: string) {
-    updateSystem((current) => {
-      if (category === "colors") {
-        return {
-          ...current,
-          colors: current.colors.filter((token) => token.id !== id),
-        };
-      }
-      if (category === "backgrounds") {
-        return {
-          ...current,
-          backgrounds: current.backgrounds.filter((token) => token.id !== id),
-        };
-      }
-      return {
-        ...current,
-        shadows: current.shadows.filter((token) => token.id !== id),
-      };
-    });
+    updateSystem((current) => withoutToken(current, category, id));
     if (openEditor?.category === category && openEditor.id === id) {
       setOpenEditor(null);
     }
@@ -203,37 +205,13 @@ export function DesignSystemPanel() {
         pendingDelete.id,
         replacement
       ) as MosaicDocument;
-      if (pendingDelete.category === "colors") {
-        return {
-          ...replaced,
-          designSystem: {
-            ...replaced.designSystem,
-            colors: replaced.designSystem.colors.filter(
-              (token) => token.id !== pendingDelete.id
-            ),
-          },
-        };
-      }
-      if (pendingDelete.category === "backgrounds") {
-        return {
-          ...replaced,
-          designSystem: {
-            ...replaced.designSystem,
-            backgrounds: replaced.designSystem.backgrounds.filter(
-              (token) => token.id !== pendingDelete.id
-            ),
-          },
-        };
-      }
-      return {
-        ...replaced,
-        designSystem: {
-          ...replaced.designSystem,
-          shadows: replaced.designSystem.shadows.filter(
-            (token) => token.id !== pendingDelete.id
-          ),
-        },
-      };
+      return withDocumentParts(replaced, {
+        designSystem: withoutToken(
+          replaced.designSystem,
+          pendingDelete.category,
+          pendingDelete.id
+        ),
+      });
     });
     setPendingDelete(null);
     if (
@@ -297,8 +275,7 @@ export function DesignSystemPanel() {
   function addMediaBackground(id: string, type: "image" | "video") {
     editor.updateDocument((current) => {
       const result = appendBackgroundAsset(current, type);
-      return {
-        ...result.document,
+      return withDocumentParts(result.document, {
         designSystem: {
           ...result.document.designSystem,
           backgrounds: result.document.designSystem.backgrounds.map((token) =>
@@ -310,7 +287,7 @@ export function DesignSystemPanel() {
               : token
           ),
         },
-      };
+      });
     });
   }
 
@@ -322,80 +299,55 @@ export function DesignSystemPanel() {
     );
   }
 
-  function move(category: DesignCategory, id: string, offset: -1 | 1) {
-    updateSystem((current) => {
-      const reorder = <Token extends DesignToken>(tokens: readonly Token[]) => {
-        const index = tokens.findIndex((tokenValue) => tokenValue.id === id);
-        const target = index + offset;
-        if (index < 0 || target < 0 || target >= tokens.length) {
-          return [...tokens];
-        }
-        const next = [...tokens];
-        const [token] = next.splice(index, 1);
-        if (token) {
-          next.splice(target, 0, token);
-        }
-        return next;
-      };
-      if (category === "colors") {
-        return { ...current, colors: reorder(current.colors) };
-      }
-      if (category === "backgrounds") {
-        return { ...current, backgrounds: reorder(current.backgrounds) };
-      }
-      return { ...current, shadows: reorder(current.shadows) };
-    });
-  }
-
-  function duplicate(category: DesignCategory, id: string) {
-    updateSystem((current) => {
-      if (category === "colors") {
-        const source = current.colors.find((token) => token.id === id);
-        return source
-          ? {
-              ...current,
-              colors: [
-                ...current.colors,
-                {
-                  ...cloneValue(source),
-                  id: nextTokenId(current.colors, "colour"),
-                  name: `${source.name} copy`,
-                },
-              ],
-            }
-          : current;
-      }
-      if (category === "backgrounds") {
-        const source = current.backgrounds.find((token) => token.id === id);
-        return source
-          ? {
-              ...current,
-              backgrounds: [
-                ...current.backgrounds,
-                {
-                  ...cloneValue(source),
-                  id: nextTokenId(current.backgrounds, "background"),
-                  name: `${source.name} copy`,
-                },
-              ],
-            }
-          : current;
-      }
-      const source = current.shadows.find((token) => token.id === id);
-      return source
+  function updateMotion(
+    id: string,
+    updater: (token: MotionToken) => MotionToken
+  ) {
+    updateSystem((current) =>
+      "motions" in current
         ? {
             ...current,
-            shadows: [
-              ...current.shadows,
+            motions: current.motions.map((token) =>
+              token.id === id ? updater(token) : token
+            ),
+          }
+        : current
+    );
+  }
+
+  function addMotion() {
+    const id = nextTokenId(motions, "motion");
+    updateSystem((current) =>
+      "motions" in current
+        ? {
+            ...current,
+            motions: [
+              ...current.motions,
               {
-                ...cloneValue(source),
-                id: nextTokenId(current.shadows, "shadow"),
-                name: `${source.name} copy`,
+                id,
+                name: `Motion ${current.motions.length + 1}`,
+                // A 240ms decelerate is the contract's own entrance example: an
+                // entrance is the first motion anyone authors, and the loop
+                // floor of 500ms would be the wrong default for it.
+                value: {
+                  type: "motion",
+                  durationMilliseconds: 240,
+                  easing: "decelerate",
+                },
               },
             ],
           }
-        : current;
-    });
+        : current
+    );
+    setOpenEditor({ category: "motions", id });
+  }
+
+  function move(category: DesignCategory, id: string, offset: -1 | 1) {
+    updateSystem((current) => withMovedToken(current, category, id, offset));
+  }
+
+  function duplicate(category: DesignCategory, id: string) {
+    updateSystem((current) => withDuplicatedToken(current, category, id));
   }
 
   return (
@@ -683,6 +635,109 @@ export function DesignSystemPanel() {
           </ul>
         )}
       </section>
+
+      {supportsMotion ? null : (
+        <section className="space-y-2 border-border border-t pt-4">
+          <h3 className="font-semibold text-xs">Motion</h3>
+          <p className="text-muted-foreground text-xs leading-5">
+            Motion needs Protocol 0.4. Upgrading adds a Motion catalog and lets
+            you author entrances, selection changes, and a call-to-action pulse.
+          </p>
+          <Button
+            onClick={() => setUpgradeOpen(true)}
+            size="xs"
+            type="button"
+            variant="outline"
+          >
+            Upgrade to Protocol 0.4
+          </Button>
+        </section>
+      )}
+      {upgradeOpen ? (
+        <UpgradeToV04Dialog
+          onConfirm={() => {
+            editor.updateDocument((current) => upgradeDocumentToV04(current));
+            setUpgradeOpen(false);
+          }}
+          onOpenChange={setUpgradeOpen}
+        />
+      ) : null}
+      {supportsMotion ? (
+        <section className="space-y-3 border-border border-t pt-4">
+          <SectionHeading
+            count={motions.length}
+            label="Motion"
+            onAdd={addMotion}
+          />
+          {motions.length === 0 ? (
+            <p className="rounded border border-dashed p-3 text-muted-foreground text-xs">
+              Add a reusable duration and easing curve. A motion token that
+              nothing references is rejected, so add one when a node needs it.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {motions.map((token, index) => (
+                <li className="rounded border border-border p-1" key={token.id}>
+                  <div className="flex items-center gap-1">
+                    <TokenSummary
+                      editorId={`design-motion-editor-${token.id}`}
+                      name={token.name}
+                      onToggle={() => toggleEditor("motions", token.id)}
+                      open={
+                        openEditor?.category === "motions" &&
+                        openEditor.id === token.id
+                      }
+                      summary={
+                        token.value.type === "motion"
+                          ? `${token.value.durationMilliseconds}ms ${token.value.easing}`
+                          : "Linked"
+                      }
+                    />
+                    <TokenActions
+                      canMoveDown={index < motions.length - 1}
+                      canMoveUp={index > 0}
+                      name={token.name}
+                      onDelete={() => requestDelete("motions", token.id)}
+                      onDuplicate={() => duplicate("motions", token.id)}
+                      onMove={(offset) => move("motions", token.id, offset)}
+                    />
+                  </div>
+                  {openEditor?.category === "motions" &&
+                  openEditor.id === token.id ? (
+                    <div
+                      className="space-y-2 border-border border-t p-2"
+                      id={`design-motion-editor-${token.id}`}
+                    >
+                      <input
+                        aria-label={`Name for ${token.name}`}
+                        className={`${FIELD_CLASS} w-full`}
+                        maxLength={80}
+                        onChange={(event) =>
+                          updateMotion(token.id, (current) => ({
+                            ...current,
+                            name: event.target.value,
+                          }))
+                        }
+                        value={token.name}
+                      />
+                      <MotionEditor
+                        id={`design-motion-${token.id}`}
+                        onChange={(value) =>
+                          updateMotion(token.id, (current) => ({
+                            ...current,
+                            value,
+                          }))
+                        }
+                        value={token.value}
+                      />
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
     </section>
   );
 }

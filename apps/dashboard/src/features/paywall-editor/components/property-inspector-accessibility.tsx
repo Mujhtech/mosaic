@@ -27,6 +27,7 @@ import type {
 } from "@/features/paywall-editor/types/editor";
 import { updateNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { createSeededLocalizedText } from "@/features/paywall-editor/utils/editor-transforms";
+import { markerLabel } from "@/features/paywall-editor/utils/marker";
 
 export function seedOptionalLocalizedText(options: {
   defaultValue: string;
@@ -372,7 +373,7 @@ export function advancedProperties(node: ProtocolNode) {
       properties.push({
         address: "marker",
         label: "Marker",
-        value: node.marker,
+        value: markerLabel(node.marker),
       });
       node.items.forEach((item, index) => {
         properties.push({
