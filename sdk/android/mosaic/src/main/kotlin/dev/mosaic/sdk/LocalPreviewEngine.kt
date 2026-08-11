@@ -436,7 +436,13 @@ class MosaicLocalPreviewEngine(
             )
 
         val schemaVersion = root.stringProperty("schemaVersion")
-        if (schemaVersion !in MOSAIC_SUPPORTED_PROTOCOL_VERSIONS ||
+        // Local Preview 0.3 is version-locked to Paywall Protocol 0.3: its message schema `$ref`s
+        // `urn:mosaic:protocol:schema:v0.3:paywall` directly, so accepting a 0.4 draft over the 0.3
+        // subprotocol would render a document this session never negotiated. Local Preview 0.4 is
+        // the named next chunk of that contract and is deliberately not in this slice, so the gate
+        // is pinned to the preview protocol's own paywall version rather than to everything the
+        // decoder happens to read.
+        if (schemaVersion != MOSAIC_LOCAL_PREVIEW_PAYWALL_VERSION ||
             schemaVersion !in capabilityReport.supportedSchemaVersions
         ) {
             val diagnostic = validationDiagnostic(

@@ -111,9 +111,9 @@ class ProtocolV03Test {
         val trial = nodes.filterIsInstance<MosaicTimelineComponent>().single { it.id == "trial-timeline" }
         assertEquals(
             listOf(
-                MosaicTimelineMarker.Dot,
-                MosaicTimelineMarker.Ordinal,
-                MosaicTimelineMarker.Icon(MosaicIconName.LOCK),
+                MosaicMarker.Dot,
+                MosaicMarker.Ordinal,
+                MosaicMarker.Icon(MosaicIconName.LOCK),
             ),
             trial.entries.map(MosaicTimelineEntry::marker),
         )

@@ -125,11 +125,16 @@ class ConfigurationDeliveryTest {
         val actual = observed.get().header("Mosaic-Paywall-Capabilities")
             ?.split(',')
             .orEmpty()
-        val expected = MosaicCapabilityCatalog.v03
-            .map { capability -> "${capability.wireName}@$MOSAIC_PROTOCOL_VERSION" }
-            .sorted()
-        assertEquals(expected, actual)
-        assertEquals(expected.size, actual.toSet().size)
+        // Exact name@version pairs for every contract this SDK reads. `style.productCardStates`
+        // exists at 0.3 and not at 0.4, and the three motion.* capabilities the other way round, so
+        // a flattened set of names could not describe what the server may deliver.
+        val expected = (
+            MosaicCapabilityCatalog.v03.map { "${it.wireName}@$MOSAIC_PROTOCOL_VERSION" } +
+                MosaicCapabilityCatalog.v04.map { "${it.wireName}@$MOSAIC_PROTOCOL_V04_VERSION" }
+            ).toSet()
+        assertEquals(expected, actual.toSet())
+        assertEquals(expected.size, actual.size)
+        assertEquals(actual.sorted(), actual)
         assertEquals("3,2,1", observed.get().header("Mosaic-Configuration-Versions"))
         assertEquals("1", observed.get().header("Mosaic-Placement-Decision-Versions"))
         assertEquals(

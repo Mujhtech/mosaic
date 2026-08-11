@@ -402,6 +402,26 @@ internal fun JsonObject.expectKeys(
     }
 }
 
+/**
+ * [expectKeys] for a node, which is the one place the two contracts differ in shape.
+ *
+ * `0.4` allows an optional `motion` block on every node except the screen Scroll Container, which is
+ * excluded for the same reason `0.3` excludes it from `sizing`: it is viewport-owned rather than
+ * authored. `0.3` still rejects `motion` as an unknown property, so a `0.3` document cannot quietly
+ * acquire behaviour its declared version does not have.
+ */
+internal fun JsonObject.expectNodeKeys(
+    expected: Set<String>,
+    path: String,
+    optional: Set<String> = emptySet(),
+) {
+    if (decodingProtocolV04()) {
+        expectKeys(expected + "motion", path, optional + "motion")
+    } else {
+        expectKeys(expected, path, optional)
+    }
+}
+
 internal fun JsonObject.getAsJsonObjectOrNull(name: String): JsonObject? =
     get(name)?.takeIf { it.isJsonObject }?.asJsonObject
 

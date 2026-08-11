@@ -1,5 +1,57 @@
 # Changelog
 
+## Unreleased (Paywall Protocol 0.4 "Motion", draft)
+
+Protocol `0.4` is a **draft**: it carries no compatibility guarantee and nothing produces it in
+production. `0.3` remains the release candidate, remains the bundled fallback, and is byte-identical
+in behaviour to what it was before `0.4` existed.
+
+- **The decoder reads both contracts and dispatches on `schemaVersion`.** Versions are exact
+  identifiers: a `0.3` document is read by the `0.3` rules and a `0.4` document by the `0.4` rules,
+  and neither reads the other. The two share one parser rather than two copies that can drift, and
+  exactly three things differ — the `motions` catalog, the per-node `motion` block, and the marker
+  vocabulary. A `0.3` document carrying any of them is still rejected as an unknown property.
+- **Authored motion decodes, validates, and renders.** `designSystem.motions` is a fourth token
+  catalog with token-to-token references; a curve is authored inline or as a `motionToken` and
+  arrives at the renderer already resolved. Three primitives: `appear` (`fade` / `fadeRise` with
+  `riseLogicalSize` and `delayMilliseconds`) on any node but the screen Scroll Container,
+  `selection` on Product Selector and Tabs, and `loop` (`pulse`) on Button. The four easing presets
+  map onto Compose `CubicBezierEasing` with the contract's normative control points.
+- **Every animation's terminal state is byte-identical to the static rendering.** True by
+  construction: a completed motion drops its `graphicsLayer` from the modifier chain rather than
+  resting at an identity value, and the frame resolver short-circuits the terminal state instead of
+  approaching it. An instrumentation test asserts the SHA-256 pixel digest at `t = end` equals the
+  digest captured with the motion driver disabled.
+- **`MosaicMotionDriver` is injectable**, alongside the existing clock on `MosaicPaywallState`. It
+  carries an enabled flag and an elapsed-time source, and it now owns the Countdown tick that was a
+  bare `delay(1_000)` in a `LaunchedEffect` — so the tick loop is observable without waiting a real
+  second. Countdown rounding is unchanged. Disabling the driver renders every motion at its terminal
+  state, which is how every static golden is captured.
+- **Reduced motion is injected at the renderer boundary**, defaulting to
+  `Settings.Global.ANIMATOR_DURATION_SCALE == 0`. `appear` drops its transform, `selection` applies
+  instantly, and `loop` is disabled at rest. **A video background does not play under reduced
+  motion**: the declared poster is rendered if available and otherwise the declared `fallbackColor`,
+  with no frame shown and no player created. That is handled explicitly because Compose honouring
+  the animator scale does not reach ExoPlayer playback at all.
+- **Flash safety is enforced, not advised.** A `loop` curve below 500 ms, a second looping Button on
+  one screen, a nested `appear`, an unknown motion token, and an unreferenced motion token each
+  reject the document. The unused-token rule is deliberately asymmetric with the colour, background,
+  and shadow catalogs: a motion's safety constraint is checked at its *reference* site, so a token
+  nothing references has never been checked against anything.
+- **The two bundled `0.3` cleanups are applied.** `style.productCardStates` is gone from the `0.4`
+  catalog and derivation — it could never vary independently of `component.productSelector`,
+  `component.productCard`, or `component.productBadge`. Feature List and Timeline now share one
+  `marker` union (`dot` / `ordinal` / `icon`), with a per-item override on Feature List so a
+  comparison paywall can express a negated item. `MosaicTimelineMarker` is now an alias of
+  `MosaicMarker`; `MosaicFeatureMarker` is removed and `MosaicFeatureListComponent.marker` is a
+  `MosaicMarker`. A `0.3` document's `"marker": "checkmark"` reads as `MosaicMarker.Icon(CHECKMARK)`
+  so one renderer path serves both versions.
+- **Capability reporting covers both contracts** as exact `name@version` pairs.
+  `MOSAIC_SUPPORTED_PROTOCOL_VERSIONS` is `{0.3, 0.4}` and the delivery request advertises both
+  catalogs. Local Preview is **not** bumped: it stays version-locked to Paywall Protocol `0.3`,
+  because its message schema `$ref`s the `0.3` paywall schema directly and Local Preview `0.4` is a
+  separate chunk of that contract.
+
 ## Unreleased (Paywall Protocol 0.3)
 
 - **Adopt Paywall Protocol `0.3`, which replaces `0.2` outright.** There is no `0.2` support, no

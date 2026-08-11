@@ -19,6 +19,12 @@ val protocolV03Fixture = layout.projectDirectory.file(
 val generatedProtocolV03TestAssets = layout.buildDirectory.dir(
     "generated/mosaic/protocol-v03-test-assets",
 )
+val protocolV04Fixture = layout.projectDirectory.file(
+    "../../../protocol/fixtures/v0.4/complete-paywall.json",
+)
+val generatedProtocolV04TestAssets = layout.buildDirectory.dir(
+    "generated/mosaic/protocol-v04-test-assets",
+)
 
 // A Gradle `Copy` whose source does not exist succeeds and produces nothing, so a renamed or
 // deleted canonical fixture would ship a library with no bundled fallback and no build failure.
@@ -29,6 +35,9 @@ check(canonicalFixture.asFile.isFile) {
 check(protocolV03Fixture.asFile.isFile) {
     "The canonical Protocol 0.3 fixture is missing at ${protocolV03Fixture.asFile.path}."
 }
+check(protocolV04Fixture.asFile.isFile) {
+    "The canonical Protocol 0.4 fixture is missing at ${protocolV04Fixture.asFile.path}."
+}
 
 val generateCanonicalPaywallAsset by tasks.registering(Copy::class) {
     from(canonicalFixture)
@@ -38,6 +47,11 @@ val generateCanonicalPaywallAsset by tasks.registering(Copy::class) {
 val generateProtocolV03TestAsset by tasks.registering(Copy::class) {
     from(protocolV03Fixture)
     into(generatedProtocolV03TestAssets.map { it.dir("mosaic/v0.3") })
+    rename { "complete-paywall.json" }
+}
+val generateProtocolV04TestAsset by tasks.registering(Copy::class) {
+    from(protocolV04Fixture)
+    into(generatedProtocolV04TestAssets.map { it.dir("mosaic/v0.4") })
     rename { "complete-paywall.json" }
 }
 
@@ -81,6 +95,7 @@ android {
     }
     sourceSets.named("androidTest") {
         assets.srcDir(generatedProtocolV03TestAssets.get().asFile)
+        assets.srcDir(generatedProtocolV04TestAssets.get().asFile)
     }
 }
 
@@ -102,6 +117,7 @@ afterEvaluate {
 tasks.named("preBuild") {
     dependsOn(generateCanonicalPaywallAsset)
     dependsOn(generateProtocolV03TestAsset)
+    dependsOn(generateProtocolV04TestAsset)
 }
 
 dependencies {

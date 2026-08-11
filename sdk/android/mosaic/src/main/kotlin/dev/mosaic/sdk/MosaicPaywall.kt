@@ -174,6 +174,8 @@ fun MosaicPaywall(
     onInteraction: (MosaicInteractionOutcome) -> Unit = {},
     analyticsRuntime: MosaicAnalyticsRuntime? = null,
     analyticsContext: MosaicAnalyticsPresentationContext? = null,
+    motionDriver: MosaicMotionDriver = MosaicMotionDriver.Default,
+    reducedMotion: Boolean? = null,
 ) {
     when (loadResult) {
         is MosaicPaywallLoadResult.Loaded -> MosaicPaywall(
@@ -190,6 +192,8 @@ fun MosaicPaywall(
             onInteraction = onInteraction,
             analyticsRuntime = analyticsRuntime,
             analyticsContext = analyticsContext,
+            motionDriver = motionDriver,
+            reducedMotion = reducedMotion,
         )
         is MosaicPaywallLoadResult.ConfigurationUnavailable -> {
             LaunchedEffect(loadResult) { onResult(loadResult.presentationResult) }
@@ -213,9 +217,26 @@ fun MosaicPaywall(
     onInteraction: (MosaicInteractionOutcome) -> Unit = {},
     analyticsRuntime: MosaicAnalyticsRuntime? = null,
     analyticsContext: MosaicAnalyticsPresentationContext? = null,
+    motionDriver: MosaicMotionDriver = MosaicMotionDriver.Default,
+    reducedMotion: Boolean? = null,
 ) {
-    val state = remember(document, purchaseProvider, diagnostics, analyticsRuntime, analyticsContext) {
-        MosaicPaywallState(document, purchaseProvider, diagnostics, clock, analyticsRuntime, analyticsContext)
+    val state = remember(
+        document,
+        purchaseProvider,
+        diagnostics,
+        analyticsRuntime,
+        analyticsContext,
+        motionDriver,
+    ) {
+        MosaicPaywallState(
+            document,
+            purchaseProvider,
+            diagnostics,
+            clock,
+            analyticsRuntime,
+            analyticsContext,
+            motionDriver,
+        )
     }
     val dispatch: (MosaicPaywallEvent) -> Unit = { event ->
         onInteraction(event.interaction)
@@ -232,6 +253,7 @@ fun MosaicPaywall(
         videoResolver = videoResolver,
         diagnostics = diagnostics,
         onEvent = dispatch,
+        reducedMotion = reducedMotion,
         modifier = modifier.onGloballyPositioned { state.presented() },
     )
 }
@@ -247,8 +269,14 @@ fun MosaicPaywallContent(
     imageResolver: MosaicBundledImageResolver = MosaicBundledImageResolver.None,
     videoResolver: MosaicBundledVideoResolver = MosaicBundledVideoResolver.None,
     diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
+    /**
+     * Null derives the signal from `Settings.Global.ANIMATOR_DURATION_SCALE`. A supplied value is
+     * what a test asserts against; the setting is not something a test should have to mutate.
+     */
+    reducedMotion: Boolean? = null,
 ) {
     val document = state.document
+    val resolvedReducedMotion = reducedMotion ?: rememberPlatformReducedMotion()
     val localization = remember(document.localization, requestedLocale) {
         MosaicLocalizationResolver(document.localization, requestedLocale)
     }
@@ -269,6 +297,7 @@ fun MosaicPaywallContent(
         LocalMosaicImageResolver provides imageResolver,
         LocalMosaicVideoResolver provides videoResolver,
         LocalMosaicDiagnostics provides diagnostics,
+        LocalMosaicReducedMotion provides resolvedReducedMotion,
     ) {
         val current = state.currentScreenOrNull
         if (current == null) {
@@ -468,6 +497,22 @@ internal fun MosaicDecorativeVideoBackground(
             null -> null
         }
     }
+    /*
+     * Protocol 0.4: under reduced motion a video background does not play.
+     *
+     * `0.3` specified video backgrounds as always muted, autoplaying, looping, and control-free, and
+     * no SDK read the platform signal — which means a Mosaic paywall could invalidate a customer's
+     * App Store Reduced Motion declaration, since Apple's criteria cover "any other ongoing motion".
+     * This is handled explicitly rather than left to the animator scale: Compose honours
+     * `ANIMATOR_DURATION_SCALE` for its own animation APIs, and that does not reach ExoPlayer
+     * playback at all.
+     *
+     * The declared poster is rendered if available and otherwise the declared fallback colour —
+     * deliberately the same resolution order the existing missing-media policy already uses, so this
+     * reuses a path three renderers have implemented rather than introducing a fourth outcome. No
+     * frame of the video is shown, playback is not started and paused, and no control is offered.
+     */
+    val reducedMotion = LocalMosaicReducedMotion.current
     var failed by remember(uri) { mutableStateOf(uri == null) }
     Box(
         modifier = modifier
@@ -485,7 +530,7 @@ internal fun MosaicDecorativeVideoBackground(
                 ownerId = "$ownerId-poster",
             )
         }
-        if (uri != null && !failed) {
+        if (uri != null && !failed && !reducedMotion) {
             val context = LocalContext.current
             val player = remember(uri) {
                 ExoPlayer.Builder(context).build().apply {
@@ -525,7 +570,7 @@ internal fun MosaicDecorativeVideoBackground(
                         importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
                     }
                 },
-                modifier = Modifier.matchParentSize(),
+                modifier = Modifier.matchParentSize().testTag("mosaic-video-$ownerId"),
             )
         }
     }
@@ -626,10 +671,14 @@ internal fun RenderNode(
     modifier: Modifier,
 ) {
     if (!state.isVisible(node.visibilityOrAlways())) return
+    // Motion wraps the whole node, including any media background it owns, and is applied here
+    // rather than inside each component renderer so that one node cannot be animated twice and a
+    // newly added component cannot silently be the one that is never animated at all.
+    val animated = modifier.mosaicNodeMotion(node.id, node.motion, state.motionDriver)
     val mediaBackground = node.appearanceOrNull()?.background
         ?.takeIf { it is MosaicBackground.Image || it is MosaicBackground.Video }
     if (mediaBackground != null) {
-        Box(modifier) {
+        Box(animated) {
             MosaicBackgroundMedia(mediaBackground, Modifier.matchParentSize(), node.id)
             RenderNodeCore(
                 node,
@@ -643,7 +692,7 @@ internal fun RenderNode(
         }
         return
     }
-    RenderNodeCore(node, state, localization, imageResolver, diagnostics, onEvent, modifier)
+    RenderNodeCore(node, state, localization, imageResolver, diagnostics, onEvent, animated)
 }
 
 @Composable

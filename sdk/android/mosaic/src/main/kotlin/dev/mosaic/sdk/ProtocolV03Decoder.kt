@@ -30,6 +30,30 @@ internal val utcTimestampPattern = Regex(
 internal val capabilitiesByWireName = MosaicCapabilityName.entries.associateBy { it.wireName }
 internal val activeDesignSystem = ThreadLocal<RawDesignSystem?>()
 
+/**
+ * The contract version currently being decoded.
+ *
+ * `0.4` is a superset of `0.3` apart from two cleanups, so the two readers share one parser rather
+ * than owning two copies that can drift while each stays internally consistent. Exactly three
+ * things differ, and each reads this: the `motions` catalog, the per-node `motion` block, and the
+ * marker vocabulary. Everything else is byte-identical for both versions by construction.
+ */
+internal val activeProtocolVersion = ThreadLocal<String?>()
+
+internal fun decodingProtocolV04(): Boolean =
+    activeProtocolVersion.get() == MOSAIC_PROTOCOL_V04_VERSION
+
+/**
+ * Motion token ids reached from a node while its screens are being parsed.
+ *
+ * Non-null only during the screen walk, so building the catalog's own model afterwards does not
+ * mark every token as used. `0.4` rejects an unreferenced motion token — deliberately asymmetric
+ * with the colour, background, and shadow catalogs, which carry no such rule — because the
+ * flash-safety floor is checked at a motion's *reference* site. A token nothing references has
+ * therefore never been checked against anything and sits in the catalog looking approved.
+ */
+internal val referencedMotionTokens = ThreadLocal<MutableSet<String>?>()
+
 internal data class RawToken(
     val id: String,
     val name: String,
@@ -41,6 +65,7 @@ internal data class RawDesignSystem(
     val colors: LinkedHashMap<String, RawToken>,
     val backgrounds: LinkedHashMap<String, RawToken>,
     val shadows: LinkedHashMap<String, RawToken>,
+    val motions: LinkedHashMap<String, RawToken> = linkedMapOf(),
 )
 
 
@@ -48,6 +73,7 @@ internal object MosaicProtocolV03Decoder {
     fun decode(
         source: String,
         capabilityReport: MosaicCapabilityReport,
+        schemaVersion: String = MOSAIC_PROTOCOL_VERSION,
     ): MosaicPaywallDocument {
         val root = try {
             JsonParser.parseString(source).objectAt("$")
@@ -65,21 +91,27 @@ internal object MosaicProtocolV03Decoder {
             ),
             "$",
         )
-        root.requireConstant("schemaVersion", MOSAIC_PROTOCOL_VERSION, "$.schemaVersion")
-        val rawDesignSystem = rawDesignSystem(root.required("designSystem", "$"))
-        activeDesignSystem.set(rawDesignSystem)
+        root.requireConstant("schemaVersion", schemaVersion, "$.schemaVersion")
+        activeProtocolVersion.set(schemaVersion)
         try {
+            val rawDesignSystem = rawDesignSystem(root.required("designSystem", "$"))
+            activeDesignSystem.set(rawDesignSystem)
+            val motionReferences = mutableSetOf<String>()
+            referencedMotionTokens.set(motionReferences)
             val initialScreenId = root.requiredIdentifier("initialScreenId", "$.initialScreenId")
             val screens = root.required("screens", "$")
                 .boundedArrayAt("$.screens", 1, 10)
                 .mapIndexed { index, value -> screen(value, "$.screens[$index]") }
+            // Only the screen walk marks references; the catalog's own model is resolved after the
+            // tracker is cleared so that resolving a token cannot make it look used.
+            referencedMotionTokens.remove()
             val initialScreen = screens.singleOrNull { it.id == initialScreenId }
                 ?: throw MosaicProtocolException("initialScreenId must reference exactly one declared screen.")
             if (initialScreen.presentation != MosaicScreenPresentation.SCREEN) {
                 throw MosaicProtocolException("initialScreenId must reference a Screen presentation.")
             }
             val document = MosaicPaywallDocument(
-                schemaVersion = MOSAIC_PROTOCOL_VERSION,
+                schemaVersion = schemaVersion,
                 id = root.requiredIdentifier("id", "$.id"),
                 revision = root.requiredPositiveInteger("revision", "$.revision"),
                 compatibility = compatibility(root.required("compatibility", "$"), capabilityReport),
@@ -96,9 +128,14 @@ internal object MosaicProtocolV03Decoder {
                 designSystem = designSystem(rawDesignSystem),
             )
             validateDocumentSemantics(document, root, capabilityReport)
+            if (decodingProtocolV04()) {
+                validateMotionSemantics(document, rawDesignSystem, motionReferences)
+            }
             return document
         } finally {
             activeDesignSystem.remove()
+            activeProtocolVersion.remove()
+            referencedMotionTokens.remove()
         }
     }
 

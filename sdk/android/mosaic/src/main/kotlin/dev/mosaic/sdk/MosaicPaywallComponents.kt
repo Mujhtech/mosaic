@@ -293,16 +293,22 @@ internal fun RenderFeatureList(
             .testTag("mosaic-node-${component.id}"),
         verticalArrangement = Arrangement.spacedBy(component.gap.dp),
     ) {
-        component.items.forEach { item ->
+        component.items.forEachIndexed { index, item ->
             Row(
                 modifier = Modifier.fillMaxWidth().testTag("mosaic-feature-${item.id}"),
                 verticalAlignment = Alignment.Top,
             ) {
-                Text(
-                    text = "✓",
-                    modifier = Modifier.clearAndSetSemantics { },
-                    color = component.markerColor.toComposeColor(),
-                    style = component.typography.toComposeTextStyle(),
+                // An absent item marker means the item carries the list's marker; it is never a
+                // request for no glyph. Marker colour and size stay component-level, exactly as
+                // they are on Timeline.
+                MosaicMarkerGlyph(
+                    marker = item.marker ?: component.marker,
+                    ownerId = item.id,
+                    ordinal = index + 1,
+                    size = component.typography.fontSize,
+                    color = component.markerColor,
+                    typography = component.typography,
+                    localization = localization,
                 )
                 Spacer(Modifier.width(10.dp))
                 MosaicStyledText(
@@ -454,7 +460,15 @@ internal fun RenderProductCard(
     onEvent: (MosaicPaywallEvent) -> Unit,
     modifier: Modifier,
 ) {
-    val style = card.styles.resolve(isSelected)
+    // `selection` is authored on the Product Selector -- the component that owns the runtime
+    // selection state -- and interpolates the card's own authored Default and Selected box styles.
+    val style = mosaicSelectionStyle(
+        ownerId = card.id,
+        styles = card.styles,
+        isSelected = isSelected,
+        motion = selector.motion?.selection,
+        driver = state.motionDriver,
+    )
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(style.cornerRadius.dp)
     var cardModifier = modifier.mosaicOuterAndSizing(card.sizing, null)
     style.shadow?.let { shadow ->
@@ -530,6 +544,7 @@ internal fun RenderProductCard(
                                 } else {
                                     Modifier
                                 },
+                                selector.motion?.selection,
                             )
                         }
                     }
@@ -565,6 +580,7 @@ internal fun RenderProductCard(
                                 } else {
                                     Modifier
                                 },
+                                selector.motion?.selection,
                             )
                         }
                     }
@@ -584,6 +600,7 @@ internal fun RenderProductCard(
                             Modifier
                                 .align(placement.anchor.toComposeAlignment())
                                 .padding(placement.inset.dp),
+                            selector.motion?.selection,
                         )
                     }
             }
@@ -601,6 +618,7 @@ internal fun RenderProductCardChild(
     diagnostics: MosaicDiagnosticSink,
     onEvent: (MosaicPaywallEvent) -> Unit,
     modifier: Modifier,
+    selectionMotion: MosaicSelectionMotion? = null,
 ) {
     if (child is MosaicProductBadgeComponent) {
         RenderProductBadge(
@@ -612,6 +630,7 @@ internal fun RenderProductCardChild(
             diagnostics,
             onEvent,
             modifier,
+            selectionMotion,
         )
     } else {
         RenderNode(
@@ -636,8 +655,16 @@ internal fun RenderProductBadge(
     diagnostics: MosaicDiagnosticSink,
     onEvent: (MosaicPaywallEvent) -> Unit,
     modifier: Modifier,
+    selectionMotion: MosaicSelectionMotion? = null,
 ) {
-    val style = badge.styles.resolve(selected)
+    // A badge follows its card's selection, so it follows the same authored curve.
+    val style = mosaicSelectionStyle(
+        ownerId = badge.id,
+        styles = badge.styles,
+        isSelected = selected,
+        motion = selectionMotion,
+        driver = state.motionDriver,
+    )
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(style.cornerRadius.dp)
     var badgeModifier = modifier.mosaicOuterAndSizing(badge.sizing, null)
     style.shadow?.let { shadow ->
@@ -797,6 +824,7 @@ internal fun RenderTabs(
                     tab = tab,
                     isSelected = tab.id == active.id,
                     localization = localization,
+                    driver = state.motionDriver,
                     onSelect = { state.selectTab(component.id, tab.id) },
                 )
             }
@@ -846,9 +874,19 @@ private fun MosaicTabControl(
     tab: MosaicTabEntry,
     isSelected: Boolean,
     localization: MosaicLocalizationResolver,
+    driver: MosaicMotionDriver,
     onSelect: () -> Unit,
 ) {
-    val style = component.styles.resolve(isSelected)
+    // Tabs `selection` animates the tab control's style, not the panel swap: `0.3` visibility
+    // semantics remove a hidden node from layout, the accessibility tree, and focus order, and
+    // animating a removal would need a "present but not focusable" third state that does not exist.
+    val style = mosaicSelectionStyle(
+        ownerId = tab.id,
+        styles = component.styles,
+        isSelected = isSelected,
+        motion = component.motion?.selection,
+        driver = driver,
+    )
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(style.cornerRadius.dp)
     val label = localization.resolve(tab.label)
     var controlModifier: Modifier = Modifier
@@ -1010,38 +1048,73 @@ private fun MosaicTimelineGutter(
                 )
             }
         }
-        when (val marker = entry.marker) {
-            null -> Unit
-            MosaicTimelineMarker.Dot -> Canvas(Modifier.size(markerSize.dp)) {
-                drawCircle(markerColor, radius = size.minDimension / 2f)
-            }
-            MosaicTimelineMarker.Ordinal -> Box(
-                Modifier.size(markerSize.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = localization.formatInteger(ordinal),
-                    color = markerColor,
-                    style = component.titleTypography.toComposeTextStyle().copy(
-                        fontSize = (markerSize * 0.7).sp,
-                        lineHeight = markerSize.sp,
-                        color = markerColor,
-                    ),
-                    textAlign = TextAlign.Center,
-                )
-            }
-            is MosaicTimelineMarker.Icon -> RenderIcon(
-                MosaicIconComponent(
-                    id = "${entry.id}-marker",
-                    name = marker.name,
-                    size = markerSize,
-                    color = requireNotNull(component.markerColor),
-                    accessibility = MosaicImageAccessibility.Decorative,
-                ),
-                localization,
-                Modifier,
+        entry.marker?.let { marker ->
+            MosaicMarkerGlyph(
+                marker = marker,
+                ownerId = entry.id,
+                ordinal = ordinal,
+                size = markerSize,
+                color = requireNotNull(component.markerColor),
+                typography = component.titleTypography,
+                localization = localization,
             )
         }
+    }
+}
+
+/**
+ * The one marker renderer, shared by Timeline entries and Feature List items.
+ *
+ * `0.4` consolidated the two marker vocabularies onto a single union so a Feature List can express
+ * a negated item; rendering them through one path is what keeps that a real consolidation rather
+ * than two implementations of one union. Markers are always decorative: the announced content is
+ * the entry's or item's text, and a glyph read aloud beside it would say the same thing twice.
+ */
+@Composable
+internal fun MosaicMarkerGlyph(
+    marker: MosaicMarker,
+    ownerId: String,
+    ordinal: Int,
+    size: Double,
+    color: MosaicColor,
+    typography: MosaicTypography,
+    localization: MosaicLocalizationResolver,
+) {
+    // Resolved once, in composition: a semantic colour reads the Material scheme, which the draw
+    // scope of a Canvas cannot do.
+    val resolved = color.toComposeColor()
+    when (marker) {
+        MosaicMarker.Dot -> Canvas(Modifier.size(size.dp).clearAndSetSemantics { }) {
+            drawCircle(resolved, radius = this.size.minDimension / 2f)
+        }
+        MosaicMarker.Ordinal -> Box(
+            Modifier.size(size.dp).clearAndSetSemantics { },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                // Locale number formatting, so an Arabic catalog is free to render Arabic-Indic
+                // digits without the protocol carrying a second numeral vocabulary.
+                text = localization.formatInteger(ordinal),
+                color = resolved,
+                style = typography.toComposeTextStyle().copy(
+                    fontSize = (size * 0.7).sp,
+                    lineHeight = size.sp,
+                    color = resolved,
+                ),
+                textAlign = TextAlign.Center,
+            )
+        }
+        is MosaicMarker.Icon -> RenderIcon(
+            MosaicIconComponent(
+                id = "$ownerId-marker",
+                name = marker.name,
+                size = size,
+                color = color,
+                accessibility = MosaicImageAccessibility.Decorative,
+            ),
+            localization,
+            Modifier,
+        )
     }
 }
 

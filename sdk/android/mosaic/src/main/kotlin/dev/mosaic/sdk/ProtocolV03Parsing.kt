@@ -23,6 +23,15 @@ internal fun compatibility(
     val entries = objectValue.required("requiredCapabilities", path)
         .boundedArrayAt("$path.requiredCapabilities", 1, 64)
     val seen = mutableSetOf<MosaicCapabilityName>()
+    // The catalog is exact per version: `style.productCardStates` exists at `0.3` and not at `0.4`,
+    // and the three `motion.*` capabilities exist at `0.4` and not at `0.3`. A document declaring
+    // one from the other version is rejected as an unknown capability rather than tolerated.
+    val documentVersion = activeProtocolVersion.get() ?: MOSAIC_PROTOCOL_VERSION
+    val catalog = if (documentVersion == MOSAIC_PROTOCOL_V04_VERSION) {
+        MosaicCapabilityCatalog.v04
+    } else {
+        MosaicCapabilityCatalog.v03
+    }
     val capabilities = entries.mapIndexed { index, element ->
         val capabilityPath = "$path.requiredCapabilities[$index]"
         val capability = element.objectAt(capabilityPath)
@@ -35,8 +44,8 @@ internal fun compatibility(
                 violation = MosaicProtocolViolation.UNSUPPORTED_CAPABILITY,
             )
         val required = MosaicRequiredCapability(name, version)
-        if (name !in MosaicCapabilityCatalog.v03 ||
-            version != MOSAIC_PROTOCOL_VERSION ||
+        if (name !in catalog ||
+            version != documentVersion ||
             !capabilityReport.supports(required)
         ) {
             throw MosaicProtocolException(
@@ -215,7 +224,7 @@ internal fun screenPresentation(value: JsonElement, path: String): MosaicScreenP
 
 internal fun stack(value: JsonElement, path: String): MosaicStack {
     val objectValue = value.objectAt(path)
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "direction", "gap", "padding", "mainAxisDistribution",
             "crossAxisAlignment", "appearance", "sizing", "outerInsets", "visibility",
@@ -228,6 +237,7 @@ internal fun stack(value: JsonElement, path: String): MosaicStack {
     val children = objectValue.required("children", path).boundedArrayAt("$path.children", 0, 500)
     return MosaicStack(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
         direction = stackDirection(objectValue, "direction", "$path.direction"),
         gap = objectValue.requiredLogicalSize("gap", "$path.gap"),
         padding = edgeInsets(objectValue.required("padding", path), "$path.padding"),
@@ -280,7 +290,7 @@ internal fun node(value: JsonElement, path: String): MosaicNode {
 }
 
 internal fun textComponent(objectValue: JsonObject, path: String): MosaicTextComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "value", "typography", "appearance", "sizing", "outerInsets",
             "visibility", "accessibility",
@@ -290,6 +300,7 @@ internal fun textComponent(objectValue: JsonObject, path: String): MosaicTextCom
     )
     return MosaicTextComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
         value = localizedText(objectValue.required("value", path), "$path.value"),
         typography = typography(objectValue.required("typography", path), "$path.typography", true),
         appearance = optionalBoxAppearance(objectValue, path),
@@ -304,7 +315,7 @@ internal fun textComponent(objectValue: JsonObject, path: String): MosaicTextCom
 }
 
 internal fun imageComponent(objectValue: JsonObject, path: String): MosaicImageComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "assetId", "aspectRatio", "contentMode", "appearance", "sizing",
             "outerInsets", "visibility", "accessibility",
@@ -315,6 +326,7 @@ internal fun imageComponent(objectValue: JsonObject, path: String): MosaicImageC
     val sizing = optionalWidthSizing(objectValue, path)
     return MosaicImageComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
         assetId = objectValue.requiredIdentifier("assetId", "$path.assetId"),
         width = sizing?.width ?: MosaicWidthSizing.Content,
         aspectRatio = if (objectValue.hasNonNull("aspectRatio")) {
@@ -338,7 +350,7 @@ internal fun imageComponent(objectValue: JsonObject, path: String): MosaicImageC
 }
 
 internal fun iconComponent(objectValue: JsonObject, path: String): MosaicIconComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "name", "size", "color", "appearance", "sizing", "outerInsets",
             "visibility", "accessibility",
@@ -349,6 +361,7 @@ internal fun iconComponent(objectValue: JsonObject, path: String): MosaicIconCom
     val name = iconName(objectValue, "name", "$path.name")
     return MosaicIconComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
         name = name,
         size = objectValue.requiredPositiveLogicalSize("size", "$path.size"),
         color = color(objectValue.required("color", path), "$path.color"),
@@ -364,7 +377,7 @@ internal fun iconComponent(objectValue: JsonObject, path: String): MosaicIconCom
 }
 
 internal fun buttonComponent(objectValue: JsonObject, path: String): MosaicButtonComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "direction", "gap", "mainAxisDistribution",
             "crossAxisAlignment", "children", "inProgressChildren", "appearance", "sizing",
@@ -384,6 +397,7 @@ internal fun buttonComponent(objectValue: JsonObject, path: String): MosaicButto
     }
     return MosaicButtonComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, buttonMotionSlots),
         direction = stackDirection(objectValue, "direction", "$path.direction"),
         gap = objectValue.requiredLogicalSize("gap", "$path.gap"),
         mainAxisDistribution = mainAxisDistribution(
@@ -411,7 +425,7 @@ internal fun buttonComponent(objectValue: JsonObject, path: String): MosaicButto
 }
 
 internal fun featureListComponent(objectValue: JsonObject, path: String): MosaicFeatureListComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "marker", "gap", "markerColor", "items", "typography",
             "appearance", "sizing", "outerInsets", "visibility", "accessibility",
@@ -419,11 +433,11 @@ internal fun featureListComponent(objectValue: JsonObject, path: String): Mosaic
         path,
         optional = setOf("appearance", "sizing", "outerInsets", "visibility"),
     )
-    objectValue.requireConstant("marker", "checkmark", "$path.marker")
     val items = objectValue.required("items", path).boundedArrayAt("$path.items", 1, 100)
     return MosaicFeatureListComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
-        marker = MosaicFeatureMarker.CHECKMARK,
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
+        marker = featureListMarker(objectValue, path),
         gap = objectValue.requiredLogicalSize("gap", "$path.gap"),
         markerColor = color(objectValue.required("markerColor", path), "$path.markerColor"),
         items = items.mapIndexed { index, item -> featureListItem(item, "$path.items[$index]") },
@@ -439,12 +453,38 @@ internal fun featureListComponent(objectValue: JsonObject, path: String): Mosaic
     )
 }
 
+/**
+ * The list's default glyph.
+ *
+ * `0.3` writes the single string constant `"checkmark"`, which cannot express a *negated* item;
+ * `0.4` writes the marker union Timeline already used. Reading the `0.3` constant as the equivalent
+ * icon marker is what lets one renderer path serve both versions, and each version still accepts
+ * only its own form.
+ */
+internal fun featureListMarker(objectValue: JsonObject, path: String): MosaicMarker {
+    if (!decodingProtocolV04()) {
+        objectValue.requireConstant("marker", "checkmark", "$path.marker")
+        return MosaicMarker.Icon(MosaicIconName.CHECKMARK)
+    }
+    return marker(objectValue.required("marker", path), "$path.marker")
+}
+
 internal fun featureListItem(value: JsonElement, path: String): MosaicFeatureListItem {
     val objectValue = value.objectAt(path)
-    objectValue.expectKeys(setOf("id", "text"), path)
+    val supportsOverride = decodingProtocolV04()
+    val expected = if (supportsOverride) setOf("id", "text", "marker") else setOf("id", "text")
+    objectValue.expectKeys(
+        expected,
+        path,
+        optional = if (supportsOverride) setOf("marker") else emptySet(),
+    )
     return MosaicFeatureListItem(
         id = objectValue.requiredIdentifier("id", "$path.id"),
         text = localizedText(objectValue.required("text", path), "$path.text"),
+        // Absent means the item carries the list's marker. It is never a request for no glyph.
+        marker = objectValue.optional("marker")
+            ?.takeIf { supportsOverride }
+            ?.let { marker(it, "$path.marker") },
     )
 }
 
@@ -452,7 +492,7 @@ internal fun productSelectorComponent(
     objectValue: JsonObject,
     path: String,
 ): MosaicProductSelectorComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "direction", "gap", "crossAxisAlignment",
             "initialProductCardId", "cards", "appearance", "sizing", "outerInsets",
@@ -470,6 +510,7 @@ internal fun productSelectorComponent(
     )
     return MosaicProductSelectorComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, selectableMotionSlots),
         productReferenceIds = cards.map(MosaicProductCardComponent::productReferenceId),
         initiallySelectedProductReferenceId = cards
             .firstOrNull { it.id == initialProductCardId }
@@ -501,7 +542,7 @@ internal fun productSelectorComponent(
 
 internal fun productCardComponent(value: JsonElement, path: String): MosaicProductCardComponent {
     val objectValue = value.objectAt(path)
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "productReferenceId", "direction", "gap",
             "mainAxisDistribution", "crossAxisAlignment", "children", "styles",
@@ -521,6 +562,7 @@ internal fun productCardComponent(value: JsonElement, path: String): MosaicProdu
         .mapIndexed { index, child -> productCardChild(child, "$path.children[$index]") }
     return MosaicProductCardComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
         productReferenceId = objectValue.requiredIdentifier(
             "productReferenceId",
             "$path.productReferenceId",
@@ -560,7 +602,7 @@ internal fun productCardChild(value: JsonElement, path: String): MosaicNode {
 
 internal fun productBadgeComponent(value: JsonElement, path: String): MosaicProductBadgeComponent {
     val objectValue = value.objectAt(path)
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "placement", "direction", "gap", "mainAxisDistribution",
             "crossAxisAlignment", "children", "styles", "sizing",
@@ -571,6 +613,7 @@ internal fun productBadgeComponent(value: JsonElement, path: String): MosaicProd
     objectValue.requireConstant("type", "productBadge", "$path.type")
     return MosaicProductBadgeComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
         placement = productBadgePlacement(
             objectValue.required("placement", path),
             "$path.placement",
@@ -718,7 +761,7 @@ internal fun carouselComponent(
     objectValue: JsonObject,
     path: String,
 ): MosaicCarouselComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "initialPageIndex", "showsIndicators", "pages", "appearance",
             "sizing", "outerInsets", "visibility", "accessibility",
@@ -730,6 +773,7 @@ internal fun carouselComponent(
         .mapIndexed { index, page -> carouselPage(page, "$path.pages[$index]") }
     return MosaicCarouselComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
         initialPageIndex = objectValue.requiredIntegerInRange(
             "initialPageIndex",
             "$path.initialPageIndex",
@@ -767,7 +811,7 @@ internal fun switchComponent(
     objectValue: JsonObject,
     path: String,
 ): MosaicSwitchComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "label", "initialValue", "typography", "offTrackColor",
             "onTrackColor", "thumbColor", "appearance", "sizing", "outerInsets", "visibility",
@@ -778,6 +822,7 @@ internal fun switchComponent(
     )
     return MosaicSwitchComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
         label = localizedText(objectValue.required("label", path), "$path.label"),
         initialValue = objectValue.requiredBoolean("initialValue", "$path.initialValue"),
         typography = typography(objectValue.required("typography", path), "$path.typography", false),
@@ -799,7 +844,7 @@ internal fun countdownComponent(
     objectValue: JsonObject,
     path: String,
 ): MosaicCountdownComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "endsAt", "largestUnit", "smallestUnit", "completedText",
             "typography", "appearance", "sizing", "outerInsets", "visibility", "accessibility",
@@ -811,6 +856,7 @@ internal fun countdownComponent(
     val endsAtEpochMillis = parseCanonicalUtcTimestamp(endsAt, "$path.endsAt")
     return MosaicCountdownComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
         endsAt = endsAt,
         endsAtEpochMillis = endsAtEpochMillis,
         largestUnit = countdownUnit(objectValue, "largestUnit", "$path.largestUnit"),
@@ -833,7 +879,7 @@ internal fun countdownComponent(
 
 
 internal fun tabsComponent(objectValue: JsonObject, path: String): MosaicTabsComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "tabBarDirection", "tabBarGap", "tabBarDistribution", "gap",
             "initialTabId", "tabs", "styles", "labelTypography", "selectedLabelColor",
@@ -847,6 +893,7 @@ internal fun tabsComponent(objectValue: JsonObject, path: String): MosaicTabsCom
         .mapIndexed { index, element -> tabsEntry(element, "$path.tabs[$index]") }
     return MosaicTabsComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, selectableMotionSlots),
         tabBarDirection = when (objectValue.requiredString("tabBarDirection", "$path.tabBarDirection")) {
             "vertical" -> MosaicTabBarDirection.VERTICAL
             "horizontal" -> MosaicTabBarDirection.HORIZONTAL
@@ -895,7 +942,7 @@ internal fun tabsEntry(value: JsonElement, path: String): MosaicTabEntry {
 }
 
 internal fun timelineComponent(objectValue: JsonObject, path: String): MosaicTimelineComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "orientation", "gap", "connector", "entries", "markerColor",
             "markerSize", "titleTypography", "descriptionTypography", "appearance", "sizing",
@@ -930,6 +977,7 @@ internal fun timelineComponent(objectValue: JsonObject, path: String): MosaicTim
     }
     return MosaicTimelineComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
         gap = objectValue.requiredLogicalSize("gap", "$path.gap"),
         connector = timelineConnector(objectValue.required("connector", path), "$path.connector"),
         entries = entries,
@@ -985,31 +1033,13 @@ internal fun timelineEntry(value: JsonElement, path: String): MosaicTimelineEntr
         description = objectValue.optional("description")?.let {
             localizedText(it, "$path.description")
         },
-        marker = objectValue.optional("marker")?.let { timelineMarker(it, "$path.marker") },
+        // The union Timeline has always used; `0.4` gives Feature List the same one.
+        marker = objectValue.optional("marker")?.let { marker(it, "$path.marker") },
     )
 }
 
-internal fun timelineMarker(value: JsonElement, path: String): MosaicTimelineMarker {
-    val objectValue = value.objectAt(path)
-    return when (objectValue.requiredString("kind", "$path.kind")) {
-        "dot" -> {
-            objectValue.expectKeys(setOf("kind"), path)
-            MosaicTimelineMarker.Dot
-        }
-        "ordinal" -> {
-            objectValue.expectKeys(setOf("kind"), path)
-            MosaicTimelineMarker.Ordinal
-        }
-        "icon" -> {
-            objectValue.expectKeys(setOf("kind", "name"), path)
-            MosaicTimelineMarker.Icon(iconName(objectValue, "name", "$path.name"))
-        }
-        else -> throw MosaicProtocolException("Invalid timeline marker kind at $path.kind.")
-    }
-}
-
 internal fun awardComponent(objectValue: JsonObject, path: String): MosaicAwardComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "direction", "gap", "crossAxisAlignment", "emblem", "title",
             "titleTypography", "subtitle", "subtitleTypography", "appearance", "sizing",
@@ -1031,6 +1061,7 @@ internal fun awardComponent(objectValue: JsonObject, path: String): MosaicAwardC
     }
     return MosaicAwardComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
         direction = stackDirection(objectValue, "direction", "$path.direction"),
         gap = objectValue.requiredLogicalSize("gap", "$path.gap"),
         crossAxisAlignment = crossAxisAlignment(
@@ -1086,7 +1117,7 @@ internal fun socialProofComponent(
     objectValue: JsonObject,
     path: String,
 ): MosaicSocialProofComponent {
-    objectValue.expectKeys(
+    objectValue.expectNodeKeys(
         setOf(
             "type", "id", "gap", "quote", "quoteTypography", "attribution",
             "attributionTypography", "rating", "avatar", "appearance", "sizing", "outerInsets",
@@ -1099,6 +1130,7 @@ internal fun socialProofComponent(
     )
     return MosaicSocialProofComponent(
         id = objectValue.requiredIdentifier("id", "$path.id"),
+        motion = optionalNodeMotion(objectValue, path, nodeMotionSlots),
         gap = objectValue.requiredLogicalSize("gap", "$path.gap"),
         quote = localizedText(objectValue.required("quote", path), "$path.quote"),
         quoteTypography = typography(

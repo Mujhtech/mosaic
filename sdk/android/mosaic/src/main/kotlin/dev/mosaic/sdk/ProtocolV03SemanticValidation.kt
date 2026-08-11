@@ -834,6 +834,7 @@ internal fun deriveCapabilities(
     document: MosaicPaywallDocument,
     root: JsonObject,
 ): Set<MosaicCapabilityName> = buildSet {
+    val isV04Document = document.schemaVersion == MOSAIC_PROTOCOL_V04_VERSION
     add(MosaicCapabilityName.LOCALIZATION_CATALOGS)
     add(MosaicCapabilityName.SCREENS)
     if (document.screens.any { it.presentation == MosaicScreenPresentation.SHEET }) {
@@ -941,9 +942,17 @@ internal fun deriveCapabilities(
         if (type == "productSelector") {
             add(MosaicCapabilityName.PRODUCT_FALLBACK)
             add(MosaicCapabilityName.NORMALIZED_OUTCOME)
-            add(MosaicCapabilityName.PRODUCT_CARD_STATES)
         }
-        if (type == "productCard" || type == "productBadge") {
+        // Derived exactly when `component.productSelector`, `component.productCard`, or
+        // `component.productBadge` is derived, which is why `0.4` removes it: a capability that
+        // cannot vary independently of another carries no information.
+        if (isV04Document) {
+            node.getAsJsonObjectOrNull("motion")?.let { motion ->
+                if (motion.hasNonNull("appear")) add(MosaicCapabilityName.MOTION_APPEAR)
+                if (motion.hasNonNull("selection")) add(MosaicCapabilityName.MOTION_SELECTION)
+                if (motion.hasNonNull("loop")) add(MosaicCapabilityName.MOTION_LOOP)
+            }
+        } else if (type == "productSelector" || type == "productCard" || type == "productBadge") {
             add(MosaicCapabilityName.PRODUCT_CARD_STATES)
         }
         node.getAsJsonObjectOrNull("action")?.get("type")?.asString?.let { action ->
