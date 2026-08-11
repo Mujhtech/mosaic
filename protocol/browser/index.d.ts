@@ -8,6 +8,7 @@ import type {
   MosaicCommerceProviderV2Record,
   MosaicLocalProject,
   MosaicLocalProjectV03,
+  MosaicLocalProjectV04,
   MosaicPaywallDocument,
   MosaicPaywallV03Document,
   MosaicPaywallV04Document,
@@ -42,15 +43,41 @@ import type {
   MosaicPreviewMessage,
   MosaicPreviewV03CapabilityReportPayload,
   MosaicPreviewV03Message,
+  MosaicPreviewV04CapabilityReportPayload,
+  MosaicPreviewV04Message,
   MosaicPreviewValidationDiagnostic,
 } from "./generated/contract-types.js";
 
 export * from "./generated/contract-types.js";
 
 export type MosaicContractDiagnostic = MosaicPreviewValidationDiagnostic;
-export type MosaicAnyPaywallDocument = MosaicPaywallV03Document;
-export type MosaicAnyPreviewMessage = MosaicPreviewV03Message;
-export type MosaicAnyLocalProject = MosaicLocalProjectV03;
+/**
+ * Every paywall contract version this runtime can read.
+ *
+ * The 0.4 slice kept this alias at 0.3 on the grounds that widening it "would
+ * tell every existing caller that a draft contract is deliverable". That
+ * rationale conflated two different ideas under one name, and the reader
+ * entry points are where the conflation shows: `validatePaywallDocument` and
+ * `parsePortablePaywallJson` now genuinely return either generation, so an
+ * alias that says 0.3 is simply a lie about what the function hands back.
+ *
+ * "Any" means any version the runtime understands, and that is what it now
+ * means. What is *deliverable* is a separate question, it is decided by the
+ * publishing backend rather than by a TypeScript alias, and no signature here
+ * ever meant it. A caller that wants exactly the release candidate keeps
+ * `MosaicPaywallDocument`, which stays 0.3 and is the narrow name to reach
+ * for. Callers that must handle both narrow on `schemaVersion`; the union is
+ * discriminated, so the compiler makes that unavoidable rather than optional.
+ */
+export type MosaicAnyPaywallDocument =
+  | MosaicPaywallV03Document
+  | MosaicPaywallV04Document;
+export type MosaicAnyPreviewMessage =
+  | MosaicPreviewV03Message
+  | MosaicPreviewV04Message;
+export type MosaicAnyLocalProject =
+  | MosaicLocalProjectV03
+  | MosaicLocalProjectV04;
 export type MosaicAnyCommerceProviderRecord =
   | MosaicCommerceProviderV1Record
   | MosaicCommerceProviderV2Record;
@@ -76,6 +103,11 @@ export type MosaicLocalPreviewNegotiation =
       readonly ok: true;
       readonly selectedVersion: "0.3";
       readonly selectedWebSocketSubprotocol: "mosaic.local-preview.v0.3";
+    }
+  | {
+      readonly ok: true;
+      readonly selectedVersion: "0.4";
+      readonly selectedWebSocketSubprotocol: "mosaic.local-preview.v0.4";
     }
   | {
       readonly ok: false;
@@ -129,20 +161,25 @@ export type MosaicValidationResult<T> =
 
 export declare const localPreviewContractVersion: "0.3";
 export declare const localPreviewWebSocketProtocol: "mosaic.local-preview.v0.3";
-export declare const localPreviewContractVersions: readonly ["0.3"];
-export declare const localPreviewVersionPreference: readonly ["0.3"];
+export declare const localPreviewV04ContractVersion: "0.4";
+export declare const localPreviewContractVersions: readonly ["0.3", "0.4"];
+/** Most preferred first: a 0.4 client renders motion, a 0.3 client still connects. */
+export declare const localPreviewVersionPreference: readonly ["0.4", "0.3"];
 export declare const localPreviewWebSocketProtocols: Readonly<{
   "0.3": "mosaic.local-preview.v0.3";
+  "0.4": "mosaic.local-preview.v0.4";
 }>;
 export declare const paywallContractVersion: "0.3";
 
 /**
  * Paywall Protocol 0.4 (draft): the motion contract.
  *
- * 0.4 is a draft that Studio does not author yet, so the runtime exposes the
- * part of it that has no 0.3 equivalent rather than a second semantic
- * validator. MosaicAnyPaywallDocument deliberately still means 0.3: widening
- * it would tell every existing caller that a draft contract is deliverable.
+ * The reader entry points dispatch on `schemaVersion` and validate a 0.4
+ * document against the 0.4 schema and the 0.4 semantic rules. The 0.4 rules
+ * are expressed as a delta over the 0.3 ones -- one motion catalog, three
+ * motion capabilities, one removed co-derived capability -- rather than as a
+ * second copy, so the two versions cannot drift apart while each stays
+ * internally consistent.
  */
 export declare const paywallV04ContractVersion: "0.4";
 export declare const paywallContractVersions: readonly ["0.3", "0.4"];
@@ -311,6 +348,7 @@ export declare function resolveRatingAnnouncement(
 export declare const previewMessageTypes: readonly MosaicPreviewMessage["type"][];
 export declare const previewMessageTypesByVersion: Readonly<{
   "0.3": readonly MosaicPreviewV03Message["type"][];
+  "0.4": readonly MosaicPreviewV04Message["type"][];
 }>;
 export declare const requiredPreviewCapabilities: readonly MosaicPreviewCapabilityName[];
 export declare const canonicalSchemas: Readonly<{
@@ -324,6 +362,11 @@ export declare const canonicalSchemasByVersion: Readonly<{
     previewMessage: Readonly<Record<string, unknown>>;
     localProject: Readonly<Record<string, unknown>>;
   }>;
+  "0.4": Readonly<{
+    paywall: Readonly<Record<string, unknown>>;
+    previewMessage: Readonly<Record<string, unknown>>;
+    localProject: Readonly<Record<string, unknown>>;
+  }>;
 }>;
 
 export declare function negotiateLocalPreviewVersion(
@@ -332,7 +375,10 @@ export declare function negotiateLocalPreviewVersion(
 ): MosaicLocalPreviewNegotiation;
 
 export declare function decideLocalPreviewDraftDelivery(options?: {
-  readonly capabilityReport?: MosaicPreviewCapabilityReportPayload | MosaicPreviewV03CapabilityReportPayload;
+  readonly capabilityReport?:
+    | MosaicPreviewCapabilityReportPayload
+    | MosaicPreviewV03CapabilityReportPayload
+    | MosaicPreviewV04CapabilityReportPayload;
   readonly document?: MosaicAnyPaywallDocument;
   readonly negotiation?: MosaicLocalPreviewNegotiation;
 }): MosaicLocalPreviewDeliveryDecision;
@@ -453,6 +499,15 @@ export declare function resolveCountdownState(
   readonly smallestUnit: MosaicPaywallV03CountdownComponent["smallestUnit"];
   readonly completedText: MosaicPaywallV03CountdownComponent["completedText"];
 };
+
+/**
+ * The contract version a value claims, defaulting to the release candidate.
+ *
+ * Anything that is not an explicit 0.4 claim reads as 0.3, so a value with a
+ * missing or unknown `schemaVersion` produces exactly the 0.3 diagnostics it
+ * produced before 0.4 existed.
+ */
+export declare function paywallDocumentVersion(value: unknown): "0.3" | "0.4";
 
 export declare function validatePaywallDocument(
   value: unknown,

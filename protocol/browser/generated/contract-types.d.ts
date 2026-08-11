@@ -1864,6 +1864,295 @@ export type MosaicLocalProjectV03 = {
   };
 };
 
+export type MosaicPreviewV04MessageId = string;
+
+export type MosaicPreviewV04SessionId = string;
+
+export type MosaicPreviewV04ClientId = string;
+
+export type MosaicPreviewV04EditableDocumentId = string;
+
+export type MosaicPreviewV04RevisionId = string;
+
+export type MosaicPreviewV04UtcTimestamp = string;
+
+export type MosaicPreviewV04MachineIdentifier = string;
+
+export type MosaicPreviewV04SemanticVersion = string;
+
+export type MosaicPreviewV04SafeText = string;
+
+export type MosaicPreviewV04SafeDisplayName = string;
+
+export type MosaicPreviewV04DiagnosticCode = string;
+
+export type MosaicPreviewV04JsonPointer = string;
+
+export type MosaicPreviewV04ComponentId = string;
+
+export type MosaicPreviewV04LocaleTag = string;
+
+export type MosaicPreviewV04LocalRevision = {
+  "revisionId": MosaicPreviewV04RevisionId;
+  "sequence": number;
+};
+
+export type MosaicPreviewV04SoftwareIdentity = {
+  "id": MosaicPreviewV04MachineIdentifier;
+  "version": MosaicPreviewV04SemanticVersion;
+};
+
+export type MosaicPreviewV04ApplicationIdentity = {
+  "id": MosaicPreviewV04MachineIdentifier;
+  "displayName": MosaicPreviewV04SafeDisplayName;
+  "version": string;
+};
+
+export type MosaicPreviewV04DeviceIdentity = {
+  "displayName": MosaicPreviewV04SafeDisplayName;
+  "systemName": MosaicPreviewV04SafeDisplayName;
+  "systemVersion": string;
+};
+
+export type MosaicPreviewV04ClientIdentity = {
+  "clientId": MosaicPreviewV04ClientId;
+  "displayName": MosaicPreviewV04SafeDisplayName;
+  "renderer": MosaicPreviewV04SoftwareIdentity;
+  "application": MosaicPreviewV04ApplicationIdentity;
+  "device": MosaicPreviewV04DeviceIdentity;
+};
+
+export type MosaicPreviewV04SupportedCapability = {
+  "name": MosaicPreviewV04MachineIdentifier;
+  "version": MosaicPreviewV04SemanticVersion;
+};
+
+export type MosaicPreviewV04CapabilityName = "preview.liveUpdate" | "preview.mockCommerce" | "preview.localeOverride" | "preview.textScale" | "preview.diagnostics";
+
+export type MosaicPreviewV04Capability = {
+  "name": MosaicPreviewV04CapabilityName;
+  "version": "0.4";
+};
+
+export type MosaicPreviewV04Limits = {
+  "maxDocumentBytes": number;
+};
+
+export type MosaicPreviewV04Context = {
+  "locale": MosaicPreviewV04LocaleTag;
+  "textScale": number;
+};
+
+export type MosaicPreviewV04DiagnosticLocation = {
+  "documentPath": MosaicPreviewV04JsonPointer;
+  "componentId"?: MosaicPreviewV04ComponentId;
+  "property"?: string;
+};
+
+export type MosaicPreviewV04RecoveryAction = {
+  "action": "editProperty" | "removeComponent" | "bindProduct" | "selectSupportedTemplate" | "updatePreviewClient" | "restoreLastValidDraft" | "retry" | "reconnect" | "inspectComponent";
+  "message": MosaicPreviewV04SafeText;
+};
+
+export type MosaicPreviewV04ValidationDiagnostic = {
+  "code": MosaicPreviewV04DiagnosticCode;
+  "message": MosaicPreviewV04SafeText;
+  "location": MosaicPreviewV04DiagnosticLocation;
+  "recovery": MosaicPreviewV04RecoveryAction;
+};
+
+export type MosaicPreviewV04CompatibilityWarning = {
+  "code": MosaicPreviewV04DiagnosticCode;
+  "severity": "warning" | "blocking";
+  "message": MosaicPreviewV04SafeText;
+  "location"?: MosaicPreviewV04DiagnosticLocation;
+  "capability"?: MosaicPreviewV04SupportedCapability;
+  "fallback": "keepLastAcceptedDraft" | "useDeclaredAssetFallback" | "useSelectorFallback" | "nativeApproximation";
+  "recovery": MosaicPreviewV04RecoveryAction;
+};
+
+export type MosaicPreviewV04RenderDiagnostic = {
+  "code": MosaicPreviewV04DiagnosticCode;
+  "message": MosaicPreviewV04SafeText;
+  "location"?: MosaicPreviewV04DiagnosticLocation;
+  "fallback": "keepLastAcceptedDraft";
+  "recovery": MosaicPreviewV04RecoveryAction;
+};
+
+export type MosaicPreviewV04Period = {
+  "unit": "day" | "week" | "month" | "year";
+  "value": number;
+};
+
+export type MosaicPreviewV04IntroductoryOffer = {
+  "localizedPrice": MosaicPreviewV04SafeDisplayName;
+  "period": MosaicPreviewV04Period;
+  "cycles": number;
+};
+
+export type MosaicPreviewV04AvailableSubscriptionProduct = {
+  "productReferenceId": MosaicPreviewV04ComponentId;
+  "availability": "available";
+  "kind": "subscription";
+  "localizedPrice": MosaicPreviewV04SafeDisplayName;
+  "currencyCode": string;
+  "billingPeriod": MosaicPreviewV04Period;
+  "trialPeriod"?: MosaicPreviewV04Period;
+  "introductoryOffer"?: MosaicPreviewV04IntroductoryOffer;
+};
+
+export type MosaicPreviewV04AvailableNonConsumableProduct = {
+  "productReferenceId": MosaicPreviewV04ComponentId;
+  "availability": "available";
+  "kind": "nonConsumable";
+  "localizedPrice": MosaicPreviewV04SafeDisplayName;
+  "currencyCode": string;
+};
+
+export type MosaicPreviewV04UnavailableMockProduct = {
+  "productReferenceId": MosaicPreviewV04ComponentId;
+  "availability": "unavailable";
+  "reason": "notConfigured" | "temporarilyUnavailable" | "unsupported";
+};
+
+export type MosaicPreviewV04MockProduct = MosaicPreviewV04AvailableSubscriptionProduct | MosaicPreviewV04AvailableNonConsumableProduct | MosaicPreviewV04UnavailableMockProduct;
+
+export type MosaicPreviewV04NoEntitlement = {
+  "status": "none";
+};
+
+export type MosaicPreviewV04ActiveEntitlement = {
+  "status": "active";
+  "productReferenceId": MosaicPreviewV04ComponentId;
+};
+
+export type MosaicPreviewV04MockEntitlement = MosaicPreviewV04NoEntitlement | MosaicPreviewV04ActiveEntitlement;
+
+export type MosaicPreviewV04MockCommerceState = {
+  "products": Array<MosaicPreviewV04MockProduct>;
+  "purchaseOutcome": "purchased" | "alreadyEntitled" | "cancelled" | "purchaseFailed";
+  "restoreOutcome": "restored" | "alreadyEntitled" | "restoreNoPurchases" | "restoreFailed";
+  "entitlement": MosaicPreviewV04MockEntitlement;
+};
+
+export type MosaicPreviewV04RevisionTarget = {
+  "clientId": MosaicPreviewV04ClientId;
+  "editableDocumentId": MosaicPreviewV04EditableDocumentId;
+  "revision": MosaicPreviewV04LocalRevision;
+};
+
+export type MosaicPreviewV04ClientConnectedPayload = {
+  "client": MosaicPreviewV04ClientIdentity;
+};
+
+export type MosaicPreviewV04ClientDisconnectedPayload = {
+  "clientId": MosaicPreviewV04ClientId;
+  "reason": "closed" | "timeout" | "transportError" | "replaced" | "sessionEnded";
+  "diagnostic"?: MosaicPreviewV04SafeText;
+};
+
+export type MosaicPreviewV04CapabilityReportPayload = {
+  "clientId": MosaicPreviewV04ClientId;
+  "supportedSchemaVersions": Array<MosaicPreviewV04SemanticVersion>;
+  "supportedCapabilities": Array<MosaicPreviewV04SupportedCapability>;
+  "previewCapabilities": Array<MosaicPreviewV04Capability>;
+  "limits": MosaicPreviewV04Limits;
+};
+
+export type MosaicPreviewV04DraftUpdatedPayload = {
+  "editableDocumentId": MosaicPreviewV04EditableDocumentId;
+  "revision": MosaicPreviewV04LocalRevision;
+  "document": MosaicPaywallV04Document;
+  "preview": MosaicPreviewV04Context;
+};
+
+export type MosaicPreviewV04DraftAcceptedPayload = {
+  "clientId": MosaicPreviewV04ClientId;
+  "editableDocumentId": MosaicPreviewV04EditableDocumentId;
+  "revision": MosaicPreviewV04LocalRevision;
+};
+
+export type MosaicPreviewV04DraftRejectedPayload = {
+  "clientId": MosaicPreviewV04ClientId;
+  "editableDocumentId": MosaicPreviewV04EditableDocumentId;
+  "revision": MosaicPreviewV04LocalRevision;
+  "reason": "staleRevision" | "revisionConflict" | "validationFailed" | "unsupportedSchemaVersion" | "unsupportedCapability" | "documentTooLarge" | "renderFailed";
+  "diagnostics": Array<MosaicPreviewV04ValidationDiagnostic>;
+};
+
+export type MosaicPreviewV04ValidationErrorPayload = {
+  "clientId": MosaicPreviewV04ClientId;
+  "editableDocumentId": MosaicPreviewV04EditableDocumentId;
+  "revision": MosaicPreviewV04LocalRevision;
+  "errors": Array<MosaicPreviewV04ValidationDiagnostic>;
+};
+
+export type MosaicPreviewV04RenderWarningPayload = {
+  "clientId": MosaicPreviewV04ClientId;
+  "editableDocumentId": MosaicPreviewV04EditableDocumentId;
+  "revision": MosaicPreviewV04LocalRevision;
+  "warnings": Array<MosaicPreviewV04CompatibilityWarning>;
+};
+
+export type MosaicPreviewV04RenderFailurePayload = {
+  "clientId": MosaicPreviewV04ClientId;
+  "editableDocumentId": MosaicPreviewV04EditableDocumentId;
+  "revision": MosaicPreviewV04LocalRevision;
+  "failure": MosaicPreviewV04RenderDiagnostic;
+};
+
+export type MosaicPreviewV04MockCommerceStateChangedPayload = {
+  "editableDocumentId": MosaicPreviewV04EditableDocumentId;
+  "stateRevision": MosaicPreviewV04LocalRevision;
+  "state": MosaicPreviewV04MockCommerceState;
+};
+
+export type MosaicPreviewV04HeartbeatPayload = {
+  "clientId": MosaicPreviewV04ClientId;
+  "kind": "ping" | "pong";
+  "sequence": number;
+};
+
+export type MosaicPreviewV04MessageType = "previewClientConnected" | "previewClientDisconnected" | "capabilityReport" | "draftUpdated" | "draftAccepted" | "draftRejected" | "validationError" | "renderWarning" | "renderFailure" | "mockCommerceStateChanged" | "previewHeartbeat";
+
+export type MosaicPreviewV04Envelope<
+  TType extends MosaicPreviewV04MessageType,
+  TPayload,
+> = {
+  "previewProtocolVersion": "0.4";
+  "messageId": MosaicPreviewV04MessageId;
+  "sessionId": MosaicPreviewV04SessionId;
+  "sentAt": MosaicPreviewV04UtcTimestamp;
+} & {
+  "type": TType;
+  "payload": TPayload;
+};
+
+export type MosaicPreviewV04Message =
+  | MosaicPreviewV04Envelope<"previewClientConnected", MosaicPreviewV04ClientConnectedPayload>
+  | MosaicPreviewV04Envelope<"previewClientDisconnected", MosaicPreviewV04ClientDisconnectedPayload>
+  | MosaicPreviewV04Envelope<"capabilityReport", MosaicPreviewV04CapabilityReportPayload>
+  | MosaicPreviewV04Envelope<"draftUpdated", MosaicPreviewV04DraftUpdatedPayload>
+  | MosaicPreviewV04Envelope<"draftAccepted", MosaicPreviewV04DraftAcceptedPayload>
+  | MosaicPreviewV04Envelope<"draftRejected", MosaicPreviewV04DraftRejectedPayload>
+  | MosaicPreviewV04Envelope<"validationError", MosaicPreviewV04ValidationErrorPayload>
+  | MosaicPreviewV04Envelope<"renderWarning", MosaicPreviewV04RenderWarningPayload>
+  | MosaicPreviewV04Envelope<"renderFailure", MosaicPreviewV04RenderFailurePayload>
+  | MosaicPreviewV04Envelope<"mockCommerceStateChanged", MosaicPreviewV04MockCommerceStateChangedPayload>
+  | MosaicPreviewV04Envelope<"previewHeartbeat", MosaicPreviewV04HeartbeatPayload>;
+
+export type MosaicLocalProjectV04 = {
+  "fileFormatVersion": "0.4";
+  "editableDocumentId": MosaicPreviewV04EditableDocumentId;
+  "revision": MosaicPreviewV04LocalRevision;
+  "document": MosaicPaywallV04Document;
+  "preview": MosaicPreviewV04Context;
+  "mockCommerce": {
+    "revision": MosaicPreviewV04LocalRevision;
+    "state": MosaicPreviewV04MockCommerceState;
+  };
+};
+
 export type MosaicCommerceProviderV1Identifier = string;
 
 export type MosaicCommerceProviderV1SafeText = string;

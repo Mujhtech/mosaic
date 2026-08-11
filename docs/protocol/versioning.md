@@ -21,8 +21,9 @@ Phase 9C adds Billing Migration Operations `1`, Authoritative Entitlement `2`,
 and Billing State Webhook `2` as exact, parallel drafts. V1 entitlement and
 webhook readers never interpret v2 documents.
 
-Paywall Protocol `0.4` is an eighth draft. See
-[Paywall Protocol 0.4 versioning](#paywall-protocol-04-versioning).
+Paywall Protocol `0.4` is an eighth draft and Local Preview `0.4` a ninth. See
+[Paywall Protocol 0.4 versioning](#paywall-protocol-04-versioning) and
+[Local Preview 0.4 versioning](#local-preview-04-versioning).
 
 These are independent versioned contracts. Their exact version values do not
 imply compatibility with one another and do not change the Paywall
@@ -111,9 +112,21 @@ byte-identical to the static rendering. This is a motion-specific exception and
 not a precedent: server-side stripping of material a reader cannot understand
 remains doctrine-forbidden.
 
-Local Preview is **not** bumped by this slice and remains version-locked to
-`0.3`. What a Local Preview `0.4` needs is enumerated in
-[Protocol 0.4](v0.4.md#local-preview-is-the-named-next-chunk).
+## Local Preview 0.4 versioning
+
+Local Preview `0.4` is a ninth draft, born `status: "draft"` alongside the
+paywall contract it accompanies. Local Preview is version-locked to the paywall
+contract — its message schema `$ref`s the paywall schema URN directly — so a
+paywall bump is a Local Preview bump. Local Preview `0.3` remains the release
+candidate for Paywall Protocol `0.3` drafts and is unchanged.
+
+The message taxonomy, capability names, fallback vocabulary, and delivery
+diagnostic codes are unchanged. `0.4` adds exactly one behavioural rule: an
+accepted revision does not replay appear motion for a screen already listed in
+the runtime state's new `motion.playedAppearScreens` member. It is the only
+runtime member an acceptance carries forward rather than resets, because it is
+the only one the document does not author. See
+[Local Preview 0.4](local-preview-v0.4.md#the-entrance-replay-suppression-rule).
 
 ## Capability negotiation
 
@@ -156,14 +169,21 @@ so a demo cannot be mistaken for a synchronized design.
 
 ## Local Preview negotiation
 
-Local Preview uses one exact WebSocket subprotocol:
+Local Preview uses exact WebSocket subprotocols, offered most preferred first:
 
 ```text
+mosaic.local-preview.v0.4
 mosaic.local-preview.v0.3
 ```
 
+A peer that speaks only `0.3` is served `0.3`; adding the `0.4` draft may not
+strand a client that has not been rebuilt. There is no translation between the
+two: the selected subprotocol fixes the paywall generation for the connection.
+
 The selected connection still does not imply support for every capability, so
-Studio checks the client's capability report before sending a draft.
+Studio checks the client's capability report before sending a draft. Local
+Preview capability names are the same in both versions, so the reported
+*version* is the whole signal.
 
 The protocol remains platform-neutral. Framework convenience, native resource
 names, billing-provider models, and platform-only view behavior are not reasons

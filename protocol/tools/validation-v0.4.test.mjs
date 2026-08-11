@@ -6,11 +6,14 @@ import {
   motionCapabilitiesFor,
   motionEasingControlPoints,
   motionLoopMinimumDurationMilliseconds,
+  parsePortablePaywallJson as parseBrowserPortablePaywallJson,
+  paywallDocumentVersion as browserPaywallDocumentVersion,
   paywallContractVersions,
   paywallV04CapabilityNames,
   paywallV04ContractVersion,
   resolveMotionFrame as resolveBrowserMotionFrame,
   resolveMotionToken as resolveBrowserMotionToken,
+  validatePaywallDocument as validateBrowserPaywallDocument,
 } from "../browser/index.js";
 import { rejectionLayerTargets } from "./generate-rejection-layers.mjs";
 import { buildMotionFrameVectors } from "./generate-motion-frames-v0.4.mjs";
@@ -694,4 +697,87 @@ test("capabilities are derived, and a hand-maintained list is rejected", () => {
       error.includes("missing required capability motion.loop"),
     ),
   );
+});
+
+test("the browser reads 0.4 documents and agrees with the Node validator", () => {
+  const input = artifacts();
+
+  // Every committed valid 0.4 fixture: both readers accept.
+  for (const document of [
+    input.document,
+    input.edgeDocument,
+    input.expiredCountdownDocument,
+    input.hiddenPurchaseTargetDocument,
+    input.navigationOnlyDocument,
+  ]) {
+    assert.equal(
+      validateBrowserPaywallDocument(document).ok,
+      errors({ ...input, document }).length === 0,
+      `valid fixture ${document.id}`,
+    );
+    assert.equal(validateBrowserPaywallDocument(document).ok, true);
+    assert.equal(browserPaywallDocumentVersion(document), "0.4");
+  }
+
+  // Every committed invalid 0.4 fixture: both readers refuse. This is the
+  // anti-drift control for the 0.4 semantic delta -- a browser rule that goes
+  // missing shows up here rather than in a preview client.
+  for (const [index, document] of input.invalidDocuments.entries()) {
+    assert.equal(
+      validateBrowserPaywallDocument(document).ok,
+      false,
+      `invalid fixture ${index}`,
+    );
+  }
+});
+
+test("the browser rejects 0.4 motion mistakes with addressable diagnostics", () => {
+  const input = artifacts();
+  const loop = walkV04DocumentNodes(input.document).find(
+    ({ node: candidate }) => candidate.motion?.loop,
+  );
+  assert.ok(loop, "expected a looping call to action in the canonical fixture");
+
+  // A motion token nothing references has never been checked against the
+  // flash-safety floor, so it is rejected rather than left looking approved.
+  input.document.designSystem.motions.push({
+    id: "motion-orphan",
+    name: "Orphan",
+    value: { type: "motion", durationMilliseconds: 40, easing: "linear" },
+  });
+  const result = validateBrowserPaywallDocument(input.document);
+  assert.equal(result.ok, false);
+  assert.ok(
+    result.diagnostics.some(
+      (entry) =>
+        entry.code === "semantic.unusedDeclaration" &&
+        entry.message.includes("motion-orphan"),
+    ),
+    JSON.stringify(result.diagnostics),
+  );
+  assert.equal(errors(input).length > 0, true);
+});
+
+test("a 0.3 document is still read as 0.3 by the dispatching entry points", () => {
+  const v03 = readV03Json(protocolV03Paths.canonicalFixture);
+
+  assert.equal(browserPaywallDocumentVersion(v03), "0.3");
+  assert.equal(validateBrowserPaywallDocument(v03).ok, true);
+  assert.equal(
+    parseBrowserPortablePaywallJson(JSON.stringify(v03)).ok,
+    true,
+  );
+
+  // And a 0.4 document round-trips through the portable reader, which is the
+  // entry point Studio builds on next.
+  const v04 = artifacts().document;
+  const parsed = parseBrowserPortablePaywallJson(JSON.stringify(v04));
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.value.schemaVersion, "0.4");
+
+  // An unknown version is read as 0.3 and refused there, rather than silently
+  // treated as the newest thing this runtime happens to know.
+  const future = { ...v04, schemaVersion: "9.9" };
+  assert.equal(browserPaywallDocumentVersion(future), "0.3");
+  assert.equal(validateBrowserPaywallDocument(future).ok, false);
 });

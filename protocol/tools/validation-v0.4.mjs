@@ -15,6 +15,7 @@ import {
   validateLayoutAndRuntime,
   validateLocalization,
   validateProductReferences,
+  runtimeStateForAcceptedV03Revision,
   walkObjectValues,
   walkV03DocumentNodes,
 } from "./validation-v0.3.mjs";
@@ -706,6 +707,41 @@ export function v04ManifestFallbackTierErrors(manifest) {
     errors.push(`manifest omits enhancement capability ${name}`);
   }
   return errors;
+}
+
+/**
+ * The runtime state a preview client holds after accepting a 0.4 revision.
+ *
+ * Every 0.3 member still resets from the accepted document, because every one
+ * of them is a value the document authors: a Switch's initial value, a Tabs'
+ * initial tab, a Carousel's initial page, the initial screen, the initial
+ * Product Card. `motion.playedAppearScreens` is the one member the document
+ * does not author -- it records what the *session* has already shown -- so
+ * resetting it would replay every entrance on every keystroke. It is carried
+ * forward instead.
+ *
+ * The carried set is filtered through the accepted document's screens and
+ * emitted in that document's screen order. A screen the new revision no longer
+ * declares cannot have played its entrance in it, and deriving the order from
+ * the document rather than from the previous runtime keeps the answer
+ * independent of the order a client happened to record.
+ *
+ * With no previous runtime -- the first accepted revision of a session -- the
+ * member is `[]`: nothing has appeared yet.
+ */
+export function runtimeStateForAcceptedV04Revision(
+  document,
+  previousRuntime = null,
+) {
+  const played = new Set(previousRuntime?.motion?.playedAppearScreens ?? []);
+  return {
+    ...runtimeStateForAcceptedV03Revision(document),
+    motion: {
+      playedAppearScreens: document.screens
+        .map((screen) => screen.id)
+        .filter((screenId) => played.has(screenId)),
+    },
+  };
 }
 
 export function loadProtocolV04Artifacts() {

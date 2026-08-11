@@ -1,30 +1,51 @@
 import Ajv2020 from "ajv/dist/2020.js";
 
 import compatibilityManifest from "../compatibility/v0.3.json" with { type: "json" };
+import compatibilityManifestV04 from "../compatibility/v0.4.json" with { type: "json" };
 import localProjectSchema from "../schema/local-preview/v0.3/local-project.schema.json" with { type: "json" };
+import localProjectV04Schema from "../schema/local-preview/v0.4/local-project.schema.json" with { type: "json" };
 import previewMessageSchema from "../schema/local-preview/v0.3/preview-message.schema.json" with { type: "json" };
+import previewMessageV04Schema from "../schema/local-preview/v0.4/preview-message.schema.json" with { type: "json" };
 import paywallSchema from "../schema/v0.3/paywall.schema.json" with { type: "json" };
 import paywallV04Schema from "../schema/v0.4/paywall.schema.json" with { type: "json" };
 
 export const localPreviewContractVersion =
   previewMessageSchema.properties.previewProtocolVersion.const;
+export const localPreviewV04ContractVersion =
+  previewMessageV04Schema.properties.previewProtocolVersion.const;
 export const localPreviewWebSocketProtocol =
   `mosaic.local-preview.v${localPreviewContractVersion}`;
-export const localPreviewContractVersions = Object.freeze(["0.3"]);
-export const localPreviewVersionPreference = Object.freeze(["0.3"]);
+export const localPreviewContractVersions = Object.freeze(["0.3", "0.4"]);
+/**
+ * Negotiation order, most preferred first.
+ *
+ * `0.4` leads because a preview client that speaks it can render motion, and a
+ * client that cannot still gets `0.3`. The singular
+ * `localPreviewContractVersion` deliberately stays `0.3`: it names the release
+ * candidate, not the newest draft, exactly as `paywallContractVersion` does.
+ */
+export const localPreviewVersionPreference = Object.freeze(["0.4", "0.3"]);
 export const localPreviewWebSocketProtocols = Object.freeze({
   "0.3": "mosaic.local-preview.v0.3",
+  "0.4": "mosaic.local-preview.v0.4",
 });
 export const previewMessageTypes = Object.freeze([
   ...previewMessageSchema.properties.type.enum,
 ]);
 export const previewMessageTypesByVersion = Object.freeze({
   "0.3": previewMessageTypes,
+  "0.4": Object.freeze([...previewMessageV04Schema.properties.type.enum]),
 });
 export const requiredPreviewCapabilities = Object.freeze([
   ...previewMessageSchema.$defs.previewCapabilityName.enum,
 ]);
 const requiredPreviewCapabilitiesV03 = requiredPreviewCapabilities;
+const requiredPreviewCapabilitiesByVersion = Object.freeze({
+  "0.3": requiredPreviewCapabilitiesV03,
+  "0.4": Object.freeze([
+    ...previewMessageV04Schema.$defs.previewCapabilityName.enum,
+  ]),
+});
 export const canonicalSchemas = Object.freeze({
   paywall: paywallSchema,
   previewMessage: previewMessageSchema,
@@ -36,18 +57,21 @@ export const canonicalSchemasByVersion = Object.freeze({
     previewMessage: previewMessageSchema,
     localProject: localProjectSchema,
   }),
+  "0.4": Object.freeze({
+    paywall: paywallV04Schema,
+    previewMessage: previewMessageV04Schema,
+    localProject: localProjectV04Schema,
+  }),
 });
 
-function incompatibleSchemaVersionDiagnostic() {
+function incompatibleSchemaVersionDiagnostic(version = "0.3") {
   return {
     code: "preview.incompatibleSchemaVersion",
-    message:
-      "This preview client cannot receive the current Protocol 0.3 draft.",
+    message: `This preview client cannot receive the current Protocol ${version} draft.`,
     fallback: "keepLastAcceptedDraft",
     recovery: {
       action: "updatePreviewClient",
-      message:
-        "Update the preview client to a version that supports Local Preview and Protocol 0.3.",
+      message: `Update the preview client to a version that supports Local Preview and Protocol ${version}.`,
     },
   };
 }
@@ -206,10 +230,11 @@ export function decideLocalPreviewDraftDelivery({
       }),
     };
   }
-  if (negotiation.selectedVersion !== document.schemaVersion) {
+  const selectedVersion = negotiation.selectedVersion;
+  if (selectedVersion !== document.schemaVersion) {
     return {
       delivery: "withhold",
-      diagnostic: incompatibleSchemaVersionDiagnostic(),
+      diagnostic: incompatibleSchemaVersionDiagnostic(document.schemaVersion),
     };
   }
   if (!isWellFormedCapabilityReport(capabilityReport)) {
@@ -226,7 +251,7 @@ export function decideLocalPreviewDraftDelivery({
   if (!capabilityReport.supportedSchemaVersions.includes(document.schemaVersion)) {
     return {
       delivery: "withhold",
-      diagnostic: incompatibleSchemaVersionDiagnostic(),
+      diagnostic: incompatibleSchemaVersionDiagnostic(document.schemaVersion),
     };
   }
   const previewCapabilities = new Map(
@@ -235,17 +260,22 @@ export function decideLocalPreviewDraftDelivery({
       version,
     ]),
   );
-  const missingPreviewCapabilities = requiredPreviewCapabilitiesV03.filter(
-    (name) => previewCapabilities.get(name) !== "0.3",
+  // Local Preview capability names are the same in 0.3 and 0.4; the version is
+  // the whole signal. A client reporting the 0.3 generation of them is a client
+  // that has not been rebuilt against the 0.4 message schema.
+  const requiredPreviewCapabilityNames =
+    requiredPreviewCapabilitiesByVersion[selectedVersion] ??
+    requiredPreviewCapabilitiesV03;
+  const missingPreviewCapabilities = requiredPreviewCapabilityNames.filter(
+    (name) => previewCapabilities.get(name) !== selectedVersion,
   );
   if (missingPreviewCapabilities.length > 0) {
     return {
       delivery: "withhold",
       diagnostic: structuredDeliveryDiagnostic({
         code: "preview.unsupportedPreviewCapability",
-        message:
-          "The preview client does not support every required Local Preview capability at version 0.3.",
-        recoveryMessage: `Update the preview client to support: ${missingPreviewCapabilities.join(", ")}@0.3.`,
+        message: `The preview client does not support every required Local Preview capability at version ${selectedVersion}.`,
+        recoveryMessage: `Update the preview client to support: ${missingPreviewCapabilities.join(", ")}@${selectedVersion}.`,
       }),
     };
   }
@@ -303,12 +333,24 @@ export function decideLocalPreviewDraftDelivery({
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 ajv.addSchema(paywallSchema);
+ajv.addSchema(paywallV04Schema);
 ajv.addSchema(previewMessageSchema);
+ajv.addSchema(previewMessageV04Schema);
 const validatePaywallSchema = ajv.getSchema(paywallSchema.$id);
+const validatePaywallV04Schema = ajv.getSchema(paywallV04Schema.$id);
 const validatePreviewMessageSchema = ajv.getSchema(previewMessageSchema.$id);
+const validatePreviewMessageV04Schema = ajv.getSchema(
+  previewMessageV04Schema.$id,
+);
 const validateLocalProjectSchema = ajv.compile(localProjectSchema);
+const validateLocalProjectV04Schema = ajv.compile(localProjectV04Schema);
 
-if (!validatePaywallSchema || !validatePreviewMessageSchema) {
+if (
+  !validatePaywallSchema ||
+  !validatePaywallV04Schema ||
+  !validatePreviewMessageSchema ||
+  !validatePreviewMessageV04Schema
+) {
   throw new Error("Canonical Mosaic schemas were not registered.");
 }
 
@@ -1685,6 +1727,139 @@ function deriveDocumentCapabilities(document, nodeEntries) {
 }
 
 /**
+ * The capabilities a 0.4 document requires.
+ *
+ * A delta over the 0.3 derivation rather than a second copy of it, because
+ * "0.4 is 0.3 plus motion minus one co-derived capability" is the whole
+ * compatibility claim, and a copy would let the two answers drift while each
+ * stayed internally consistent. It mirrors `expectedV04DocumentCapabilities` in
+ * `tools/validation-v0.4.mjs`, and the browser/Node agreement test drives a 0.4
+ * document through both validators.
+ */
+function deriveV04DocumentCapabilities(document, nodeEntries) {
+  const capabilities = deriveDocumentCapabilities(document, nodeEntries);
+  capabilities.delete("style.productCardStates");
+  for (const { node } of nodeEntries) {
+    if (node.motion?.appear) capabilities.add("motion.appear");
+    if (node.motion?.selection) capabilities.add("motion.selection");
+    if (node.motion?.loop) capabilities.add("motion.loop");
+  }
+  return capabilities;
+}
+
+/**
+ * The 0.4 rules that have no 0.3 equivalent.
+ *
+ * Deliberately asymmetric with the colour, background, and shadow catalogs: an
+ * unreferenced colour is inert, but an unreferenced motion is a duration whose
+ * flash safety is checked at its *reference* site, so a token nothing
+ * references has never been checked against anything and sits in the catalog
+ * looking approved. See docs/protocol/v0.4.md.
+ */
+function addV04MotionDiagnostics(diagnostics, document, nodeEntries) {
+  const catalog = document.designSystem.motions;
+  const declared = new Set(catalog.map((token) => token.id));
+  const referenced = new Set();
+  const roots = [document.designSystem, ...nodeEntries.map(({ node }) => node)];
+  for (const root of roots) {
+    walkObjectValues(root, (value) => {
+      if (value.type === "motionToken" && declared.has(value.id)) {
+        referenced.add(value.id);
+      }
+    });
+  }
+  const graph = new Map(catalog.map((token) => [token.id, new Set()]));
+  for (const token of catalog) {
+    walkObjectValues(token.value, (value) => {
+      if (value.type === "motionToken") graph.get(token.id).add(value.id);
+    });
+  }
+  for (const [index, token] of catalog.entries()) {
+    if (referenced.has(token.id)) continue;
+    // A token reached only through another token is used; an unreachable one
+    // is not.
+    if ([...referenced].some((id) => graph.get(id)?.has(token.id))) continue;
+    diagnostics.push(
+      diagnostic({
+        code: "semantic.unusedDeclaration",
+        message: `Motion token ${token.id} is declared but never referenced.`,
+        documentPath: `/designSystem/motions/${index}`,
+        property: "motions",
+        recoveryMessage:
+          "Reference the motion where it is used, or remove it from the catalog.",
+        document,
+      }),
+    );
+  }
+
+  const loopsByScreen = new Map();
+  for (const { node, path, screenId, ancestors } of nodeEntries) {
+    const motion = node.motion;
+    if (!motion) continue;
+
+    if (motion.appear) {
+      const animatedAncestor = ancestors.find(
+        (ancestor) => ancestor.motion?.appear,
+      );
+      if (animatedAncestor) {
+        // Two entrance opacities multiply, and three renderers compose that
+        // product at different points in their pipelines.
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.motion",
+            message: `${node.id} declares appear motion inside ${animatedAncestor.id}, which already declares one.`,
+            documentPath: `${path}/motion/appear`,
+            componentId: node.id,
+            property: "motion",
+            recoveryMessage:
+              "Put the entrance on the group you want to animate, not on both.",
+            document,
+          }),
+        );
+      }
+    }
+
+    if (!motion.loop) continue;
+    loopsByScreen.set(screenId, [
+      ...(loopsByScreen.get(screenId) ?? []),
+      { node, path },
+    ]);
+    const resolved = resolveMotionToken(document, motion.loop.curve);
+    if (!resolved) continue;
+    if (resolved.durationMilliseconds >= motionLoopMinimumDurationMilliseconds) {
+      continue;
+    }
+    diagnostics.push(
+      diagnostic({
+        code: "semantic.motion",
+        message: `Loop motion on ${node.id} resolves to ${resolved.durationMilliseconds}ms, below the ${motionLoopMinimumDurationMilliseconds}ms flash-safety floor.`,
+        documentPath: `${path}/motion/loop/curve`,
+        componentId: node.id,
+        property: "motion",
+        recoveryMessage: `Use a motion of at least ${motionLoopMinimumDurationMilliseconds}ms for a looping pulse.`,
+        document,
+      }),
+    );
+  }
+  for (const [screenId, entries] of loopsByScreen) {
+    if (entries.length <= 1) continue;
+    for (const entry of entries.slice(1)) {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.motion",
+          message: `Screen ${screenId} declares loop motion on more than one button.`,
+          documentPath: `${entry.path}/motion/loop`,
+          componentId: entry.node.id,
+          property: "motion",
+          recoveryMessage: "Keep at most one looping call to action per screen.",
+          document,
+        }),
+      );
+    }
+  }
+}
+
+/**
  * The capability names a document requires, in canonical order.
  *
  * The single reference implementation. Studio serialises
@@ -1757,11 +1932,21 @@ function collectLocalizedText(value, path, entries) {
   }
 }
 
-function semanticPaywallDiagnostics(document) {
+const designSystemCategoryByTokenType = Object.freeze({
+  colorToken: "colors",
+  backgroundToken: "backgrounds",
+  shadowToken: "shadows",
+  motionToken: "motions",
+});
+
+function semanticPaywallDiagnostics(document, version = paywallContractVersion) {
   const diagnostics = [];
-  const manifest = compatibilityManifest;
+  const isV04 = version === paywallV04ContractVersion;
+  const manifest = isV04 ? compatibilityManifestV04 : compatibilityManifest;
   const nodeEntries = walkDocumentNodes(document);
-  const expectedCapabilities = deriveDocumentCapabilities(document, nodeEntries);
+  const expectedCapabilities = isV04
+    ? deriveV04DocumentCapabilities(document, nodeEntries)
+    : deriveDocumentCapabilities(document, nodeEntries);
   const declaredCapabilities = document.compatibility.requiredCapabilities;
   const declaredByName = new Map();
   const supportedByName = new Map(
@@ -1775,14 +1960,10 @@ function semanticPaywallDiagnostics(document) {
     colorToken: document.designSystem.colors,
     backgroundToken: document.designSystem.backgrounds,
     shadowToken: document.designSystem.shadows,
+    ...(isV04 ? { motionToken: document.designSystem.motions } : {}),
   };
   for (const [type, catalog] of Object.entries(catalogs)) {
-    const category =
-      type === "colorToken"
-        ? "colors"
-        : type === "backgroundToken"
-          ? "backgrounds"
-          : "shadows";
+    const category = designSystemCategoryByTokenType[type];
     addDuplicateDiagnostics({
       diagnostics,
       entries: catalog,
@@ -2936,6 +3117,8 @@ function semanticPaywallDiagnostics(document) {
     );
   }
 
+  if (isV04) addV04MotionDiagnostics(diagnostics, document, nodeEntries);
+
   return diagnostics;
 }
 
@@ -3034,16 +3217,48 @@ function duplicateCapabilityDiagnostics(message) {
   return diagnostics;
 }
 
+/**
+ * The contract version a value claims, defaulting to the release candidate.
+ *
+ * Anything that is not an explicit `0.4` claim is read as `0.3`, so a value
+ * with a missing, malformed, or unknown `schemaVersion` produces exactly the
+ * 0.3 schema diagnostics it produced before 0.4 existed. Dispatching on the
+ * claim rather than on shape matters because 0.4 is a superset: a 0.3 document
+ * validated against the 0.4 schema would be rejected only by its version
+ * `const`, which is a confusing way to say "this reader is newer than you".
+ */
+export function paywallDocumentVersion(value) {
+  return isRecord(value) && value.schemaVersion === paywallV04ContractVersion
+    ? paywallV04ContractVersion
+    : paywallContractVersion;
+}
+
 export function validatePaywallDocument(value) {
-  const schemaErrors = schemaDiagnostics(validatePaywallSchema, value);
+  const version = paywallDocumentVersion(value);
+  const schemaErrors = schemaDiagnostics(
+    version === paywallV04ContractVersion
+      ? validatePaywallV04Schema
+      : validatePaywallSchema,
+    value,
+  );
   if (schemaErrors.length > 0) return failure(schemaErrors);
 
-  const semanticErrors = semanticPaywallDiagnostics(value);
+  const semanticErrors = semanticPaywallDiagnostics(value, version);
   return semanticErrors.length > 0 ? failure(semanticErrors) : success(value);
 }
 
 export function validatePreviewMessage(value, options = {}) {
-  const schemaErrors = schemaDiagnostics(validatePreviewMessageSchema, value);
+  const previewVersion =
+    isRecord(value) &&
+    value.previewProtocolVersion === localPreviewV04ContractVersion
+      ? localPreviewV04ContractVersion
+      : localPreviewContractVersion;
+  const schemaErrors = schemaDiagnostics(
+    previewVersion === localPreviewV04ContractVersion
+      ? validatePreviewMessageV04Schema
+      : validatePreviewMessageSchema,
+    value,
+  );
   if (schemaErrors.length > 0) return failure(schemaErrors);
 
   const diagnostics = duplicateCapabilityDiagnostics(value);
@@ -3063,7 +3278,12 @@ export function validatePreviewMessage(value, options = {}) {
 }
 
 export function validateLocalProject(value) {
-  const schemaErrors = schemaDiagnostics(validateLocalProjectSchema, value);
+  const schemaErrors = schemaDiagnostics(
+    isRecord(value) && value.fileFormatVersion === localPreviewV04ContractVersion
+      ? validateLocalProjectV04Schema
+      : validateLocalProjectSchema,
+    value,
+  );
   if (schemaErrors.length > 0) return failure(schemaErrors);
 
   const documentResult = validatePaywallDocument(value.document);
