@@ -379,34 +379,43 @@ final class MotionDriverTests: XCTestCase {
 
   // MARK: - Screen re-entry
 
-  /// A screen the customer left and returned to plays its entrances again, and
-  /// the bounded pulse spends its cycles again, both measured from the new entry.
+  /// A screen the customer left and returned to plays its entrance again, and its
+  /// bounded pulse gets a fresh budget, both measured from the new entry.
   ///
-  /// Protects the node-entry origin across navigation, which the existing
-  /// coverage could not reach: every other motion test starts at the driver's
-  /// origin, where "since node entry" and "since the driver started" are the same
-  /// number. They diverge only after a re-entry, and the closing assertions pin
-  /// that divergence — at the instant checked, a renderer that kept measuring
-  /// from the driver's origin would show the static rendering, so dropping the
-  /// entry origin fails this test rather than merely making it redundant.
+  /// Protects the node-entry origin across navigation, which no other motion test
+  /// reaches: every one of them starts at the driver's origin, where "since node
+  /// entry" and "since the driver started" are the same number. They diverge only
+  /// after a re-entry, and the closing assertions pin that divergence — at the
+  /// instant checked, a renderer still measuring from the driver's origin shows
+  /// the static rendering, so dropping the entry origin fails this test rather
+  /// than merely making it redundant.
   ///
-  /// The canonical fixture's second screen is a sheet, which is presented *over*
-  /// the offer screen and leaves its nodes in place. Promoting it to a full
-  /// screen is the smallest change that makes the purchase button genuinely
-  /// leave; the sheet case is the counterpart test below.
+  /// Driven by `screen-round-trip.json`, whose two screens are both `screen`
+  /// presentations, so navigating between them genuinely removes and rebuilds
+  /// each screen's nodes. `complete-paywall.json` cannot express this: its second
+  /// screen is a sheet, presented *over* the first, which is the negative half and
+  /// is covered by the test below.
   func testEntranceAndPulseReplayFromNodeEntryWhenAScreenIsReEntered() throws {
-    let document = try v04DocumentWithDetailsAsAFullScreen()
+    let document = try v04Document(named: "screen-round-trip.json")
     let model = MosaicPaywallModel(
       document: document,
       purchaseProvider: MockMosaicPurchaseProvider(products: MosaicProduct.phase1MockProducts),
       onResult: { _ in }
     )
-    guard case .button(let button)? = document.allNodes.first(where: { $0.id == "purchase" })
-    else { return XCTFail("Expected the canonical purchase button.") }
-    let appear = try XCTUnwrap(button.motion?.appear)
+
+    // The entrance is authored on the screen's root content stack, which the
+    // renderer reaches directly rather than as a node, so it is read the same way
+    // `surface(for:)` reads it.
+    let start = try XCTUnwrap(document.screen(id: "start"))
+    let appear = try XCTUnwrap(start.layout.content.motion?.appear)
+    guard case .button(let button)? = document.allNodes.first(where: { $0.id == "view-details" })
+    else { return XCTFail("Expected the start screen's navigating button.") }
     let loop = try XCTUnwrap(button.motion?.loop)
     let appearCurve = try XCTUnwrap(document.resolvedMotionCurve(appear.curve))
     let loopCurve = try XCTUnwrap(document.resolvedMotionCurve(loop.curve))
+    XCTAssertEqual(appearCurve.durationMilliseconds, 240)
+    XCTAssertEqual(loopCurve.durationMilliseconds, 900)
+    XCTAssertEqual(loop.repeatCount, 3)
 
     let driver = MosaicMotionDriver.controlled()
     // Exactly what the two controlled-mode motion views read.
@@ -422,18 +431,19 @@ final class MotionDriverTests: XCTestCase {
     }
 
     driver.enterScreen(model.baseScreen?.id)
-    XCTAssertEqual(model.baseScreen?.id, "offer")
+    XCTAssertEqual(model.baseScreen?.id, "start")
     XCTAssertEqual(driver.screenEntryCount, 1)
 
-    let (entering, pulsing) = try frames(at: 360)
+    let (entering, pulsing) = try frames(at: 120)
     XCTAssertFalse(entering.isStatic)
     XCTAssertFalse(pulsing.isStatic)
     XCTAssertEqual(pulsing.cycle, 0)
 
-    // Both settle, and the pulse spends its authored cycles.
-    let exhausted =
-      appear.delayMilliseconds + appearCurve.durationMilliseconds
-      + loopCurve.durationMilliseconds * loop.repeatCount
+    // Both settle, and the pulse spends its three authored cycles.
+    let exhausted = max(
+      appear.delayMilliseconds + appearCurve.durationMilliseconds,
+      loopCurve.durationMilliseconds * loop.repeatCount
+    )
     let (settled, rested) = try frames(at: exhausted)
     XCTAssertTrue(settled.isStatic)
     XCTAssertTrue(rested.isStatic)
@@ -442,37 +452,43 @@ final class MotionDriverTests: XCTestCase {
     driver.enterScreen(model.baseScreen?.id)
     XCTAssertEqual(driver.screenEntryCount, 1)
 
+    // The fixture's own navigation: start → details → back.
     model.navigate(to: "details")
     driver.advance(to: 4_000)
     driver.enterScreen(model.baseScreen?.id)
     XCTAssertEqual(model.baseScreen?.id, "details")
+    XCTAssertNil(model.presentedSheet, "Both screens are screen presentations.")
 
     model.navigateBack()
     driver.advance(to: 5_000)
     driver.enterScreen(model.baseScreen?.id)
-    XCTAssertEqual(model.baseScreen?.id, "offer")
+    XCTAssertEqual(model.baseScreen?.id, "start")
     XCTAssertEqual(driver.screenEntryCount, 3)
     XCTAssertEqual(driver.screenEntryElapsedMilliseconds, 5_000)
 
     // The same offset into the new entry is the same frame as the first time.
-    let (replayedEntrance, replayedPulse) = try frames(at: 5_360)
+    let (replayedEntrance, replayedPulse) = try frames(at: 5_120)
     XCTAssertEqual(replayedEntrance.opacity, entering.opacity)
     XCTAssertEqual(replayedEntrance.translateLogicalSize, entering.translateLogicalSize)
     XCTAssertEqual(replayedPulse.scale, pulsing.scale)
     XCTAssertEqual(replayedPulse.opacityMultiplier, pulsing.opacityMultiplier)
-    // The bound is per screen entry, not per session: the pulse is in its first
-    // cycle again rather than permanently spent.
+    // A fresh budget: the bound is per screen entry, not per session, so the
+    // pulse is in its first cycle again rather than permanently spent.
     XCTAssertEqual(replayedPulse.cycle, 0)
+    // And it still ends after three cycles counted from *this* entry.
+    let (_, spentAgain) = try frames(
+      at: 5_000 + loopCurve.durationMilliseconds * loop.repeatCount)
+    XCTAssertTrue(spentAgain.isStatic)
 
-    // Measured from the driver's origin instead, both would be static — which is
-    // what makes the assertions above a test of the entry origin.
+    // Measured from the driver's origin instead, both would be static at 5_120 —
+    // which is what makes the assertions above a test of the entry origin.
     XCTAssertTrue(
       try MosaicMotionResolver.appearFrame(
-        appear, curve: appearCurve, elapsedMilliseconds: 5_360, reducedMotion: false
+        appear, curve: appearCurve, elapsedMilliseconds: 5_120, reducedMotion: false
       ).isStatic)
     XCTAssertTrue(
       try MosaicMotionResolver.loopFrame(
-        loop, curve: loopCurve, elapsedMilliseconds: 5_360, reducedMotion: false
+        loop, curve: loopCurve, elapsedMilliseconds: 5_120, reducedMotion: false
       ).isStatic)
   }
 
@@ -618,32 +634,6 @@ final class MotionDriverTests: XCTestCase {
         accessibility: .unrestricted),
       .still(posterID: "poster", recordsUnavailable: true)
     )
-  }
-
-  /// The canonical `0.4` document with its second screen promoted from a sheet to
-  /// a full screen, so navigating to it genuinely removes the offer screen's
-  /// nodes.
-  ///
-  /// The declared capabilities are trimmed with it: a document that keeps
-  /// `navigation.sheets` after its only sheet became a screen declares a
-  /// capability nothing consumes, which the validator rejects — correctly.
-  private func v04DocumentWithDetailsAsAFullScreen() throws -> MosaicPaywallDocument {
-    var object = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any])
-    var screens = try XCTUnwrap(object["screens"] as? [[String: Any]])
-    let index = try XCTUnwrap(screens.firstIndex { $0["id"] as? String == "details" })
-    screens[index]["presentation"] = ["type": "screen"]
-    object["screens"] = screens
-
-    var compatibility = try XCTUnwrap(object["compatibility"] as? [String: Any])
-    let capabilities = try XCTUnwrap(compatibility["requiredCapabilities"] as? [[String: Any]])
-    compatibility["requiredCapabilities"] = capabilities.filter {
-      $0["name"] as? String != MosaicCapabilityName.sheets.rawValue
-    }
-    object["compatibility"] = compatibility
-
-    return try MosaicProtocolDecoder.decode(
-      JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
   }
 
   // MARK: - Terminal state

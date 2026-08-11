@@ -54,7 +54,7 @@ final class ProtocolV04Tests: XCTestCase {
     // frames and announcements rather than a `schemaVersion`.
     let corpora: Set<String> = ["motion-frames.json", "accessibility-announcement.json"]
     let names = try v04FixtureNames(in: ".").filter { !corpora.contains($0) }
-    XCTAssertEqual(names.count, 5)
+    XCTAssertEqual(names.count, 6)
     for name in names {
       XCTAssertNoThrow(try v04Document(named: name), name)
     }
