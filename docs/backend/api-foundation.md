@@ -165,6 +165,7 @@ variables take precedence because `.env` loading does not overwrite them.
 | `MOSAIC_AUTH_BURST`               | `4`                                  | Burst size for each authentication limiter bucket.                                                          |
 | `MOSAIC_AUTH_LIMITER_ENTRIES`     | `10000`                              | Bound on in-process authentication limiter keys.                                                            |
 | `MOSAIC_PROTOCOL_V03_SCHEMA_PATH` | repository canonical schema path     | Canonical Protocol 0.3 JSON Schema compiled at startup.                                                      |
+| `MOSAIC_PROTOCOL_V04_SCHEMA_PATH` | repository canonical schema path     | Canonical Protocol 0.4 JSON Schema compiled at startup. A document is validated against exactly the version its `schemaVersion` declares. |
 | `MOSAIC_COMMERCE_PROVIDER_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Provider v1 JSON Schema compiled at API startup.                                          |
 | `MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Configuration v1 JSON Schema compiled at API startup.                              |
 | `MOSAIC_COMMERCE_PROVIDER_V2_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Provider v2 JSON Schema compiled at API startup. |

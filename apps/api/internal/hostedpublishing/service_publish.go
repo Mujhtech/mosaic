@@ -659,14 +659,10 @@ func buildDeliveryPayload(releaseID string, releaseNumber int64, environment Env
 	}
 	sort.Slice(versionValues, func(i, j int) bool { return versionValues[i].ID < versionValues[j].ID })
 	deliveryVersions := make([]deliveryVersion, 0, len(versionValues))
-	requiredCapabilities := make(map[string]deliveryRequiredCapability)
+	requiredCapabilities := make(map[string]map[string]deliveryRequiredCapability)
 	for _, version := range versionValues {
-		capabilities, err := documentRequiredCapabilities(version.Document)
-		if err != nil {
+		if err := accumulateProtocolCapabilities(requiredCapabilities, version.ProtocolVersion, version.Document); err != nil {
 			return nil, "", err
-		}
-		for _, capability := range capabilities {
-			requiredCapabilities[capability.Name+"@"+capability.Version] = capability
 		}
 		assetBindings := make([]deliveryAssetBinding, 0, len(version.Assets))
 		for _, binding := range version.Assets {
@@ -679,16 +675,6 @@ func buildDeliveryPayload(releaseID string, releaseNumber int64, environment Env
 			ProductReferenceIDs: uniqueStrings(version.ProductIDs), AssetBindings: assetBindings,
 		})
 	}
-	capabilityValues := make([]deliveryRequiredCapability, 0, len(requiredCapabilities))
-	for _, capability := range requiredCapabilities {
-		capabilityValues = append(capabilityValues, capability)
-	}
-	sort.Slice(capabilityValues, func(i, j int) bool {
-		if capabilityValues[i].Name == capabilityValues[j].Name {
-			return capabilityValues[i].Version < capabilityValues[j].Version
-		}
-		return capabilityValues[i].Name < capabilityValues[j].Name
-	})
 	productValues := make([]Product, 0, len(products))
 	for _, product := range products {
 		productValues = append(productValues, product)
@@ -710,7 +696,7 @@ func buildDeliveryPayload(releaseID string, releaseNumber int64, environment Env
 	envelope := deliveryEnvelope{ConfigurationDeliveryVersion: DeliveryVersion, Release: deliveryRelease{
 		ID: releaseID, Number: releaseNumber, Environment: deliveryEnvironment{ID: environment.ID, Key: environment.Key},
 		PublishedAt: publishedAt.UTC().Format(time.RFC3339Nano), Compatibility: deliveryCompatibility{
-			PaywallProtocols: []deliveryProtocolCompatibility{{Version: ProtocolVersion, RequiredCapabilities: capabilityValues}},
+			PaywallProtocols: protocolCompatibilityEntries(requiredCapabilities),
 			Acceptance:       "atomic",
 		},
 		Placements: deliveryPlacements, PaywallVersions: deliveryVersions, ProductReferences: deliveryProducts, AssetReferences: deliveryAssets,
@@ -877,7 +863,7 @@ func buildDeliveryV2Payload(v1Payload json.RawMessage, projectID, environmentMod
 	sort.Strings(algorithms)
 	deliveryPaywalls := make([]deliveryVersion, 0, len(requiredPaywalls))
 	requiredAssets := map[string]struct{}{}
-	requiredCapabilities := map[string]deliveryRequiredCapability{}
+	requiredCapabilities := map[string]map[string]deliveryRequiredCapability{}
 	for _, version := range v1.Release.PaywallVersions {
 		if _, ok := requiredPaywalls[version.ID]; !ok {
 			continue
@@ -889,21 +875,10 @@ func buildDeliveryV2Payload(v1Payload json.RawMessage, projectID, environmentMod
 		for _, binding := range version.AssetBindings {
 			requiredAssets[binding.AssetReferenceID] = struct{}{}
 		}
-		capabilities, err := documentRequiredCapabilities(version.Document)
-		if err != nil {
+		if err := accumulateProtocolCapabilities(requiredCapabilities, version.ProtocolVersion, version.Document); err != nil {
 			return nil, "", err
 		}
-		for _, capability := range capabilities {
-			requiredCapabilities[capability.Name+"@"+capability.Version] = capability
-		}
 	}
-	capabilityValues := make([]deliveryRequiredCapability, 0, len(requiredCapabilities))
-	for _, capability := range requiredCapabilities {
-		capabilityValues = append(capabilityValues, capability)
-	}
-	sort.Slice(capabilityValues, func(i, j int) bool {
-		return capabilityValues[i].Name+capabilityValues[i].Version < capabilityValues[j].Name+capabilityValues[j].Version
-	})
 	productValues := make([]Product, 0, len(requiredProducts))
 	for _, product := range products {
 		if _, ok := requiredProducts[product.ID]; ok {
@@ -930,7 +905,7 @@ func buildDeliveryV2Payload(v1Payload json.RawMessage, projectID, environmentMod
 			deliveryAssets = append(deliveryAssets, asset)
 		}
 	}
-	paywallProtocols := []deliveryProtocolCompatibility{{Version: ProtocolVersion, RequiredCapabilities: capabilityValues}}
+	paywallProtocols := protocolCompatibilityEntries(requiredCapabilities)
 	envelope := deliveryV2Envelope{ConfigurationDeliveryVersion: "2", Release: deliveryV2Release{ID: v1.Release.ID, Number: v1.Release.Number, ProjectID: projectID, Environment: deliveryV2Environment{ID: v1.Release.Environment.ID, Key: v1.Release.Environment.Key, Mode: environmentMode}, PublishedAt: v1.Release.PublishedAt, Compatibility: deliveryV2Compatibility{PlacementDecisionContracts: []deliveryDecisionCompatibility{{Version: "1", RequiredFeatures: features, BucketingAlgorithms: algorithms}}, PaywallProtocols: paywallProtocols, Acceptance: "atomic"}, PlacementDecisions: decisionDocuments, PaywallVersions: deliveryPaywalls, ProductReferences: deliveryProducts, EntitlementReferences: entitlementValues, AssetReferences: deliveryAssets}}
 	material, err := json.Marshal(envelope.Release)
 	if err != nil {
@@ -951,6 +926,59 @@ func buildDeliveryV2Payload(v1Payload json.RawMessage, projectID, environmentMod
 		return nil, "", err
 	}
 	return payload, digestString(string(payload)), nil
+}
+
+// accumulateProtocolCapabilities collects a Paywall Version's declared required
+// capabilities under the protocol version the Version itself carries. A Version
+// persisted before the field was authoritative counts as the 0.3 baseline.
+func accumulateProtocolCapabilities(byVersion map[string]map[string]deliveryRequiredCapability, protocolVersion string, document json.RawMessage) error {
+	capabilities, err := documentRequiredCapabilities(document)
+	if err != nil {
+		return err
+	}
+	if protocolVersion == "" {
+		protocolVersion = ProtocolVersion
+	}
+	bucket := byVersion[protocolVersion]
+	if bucket == nil {
+		bucket = map[string]deliveryRequiredCapability{}
+		byVersion[protocolVersion] = bucket
+	}
+	for _, capability := range capabilities {
+		bucket[capability.Name+"@"+capability.Version] = capability
+	}
+	return nil
+}
+
+// protocolCompatibilityEntries renders one compatibility entry per protocol
+// version the Release carries, in version order, so a Release holding both a
+// 0.3 and a 0.4 document advertises both and an SDK missing either is refused
+// atomically. A Release with no Paywall Versions keeps the frozen v1 shape: a
+// single baseline entry with no required capabilities.
+func protocolCompatibilityEntries(byVersion map[string]map[string]deliveryRequiredCapability) []deliveryProtocolCompatibility {
+	if len(byVersion) == 0 {
+		return []deliveryProtocolCompatibility{{Version: ProtocolVersion, RequiredCapabilities: []deliveryRequiredCapability{}}}
+	}
+	versions := make([]string, 0, len(byVersion))
+	for version := range byVersion {
+		versions = append(versions, version)
+	}
+	sort.Strings(versions)
+	entries := make([]deliveryProtocolCompatibility, 0, len(versions))
+	for _, version := range versions {
+		capabilityValues := make([]deliveryRequiredCapability, 0, len(byVersion[version]))
+		for _, capability := range byVersion[version] {
+			capabilityValues = append(capabilityValues, capability)
+		}
+		sort.Slice(capabilityValues, func(i, j int) bool {
+			if capabilityValues[i].Name == capabilityValues[j].Name {
+				return capabilityValues[i].Version < capabilityValues[j].Version
+			}
+			return capabilityValues[i].Name < capabilityValues[j].Name
+		})
+		entries = append(entries, deliveryProtocolCompatibility{Version: version, RequiredCapabilities: capabilityValues})
+	}
+	return entries
 }
 
 func documentRequiredCapabilities(document json.RawMessage) ([]deliveryRequiredCapability, error) {

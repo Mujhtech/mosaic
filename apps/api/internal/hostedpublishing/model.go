@@ -9,11 +9,17 @@ import (
 )
 
 const (
-	// ProtocolVersion is the single Paywall Protocol version this backend
-	// reads and serves. 0.3 replaced 0.2 outright: there is no dual-version
-	// acceptance and no migration, so a 0.2 document is an unknown version.
+	// ProtocolVersion is the baseline Paywall Protocol version this backend
+	// reads and serves. 0.3 replaced 0.2 outright: there is no migration, so a
+	// 0.2 document is an unknown version.
 	ProtocolVersion = "0.3"
-	DeliveryVersion = "1"
+	// ProtocolVersion04 is Paywall Protocol 0.4 "Motion". Unlike the 0.2 to 0.3
+	// replacement, 0.4 is served alongside 0.3: versions are exact identifiers,
+	// a document validates against exactly the version it declares, and a
+	// Release advertises one compatibility entry per protocol version it
+	// carries. See docs/protocol/v0.4.md.
+	ProtocolVersion04 = "0.4"
+	DeliveryVersion   = "1"
 )
 
 type Actor struct{ ID string }
