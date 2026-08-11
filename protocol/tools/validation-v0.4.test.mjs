@@ -17,7 +17,11 @@ import {
 } from "../browser/index.js";
 import { rejectionLayerTargets } from "./generate-rejection-layers.mjs";
 import { buildMotionFrameVectors } from "./generate-motion-frames-v0.4.mjs";
-import { readV03Json, protocolV03Paths } from "./validation-v0.3.mjs";
+import {
+  readV03Json,
+  protocolV03Paths,
+  walkObjectValues,
+} from "./validation-v0.3.mjs";
 import {
   expectedV04DocumentCapabilities,
   loadProtocolV04Artifacts,
@@ -77,9 +81,48 @@ test("the canonical 0.4 document and every ported document validate", () => {
     input.expiredCountdownDocument,
     input.hiddenPurchaseTargetDocument,
     input.navigationOnlyDocument,
+    input.screenRoundTripDocument,
   ]) {
     assert.deepEqual(errors({ ...input, document }), []);
   }
+});
+
+test("a canonical document pins the screen-to-screen half of the replay ruling", () => {
+  // Renderers must be able to drive a genuine screen round trip -- navigateTo
+  // then navigateBack between two screen-*presentation* screens -- and assert
+  // that entrances and the pulse budget both restart. The canonical document
+  // cannot supply that: its second surface is a sheet, and a sheet round trip
+  // is the case where nothing replays. Without this fixture all three renderers
+  // infer screen re-entry from the sheet path, which is the opposite rule.
+  const document = artifacts().screenRoundTripDocument;
+  const entries = walkV04DocumentNodes(document);
+
+  assert.deepEqual(
+    document.screens.map((screen) => screen.presentation.type),
+    ["screen", "screen"],
+  );
+  for (const screen of document.screens) {
+    const onScreen = entries.filter((entry) => entry.screenId === screen.id);
+    assert.ok(
+      onScreen.some(({ node }) => node.motion?.appear),
+      `screen ${screen.id} authors no entrance`,
+    );
+    assert.ok(
+      onScreen.some(({ node }) => node.motion?.loop),
+      `screen ${screen.id} authors no bounded loop`,
+    );
+  }
+
+  // And the round trip is authored, not merely possible: one screen navigates
+  // to the other, and the other navigates back.
+  const actions = [];
+  walkObjectValues(document.screens, (value) => {
+    if (value.type === "navigateTo" || value.type === "navigateBack") {
+      actions.push(value.type);
+    }
+  });
+  assert.ok(actions.includes("navigateTo"));
+  assert.ok(actions.includes("navigateBack"));
 });
 
 test("the canonical fixture covers every motion case a renderer can get wrong", () => {
@@ -741,6 +784,7 @@ test("the browser reads 0.4 documents and agrees with the Node validator", () =>
     input.expiredCountdownDocument,
     input.hiddenPurchaseTargetDocument,
     input.navigationOnlyDocument,
+    input.screenRoundTripDocument,
   ]) {
     assert.equal(
       validateBrowserPaywallDocument(document).ok,

@@ -189,6 +189,10 @@ try {
       ...artifactsV04,
       document: artifactsV04.navigationOnlyDocument,
     }),
+    ...validateProtocolV04({
+      ...artifactsV04,
+      document: artifactsV04.screenRoundTripDocument,
+    }),
     ...validateCanonicalV03Coverage(artifactsV04.document),
     ...validateCanonicalV04Coverage(artifactsV04.document),
     ...validateMotionFrameVectors(),

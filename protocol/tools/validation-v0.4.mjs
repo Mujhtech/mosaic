@@ -38,6 +38,15 @@ export const protocolV04Paths = Object.freeze({
     protocolV04Root,
     "fixtures/v0.4/hidden-purchase-target.json",
   ),
+  // Two screen-*presentation* screens, each carrying an entrance and a bounded
+  // loop, joined by navigateTo/navigateBack. The canonical document cannot
+  // stand in: its second surface is a sheet, and a sheet round trip is
+  // explicitly not a re-entry, so a renderer driving only that path pins the
+  // negative half of the replay ruling and infers the positive half.
+  screenRoundTripFixture: resolve(
+    protocolV04Root,
+    "fixtures/v0.4/screen-round-trip.json",
+  ),
   navigationOnlyFixture: resolve(
     protocolV04Root,
     "fixtures/v0.4/navigation-only.json",
@@ -784,6 +793,7 @@ export function loadProtocolV04Artifacts() {
       protocolV04Paths.hiddenPurchaseTargetFixture,
     ),
     navigationOnlyDocument: readV04Json(protocolV04Paths.navigationOnlyFixture),
+    screenRoundTripDocument: readV04Json(protocolV04Paths.screenRoundTripFixture),
     invalidDocument: readV04Json(protocolV04Paths.invalidFixture),
     invalidDocuments: [
       readV04Json(protocolV04Paths.invalidFixture),
