@@ -89,6 +89,32 @@ func TestProtocolV04CyclicMotionTokenIsRejectedRatherThanSkippingTheFlashFloor(t
 	}
 }
 
+// Unused-token detection is transitive reachability rooted at node reference
+// sites: a token counted as used merely because another *unused* token aliased
+// it survives a redesign looking approved, which is the exact gap the unused
+// rule exists to close. The mutation adds an alias of the fixture's orphan that
+// nothing references; both the alias and the orphan must be reported, where the
+// earlier catalog-seeded implementation reported only the alias. Mirrors the
+// reachability correction in protocol/tools/validation-v0.4.mjs; reconcile with
+// its unused-token-transitive fixture once that fixture lands.
+func TestProtocolV04UnusedMotionTokenReachabilityIsRootedAtNodeReferences(t *testing.T) {
+	root := readProtocolFixture(t, filepath.Join(protocolFixtureRoot04, "invalid", "unused-motion-token.json"))
+	design := mapValue(root["designSystem"])
+	design["motions"] = append(arrayValue(design["motions"]), map[string]any{
+		"id": "motion-orphan-alias", "name": "Orphan alias",
+		"value": map[string]any{"type": "motionToken", "id": "motion-orphan"},
+	})
+	unused := 0
+	for _, code := range validateProtocolMotionTokens(root, walkProtocolNodes(root)) {
+		if code == "protocol_motion_token_unused" {
+			unused++
+		}
+	}
+	if unused != 2 {
+		t.Fatalf("an unused alias chain must report both links unused, got %d unused-token errors", unused)
+	}
+}
+
 // Capability derivation is what a Release advertises to an SDK. The two 0.4
 // deltas are asserted from the canonical document, which reconciles exactly in
 // both directions: the three motion.* names must be derived, and

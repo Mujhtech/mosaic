@@ -658,6 +658,13 @@ func buildDeliveryPayload(releaseID string, releaseNumber int64, environment Env
 		versionValues = append(versionValues, version)
 	}
 	sort.Slice(versionValues, func(i, j int) bool { return versionValues[i].ID < versionValues[j].ID })
+	members := make([]releaseProtocolMember, 0, len(versionValues))
+	for _, version := range versionValues {
+		members = append(members, releaseProtocolMember{paywallID: version.PaywallID, protocolVersion: version.ProtocolVersion})
+	}
+	if err := mixedReleaseProtocolError(members); err != nil {
+		return nil, "", err
+	}
 	deliveryVersions := make([]deliveryVersion, 0, len(versionValues))
 	requiredCapabilities := make(map[string]map[string]deliveryRequiredCapability)
 	for _, version := range versionValues {
@@ -693,10 +700,14 @@ func buildDeliveryPayload(releaseID string, releaseNumber int64, environment Env
 	for _, asset := range assetValues {
 		deliveryAssets = append(deliveryAssets, deliveryAsset{ID: asset.ID, Kind: asset.Kind, MediaType: asset.MediaType, ByteLength: asset.ByteLength, ContentDigest: asset.ContentDigest, URL: asset.URL})
 	}
+	paywallProtocols, err := protocolCompatibilityEntries(requiredCapabilities)
+	if err != nil {
+		return nil, "", err
+	}
 	envelope := deliveryEnvelope{ConfigurationDeliveryVersion: DeliveryVersion, Release: deliveryRelease{
 		ID: releaseID, Number: releaseNumber, Environment: deliveryEnvironment{ID: environment.ID, Key: environment.Key},
 		PublishedAt: publishedAt.UTC().Format(time.RFC3339Nano), Compatibility: deliveryCompatibility{
-			PaywallProtocols: protocolCompatibilityEntries(requiredCapabilities),
+			PaywallProtocols: paywallProtocols,
 			Acceptance:       "atomic",
 		},
 		Placements: deliveryPlacements, PaywallVersions: deliveryVersions, ProductReferences: deliveryProducts, AssetReferences: deliveryAssets,
@@ -864,10 +875,12 @@ func buildDeliveryV2Payload(v1Payload json.RawMessage, projectID, environmentMod
 	deliveryPaywalls := make([]deliveryVersion, 0, len(requiredPaywalls))
 	requiredAssets := map[string]struct{}{}
 	requiredCapabilities := map[string]map[string]deliveryRequiredCapability{}
+	members := make([]releaseProtocolMember, 0, len(requiredPaywalls))
 	for _, version := range v1.Release.PaywallVersions {
 		if _, ok := requiredPaywalls[version.ID]; !ok {
 			continue
 		}
+		members = append(members, releaseProtocolMember{paywallID: version.PaywallID, protocolVersion: version.ProtocolVersion})
 		deliveryPaywalls = append(deliveryPaywalls, version)
 		for _, id := range version.ProductReferenceIDs {
 			requiredProducts[id] = struct{}{}
@@ -905,7 +918,13 @@ func buildDeliveryV2Payload(v1Payload json.RawMessage, projectID, environmentMod
 			deliveryAssets = append(deliveryAssets, asset)
 		}
 	}
-	paywallProtocols := protocolCompatibilityEntries(requiredCapabilities)
+	if err := mixedReleaseProtocolError(members); err != nil {
+		return nil, "", err
+	}
+	paywallProtocols, err := protocolCompatibilityEntries(requiredCapabilities)
+	if err != nil {
+		return nil, "", err
+	}
 	envelope := deliveryV2Envelope{ConfigurationDeliveryVersion: "2", Release: deliveryV2Release{ID: v1.Release.ID, Number: v1.Release.Number, ProjectID: projectID, Environment: deliveryV2Environment{ID: v1.Release.Environment.ID, Key: v1.Release.Environment.Key, Mode: environmentMode}, PublishedAt: v1.Release.PublishedAt, Compatibility: deliveryV2Compatibility{PlacementDecisionContracts: []deliveryDecisionCompatibility{{Version: "1", RequiredFeatures: features, BucketingAlgorithms: algorithms}}, PaywallProtocols: paywallProtocols, Acceptance: "atomic"}, PlacementDecisions: decisionDocuments, PaywallVersions: deliveryPaywalls, ProductReferences: deliveryProducts, EntitlementReferences: entitlementValues, AssetReferences: deliveryAssets}}
 	material, err := json.Marshal(envelope.Release)
 	if err != nil {
@@ -950,24 +969,67 @@ func accumulateProtocolCapabilities(byVersion map[string]map[string]deliveryRequ
 	return nil
 }
 
-// protocolCompatibilityEntries renders one compatibility entry per protocol
-// version the Release carries, in version order, so a Release holding both a
-// 0.3 and a 0.4 document advertises both and an SDK missing either is refused
-// atomically. A Release with no Paywall Versions keeps the frozen v1 shape: a
-// single baseline entry with no required capabilities.
-func protocolCompatibilityEntries(byVersion map[string]map[string]deliveryRequiredCapability) []deliveryProtocolCompatibility {
+// releaseProtocolMember is one Paywall's protocol-version claim on a Release,
+// used to refuse a mixed-version Release before a payload is built.
+type releaseProtocolMember struct {
+	paywallID       string
+	protocolVersion string
+}
+
+// mixedReleaseProtocolError refuses a Release whose Paywalls span more than one
+// Paywall Protocol version. The frozen Configuration Delivery contracts (v1,
+// v2, and v3) pin compatibility.paywallProtocols to exactly one entry and every
+// shipped SDK decoder enforces exactly-one, so a mixed Release would ship a
+// schema-invalid payload that hard-fails every decode. Refusal follows the
+// v1-projection precedent: when the frozen contract cannot express a state,
+// publishing refuses rather than manufacturing a shape no reader was built for.
+// A Version persisted before the protocol-version field was authoritative
+// counts as the 0.3 baseline, matching accumulateProtocolCapabilities.
+func mixedReleaseProtocolError(members []releaseProtocolMember) error {
+	paywallsByVersion := map[string]map[string]bool{}
+	for _, member := range members {
+		version := member.protocolVersion
+		if version == "" {
+			version = ProtocolVersion
+		}
+		if paywallsByVersion[version] == nil {
+			paywallsByVersion[version] = map[string]bool{}
+		}
+		paywallsByVersion[version][member.paywallID] = true
+	}
+	if len(paywallsByVersion) <= 1 {
+		return nil
+	}
+	detail := make(map[string][]string, len(paywallsByVersion))
+	for version, paywalls := range paywallsByVersion {
+		ids := make([]string, 0, len(paywalls))
+		for id := range paywalls {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		detail[version] = ids
+	}
+	return &ReleaseProtocolMixError{PaywallIDsByProtocolVersion: detail}
+}
+
+// protocolCompatibilityEntries renders the Release's single compatibility
+// entry. The frozen Delivery contracts pin paywallProtocols to exactly one
+// entry, so publishing refuses a mixed Release (mixedReleaseProtocolError) with
+// the operator-facing detail before this point; the error returned here is the
+// invariant's last line of defence, not an operator surface. A Release with no
+// Paywall Versions keeps the frozen v1 shape: a single baseline entry with no
+// required capabilities.
+func protocolCompatibilityEntries(byVersion map[string]map[string]deliveryRequiredCapability) ([]deliveryProtocolCompatibility, error) {
 	if len(byVersion) == 0 {
-		return []deliveryProtocolCompatibility{{Version: ProtocolVersion, RequiredCapabilities: []deliveryRequiredCapability{}}}
+		return []deliveryProtocolCompatibility{{Version: ProtocolVersion, RequiredCapabilities: []deliveryRequiredCapability{}}}, nil
 	}
-	versions := make([]string, 0, len(byVersion))
-	for version := range byVersion {
-		versions = append(versions, version)
+	if len(byVersion) > 1 {
+		return nil, ErrReleaseProtocolMixed
 	}
-	sort.Strings(versions)
-	entries := make([]deliveryProtocolCompatibility, 0, len(versions))
-	for _, version := range versions {
-		capabilityValues := make([]deliveryRequiredCapability, 0, len(byVersion[version]))
-		for _, capability := range byVersion[version] {
+	entries := make([]deliveryProtocolCompatibility, 0, 1)
+	for version, capabilities := range byVersion {
+		capabilityValues := make([]deliveryRequiredCapability, 0, len(capabilities))
+		for _, capability := range capabilities {
 			capabilityValues = append(capabilityValues, capability)
 		}
 		sort.Slice(capabilityValues, func(i, j int) bool {
@@ -978,7 +1040,7 @@ func protocolCompatibilityEntries(byVersion map[string]map[string]deliveryRequir
 		})
 		entries = append(entries, deliveryProtocolCompatibility{Version: version, RequiredCapabilities: capabilityValues})
 	}
-	return entries
+	return entries, nil
 }
 
 func documentRequiredCapabilities(document json.RawMessage) ([]deliveryRequiredCapability, error) {

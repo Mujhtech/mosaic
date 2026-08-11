@@ -131,6 +131,19 @@ func TestV04FallbackTierIsExactlyTheThreeMotionCapabilities(t *testing.T) {
 	if _, present := protocolCapabilityFallbacks[ProtocolVersion04]["style.productCardStates"]; present {
 		t.Fatal("the 0.4 manifest must not carry style.productCardStates")
 	}
+	// The enhancement tier is a 0.4 invention: 0.3 predates renderWithoutMotion,
+	// so every 0.3 capability must keep rejectDocument. A 0.3 manifest edit that
+	// introduced a degrading fallback would silently deliver Releases to readers
+	// that cannot render them, which is exactly the widening this test exists to
+	// refuse.
+	if len(protocolCapabilityFallbacks[ProtocolVersion]) == 0 {
+		t.Fatal("the 0.3 manifest declares no capabilities, so its fallback tier is untested")
+	}
+	for name, fallback := range protocolCapabilityFallbacks[ProtocolVersion] {
+		if fallback != capabilityFallbackRejectDocument {
+			t.Fatalf("0.3 capability %s declares fallback %q; every 0.3 capability must be %s", name, fallback, capabilityFallbackRejectDocument)
+		}
+	}
 }
 
 // Regression: the capability vocabulary was hand-maintained in this package and

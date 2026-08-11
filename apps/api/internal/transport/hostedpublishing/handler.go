@@ -263,6 +263,12 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusServiceUnavailable, "asset_storage_failed", "Asset storage is temporarily unavailable."
 	case errors.Is(err, hostedpublishing.ErrPlacementUnpublished):
 		status, code, message = http.StatusConflict, "placement_unpublished", "Every active Placement binding must resolve to a published Paywall."
+	case errors.Is(err, hostedpublishing.ErrReleaseProtocolMixed):
+		status, code, message = http.StatusConflict, "release_protocol_mixed", "A Configuration Release must carry Paywalls on a single Paywall Protocol version. Republish the outdated Paywalls on one version, then publish again."
+		var mixed *hostedpublishing.ReleaseProtocolMixError
+		if errors.As(err, &mixed) {
+			apiError.Details = map[string]any{"paywallIdsByProtocolVersion": mixed.PaywallIDsByProtocolVersion}
+		}
 	case errors.Is(err, hostedpublishing.ErrProductInvalid):
 		status, code, message = http.StatusConflict, "product_invalid", "A referenced Product is missing, archived, or outside the Project."
 	case errors.Is(err, hostedpublishing.ErrProviderReadiness):

@@ -14,10 +14,19 @@ const (
 	// 0.2 document is an unknown version.
 	ProtocolVersion = "0.3"
 	// ProtocolVersion04 is Paywall Protocol 0.4 "Motion". Unlike the 0.2 to 0.3
-	// replacement, 0.4 is served alongside 0.3: versions are exact identifiers,
-	// a document validates against exactly the version it declares, and a
-	// Release advertises one compatibility entry per protocol version it
-	// carries. See docs/protocol/v0.4.md.
+	// replacement, 0.4 is served alongside 0.3: versions are exact identifiers
+	// and a document validates against exactly the version it declares. A
+	// single Configuration Release, however, must be protocol-version
+	// homogeneous. The frozen Configuration Delivery contracts (v1, v2, and v3)
+	// pin compatibility.paywallProtocols to exactly one entry (minItems 1,
+	// maxItems 1) and every shipped SDK decoder enforces exactly-one, so a
+	// Release mixing 0.3 and 0.4 Paywalls cannot be expressed without shipping
+	// a schema-invalid payload that hard-fails every decode. Publishing
+	// therefore refuses a mixed Release (ErrReleaseProtocolMixed), following
+	// the v1-projection precedent of refusing rather than manufacturing a
+	// shape the frozen contract does not define. Widening paywallProtocols to
+	// several entries requires an ADR and coordinated SDK decoder changes.
+	// See docs/protocol/v0.4.md.
 	ProtocolVersion04 = "0.4"
 	DeliveryVersion   = "1"
 )

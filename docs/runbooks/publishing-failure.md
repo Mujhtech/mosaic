@@ -21,6 +21,14 @@ Publishing errors are diagnosable by code:
   at least one (drill-verified first-run trap). Create a Placement, bind it
   (`PUT .../placements/{placementId}/binding`), retry. Note this one code
   covers several distinct conditions (known limitation).
+- **`409 release_protocol_mixed`** — the Release would carry Paywalls on more
+  than one Paywall Protocol version (for example one Placement resolving to a
+  0.3 Paywall and another to a 0.4 Paywall). The Configuration Delivery
+  contracts advertise exactly one protocol version per Release, so a mixed
+  Release is refused rather than published as a payload no SDK can decode.
+  `details.paywallIdsByProtocolVersion` lists which Paywalls are on which
+  version; republish the outdated Paywalls so every bound Paywall's latest
+  Version declares the same protocol version, then retry.
 - **`422 document_paywall_id_mismatch`** — the draft document's `id` must
   equal the Paywall id.
 - **Draft validation errors** — run

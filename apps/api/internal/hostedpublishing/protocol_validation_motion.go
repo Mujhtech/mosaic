@@ -26,13 +26,24 @@ func validateProtocolMotionTokens(root map[string]any, entries []protocolNode) [
 	for _, raw := range catalog {
 		declared[stringValue(mapValue(raw)["id"])] = true
 	}
+	// Usage is transitive reachability rooted at node reference sites only.
+	// The designSystem is still walked for unknown-token references, but a
+	// reference inside another catalog token's value does not count as usage
+	// on its own: a token chain reachable only from an unused token head is
+	// entirely unused, and each link is reported. Seeding usage from the
+	// catalog itself was the earlier defect, which counted a token as used
+	// because another unused token aliased it.
 	referenced := map[string]bool{}
-	roots := []any{design}
+	walkObjects(design, func(item map[string]any) {
+		if stringValue(item["type"]) != "motionToken" {
+			return
+		}
+		if !declared[stringValue(item["id"])] {
+			errors = append(errors, "protocol_motion_token_unknown")
+		}
+	})
 	for _, entry := range entries {
-		roots = append(roots, entry.value)
-	}
-	for _, rootValue := range roots {
-		walkObjects(rootValue, func(item map[string]any) {
+		walkObjects(entry.value, func(item map[string]any) {
 			if stringValue(item["type"]) != "motionToken" {
 				return
 			}
@@ -57,22 +68,22 @@ func validateProtocolMotionTokens(root map[string]any, entries []protocolNode) [
 	if graphCycle(graph) {
 		errors = append(errors, "protocol_motion_token_cycle")
 	}
-	for _, raw := range catalog {
-		id := stringValue(mapValue(raw)["id"])
-		if referenced[id] {
-			continue
-		}
-		// A token reached only through another token is used; an unreachable
-		// one is not.
-		reachable := false
-		for from := range referenced {
-			for _, target := range graph[from] {
-				if target == id {
-					reachable = true
-				}
+	queue := make([]string, 0, len(referenced))
+	for id := range referenced {
+		queue = append(queue, id)
+	}
+	for len(queue) > 0 {
+		from := queue[0]
+		queue = queue[1:]
+		for _, target := range graph[from] {
+			if declared[target] && !referenced[target] {
+				referenced[target] = true
+				queue = append(queue, target)
 			}
 		}
-		if !reachable {
+	}
+	for _, raw := range catalog {
+		if !referenced[stringValue(mapValue(raw)["id"])] {
 			errors = append(errors, "protocol_motion_token_unused")
 		}
 	}

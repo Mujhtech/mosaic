@@ -3,6 +3,8 @@ package hostedpublishing
 import (
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -32,6 +34,14 @@ var (
 	ErrAssetObjectMissing    = errors.New("asset object is missing from storage")
 	ErrNoCurrentRelease      = errors.New("no current release")
 	ErrUnsupportedCapability = errors.New("unsupported capability")
+	// ErrReleaseProtocolMixed refuses publication of a Configuration Release
+	// whose Paywall Versions span more than one Paywall Protocol version. The
+	// frozen Configuration Delivery contracts (v1, v2, and v3) pin
+	// compatibility.paywallProtocols to exactly one entry and every shipped SDK
+	// decoder enforces exactly-one, so a mixed Release would be schema-invalid
+	// and hard-fail every SDK decode. Publishing refuses instead; see
+	// ReleaseProtocolMixError for the operator-facing detail.
+	ErrReleaseProtocolMixed = errors.New("release mixes paywall protocol versions")
 )
 
 type ConflictError struct {
@@ -52,6 +62,30 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("document validation failed: %v", e.Errors)
 }
 func (e *ValidationError) Unwrap() error { return ErrValidationFailed }
+
+// ReleaseProtocolMixError names, per protocol version, the Paywalls that would
+// have shipped on it, so the operator can see exactly which Paywalls must be
+// republished to make the Release version-homogeneous.
+type ReleaseProtocolMixError struct {
+	// PaywallIDsByProtocolVersion maps each Paywall Protocol version in the
+	// refused Release to the sorted Paywall IDs carried on it.
+	PaywallIDsByProtocolVersion map[string][]string
+}
+
+func (e *ReleaseProtocolMixError) Error() string {
+	versions := make([]string, 0, len(e.PaywallIDsByProtocolVersion))
+	for version := range e.PaywallIDsByProtocolVersion {
+		versions = append(versions, version)
+	}
+	sort.Strings(versions)
+	parts := make([]string, 0, len(versions))
+	for _, version := range versions {
+		parts = append(parts, fmt.Sprintf("protocol %s: %s", version, strings.Join(e.PaywallIDsByProtocolVersion[version], ", ")))
+	}
+	return "a configuration release must carry paywalls on a single paywall protocol version (" +
+		strings.Join(parts, "; ") + "); republish the outdated paywalls on one version, then publish again"
+}
+func (e *ReleaseProtocolMixError) Unwrap() error { return ErrReleaseProtocolMixed }
 
 type ProviderReadinessError struct {
 	Blockers []ProviderPublicationIssue
