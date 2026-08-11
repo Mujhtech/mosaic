@@ -267,6 +267,7 @@
             products: MosaicProduct.phase1MockProducts
           ),
           clock: { Date(timeIntervalSince1970: 1_893_455_998) },
+          motionDriver: driver(),
           onResult: { _ in }
         )
         await model.prepare()
@@ -274,7 +275,6 @@
           MosaicPaywall(
             model: model,
             imageResolver: .missing,
-            motionDriver: driver(),
             motionAccessibility: .unrestricted
           )
           .environment(\.colorScheme, .light)
@@ -327,7 +327,7 @@
       XCTAssertEqual(document.schemaVersion, mosaicMotionProtocolVersion)
       XCTAssertEqual(
         MosaicVideoBackgroundPresentation.resolve(
-          url: URL(string: "https://cdn.mosaic.dev/video/sheet.mp4"),
+          resolvedSource: URL(string: "https://cdn.mosaic.dev/video/sheet.mp4"),
           posterID: "remote-texture",
           schemaVersion: document.schemaVersion,
           accessibility: .reduced

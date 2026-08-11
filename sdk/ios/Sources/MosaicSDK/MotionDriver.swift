@@ -88,46 +88,6 @@ public final class MosaicMotionDriver: ObservableObject {
   /// controlled driver can force a redraw.
   public func tick() { tickCount += 1 }
 
-  // MARK: - Screen entry
-
-  /// The driver time at which the screen now on show was entered.
-  ///
-  /// `appear` and `loop` both measure from node entry, and for a node authored
-  /// on a screen that is the moment the screen was entered. A platform-driven
-  /// renderer gets this from the view lifecycle for free — a screen the user
-  /// leaves discards its nodes, and returning builds them again with fresh state
-  /// — but a controlled driver has no lifecycle to read, so the origin has to be
-  /// recorded.
-  @Published public private(set) var screenEntryElapsedMilliseconds = 0
-
-  /// How many genuine screen entries have happened, starting at zero before the
-  /// first.
-  @Published public private(set) var screenEntryCount = 0
-
-  private var enteredScreenID: String?
-
-  /// Records entry into `screenID`, if that is a genuine entry.
-  ///
-  /// A genuine entry is a *change* of screen. Returning to a screen you left is
-  /// one, so its entrances and its bounded pulse run again. Re-evaluating the
-  /// body of the screen you are already on is not, and neither is presenting a
-  /// sheet over it: the screen underneath keeps its nodes, so replaying its
-  /// entrances when the sheet closed would animate content that never left.
-  ///
-  /// The renderer passes the base screen for exactly that reason.
-  public func enterScreen(_ screenID: String?) {
-    guard screenEntryCount == 0 || screenID != enteredScreenID else { return }
-    enteredScreenID = screenID
-    screenEntryElapsedMilliseconds = elapsedMilliseconds ?? 0
-    screenEntryCount += 1
-  }
-
-  /// `elapsed` re-expressed against the current screen entry, which is the
-  /// origin the contract measures `appear` and `loop` from.
-  public func nodeElapsedMilliseconds(at elapsed: Int) -> Int {
-    max(0, elapsed - screenEntryElapsedMilliseconds)
-  }
-
   /// The one-second cadence a Countdown redraws on.
   ///
   /// It runs only for a platform-driven driver: a controlled driver's caller
@@ -167,8 +127,12 @@ public struct MosaicMotionAccessibility: Sendable, Equatable {
     self.allowsVideoAutoplay = allowsVideoAutoplay
   }
 
-  /// Whether a declared video background may play.
-  public var permitsVideoPlayback: Bool { !prefersReducedMotion && allowsVideoAutoplay }
+  // `permitsVideoPlayback` used to live here, combining the two signals. It is
+  // gone rather than left unused: whether a video may play now depends on the
+  // document's `schemaVersion` as well, and a public helper that answers the
+  // question without asking which contract it is answering for is one a caller
+  // would reasonably believe. `MosaicVideoBackgroundPresentation.resolve` is the
+  // single place that decides.
 
   public static let unrestricted = MosaicMotionAccessibility(
     prefersReducedMotion: false, allowsVideoAutoplay: true)
@@ -178,6 +142,11 @@ public struct MosaicMotionAccessibility: Sendable, Equatable {
 
   /// The platform's current answer for the signal SwiftUI does not surface.
   /// Reduce Motion itself arrives through `\.accessibilityReduceMotion`.
+  ///
+  /// Main-actor isolated because `UIAccessibility` is: reading it from anywhere
+  /// else is a data race the Swift 6 language mode diagnoses. The one caller is
+  /// the renderer boundary, which is already on the main actor.
+  @MainActor
   public static var systemAllowsVideoAutoplay: Bool {
     #if os(iOS)
       return UIAccessibility.isVideoAutoplayEnabled
@@ -196,6 +165,61 @@ extension EnvironmentValues {
   var mosaicMotionAccessibility: MosaicMotionAccessibility {
     get { self[MosaicMotionAccessibilityEnvironmentKey.self] }
     set { self[MosaicMotionAccessibilityEnvironmentKey.self] = newValue }
+  }
+}
+
+// MARK: - Screen entry
+
+/// One presentation surface's entry: which screen, which entry into it, and the
+/// driver time it began at.
+///
+/// `appear` and `loop` both measure from node entry, and for a node authored on a
+/// screen that is the moment its surface was entered. A platform-driven renderer
+/// gets this from the view lifecycle for free — a screen the customer leaves
+/// discards its nodes, and returning builds them again with fresh state — but a
+/// controlled driver has no lifecycle to read, so the origin has to be recorded.
+///
+/// There is one of these per *surface* rather than one per renderer, because a
+/// presented Sheet and the screen beneath it are on screen together with
+/// different origins: the screen underneath stays mounted and keeps its scroll
+/// position, selection, and Carousel page, while the Sheet's own content enters
+/// on every presentation. A single origin for both is how a Sheet's entrance
+/// comes out already finished.
+///
+/// Recorded by ``MosaicPaywallModel``, which owns navigation, rather than by the
+/// renderer: entry is a consequence of navigating, so a renderer that forgot to
+/// wire it up would be the only thing keeping the rule true.
+public struct MosaicScreenEntry: Sendable, Equatable, Hashable {
+  public let screenID: String
+  /// Increments on every genuine entry, so returning to a screen is a different
+  /// entry from the first visit even though it is the same screen.
+  public let generation: Int
+  /// The driver time this entry began at.
+  public let elapsedMillisecondsAtEntry: Int
+
+  public init(screenID: String, generation: Int, elapsedMillisecondsAtEntry: Int) {
+    self.screenID = screenID
+    self.generation = generation
+    self.elapsedMillisecondsAtEntry = elapsedMillisecondsAtEntry
+  }
+
+  /// A driver instant re-expressed against this entry, which is the origin the
+  /// contract measures `appear` and `loop` from.
+  public func elapsedMilliseconds(at driverElapsed: Int) -> Int {
+    max(0, driverElapsed - elapsedMillisecondsAtEntry)
+  }
+}
+
+struct MosaicScreenEntryEnvironmentKey: EnvironmentKey {
+  static let defaultValue: MosaicScreenEntry? = nil
+}
+
+extension EnvironmentValues {
+  /// The entry of the surface a node is being rendered into, set once per
+  /// surface by the renderer.
+  var mosaicScreenEntry: MosaicScreenEntry? {
+    get { self[MosaicScreenEntryEnvironmentKey.self] }
+    set { self[MosaicScreenEntryEnvironmentKey.self] = newValue }
   }
 }
 

@@ -36,7 +36,6 @@ public struct MosaicVideoResolver: @unchecked Sendable {
 public struct MosaicPaywall: View {
   @Environment(\.accessibilityReduceMotion) private var systemPrefersReducedMotion
   @StateObject private var model: MosaicPaywallModel
-  @StateObject private var motionDriver: MosaicMotionDriver
   private let imageResolver: MosaicImageResolver
   private let videoResolver: MosaicVideoResolver
   private let motionAccessibility: MosaicMotionAccessibility?
@@ -63,37 +62,41 @@ public struct MosaicPaywall: View {
         requestedLocale: requestedLocale,
         purchaseProvider: purchaseProvider,
         clock: clock,
+        motionDriver: motionDriver(),
         analytics: analytics,
         presentationDiagnostics: presentationDiagnostics,
         onInteraction: onInteraction,
         onResult: onResult
       )
     )
-    _motionDriver = StateObject(wrappedValue: motionDriver())
     self.imageResolver = imageResolver
     self.videoResolver = videoResolver
     self.motionAccessibility = motionAccessibility
   }
 
+  /// The driver is the model's: entry origins are recorded when navigation
+  /// happens, so a second one passed in here could only disagree with it.
   public init(
     model: @autoclosure @escaping () -> MosaicPaywallModel,
     imageResolver: MosaicImageResolver = .missing,
     videoResolver: MosaicVideoResolver = .missing,
-    motionDriver: @autoclosure @escaping () -> MosaicMotionDriver = .platform(),
     motionAccessibility: MosaicMotionAccessibility? = nil
   ) {
     _model = StateObject(wrappedValue: model())
-    _motionDriver = StateObject(wrappedValue: motionDriver())
     self.imageResolver = imageResolver
     self.videoResolver = videoResolver
     self.motionAccessibility = motionAccessibility
   }
 
   public var body: some View {
-    surface(for: model.baseScreen)
+    // Each surface carries its own entry: the screen beneath a Sheet keeps the
+    // one it entered on, while the Sheet's own content takes a fresh one every
+    // time it is presented. Both come from the model, which records them as
+    // navigation happens.
+    surface(for: model.baseScreen, entry: model.baseScreenEntry)
       .sheet(item: presentedSheet) { _ in
         if let sheet = model.presentedSheet {
-          surface(for: sheet)
+          surface(for: sheet, entry: model.sheetScreenEntry)
             .mosaicScreenAccessibilityLabel(
               sheet.accessibilityLabel.map(model.localization.resolve))
         }
@@ -102,20 +105,13 @@ public struct MosaicPaywall: View {
       .environment(\.mosaicImageResolver, imageResolver)
       .environment(\.mosaicVideoResolver, videoResolver)
       .environmentObject(model)
-      .environmentObject(motionDriver)
+      .environmentObject(model.motionDriver)
       // Resolved once, here, so no view deeper in the tree samples the platform
       // for itself and no test has to configure the simulator to state a
       // preference.
       .environment(\.mosaicMotionAccessibility, resolvedMotionAccessibility)
       .environment(\.layoutDirection, swiftUILayoutDirection)
       .environment(\.locale, Locale(identifier: model.localization.resolvedLocale.effectiveLocale))
-      // `appear` and `loop` both measure from node entry, and the base screen is
-      // what actually swaps a screen's nodes. A sheet is presented over it and
-      // leaves its nodes in place, so it is deliberately not an entry: replaying
-      // the screen underneath when a sheet closed would animate content that
-      // never left.
-      .onAppear { motionDriver.enterScreen(model.baseScreen?.id) }
-      .onChange(of: model.baseScreen?.id) { motionDriver.enterScreen($0) }
       .task { await model.prepare() }
   }
 
@@ -134,7 +130,9 @@ public struct MosaicPaywall: View {
     )
   }
 
-  private func surface(for screen: MosaicScreen?) -> some View {
+  private func surface(
+    for screen: MosaicScreen?, entry: MosaicScreenEntry?
+  ) -> some View {
     let layout = screen?.layout ?? model.document.layout
     return ScrollView(.vertical, showsIndicators: layout.showsIndicators) {
       MosaicStackView(
@@ -156,6 +154,7 @@ public struct MosaicPaywall: View {
       }
     }
     .environment(\.mosaicAxisBounds, MosaicAxisBounds(width: true, height: false))
+    .environment(\.mosaicScreenEntry, entry)
     .mosaicScreenAccessibilityLabel(
       screen?.accessibilityLabel.map(model.localization.resolve)
     )

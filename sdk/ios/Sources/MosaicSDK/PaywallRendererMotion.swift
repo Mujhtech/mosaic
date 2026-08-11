@@ -73,6 +73,7 @@ private struct MosaicAppearMotionModifier: ViewModifier, Animatable {
 struct MosaicAppearMotionView<Content: View>: View {
   @EnvironmentObject private var driver: MosaicMotionDriver
   @Environment(\.mosaicMotionAccessibility) private var accessibility
+  @Environment(\.mosaicScreenEntry) private var screenEntry
   let motion: MosaicAppearMotion
   let curve: MosaicResolvedMotionCurve
   @ViewBuilder let content: () -> Content
@@ -83,10 +84,10 @@ struct MosaicAppearMotionView<Content: View>: View {
     if !driver.isEnabled {
       content()
     } else if let elapsed = driver.elapsedMilliseconds {
-      // Measured from screen entry rather than from the driver's origin. The
-      // platform path gets the same origin from the view lifecycle: a node that
-      // left the screen is rebuilt with `progress` back at zero.
-      content().mosaicAppearFrame(controlledFrame(at: driver.nodeElapsedMilliseconds(at: elapsed)))
+      // Measured from this surface's entry rather than from the driver's
+      // origin. The platform path gets the same origin from the view lifecycle:
+      // a node that left the screen is rebuilt with `progress` back at zero.
+      content().mosaicAppearFrame(controlledFrame(at: entryElapsed(elapsed)))
     } else {
       content()
         .modifier(
@@ -101,6 +102,13 @@ struct MosaicAppearMotionView<Content: View>: View {
           withAnimation(animation) { progress = 1 }
         }
     }
+  }
+
+  /// A driver instant re-expressed against this surface's entry. A surface with
+  /// no recorded entry has not been navigated into and measures from the
+  /// driver's own origin.
+  private func entryElapsed(_ elapsed: Int) -> Int {
+    screenEntry?.elapsedMilliseconds(at: elapsed) ?? elapsed
   }
 
   /// The frame is resolved from the elapsed time directly rather than from a
@@ -238,6 +246,7 @@ struct MosaicSelectionStyledContent<Content: View>: View {
 struct MosaicLoopMotionView<Content: View>: View {
   @EnvironmentObject private var driver: MosaicMotionDriver
   @Environment(\.mosaicMotionAccessibility) private var accessibility
+  @Environment(\.mosaicScreenEntry) private var screenEntry
   let motion: MosaicLoopMotion
   let curve: MosaicResolvedMotionCurve
   @ViewBuilder let content: () -> Content
@@ -256,7 +265,7 @@ struct MosaicLoopMotionView<Content: View>: View {
     } else if let elapsed = driver.elapsedMilliseconds {
       // Same origin as the entrance, and the cycle bound is counted from it, so
       // the pulse is bounded per screen entry rather than per session.
-      content().mosaicLoopFrame(frame(at: driver.nodeElapsedMilliseconds(at: elapsed)))
+      content().mosaicLoopFrame(frame(at: entryElapsed(elapsed)))
     } else {
       TimelineView(.animation(paused: hasFinished)) { context in
         let frame = frame(at: elapsedMilliseconds(at: context.date))
@@ -267,6 +276,13 @@ struct MosaicLoopMotionView<Content: View>: View {
       }
       .onAppear { if startedAt == nil { startedAt = Date() } }
     }
+  }
+
+  /// A driver instant re-expressed against this surface's entry. A surface with
+  /// no recorded entry has not been navigated into and measures from the
+  /// driver's own origin.
+  private func entryElapsed(_ elapsed: Int) -> Int {
+    screenEntry?.elapsedMilliseconds(at: elapsed) ?? elapsed
   }
 
   private func elapsedMilliseconds(at date: Date) -> Int {

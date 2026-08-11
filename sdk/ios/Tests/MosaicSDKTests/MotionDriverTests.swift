@@ -397,9 +397,14 @@ final class MotionDriverTests: XCTestCase {
   /// is covered by the test below.
   func testEntranceAndPulseReplayFromNodeEntryWhenAScreenIsReEntered() throws {
     let document = try v04Document(named: "screen-round-trip.json")
+    // The driver is handed to the model, not held beside it: the model records
+    // each entry as it navigates, so this test never stamps an origin by hand and
+    // deleting that recording fails it.
+    let driver = MosaicMotionDriver.controlled()
     let model = MosaicPaywallModel(
       document: document,
       purchaseProvider: MockMosaicPurchaseProvider(products: MosaicProduct.phase1MockProducts),
+      motionDriver: driver,
       onResult: { _ in }
     )
 
@@ -417,11 +422,13 @@ final class MotionDriverTests: XCTestCase {
     XCTAssertEqual(loopCurve.durationMilliseconds, 900)
     XCTAssertEqual(loop.repeatCount, 3)
 
-    let driver = MosaicMotionDriver.controlled()
-    // Exactly what the two controlled-mode motion views read.
+    // Exactly what the two controlled-mode motion views read: the driver's
+    // instant, re-expressed against the entry the renderer puts in the
+    // environment for this surface.
     func frames(at driverTime: Int) throws -> (MosaicAppearFrame, MosaicLoopFrame) {
       driver.advance(to: driverTime)
-      let elapsed = driver.nodeElapsedMilliseconds(at: try XCTUnwrap(driver.elapsedMilliseconds))
+      let entry = try XCTUnwrap(model.baseScreenEntry)
+      let elapsed = entry.elapsedMilliseconds(at: try XCTUnwrap(driver.elapsedMilliseconds))
       return (
         try MosaicMotionResolver.appearFrame(
           appear, curve: appearCurve, elapsedMilliseconds: elapsed, reducedMotion: false),
@@ -430,9 +437,11 @@ final class MotionDriverTests: XCTestCase {
       )
     }
 
-    driver.enterScreen(model.baseScreen?.id)
+    // Constructing the model is the first entry; nothing else had to happen.
     XCTAssertEqual(model.baseScreen?.id, "start")
-    XCTAssertEqual(driver.screenEntryCount, 1)
+    let firstEntry = try XCTUnwrap(model.baseScreenEntry)
+    XCTAssertEqual(firstEntry.screenID, "start")
+    XCTAssertEqual(firstEntry.elapsedMillisecondsAtEntry, 0)
 
     let (entering, pulsing) = try frames(at: 120)
     XCTAssertFalse(entering.isStatic)
@@ -448,23 +457,21 @@ final class MotionDriverTests: XCTestCase {
     XCTAssertTrue(settled.isStatic)
     XCTAssertTrue(rested.isStatic)
 
-    // Re-rendering the screen already on show is not an entry. Only a change is.
-    driver.enterScreen(model.baseScreen?.id)
-    XCTAssertEqual(driver.screenEntryCount, 1)
-
     // The fixture's own navigation: start → details → back.
-    model.navigate(to: "details")
     driver.advance(to: 4_000)
-    driver.enterScreen(model.baseScreen?.id)
+    model.navigate(to: "details")
     XCTAssertEqual(model.baseScreen?.id, "details")
     XCTAssertNil(model.presentedSheet, "Both screens are screen presentations.")
 
-    model.navigateBack()
     driver.advance(to: 5_000)
-    driver.enterScreen(model.baseScreen?.id)
+    model.navigateBack()
     XCTAssertEqual(model.baseScreen?.id, "start")
-    XCTAssertEqual(driver.screenEntryCount, 3)
-    XCTAssertEqual(driver.screenEntryElapsedMilliseconds, 5_000)
+
+    // A new entry into the same screen: same id, later generation, new origin.
+    let secondEntry = try XCTUnwrap(model.baseScreenEntry)
+    XCTAssertEqual(secondEntry.screenID, firstEntry.screenID)
+    XCTAssertGreaterThan(secondEntry.generation, firstEntry.generation)
+    XCTAssertEqual(secondEntry.elapsedMillisecondsAtEntry, 5_000)
 
     // The same offset into the new entry is the same frame as the first time.
     let (replayedEntrance, replayedPulse) = try frames(at: 5_120)
@@ -492,25 +499,33 @@ final class MotionDriverTests: XCTestCase {
       ).isStatic)
   }
 
-  /// Presenting and dismissing a sheet is not a screen entry: the screen behind
-  /// it keeps its motion state, so its entrances do not replay and its pulse
-  /// budget does not reset.
+  /// A Sheet is not an entry for the screen *behind* it, and is an entry for its
+  /// *own* content every time it is presented.
   ///
-  /// Protects the other half of "genuine", in two places it can be lost. The
-  /// obvious *wiring* mistake is keying the origin on the current screen, which
-  /// replays the whole paywall every time a details sheet closes. The subtler one
-  /// is structural, and Compose shipped it: building the background screen from
-  /// two call sites in two branches gives it two identities, so presenting the
-  /// sheet tears the first down and rebuilds the second with fresh state — the
-  /// entrance replays and the bounded pulse starts its cycles over, with the
-  /// origin wired perfectly correctly. SwiftUI builds the base surface from one
-  /// unconditional call site and presents the sheet's own surface beside it, so
-  /// the background screen is never rebuilt; these assertions hold it there.
-  func testPresentingAndDismissingASheetIsNotAScreenReEntry() throws {
+  /// The two halves fail in opposite directions and both have shipped somewhere.
+  ///
+  /// Behind the Sheet, the obvious *wiring* mistake is keying the origin on the
+  /// current screen, which replays the whole paywall every time a details Sheet
+  /// closes. The subtler one is structural, and Compose shipped it: building the
+  /// background screen from two call sites in two branches gives it two
+  /// identities, so presenting the Sheet tears the first down and rebuilds the
+  /// second with fresh state — the entrance replays and the bounded pulse starts
+  /// its cycles over, with the origin wired perfectly correctly. SwiftUI builds
+  /// the base surface from one unconditional call site and presents the Sheet's
+  /// own surface beside it, so the background screen is never rebuilt.
+  ///
+  /// Inside the Sheet, the mistake is the mirror image and this renderer had it:
+  /// measuring the Sheet's content from the *base* screen's entry. By the time a
+  /// customer opens a Sheet the base entry is usually long past, so the Sheet's
+  /// entrance renders already finished — and re-presenting it never plays it
+  /// again, because the origin it measures from never moves.
+  func testASheetDoesNotReEnterTheScreenBehindItAndAlwaysEntersItsOwnContent() throws {
     let document = try v04Document()
+    let driver = MosaicMotionDriver.controlled()
     let model = MosaicPaywallModel(
       document: document,
       purchaseProvider: MockMosaicPurchaseProvider(products: MosaicProduct.phase1MockProducts),
+      motionDriver: driver,
       onResult: { _ in }
     )
     guard case .button(let button)? = document.allNodes.first(where: { $0.id == "purchase" })
@@ -520,10 +535,17 @@ final class MotionDriverTests: XCTestCase {
     let appearCurve = try XCTUnwrap(document.resolvedMotionCurve(appear.curve))
     let loopCurve = try XCTUnwrap(document.resolvedMotionCurve(loop.curve))
 
-    let driver = MosaicMotionDriver.controlled()
+    // The Sheet's own content: a title that enters, on the surface the Sheet
+    // renders into.
+    guard case .text(let title)? = document.allNodes.first(where: { $0.id == "details-title" })
+    else { return XCTFail("Expected the details sheet's entering title.") }
+    let sheetAppear = try XCTUnwrap(title.motion?.appear)
+    let sheetAppearCurve = try XCTUnwrap(document.resolvedMotionCurve(sheetAppear.curve))
+
     func frames(at driverTime: Int) throws -> (MosaicAppearFrame, MosaicLoopFrame) {
       driver.advance(to: driverTime)
-      let elapsed = driver.nodeElapsedMilliseconds(at: try XCTUnwrap(driver.elapsedMilliseconds))
+      let entry = try XCTUnwrap(model.baseScreenEntry)
+      let elapsed = entry.elapsedMilliseconds(at: try XCTUnwrap(driver.elapsedMilliseconds))
       return (
         try MosaicMotionResolver.appearFrame(
           appear, curve: appearCurve, elapsedMilliseconds: elapsed, reducedMotion: false),
@@ -532,7 +554,21 @@ final class MotionDriverTests: XCTestCase {
       )
     }
 
-    driver.enterScreen(model.baseScreen?.id)
+    /// The Sheet title's entrance, measured from the Sheet's own entry.
+    func sheetTitleFrame() throws -> MosaicAppearFrame {
+      let entry = try XCTUnwrap(model.sheetScreenEntry)
+      return try MosaicMotionResolver.appearFrame(
+        sheetAppear,
+        curve: sheetAppearCurve,
+        elapsedMilliseconds: entry.elapsedMilliseconds(
+          at: try XCTUnwrap(driver.elapsedMilliseconds)),
+        reducedMotion: false
+      )
+    }
+
+    let baseEntry = try XCTUnwrap(model.baseScreenEntry)
+    XCTAssertNil(model.sheetScreenEntry, "No Sheet is presented yet.")
+
     // Let the offer screen finish entering and spend the pulse's authored cycles.
     let exhausted =
       appear.delayMilliseconds + appearCurve.durationMilliseconds
@@ -541,25 +577,65 @@ final class MotionDriverTests: XCTestCase {
     XCTAssertTrue(settled.isStatic)
     XCTAssertTrue(rested.isStatic)
 
+    // --- Presenting the Sheet.
     model.navigate(to: "details")
-    driver.enterScreen(model.baseScreen?.id)
     XCTAssertEqual(model.currentScreenID, "details")
     XCTAssertNotNil(model.presentedSheet)
-    // The sheet is presented *over* the offer screen, which is still the base.
+    // The Sheet is presented *over* the offer screen, which is still the base and
+    // keeps the entry it has had all along.
     XCTAssertEqual(model.baseScreen?.id, "offer")
+    XCTAssertEqual(model.baseScreenEntry, baseEntry)
 
+    // The Sheet's own content enters now, from its own origin — so its entrance
+    // is at the start of its travel rather than already finished.
+    let firstSheetEntry = try XCTUnwrap(model.sheetScreenEntry)
+    XCTAssertEqual(firstSheetEntry.screenID, "details")
+    XCTAssertEqual(firstSheetEntry.elapsedMillisecondsAtEntry, exhausted)
+    XCTAssertGreaterThan(firstSheetEntry.generation, baseEntry.generation)
+    XCTAssertFalse(try sheetTitleFrame().isStatic)
+    driver.advance(to: exhausted + 120)
+    let midSheetEntrance = try sheetTitleFrame()
+    XCTAssertFalse(midSheetEntrance.isStatic)
+    XCTAssertGreaterThan(midSheetEntrance.opacity, 0)
+    XCTAssertLessThan(midSheetEntrance.opacity, 1)
+
+    // --- Dismissing it.
+    driver.advance(to: exhausted + 2_000)
     model.dismissPresentedSheet()
-    driver.enterScreen(model.baseScreen?.id)
     XCTAssertNil(model.presentedSheet)
-    XCTAssertEqual(driver.screenEntryCount, 1)
-    XCTAssertEqual(driver.screenEntryElapsedMilliseconds, 0)
-
-    // And the screen underneath is exactly where it was left: still settled, and
-    // still out of pulse cycles. A rebuild would have put both back at zero.
-    let (afterSheet, afterSheetPulse) = try frames(at: exhausted + 360)
+    XCTAssertNil(model.sheetScreenEntry)
+    // The screen underneath is exactly where it was left: same entry, still
+    // settled, still out of pulse cycles. A rebuild would have put both at zero.
+    XCTAssertEqual(model.baseScreenEntry, baseEntry)
+    let (afterSheet, afterSheetPulse) = try frames(at: exhausted + 2_360)
     XCTAssertTrue(afterSheet.isStatic)
     XCTAssertTrue(afterSheetPulse.isStatic)
     XCTAssertEqual(afterSheetPulse.scale, 1)
+
+    // --- Presenting the same Sheet again.
+    driver.advance(to: 20_000)
+    model.navigate(to: "details")
+    let secondSheetEntry = try XCTUnwrap(model.sheetScreenEntry)
+    // The same screen, but a different entry: a later generation and a new
+    // origin. Keyed on the screen id alone this would be the first entry still,
+    // and the entrance below would already be over.
+    XCTAssertEqual(secondSheetEntry.screenID, firstSheetEntry.screenID)
+    XCTAssertGreaterThan(secondSheetEntry.generation, firstSheetEntry.generation)
+    XCTAssertEqual(secondSheetEntry.elapsedMillisecondsAtEntry, 20_000)
+    XCTAssertFalse(try sheetTitleFrame().isStatic)
+    driver.advance(to: 20_120)
+    XCTAssertEqual(try sheetTitleFrame().opacity, midSheetEntrance.opacity)
+    // Measured from the base screen's entry it would have been static long ago,
+    // which is the defect this half of the test exists to catch.
+    XCTAssertTrue(
+      try MosaicMotionResolver.appearFrame(
+        sheetAppear,
+        curve: sheetAppearCurve,
+        elapsedMilliseconds: baseEntry.elapsedMilliseconds(at: 20_120),
+        reducedMotion: false
+      ).isStatic)
+    // And the base screen still never re-entered through any of it.
+    XCTAssertEqual(model.baseScreenEntry, baseEntry)
   }
 
   // MARK: - Video backgrounds
@@ -587,7 +663,7 @@ final class MotionDriverTests: XCTestCase {
       poster: String? = "poster"
     ) -> MosaicVideoBackgroundPresentation {
       MosaicVideoBackgroundPresentation.resolve(
-        url: url,
+        resolvedSource: url,
         posterID: poster,
         schemaVersion: schemaVersion,
         accessibility: accessibility
@@ -610,7 +686,8 @@ final class MotionDriverTests: XCTestCase {
     // And an unstated version is not treated as `0.4`.
     XCTAssertEqual(
       MosaicVideoBackgroundPresentation.resolve(
-        url: url, posterID: "poster", schemaVersion: nil, accessibility: reducedMotionOnly),
+        resolvedSource: url, posterID: "poster", schemaVersion: nil,
+        accessibility: reducedMotionOnly),
       .play(url: url)
     )
     // Without the preference, `0.4` plays like everything else.
@@ -626,13 +703,32 @@ final class MotionDriverTests: XCTestCase {
       .still(posterID: "poster", recordsUnavailable: false)
     )
 
-    // An unresolvable asset is a media failure rather than a preference, and is
-    // the one still frame that diagnoses.
+    // A source the host cannot resolve is a media fact rather than a preference,
+    // and is the one still frame that diagnoses — on the playing path...
     XCTAssertEqual(
       MosaicVideoBackgroundPresentation.resolve(
-        url: nil, posterID: "poster", schemaVersion: mosaicMotionProtocolVersion,
+        resolvedSource: nil, posterID: "poster", schemaVersion: mosaicMotionProtocolVersion,
         accessibility: .unrestricted),
       .still(posterID: "poster", recordsUnavailable: true)
+    )
+    // ...and equally on the suppressed one. A bundled key the host does not map
+    // is broken whether or not reduced motion would have stopped it, and an
+    // operator must not have to rule out every viewer's accessibility settings
+    // before believing an asset is missing.
+    XCTAssertEqual(
+      MosaicVideoBackgroundPresentation.resolve(
+        resolvedSource: nil, posterID: "poster", schemaVersion: mosaicMotionProtocolVersion,
+        accessibility: reducedMotionOnly),
+      .still(posterID: "poster", recordsUnavailable: true)
+    )
+    // The converse, and the boundary: a *remote* asset always resolves to its URL
+    // here, so under suppression it diagnoses nothing. Whether that URL would
+    // have loaded is knowable only by fetching it, and fetching is the playback
+    // the ruling forbids — so a remote video that would have failed is reported
+    // by the player that actually tried, on the playing path alone.
+    XCTAssertEqual(
+      resolve(mosaicMotionProtocolVersion, reducedMotionOnly),
+      .still(posterID: "poster", recordsUnavailable: false)
     )
   }
 

@@ -630,12 +630,25 @@ enum MosaicVideoBackgroundPresentation: Equatable {
   /// No player is constructed. The declared poster is drawn when one is
   /// declared, and the declared fallback colour otherwise.
   ///
-  /// `recordsUnavailable` separates the two reasons for arriving here: a media
-  /// failure, which diagnoses, and a user preference, which does not.
+  /// `recordsUnavailable` separates the two reasons for arriving here: media the
+  /// host could not resolve, which diagnoses, and a user preference, which does
+  /// not.
   case still(posterID: String?, recordsUnavailable: Bool)
 
+  /// The one code both paths record, so an operator reading diagnostics cannot
+  /// infer from the wording whether the video was suppressed or attempted. The
+  /// customer's accessibility settings are not something a diagnostic feed should
+  /// disclose, and "this asset is broken" is the same fact either way.
+  static let unavailableDiagnosticCode = "media_video_background_unavailable"
+
+  /// - Parameter resolvedSource: the asset's playable URL, or `nil` when the host
+  ///   could not resolve one. `nil` means the document declares no such asset, or
+  ///   declares a *bundled* one whose key the host's resolver does not map —
+  ///   both knowable by lookup alone. A *remote* asset always resolves to its
+  ///   URL here, because whether that URL actually loads is knowable only by
+  ///   fetching it, and fetching is the playback a suppressed video must not do.
   static func resolve(
-    url: URL?,
+    resolvedSource: URL?,
     posterID: String?,
     schemaVersion: String?,
     accessibility: MosaicMotionAccessibility
@@ -651,14 +664,24 @@ enum MosaicVideoBackgroundPresentation: Equatable {
     // rule, so it is honoured on every document version: a user who turned it
     // off meant it, and a `0.3` document is not a licence to ignore it.
     let autoplayStops = !accessibility.allowsVideoAutoplay
-    guard !reducedMotionStops, !autoplayStops else {
-      // A preference, not a failure. The poster-then-fallback order is the one
-      // the existing missing-media policy already uses, reused deliberately
-      // rather than introducing a fourth outcome.
-      return .still(posterID: posterID, recordsUnavailable: false)
+    // The poster-then-fallback order is the one the existing missing-media
+    // policy already uses, reused deliberately rather than introducing a fourth
+    // outcome.
+    //
+    // Unavailability is a fact about the media rather than about the preference,
+    // so a source the host cannot resolve is reported whether or not it would
+    // have been allowed to play: an operator must be able to see a broken asset
+    // without first ruling out every viewer's accessibility settings, and
+    // Compose has always recorded it here. The converse holds too — a suppressed
+    // video whose source resolves diagnoses nothing, because nothing is wrong.
+    //
+    // The line sits exactly where knowability does. Everything diagnosed on this
+    // path is settled by lookup; a remote URL that would have 404'd is diagnosed
+    // on the playing path alone, by the player that actually tried.
+    guard !reducedMotionStops, !autoplayStops, let resolvedSource else {
+      return .still(posterID: posterID, recordsUnavailable: resolvedSource == nil)
     }
-    guard let url else { return .still(posterID: posterID, recordsUnavailable: true) }
-    return .play(url: url)
+    return .play(url: resolvedSource)
   }
 }
 
@@ -787,16 +810,20 @@ struct MosaicBackgroundView: View {
     mode: MosaicImageContentMode,
     fallback: Color
   ) -> some View {
-    let url = document?.assets.first(where: { $0.id == assetID }).flatMap { asset -> URL? in
-      switch asset.source {
-      case .bundled(let key): videoResolver.url(for: key)
-      case .remote(let url): url
+    // Resolvable by lookup alone: a bundled key the host does not map yields
+    // nothing, while a remote asset always yields its URL — whether that URL
+    // loads is the player's question, not this one's.
+    let resolvedSource = document?.assets.first(where: { $0.id == assetID })
+      .flatMap { asset -> URL? in
+        switch asset.source {
+        case .bundled(let key): videoResolver.url(for: key)
+        case .remote(let url): url
+        }
       }
-    }
     // No frame of a stopped video is shown, playback is not started and paused,
     // and no control is offered: the `still` arm constructs no player at all.
     switch MosaicVideoBackgroundPresentation.resolve(
-      url: url,
+      resolvedSource: resolvedSource,
       posterID: posterID,
       schemaVersion: document?.schemaVersion,
       accessibility: motionAccessibility
@@ -804,7 +831,7 @@ struct MosaicBackgroundView: View {
     case .play(let url):
       MosaicDecorativeVideoView(url: url, contentMode: mode) {
         model.recordRenderingDiagnosticOnce(
-          "media_video_background_unavailable", subjectID: assetID)
+          MosaicVideoBackgroundPresentation.unavailableDiagnosticCode, subjectID: assetID)
       } fallback: {
         posterOrFallback(posterID: posterID, mode: mode, fallback: fallback)
       }
@@ -813,7 +840,7 @@ struct MosaicBackgroundView: View {
         .task {
           guard recordsUnavailable else { return }
           model.recordRenderingDiagnosticOnce(
-            "media_video_background_unavailable", subjectID: assetID)
+            MosaicVideoBackgroundPresentation.unavailableDiagnosticCode, subjectID: assetID)
         }
     }
   }
