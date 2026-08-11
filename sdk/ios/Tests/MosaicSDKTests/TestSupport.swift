@@ -75,6 +75,43 @@ func v03Document(named name: String = "complete-paywall.json") throws
   try MosaicProtocolDecoder.decode(v03FixtureData(named: name))
 }
 
+func v04FixtureURL(named name: String = "complete-paywall.json") throws -> URL {
+  let fileManager = FileManager.default
+  var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+
+  while directory.path != "/" {
+    let candidate =
+      directory
+      .appendingPathComponent("protocol")
+      .appendingPathComponent("fixtures")
+      .appendingPathComponent("v0.4")
+      .appendingPathComponent(name)
+    if fileManager.fileExists(atPath: candidate.path) {
+      return candidate
+    }
+    directory.deleteLastPathComponent()
+  }
+
+  throw CanonicalFixtureLookupError.notFound
+}
+
+func v04FixtureData(named name: String = "complete-paywall.json") throws -> Data {
+  try Data(contentsOf: v04FixtureURL(named: name))
+}
+
+func v04Document(named name: String = "complete-paywall.json") throws -> MosaicPaywallDocument {
+  try MosaicProtocolDecoder.decode(v04FixtureData(named: name))
+}
+
+func v04FixtureNames(in subdirectory: String) throws -> [String] {
+  let directory = try v04FixtureURL(named: "complete-paywall.json")
+    .deletingLastPathComponent()
+    .appendingPathComponent(subdirectory)
+  return try FileManager.default.contentsOfDirectory(atPath: directory.path)
+    .filter { $0.hasSuffix(".json") }
+    .sorted()
+}
+
 func deliveryFixtureURL(named name: String = "valid-release.json") throws -> URL {
   let fileManager = FileManager.default
   var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()

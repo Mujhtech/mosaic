@@ -144,7 +144,11 @@ public struct MosaicPreviewCapabilityReport: Sendable, Equatable {
   ) -> MosaicPreviewCapabilityReport {
     MosaicPreviewCapabilityReport(
       clientId: clientId,
-      supportedSchemaVersions: mosaicSupportedProtocolVersions,
+      // Local Preview `0.3` is version-locked to Paywall Protocol `0.3` — its
+      // message schema references that paywall schema directly — so this
+      // handshake advertises `0.3` alone even though the decoder also reads
+      // `0.4`. Local Preview `0.4` is a separate, named piece of work.
+      supportedSchemaVersions: [mosaicProtocolVersion],
       supportedCapabilities: MosaicCapabilityCatalog.v03.map {
         MosaicPreviewSupportedCapability(name: $0.rawValue, version: mosaicProtocolVersion)
       },

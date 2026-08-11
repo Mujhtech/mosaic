@@ -12,9 +12,16 @@ final class CanonicalFixtureTests: XCTestCase {
     XCTAssertEqual(document.initialScreenId, "offer")
     XCTAssertEqual(document.screens.map(\.id), ["offer", "details"])
     XCTAssertEqual(document.screens.map { $0.presentation?.type }, [.screen, .sheet])
-    XCTAssertEqual(MosaicSDKCapabilityReport.current.supportedSchemaVersions, ["0.3"])
+    // The SDK reads both contracts, and reports each one's capabilities against
+    // the version they belong to: `style.productCardStates` exists in `0.3` and
+    // not in `0.4`, so a merged set could not describe either.
+    XCTAssertEqual(MosaicSDKCapabilityReport.current.supportedSchemaVersions, ["0.3", "0.4"])
     XCTAssertEqual(
-      Set(MosaicSDKCapabilityReport.current.capabilities.map(\.name)),
+      Set(
+        MosaicSDKCapabilityReport.current.capabilities
+          .filter { $0.version == "0.3" }
+          .map(\.name)
+      ),
       Set(MosaicCapabilityCatalog.v03)
     )
   }

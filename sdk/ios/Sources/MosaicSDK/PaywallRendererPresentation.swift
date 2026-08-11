@@ -154,20 +154,32 @@ struct MosaicTabsView: View {
 
   private func tabControl(_ tab: MosaicTabsEntry) -> some View {
     let selected = selectedTabID == tab.id
-    let style = component.styles.resolving(selected: selected)
     // `selectedLabelColor` is authored either way, so the selected label colour
     // is read rather than inferred from the Default typography.
     let typography = selected
       ? component.labelTypography.recolored(component.selectedLabelColor)
       : component.labelTypography
-    return Button {
-      model.selectTab(tab.id, in: component.id)
-    } label: {
-      MosaicStyledText(value: localization.resolve(tab.label), typography: typography)
-        .contentShape(Rectangle())
+    // Tabs `selection` animates the tab control's style, not the panel swap:
+    // `0.3` visibility semantics remove a hidden node from layout, the
+    // accessibility tree, and focus order, and animating a removal would need a
+    // "present but not focusable" third state that does not exist.
+    return MosaicSelectionStyledContent(
+      styles: component.styles,
+      selected: selected,
+      motion: component.motion?.selection,
+      curve: component.motion?.selection.flatMap {
+        document.resolvedMotionCurve($0.curve)
+      }
+    ) { style in
+      Button {
+        model.selectTab(tab.id, in: component.id)
+      } label: {
+        MosaicStyledText(value: localization.resolve(tab.label), typography: typography)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .modifier(MosaicSelectionStyledBox(style: style, document: document))
     }
-    .buttonStyle(.plain)
-    .modifier(MosaicSelectionStyledBox(style: style, document: document))
     .frame(minWidth: 44, minHeight: 44)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(Text(localization.resolve(tab.label)))

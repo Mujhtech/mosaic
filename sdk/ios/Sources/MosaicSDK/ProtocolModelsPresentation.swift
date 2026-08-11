@@ -47,12 +47,14 @@ public struct MosaicTabsComponent: Decodable, Sendable, Equatable, Identifiable 
   public let appearance: MosaicBoxAppearance?
   public let sizing: MosaicBoxSizing?
   public let outerInsets: MosaicEdgeInsets?
+  public let motion: MosaicMotion?
   public let visibility: MosaicVisibility
   public let accessibility: MosaicControlAccessibility
 
   private enum CodingKeys: String, CodingKey {
     case type, id, tabBarDirection, tabBarGap, tabBarDistribution, gap, initialTabId, tabs
-    case styles, labelTypography, selectedLabelColor, appearance, sizing, outerInsets, visibility
+    case styles, labelTypography, selectedLabelColor, appearance, sizing, outerInsets, motion
+    case visibility
     case accessibility
   }
 
@@ -73,6 +75,7 @@ public struct MosaicTabsComponent: Decodable, Sendable, Equatable, Identifiable 
     appearance = try c.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
     sizing = try c.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
     outerInsets = try c.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
+    motion = try c.decodeIfPresent(MosaicMotion.self, forKey: .motion)
     visibility = try c.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
     accessibility = try c.decode(MosaicControlAccessibility.self, forKey: .accessibility)
   }
@@ -94,14 +97,18 @@ public struct MosaicTimelineConnector: Decodable, Sendable, Equatable {
   public let style: MosaicTimelineConnectorStyle
 }
 
-/// The glyph drawn at an entry's position on the connector.
+/// The glyph rendered beside a Feature List item or at a Timeline entry's
+/// position on the connector.
 ///
 /// A closed union: an unrecognised `kind` rejects the document rather than
-/// rendering an arbitrary substitute.
-public enum MosaicTimelineMarker: Decodable, Sendable, Equatable {
+/// rendering an arbitrary substitute. `0.4` consolidated the two component
+/// vocabularies onto this one, so a Feature List can finally express a negated
+/// item — "not included" on a comparison paywall — which the single `"checkmark"`
+/// constant `0.3` carried could not.
+public enum MosaicMarker: Decodable, Sendable, Equatable {
   case dot
-  /// The entry's 1-based position, formatted by the platform's locale number
-  /// formatting.
+  /// The item's or entry's 1-based position, formatted by the platform's locale
+  /// number formatting.
   case ordinal
   case icon(name: MosaicIconName)
 
@@ -109,6 +116,22 @@ public enum MosaicTimelineMarker: Decodable, Sendable, Equatable {
   private enum Kind: String, Decodable { case dot, ordinal, icon }
 
   public init(from decoder: any Decoder) throws {
+    // `0.3` authors a Feature List marker as the bare string `"checkmark"`.
+    // Accepting it here is what lets one renderer draw both contracts: it is
+    // the same glyph the `0.4` icon arm names, so the rendering is identical
+    // and neither version needs a second marker type.
+    if let raw = try? decoder.singleValueContainer().decode(String.self) {
+      guard raw == MosaicIconName.checkmark.rawValue else {
+        throw DecodingError.dataCorrupted(
+          .init(
+            codingPath: decoder.codingPath,
+            debugDescription: "Protocol 0.3 admits only the checkmark marker."
+          )
+        )
+      }
+      self = .icon(name: .checkmark)
+      return
+    }
     let c = try decoder.container(keyedBy: CodingKeys.self)
     switch try c.decode(Kind.self, forKey: .kind) {
     case .dot: self = .dot
@@ -117,6 +140,10 @@ public enum MosaicTimelineMarker: Decodable, Sendable, Equatable {
     }
   }
 }
+
+/// `0.3` named this type for Timeline alone. It is an alias rather than a second
+/// declaration so the two components cannot drift apart again.
+public typealias MosaicTimelineMarker = MosaicMarker
 
 public struct MosaicTimelineEntry: Decodable, Sendable, Equatable, Identifiable {
   public let id: String
@@ -149,12 +176,13 @@ public struct MosaicTimelineComponent: Decodable, Sendable, Equatable, Identifia
   public let appearance: MosaicBoxAppearance?
   public let sizing: MosaicBoxSizing?
   public let outerInsets: MosaicEdgeInsets?
+  public let motion: MosaicMotion?
   public let visibility: MosaicVisibility
   public let accessibility: MosaicControlAccessibility
 
   private enum CodingKeys: String, CodingKey {
     case type, id, orientation, gap, connector, entries, markerColor, markerSize
-    case titleTypography, descriptionTypography, appearance, sizing, outerInsets, visibility
+    case titleTypography, descriptionTypography, appearance, sizing, outerInsets, motion, visibility
     case accessibility
   }
 
@@ -174,6 +202,7 @@ public struct MosaicTimelineComponent: Decodable, Sendable, Equatable, Identifia
     appearance = try c.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
     sizing = try c.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
     outerInsets = try c.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
+    motion = try c.decodeIfPresent(MosaicMotion.self, forKey: .motion)
     visibility = try c.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
     accessibility = try c.decode(MosaicControlAccessibility.self, forKey: .accessibility)
   }
@@ -236,12 +265,14 @@ public struct MosaicAwardComponent: Decodable, Sendable, Equatable, Identifiable
   public let appearance: MosaicBoxAppearance?
   public let sizing: MosaicBoxSizing?
   public let outerInsets: MosaicEdgeInsets?
+  public let motion: MosaicMotion?
   public let visibility: MosaicVisibility
   public let accessibility: MosaicControlAccessibility
 
   private enum CodingKeys: String, CodingKey {
     case type, id, direction, gap, crossAxisAlignment, emblem, title, titleTypography
-    case subtitle, subtitleTypography, appearance, sizing, outerInsets, visibility, accessibility
+    case subtitle, subtitleTypography, appearance, sizing, outerInsets, motion, visibility
+    case accessibility
   }
 
   public init(from decoder: any Decoder) throws {
@@ -261,6 +292,7 @@ public struct MosaicAwardComponent: Decodable, Sendable, Equatable, Identifiable
     appearance = try c.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
     sizing = try c.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
     outerInsets = try c.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
+    motion = try c.decodeIfPresent(MosaicMotion.self, forKey: .motion)
     visibility = try c.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
     accessibility = try c.decode(MosaicControlAccessibility.self, forKey: .accessibility)
   }
@@ -421,12 +453,13 @@ public struct MosaicSocialProofComponent: Decodable, Sendable, Equatable, Identi
   public let appearance: MosaicBoxAppearance?
   public let sizing: MosaicBoxSizing?
   public let outerInsets: MosaicEdgeInsets?
+  public let motion: MosaicMotion?
   public let visibility: MosaicVisibility
   public let accessibility: MosaicControlAccessibility
 
   private enum CodingKeys: String, CodingKey {
     case type, id, gap, quote, quoteTypography, attribution, attributionTypography, rating
-    case avatar, appearance, sizing, outerInsets, visibility, accessibility
+    case avatar, appearance, sizing, outerInsets, motion, visibility, accessibility
   }
 
   public init(from decoder: any Decoder) throws {
@@ -444,6 +477,7 @@ public struct MosaicSocialProofComponent: Decodable, Sendable, Equatable, Identi
     appearance = try c.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
     sizing = try c.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
     outerInsets = try c.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
+    motion = try c.decodeIfPresent(MosaicMotion.self, forKey: .motion)
     visibility = try c.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
     accessibility = try c.decode(MosaicControlAccessibility.self, forKey: .accessibility)
   }

@@ -76,6 +76,94 @@ extension MosaicProtocolV03Semantics {
     }
   }
 
+  /// The flash-safety floor for a looping motion, in milliseconds.
+  ///
+  /// A 500 ms cycle caps the pulse's fundamental at 2 Hz and its perceived rate
+  /// at 1 Hz, an order of magnitude below the three-per-second threshold WCAG
+  /// 2.3.1 draws. It lives in the semantic layer rather than the schema because
+  /// the duration lives on a token and the constraint belongs to the reference
+  /// site: the same 240 ms token is legitimate for an entrance and illegitimate
+  /// for a pulse.
+  static let loopMinimumDurationMilliseconds = 500
+
+  /// The `0.4` motion rules that a single node cannot answer on its own.
+  static func validateMotion(
+    document: MosaicPaywallDocument,
+    entries: [MotionEntry]
+  ) throws {
+    let catalog = document.designSystem?.motions ?? []
+
+    var ids = Set<String>()
+    var names = Set<String>()
+    for token in catalog {
+      try identifier(token.id)
+      guard ids.insert(token.id).inserted else {
+        throw violation("protocol_duplicate_design_token_id")
+      }
+      guard !token.name.isEmpty, token.name.count <= 80, names.insert(token.name).inserted else {
+        throw violation("protocol_invalid_design_token_name")
+      }
+      // Resolution covers both an unknown target and a reference cycle: the
+      // resolver refuses to revisit a token it is already inside.
+      guard document.resolvedMotionCurve(token.value) != nil else {
+        throw violation("protocol_unknown_or_cyclic_motion_token")
+      }
+    }
+
+    var referenced = Set<String>()
+    for token in catalog {
+      if let id = token.value.tokenID { referenced.insert(id) }
+    }
+    var loopsByScreen: [String: [String]] = [:]
+
+    for entry in entries {
+      let motion = entry.motion
+      if let appear = motion.appear {
+        guard entry.appearAncestorID == nil else {
+          throw violation("protocol_nested_appear_motion")
+        }
+        try motionCurve(appear.curve, document: document, referenced: &referenced)
+      }
+      if let selection = motion.selection {
+        try motionCurve(selection.curve, document: document, referenced: &referenced)
+      }
+      guard let loop = motion.loop else { continue }
+      loopsByScreen[entry.screenID, default: []].append(entry.nodeID)
+      let resolved = try motionCurve(loop.curve, document: document, referenced: &referenced)
+      guard resolved.durationMilliseconds >= loopMinimumDurationMilliseconds else {
+        throw violation("protocol_loop_motion_below_flash_floor")
+      }
+    }
+
+    // A protocol that lets you pulse six things is a toolkit; one that lets you
+    // pulse the thing is a paywall protocol.
+    guard loopsByScreen.values.allSatisfy({ $0.count <= 1 }) else {
+      throw violation("protocol_multiple_loop_motions_on_screen")
+    }
+
+    // Deliberately asymmetric with the colour, background, and shadow catalogs,
+    // which carry no unused-token check. Those are inert values. A motion token
+    // is a duration whose flash safety is checked at its *reference* site, so a
+    // token nothing references has never been checked against anything and sits
+    // in the catalog looking approved.
+    guard ids.subtracting(referenced).isEmpty else {
+      throw violation("protocol_unused_motion_token")
+    }
+  }
+
+  @discardableResult
+  private static func motionCurve(
+    _ curve: MosaicMotionCurve,
+    document: MosaicPaywallDocument,
+    referenced: inout Set<String>
+  ) throws -> MosaicResolvedMotionCurve {
+    if let id = curve.tokenID { referenced.insert(id) }
+    guard let resolved = document.resolvedMotionCurve(curve) else {
+      throw violation("protocol_unknown_or_cyclic_motion_token")
+    }
+    return resolved
+  }
+
   static func externalURL(_ url: URL) throws {
     guard isSafeMosaicV03ExternalURL(url.absoluteString) else {
       throw violation("protocol_invalid_external_url")

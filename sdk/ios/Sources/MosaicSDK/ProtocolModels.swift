@@ -1,9 +1,38 @@
 import Foundation
 
-/// The single protocol contract supported during pre-release iteration.
+/// The release-candidate protocol contract.
+///
+/// It remains the version the SDK negotiates with Configuration Delivery and
+/// Local Preview: `0.4` is a draft that nothing produces in production, and the
+/// backend capability partitioning it needs is a later wave the contract
+/// explicitly defers. Reading a `0.4` document is supported; asking a server for
+/// one is not yet.
 public let mosaicProtocolVersion = "0.3"
-public let mosaicLatestProtocolVersion = mosaicProtocolVersion
-public let mosaicSupportedProtocolVersions = [mosaicProtocolVersion]
+/// Paywall Protocol `0.4`, "Motion". A pure superset of `0.3` apart from the two
+/// cleanups `0.3` itself named for this version.
+public let mosaicMotionProtocolVersion = "0.4"
+public let mosaicLatestProtocolVersion = mosaicMotionProtocolVersion
+/// Every contract this SDK can decode and render. Versions are exact
+/// identifiers: a `0.3` document is read by the `0.3` rules and a `0.4` document
+/// by the `0.4` rules, and neither reads the other.
+public let mosaicSupportedProtocolVersions = [mosaicProtocolVersion, mosaicMotionProtocolVersion]
+
+/// One decodable contract, and the rules that go with it.
+public enum MosaicSchemaVersion: String, Sendable, CaseIterable, Equatable {
+  case v03 = "0.3"
+  case v04 = "0.4"
+
+  public var capabilities: [MosaicCapabilityName] {
+    switch self {
+    case .v03: MosaicCapabilityCatalog.v03
+    case .v04: MosaicCapabilityCatalog.v04
+    }
+  }
+
+  /// Whether documents of this version may author motion. Used to keep the one
+  /// shape and semantic validator honest about which contract it is reading.
+  public var supportsMotion: Bool { self == .v04 }
+}
 /// The exact published artifact version. It must stay identical to
 /// `MosaicSDK.podspec` and `StoreKit/MosaicStoreKit.podspec` because it is sent
 /// as the `Mosaic-SDK-Version` header and reported in analytics context.
@@ -59,10 +88,17 @@ public enum MosaicCapabilityName: String, Codable, CaseIterable, Sendable {
   case boxStyle = "style.box"
   case clipping = "style.clipping"
   case typography = "style.typography"
+  /// Removed in `0.4` as a legacy co-derived signal: it was derived exactly
+  /// when Product Selector, Product Card, or Product Badge was, so it carried no
+  /// information of its own. A `0.4` document that declares it is rejected as an
+  /// unknown capability.
   case productCardStates = "style.productCardStates"
   case staticVisibility = "visibility.static"
   case switchVisibility = "condition.switchVisibility"
   case tabVisibility = "condition.tabVisibility"
+  case motionAppear = "motion.appear"
+  case motionSelection = "motion.selection"
+  case motionLoop = "motion.loop"
 }
 
 public enum MosaicCapabilityCatalog {
@@ -79,6 +115,24 @@ public enum MosaicCapabilityCatalog {
     .staticVisibility, .switchVisibility,
     .tabs, .timeline, .award, .socialProof, .tabVisibility, .reservedStrings,
   ]
+
+  /// `0.4` is `0.3` plus the three motion capabilities, minus the one capability
+  /// `0.3` named for removal.
+  ///
+  /// Expressed as a delta rather than as a second list, because "0.4 is 0.3 plus
+  /// motion minus one co-derived capability" is the whole compatibility claim: a
+  /// copied list would let the two answers drift while each stayed internally
+  /// consistent.
+  public static let v04: [MosaicCapabilityName] =
+    v03.filter { $0 != .productCardStates } + [.motionAppear, .motionSelection, .motionLoop]
+
+  /// The three capabilities that carry `renderWithoutMotion` rather than
+  /// `rejectDocument`. A reader missing one of these renders the document
+  /// statically and completely, which the terminal-state rule guarantees is the
+  /// full authored design.
+  public static let motion: [MosaicCapabilityName] = [
+    .motionAppear, .motionSelection, .motionLoop,
+  ]
 }
 
 public struct MosaicSDKCapabilityReport: Sendable, Equatable {
@@ -89,8 +143,13 @@ public struct MosaicSDKCapabilityReport: Sendable, Equatable {
   public init(
     sdkVersion: String = mosaicSDKVersion,
     supportedSchemaVersions: [String] = mosaicSupportedProtocolVersions,
-    capabilities: [MosaicRequiredCapability] = MosaicCapabilityCatalog.v03.map {
-      MosaicRequiredCapability(name: $0, version: mosaicProtocolVersion)
+    /// Reported per version rather than as one merged set: a capability is only
+    /// meaningful next to the contract it belongs to, and `style.productCardStates`
+    /// exists in exactly one of the two.
+    capabilities: [MosaicRequiredCapability] = MosaicSchemaVersion.allCases.flatMap { version in
+      version.capabilities.map {
+        MosaicRequiredCapability(name: $0, version: version.rawValue)
+      }
     }
   ) {
     self.sdkVersion = sdkVersion
@@ -132,14 +191,14 @@ public struct MosaicPaywallDocument: Decodable, Sendable, Equatable {
     assets = try container.decode([MosaicAsset].self, forKey: .assets)
     products = try container.decode([MosaicProductReference].self, forKey: .products)
 
-    if schemaVersion == mosaicProtocolVersion {
+    if mosaicSupportedProtocolVersions.contains(schemaVersion) {
       let decodedScreens = try container.decode([MosaicScreen].self, forKey: .screens)
       let decodedInitialScreenID = try container.decode(String.self, forKey: .initialScreenId)
       guard !decodedScreens.isEmpty else {
         throw DecodingError.dataCorruptedError(
           forKey: .screens,
           in: container,
-          debugDescription: "Protocol 0.3 requires at least one screen."
+          debugDescription: "Every supported protocol version requires at least one screen."
         )
       }
       // `invalidReference` is `rejectDocument` in the 0.3 reader policy. A
@@ -336,12 +395,13 @@ public struct MosaicStack: Decodable, Sendable, Equatable, Identifiable {
   public let appearance: MosaicBoxAppearance?
   public let sizing: MosaicBoxSizing?
   public let outerInsets: MosaicEdgeInsets?
+  public let motion: MosaicMotion?
   public let visibility: MosaicVisibility
   public let children: [MosaicNode]
 
   private enum CodingKeys: String, CodingKey {
     case type, id, direction, gap, padding, mainAxisDistribution
-    case crossAxisAlignment, appearance, sizing, outerInsets, visibility
+    case crossAxisAlignment, appearance, sizing, outerInsets, motion, visibility
     case children
   }
 
@@ -353,6 +413,7 @@ public struct MosaicStack: Decodable, Sendable, Equatable, Identifiable {
     appearance = try container.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
     sizing = try container.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
     outerInsets = try container.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
+    motion = try container.decodeIfPresent(MosaicMotion.self, forKey: .motion)
     visibility =
       try container.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
     children = try container.decode([MosaicNode].self, forKey: .children)
@@ -625,6 +686,21 @@ public struct MosaicDesignSystem: Decodable, Sendable, Equatable {
   public let colors: [MosaicColorToken]
   public let backgrounds: [MosaicBackgroundToken]
   public let shadows: [MosaicShadowToken]
+  /// The fourth catalog, added by `0.4`. Required and possibly empty there, and
+  /// absent from `0.3`, where the shape validator rejects the key outright — so
+  /// an empty catalog here means "authored empty" in `0.4` and "not that
+  /// contract" in `0.3`, and neither is a decoding default.
+  public let motions: [MosaicMotionToken]
+
+  private enum CodingKeys: String, CodingKey { case colors, backgrounds, shadows, motions }
+
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    colors = try container.decode([MosaicColorToken].self, forKey: .colors)
+    backgrounds = try container.decode([MosaicBackgroundToken].self, forKey: .backgrounds)
+    shadows = try container.decode([MosaicShadowToken].self, forKey: .shadows)
+    motions = try container.decodeIfPresent([MosaicMotionToken].self, forKey: .motions) ?? []
+  }
 }
 
 /// A style reference the renderer could not resolve to an authored value.

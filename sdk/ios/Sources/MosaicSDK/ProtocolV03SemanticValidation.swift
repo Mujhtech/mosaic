@@ -1,8 +1,11 @@
 import Foundation
 
 enum MosaicProtocolV03Semantics {
-  static func validate(_ document: MosaicPaywallDocument) throws {
-    guard document.schemaVersion == mosaicProtocolVersion else {
+  static func validate(
+    _ document: MosaicPaywallDocument,
+    version: MosaicSchemaVersion = .v03
+  ) throws {
+    guard document.schemaVersion == version.rawValue else {
       throw MosaicProtocolError.unsupportedSchemaVersion(document.schemaVersion)
     }
     guard (1...Int(Int32.max)).contains(document.revision) else {
@@ -12,11 +15,11 @@ enum MosaicProtocolV03Semantics {
 
     var declared = Set<MosaicCapabilityName>()
     for capability in document.compatibility.requiredCapabilities {
-      guard capability.version == mosaicProtocolVersion else {
+      guard capability.version == version.rawValue else {
         throw MosaicProtocolError.unsupportedCapability(
           name: capability.name.rawValue, version: capability.version)
       }
-      guard MosaicCapabilityCatalog.v03.contains(capability.name) else {
+      guard version.capabilities.contains(capability.name) else {
         throw MosaicProtocolError.unsupportedCapability(
           name: capability.name.rawValue, version: capability.version)
       }
@@ -30,7 +33,7 @@ enum MosaicProtocolV03Semantics {
     }
     try validateDesignSystem(designSystem, document: document)
 
-    var state = State(document: document)
+    var state = State(document: document, version: version)
     state.capabilities.formUnion([.scrollContainer, .stack, .screens, .localizationCatalogs])
     if !designSystem.colors.isEmpty || !designSystem.backgrounds.isEmpty
       || !designSystem.shadows.isEmpty
@@ -194,6 +197,16 @@ enum MosaicProtocolV03Semantics {
       state.capabilities.insert(.localizationRTL)
     }
 
+    if version.supportsMotion {
+      try validateMotion(document: document, entries: state.motionEntries)
+      // `0.4` removed `style.productCardStates`: it was derived exactly when
+      // Product Selector, Product Card, or Product Badge was, so it could never
+      // vary independently and carried no information. Removing it from the
+      // derived set here — rather than guarding each insertion — keeps the delta
+      // stated in one place, as the reference derivation does.
+      state.capabilities.remove(.productCardStates)
+    }
+
     if let missing = state.capabilities.subtracting(declared).first {
       throw violation("protocol_missing_capability_\(missing.rawValue)")
     }
@@ -229,6 +242,19 @@ enum MosaicProtocolV03Semantics {
     let productTemplateAllowed: Bool
   }
 
+  /// One authored `motion` block, with the context its rules are checked
+  /// against.
+  struct MotionEntry {
+    let nodeID: String
+    let motion: MosaicMotion
+    let screenID: String
+    /// The nearest enclosing node that also declares `appear`, if any. Two
+    /// entrance opacities multiply and the three renderers compose that product
+    /// at different points in their pipelines, so the document is rejected
+    /// rather than an arithmetic pinned that no platform agrees on.
+    let appearAncestorID: String?
+  }
+
   private struct State {
     var capabilities = Set<MosaicCapabilityName>()
     var screenIDs = Set<String>()
@@ -255,11 +281,39 @@ enum MosaicProtocolV03Semantics {
     var navigationEdges: [String: Set<String>] = [:]
     var localizedTextEntries: [LocalizedTextEntry] = []
     var currentScreenID: String?
+    /// Every `motion` block the walk found, with the context the motion rules
+    /// need. Collected during the walk and checked afterwards, because "one loop
+    /// per screen" and "no nested appear" are properties of a screen rather than
+    /// of a node.
+    var motionEntries: [MotionEntry] = []
+    var appearAncestorIDs: [String] = []
     let document: MosaicPaywallDocument
+    let version: MosaicSchemaVersion
 
     mutating func layoutID(_ id: String) throws {
       try identifier(id)
       guard layoutIDs.insert(id).inserted else { throw violation("protocol_duplicate_layout_id") }
+    }
+
+    /// Records a node's authored motion and derives its capabilities.
+    ///
+    /// A `0.3` document cannot reach this with a motion block — the shape
+    /// validator rejects the unknown property first — so the version guard is a
+    /// second lock on the same door rather than the only one.
+    mutating func recordMotion(_ motion: MosaicMotion?, id: String) throws {
+      guard let motion else { return }
+      guard version.supportsMotion else { throw violation("protocol_motion_not_supported") }
+      motionEntries.append(
+        MotionEntry(
+          nodeID: id,
+          motion: motion,
+          screenID: try screenID(),
+          appearAncestorID: motion.appear == nil ? nil : appearAncestorIDs.last
+        )
+      )
+      if motion.appear != nil { capabilities.insert(.motionAppear) }
+      if motion.selection != nil { capabilities.insert(.motionSelection) }
+      if motion.loop != nil { capabilities.insert(.motionLoop) }
     }
 
     mutating func stack(
@@ -268,6 +322,13 @@ enum MosaicProtocolV03Semantics {
       productCardContext: Bool = false
     ) throws {
       guard stack.type == .stack else { throw violation("protocol_invalid_stack_type") }
+      // Recorded here rather than in `validate(_:carouselDepth:)` because a
+      // screen's root content stack is reached directly, without being a child
+      // of anything.
+      try recordMotion(stack.motion, id: stack.id)
+      let opensAppearScope = stack.motion?.appear != nil
+      if opensAppearScope { appearAncestorIDs.append(stack.id) }
+      defer { if opensAppearScope { appearAncestorIDs.removeLast() } }
       try layoutID(stack.id)
       try logicalSize(stack.gap)
       try insets(stack.padding)
@@ -289,6 +350,24 @@ enum MosaicProtocolV03Semantics {
     }
 
     mutating func validate(
+      _ node: MosaicNode,
+      carouselDepth: Int,
+      productCardContext: Bool = false
+    ) throws {
+      // A Stack records its own motion, because it is also reachable without
+      // being a node. Every other kind records here, once, whatever its shape.
+      if case .stack = node {
+        try validateNode(node, carouselDepth: carouselDepth, productCardContext: productCardContext)
+        return
+      }
+      try recordMotion(node.motion, id: node.id)
+      let opensAppearScope = node.motion?.appear != nil
+      if opensAppearScope { appearAncestorIDs.append(node.id) }
+      defer { if opensAppearScope { appearAncestorIDs.removeLast() } }
+      try validateNode(node, carouselDepth: carouselDepth, productCardContext: productCardContext)
+    }
+
+    mutating func validateNode(
       _ node: MosaicNode,
       carouselDepth: Int,
       productCardContext: Bool = false
@@ -765,6 +844,10 @@ enum MosaicProtocolV03Semantics {
     }
 
     mutating func productCard(_ card: MosaicProductCardComponent) throws {
+      try recordMotion(card.motion, id: card.id)
+      let opensAppearScope = card.motion?.appear != nil
+      if opensAppearScope { appearAncestorIDs.append(card.id) }
+      defer { if opensAppearScope { appearAncestorIDs.removeLast() } }
       try layoutID(card.id)
       capabilities.formUnion([
         .productCard, .productCardStates, .boxStyle, .colors,
@@ -806,6 +889,10 @@ enum MosaicProtocolV03Semantics {
     }
 
     mutating func productBadge(_ badge: MosaicProductBadgeComponent) throws {
+      try recordMotion(badge.motion, id: badge.id)
+      let opensAppearScope = badge.motion?.appear != nil
+      if opensAppearScope { appearAncestorIDs.append(badge.id) }
+      defer { if opensAppearScope { appearAncestorIDs.removeLast() } }
       try layoutID(badge.id)
       capabilities.formUnion([
         .productBadge, .productCardStates, .boxStyle, .colors,

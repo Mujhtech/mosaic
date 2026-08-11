@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+- Read Paywall Protocol `0.4`, "Motion", alongside `0.3`. Versions stay exact
+  identifiers: the decoder dispatches on `schemaVersion`, a `0.3` document is
+  held to the `0.3` rules and a `0.4` document to the `0.4` rules, and neither
+  reads the other. `0.4` is validated by the same shape and semantic validators
+  parameterized by version rather than by a forked copy, because "0.4 is 0.3 plus
+  motion minus one capability" is the whole compatibility claim and two copies
+  could drift while each stayed internally consistent.
+- Add the `designSystem.motions` catalog, `motionToken` references and inline
+  motions, and per-node `appear`, `selection`, and `loop` blocks, with the `0.4`
+  semantic rules enforced: nested `appear` rejects the document, at most one
+  `loop` per screen, a `loop` curve resolving below the 500 ms flash-safety floor
+  rejects, every reference must resolve and the graph must be acyclic, and an
+  **unused** motion token rejects — deliberately unlike the colour, background,
+  and shadow catalogs, because a motion nothing references has never been checked
+  against the safety rule that lives at its reference site.
+- Add `MosaicMotionDriver`, an injected enabled flag and elapsed-time source that
+  mirrors the existing clock injection. The Countdown's one-second repaint moved
+  off `TimelineView(.periodic(from: .now, by: 1))` onto the driver's tick, so its
+  cadence is now testable; its remaining-time rounding is deliberately unchanged,
+  as that divergence is a separately tracked `0.3` defect. A disabled driver
+  renders every node's terminal state, which is its static rendering, so existing
+  goldens are unaffected.
+- Render the three primitives from `MosaicMotionResolver`, the same code the
+  published frame vectors are checked against: SwiftUI supplies a timeline —
+  `Animation.timingCurve` with the contract's normative control points for the
+  two one-shot primitives, a frame clock for the bounded pulse — and never
+  supplies a value. Every animation's terminal state is byte-identical to the
+  static rendering by construction: a terminal frame applies no modifier at all.
+- Honour reduced motion as a signal injected at the renderer boundary, defaulting
+  to `accessibilityReduceMotion`. `appear` becomes opacity-only with the
+  transform dropped at every instant, `selection` applies instantly, `loop` is
+  disabled at rest, and a **video background does not play** — the declared
+  poster is drawn, and otherwise the declared fallback colour, with no frame
+  shown and no control offered. `UIAccessibility.isVideoAutoplayEnabled` is
+  honoured alongside Reduce Motion for the same reason.
+- Report capabilities per contract: `MosaicSDKCapabilityReport.current` now
+  advertises `0.3` and `0.4` with each version's own capability set, including
+  `motion.appear`, `motion.selection`, and `motion.loop`. Configuration Delivery
+  and Local Preview still negotiate `0.3` alone — `0.4` is a draft, and the
+  backend capability partitioning and the Local Preview version bump it needs are
+  separate, named work.
+- **Breaking (pre-release):** `MosaicFeatureMarker` is removed. `0.4` consolidates
+  Feature List and Timeline onto one `MosaicMarker` union of `dot`, `ordinal`, and
+  `icon`, so a list can express a negated item, and an item may override the
+  list's glyph. `MosaicTimelineMarker` is now an alias of it. A `0.3` document's
+  bare `"checkmark"` string still decodes, to the same glyph it always drew.
+
 - Adopt Paywall Protocol `0.3`, which replaces `0.2` outright. There is no `0.2`
   support, no migration, and no dual-version code: a `0.2` document is an
   unknown version to this reader and is rejected atomically, resolving through

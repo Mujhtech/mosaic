@@ -172,6 +172,9 @@ struct MosaicButtonView: View {
       outerInsets: component.outerInsets
     )
     .frame(minWidth: 44, minHeight: 44)
+    // Button is the only component that may pulse, and at most one per screen
+    // may do so. A pulsing button announces exactly what a static one does.
+    .mosaicLoopMotion(component.motion, in: document)
   }
 
   private func handleAction() {
@@ -426,27 +429,37 @@ struct MosaicCarouselView: View {
 
 @MainActor
 struct MosaicCountdownView: View {
+  @EnvironmentObject private var driver: MosaicMotionDriver
   let component: MosaicCountdownComponent
   let localization: MosaicLocalizationResolver
   @ObservedObject var model: MosaicPaywallModel
 
+  /// The redraw cadence comes from the injected driver rather than from
+  /// `TimelineView(.periodic(from: .now, by: 1))`.
+  ///
+  /// The countdown's *value* has always come from the injected clock; only its
+  /// repaint schedule was wall-clock, and that made "what does it show one tick
+  /// later" untestable. Observing the driver's tick count makes the cadence an
+  /// injected input like everything else. The rounding of the remaining time is
+  /// deliberately untouched here: that divergence is a separately tracked 0.3
+  /// defect, and fixing it inside a 0.4 change would hide it.
   var body: some View {
-    TimelineView(.periodic(from: .now, by: 1)) { _ in
-      let resolution = MosaicCountdownText.resolution(
-        component: component,
-        now: model.currentDate(),
-        completedText: localization.resolve(component.completedText)
-      )
-      MosaicStyledText(value: resolution.text, typography: component.typography)
-        .mosaicHeading(component.accessibility)
-        .mosaicTextAccessibilityLabel(component.accessibility, localization: localization)
-        .mosaicCountdownDiagnostic(resolution, componentID: component.id)
-    }
-    .mosaicPresentation(
-      appearance: component.appearance,
-      sizing: component.sizing,
-      outerInsets: component.outerInsets
+    let resolution = MosaicCountdownText.resolution(
+      component: component,
+      now: model.currentDate(),
+      completedText: localization.resolve(component.completedText)
     )
+    return MosaicStyledText(value: resolution.text, typography: component.typography)
+      .mosaicHeading(component.accessibility)
+      .mosaicTextAccessibilityLabel(component.accessibility, localization: localization)
+      .mosaicCountdownDiagnostic(resolution, componentID: component.id)
+      .id(driver.tickCount)
+      .mosaicPresentation(
+        appearance: component.appearance,
+        sizing: component.sizing,
+        outerInsets: component.outerInsets
+      )
+      .task { await driver.runCadence() }
   }
 }
 
@@ -610,6 +623,7 @@ struct MosaicBackgroundView: View {
   @Environment(\.mosaicDocument) private var document
   @Environment(\.mosaicImageResolver) private var imageResolver
   @Environment(\.mosaicVideoResolver) private var videoResolver
+  @Environment(\.mosaicMotionAccessibility) private var motionAccessibility
   @EnvironmentObject private var model: MosaicPaywallModel
 
   let background: MosaicBackground
@@ -735,7 +749,16 @@ struct MosaicBackgroundView: View {
       case .remote(let url): url
       }
     }
-    if let url {
+    if !motionAccessibility.permitsVideoPlayback {
+      // The `0.4` ruling: under reduced motion a video background does not play.
+      // No frame of it is shown, playback is not started and paused, and no
+      // control is offered. The declared poster is rendered, and otherwise the
+      // declared fallback colour — the same resolution order the existing
+      // missing-media policy already uses, reused deliberately rather than
+      // introducing a fourth outcome. This is a user preference, not a failure,
+      // so it records no diagnostic.
+      posterOrFallback(posterID: posterID, mode: mode, fallback: fallback)
+    } else if let url {
       MosaicDecorativeVideoView(url: url, contentMode: mode) {
         model.recordRenderingDiagnosticOnce(
           "media_video_background_unavailable", subjectID: assetID)

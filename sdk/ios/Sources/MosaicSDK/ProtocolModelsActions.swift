@@ -11,11 +11,12 @@ public struct MosaicProductCardComponent: Decodable, Sendable, Equatable, Identi
   public let styles: MosaicSelectionStyles
   public let sizing: MosaicBoxSizing?
   public let clipContent: Bool?
+  public let motion: MosaicMotion?
   public let accessibility: MosaicProductCardAccessibility?
 
   private enum CodingKeys: String, CodingKey {
     case type, id, productReferenceId, direction, gap, mainAxisDistribution, crossAxisAlignment
-    case children, styles, sizing, clipContent, accessibility
+    case children, styles, sizing, clipContent, motion, accessibility
   }
 
   public init(from decoder: any Decoder) throws {
@@ -37,6 +38,7 @@ public struct MosaicProductCardComponent: Decodable, Sendable, Equatable, Identi
     styles = try container.decode(MosaicSelectionStyles.self, forKey: .styles)
     sizing = try container.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
     clipContent = try container.decodeIfPresent(Bool.self, forKey: .clipContent)
+    motion = try container.decodeIfPresent(MosaicMotion.self, forKey: .motion)
     accessibility = try container.decodeIfPresent(
       MosaicProductCardAccessibility.self, forKey: .accessibility)
   }
@@ -56,6 +58,7 @@ public struct MosaicProductSelectorComponent: Decodable, Sendable, Equatable, Id
   public let appearance: MosaicBoxAppearance?
   public let sizing: MosaicBoxSizing?
   public let outerInsets: MosaicEdgeInsets?
+  public let motion: MosaicMotion?
   public let visibility: MosaicVisibility
   public let unavailableFallback: MosaicUnavailableProductFallback
   public let accessibility: MosaicControlAccessibility
@@ -65,7 +68,7 @@ public struct MosaicProductSelectorComponent: Decodable, Sendable, Equatable, Id
   private enum CodingKeys: String, CodingKey {
     case type, id, productReferenceIds, initiallySelectedProductReferenceId, direction, gap
     case itemSpacing, crossAxisAlignment, cards, initialProductCardId, cardStyles
-    case appearance, sizing, outerInsets, visibility
+    case appearance, sizing, outerInsets, motion, visibility
     case unavailableFallback, accessibility
   }
 
@@ -107,6 +110,7 @@ public struct MosaicProductSelectorComponent: Decodable, Sendable, Equatable, Id
     appearance = try container.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
     sizing = try container.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
     outerInsets = try container.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
+    motion = try container.decodeIfPresent(MosaicMotion.self, forKey: .motion)
     visibility =
       try container.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
     unavailableFallback = try container.decode(
@@ -185,13 +189,15 @@ public struct MosaicButtonComponent: Decodable, Sendable, Equatable, Identifiabl
   public let appearance: MosaicBoxAppearance?
   public let sizing: MosaicBoxSizing?
   public let outerInsets: MosaicEdgeInsets?
+  public let motion: MosaicMotion?
   public let visibility: MosaicVisibility
   public let action: MosaicAction
   public let accessibility: MosaicControlAccessibility
 
   private enum CodingKeys: String, CodingKey {
     case type, id, direction, gap, mainAxisDistribution, crossAxisAlignment, children
-    case inProgressChildren, appearance, sizing, outerInsets, visibility, action, accessibility
+    case inProgressChildren, appearance, sizing, outerInsets, motion, visibility, action
+    case accessibility
   }
 
   public init(from decoder: any Decoder) throws {
@@ -210,6 +216,7 @@ public struct MosaicButtonComponent: Decodable, Sendable, Equatable, Identifiabl
     appearance = try container.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
     sizing = try container.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
     outerInsets = try container.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
+    motion = try container.decodeIfPresent(MosaicMotion.self, forKey: .motion)
     visibility =
       try container.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
     action = try container.decode(MosaicAction.self, forKey: .action)
@@ -237,12 +244,13 @@ public struct MosaicCarouselComponent: Decodable, Sendable, Equatable, Identifia
   public let appearance: MosaicBoxAppearance?
   public let sizing: MosaicBoxSizing?
   public let outerInsets: MosaicEdgeInsets?
+  public let motion: MosaicMotion?
   public let visibility: MosaicVisibility
   public let accessibility: MosaicControlAccessibility
 
   private enum CodingKeys: String, CodingKey {
     case type, id, initialPageIndex, showsIndicators, pages, appearance, sizing, outerInsets
-    case visibility, accessibility
+    case motion, visibility, accessibility
   }
 
   public init(from decoder: any Decoder) throws {
@@ -255,6 +263,7 @@ public struct MosaicCarouselComponent: Decodable, Sendable, Equatable, Identifia
     appearance = try c.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
     sizing = try c.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
     outerInsets = try c.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
+    motion = try c.decodeIfPresent(MosaicMotion.self, forKey: .motion)
     visibility = try c.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
     accessibility = try c.decode(MosaicControlAccessibility.self, forKey: .accessibility)
   }
@@ -272,12 +281,13 @@ public struct MosaicSwitchComponent: Decodable, Sendable, Equatable, Identifiabl
   public let appearance: MosaicBoxAppearance?
   public let sizing: MosaicBoxSizing?
   public let outerInsets: MosaicEdgeInsets?
+  public let motion: MosaicMotion?
   public let visibility: MosaicVisibility
   public let accessibility: MosaicControlAccessibility
 
   private enum CodingKeys: String, CodingKey {
     case type, id, label, initialValue, typography, offTrackColor, onTrackColor, thumbColor
-    case appearance, sizing, outerInsets, visibility, accessibility
+    case appearance, sizing, outerInsets, motion, visibility, accessibility
   }
 
   public init(from decoder: any Decoder) throws {
@@ -293,6 +303,7 @@ public struct MosaicSwitchComponent: Decodable, Sendable, Equatable, Identifiabl
     appearance = try c.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
     sizing = try c.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
     outerInsets = try c.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
+    motion = try c.decodeIfPresent(MosaicMotion.self, forKey: .motion)
     visibility = try c.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
     accessibility = try c.decode(MosaicControlAccessibility.self, forKey: .accessibility)
   }
@@ -322,12 +333,13 @@ public struct MosaicCountdownComponent: Decodable, Sendable, Equatable, Identifi
   public let appearance: MosaicBoxAppearance?
   public let sizing: MosaicBoxSizing?
   public let outerInsets: MosaicEdgeInsets?
+  public let motion: MosaicMotion?
   public let visibility: MosaicVisibility
   public let accessibility: MosaicTextAccessibility
 
   private enum CodingKeys: String, CodingKey {
     case type, id, endsAt, largestUnit, smallestUnit, completedText, typography, appearance
-    case sizing, outerInsets, visibility, accessibility
+    case sizing, outerInsets, motion, visibility, accessibility
   }
 
   public init(from decoder: any Decoder) throws {
@@ -342,6 +354,7 @@ public struct MosaicCountdownComponent: Decodable, Sendable, Equatable, Identifi
     appearance = try c.decodeIfPresent(MosaicBoxAppearance.self, forKey: .appearance)
     sizing = try c.decodeIfPresent(MosaicBoxSizing.self, forKey: .sizing)
     outerInsets = try c.decodeIfPresent(MosaicEdgeInsets.self, forKey: .outerInsets)
+    motion = try c.decodeIfPresent(MosaicMotion.self, forKey: .motion)
     visibility = try c.decodeIfPresent(MosaicVisibility.self, forKey: .visibility) ?? .always
     accessibility = try c.decode(MosaicTextAccessibility.self, forKey: .accessibility)
   }

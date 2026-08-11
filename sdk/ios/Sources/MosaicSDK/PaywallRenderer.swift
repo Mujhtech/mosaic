@@ -34,9 +34,12 @@ public struct MosaicVideoResolver: @unchecked Sendable {
 /// The host application retains ownership of sheet or full-screen dismissal.
 @MainActor
 public struct MosaicPaywall: View {
+  @Environment(\.accessibilityReduceMotion) private var systemPrefersReducedMotion
   @StateObject private var model: MosaicPaywallModel
+  @StateObject private var motionDriver: MosaicMotionDriver
   private let imageResolver: MosaicImageResolver
   private let videoResolver: MosaicVideoResolver
+  private let motionAccessibility: MosaicMotionAccessibility?
 
   public init(
     document: MosaicPaywallDocument,
@@ -45,6 +48,10 @@ public struct MosaicPaywall: View {
     imageResolver: MosaicImageResolver = .missing,
     videoResolver: MosaicVideoResolver = .missing,
     clock: @escaping @Sendable () -> Date = { Date() },
+    motionDriver: @autoclosure @escaping () -> MosaicMotionDriver = .platform(),
+    /// The reduced-motion and video-autoplay signals. `nil` reads the platform's
+    /// current answer at the renderer boundary.
+    motionAccessibility: MosaicMotionAccessibility? = nil,
     analytics: MosaicAnalyticsPresentationInstrumentation? = nil,
     presentationDiagnostics: [String] = [],
     onInteraction: @escaping @MainActor (MosaicInteractionOutcome) -> Void = { _ in },
@@ -62,18 +69,24 @@ public struct MosaicPaywall: View {
         onResult: onResult
       )
     )
+    _motionDriver = StateObject(wrappedValue: motionDriver())
     self.imageResolver = imageResolver
     self.videoResolver = videoResolver
+    self.motionAccessibility = motionAccessibility
   }
 
   public init(
     model: @autoclosure @escaping () -> MosaicPaywallModel,
     imageResolver: MosaicImageResolver = .missing,
-    videoResolver: MosaicVideoResolver = .missing
+    videoResolver: MosaicVideoResolver = .missing,
+    motionDriver: @autoclosure @escaping () -> MosaicMotionDriver = .platform(),
+    motionAccessibility: MosaicMotionAccessibility? = nil
   ) {
     _model = StateObject(wrappedValue: model())
+    _motionDriver = StateObject(wrappedValue: motionDriver())
     self.imageResolver = imageResolver
     self.videoResolver = videoResolver
+    self.motionAccessibility = motionAccessibility
   }
 
   public var body: some View {
@@ -89,9 +102,22 @@ public struct MosaicPaywall: View {
       .environment(\.mosaicImageResolver, imageResolver)
       .environment(\.mosaicVideoResolver, videoResolver)
       .environmentObject(model)
+      .environmentObject(motionDriver)
+      // Resolved once, here, so no view deeper in the tree samples the platform
+      // for itself and no test has to configure the simulator to state a
+      // preference.
+      .environment(\.mosaicMotionAccessibility, resolvedMotionAccessibility)
       .environment(\.layoutDirection, swiftUILayoutDirection)
       .environment(\.locale, Locale(identifier: model.localization.resolvedLocale.effectiveLocale))
       .task { await model.prepare() }
+  }
+
+  private var resolvedMotionAccessibility: MosaicMotionAccessibility {
+    motionAccessibility
+      ?? MosaicMotionAccessibility(
+        prefersReducedMotion: systemPrefersReducedMotion,
+        allowsVideoAutoplay: MosaicMotionAccessibility.systemAllowsVideoAutoplay
+      )
   }
 
   private var presentedSheet: Binding<MosaicScreen?> {
@@ -112,6 +138,10 @@ public struct MosaicPaywall: View {
         imageResolver: imageResolver,
         productOption: nil
       )
+      // A screen's root content stack is reached directly rather than as a
+      // node, so its entrance is attached here. The screen Scroll Container
+      // itself carries no motion: it is viewport-owned rather than authored.
+      .mosaicAppearMotion(layout.content.motion, in: model.document)
     }
     .background {
       if let background = layout.background {
@@ -268,92 +298,100 @@ struct MosaicNodeView: View {
   @ViewBuilder
   var body: some View {
     if model.isVisible(node.visibility) {
-      switch node {
-      case .stack(let stack):
-        MosaicStackView(
-          stack: stack,
-          document: document,
-          localization: localization,
-          model: model,
-          imageResolver: imageResolver,
-          productOption: productOption
-        )
-      case .text(let component):
-        MosaicTextView(
-          component: component,
-          localization: localization,
-          productOption: productOption
-        )
-      case .image(let component):
-        MosaicImageView(
-          component: component,
-          asset: document.assets.first { $0.id == component.assetId },
-          localization: localization,
-          resolver: imageResolver
-        )
-      case .icon(let component):
-        MosaicIconView(component: component, localization: localization)
-      case .featureList(let component):
-        MosaicFeatureListView(component: component, localization: localization)
-      case .productSelector(let component):
-        MosaicProductSelectorView(
-          component: component,
-          document: document,
-          localization: localization,
-          model: model,
-          imageResolver: imageResolver
-        )
-      case .button(let component):
-        MosaicButtonView(
-          component: component,
-          document: document,
-          localization: localization,
-          model: model,
-          imageResolver: imageResolver
-        )
-      case .carousel(let component):
-        MosaicCarouselView(
-          component: component,
-          document: document,
-          localization: localization,
-          model: model,
-          imageResolver: imageResolver
-        )
-      case .switchControl(let component):
-        MosaicSwitchView(component: component, localization: localization, model: model)
-      case .countdown(let component):
-        MosaicCountdownView(component: component, localization: localization, model: model)
-      case .tabs(let component):
-        MosaicTabsView(
-          component: component,
-          document: document,
-          localization: localization,
-          model: model,
-          imageResolver: imageResolver
-        )
-      case .timeline(let component):
-        MosaicTimelineView(component: component, localization: localization)
-      case .award(let component):
-        MosaicAwardView(
-          component: component,
-          asset: {
-            guard let assetID = component.emblem?.imageAssetID else { return nil }
-            return document.assets.first { $0.id == assetID }
-          }(),
-          localization: localization,
-          resolver: imageResolver
-        )
-      case .socialProof(let component):
-        MosaicSocialProofView(
-          component: component,
-          asset: {
-            guard let assetID = component.avatar?.assetId else { return nil }
-            return document.assets.first { $0.id == assetID }
-          }(),
-          localization: localization,
-          resolver: imageResolver
-        )
-      }
+      // Every node kind's entrance is attached in exactly one place. Motion
+      // never touches the accessibility tree: a node mid-entrance is already
+      // present, focusable, and announceable.
+      nodeContent.mosaicAppearMotion(node.motion, in: document)
+    }
+  }
+
+  @ViewBuilder
+  private var nodeContent: some View {
+    switch node {
+    case .stack(let stack):
+      MosaicStackView(
+        stack: stack,
+        document: document,
+        localization: localization,
+        model: model,
+        imageResolver: imageResolver,
+        productOption: productOption
+      )
+    case .text(let component):
+      MosaicTextView(
+        component: component,
+        localization: localization,
+        productOption: productOption
+      )
+    case .image(let component):
+      MosaicImageView(
+        component: component,
+        asset: document.assets.first { $0.id == component.assetId },
+        localization: localization,
+        resolver: imageResolver
+      )
+    case .icon(let component):
+      MosaicIconView(component: component, localization: localization)
+    case .featureList(let component):
+      MosaicFeatureListView(component: component, localization: localization)
+    case .productSelector(let component):
+      MosaicProductSelectorView(
+        component: component,
+        document: document,
+        localization: localization,
+        model: model,
+        imageResolver: imageResolver
+      )
+    case .button(let component):
+      MosaicButtonView(
+        component: component,
+        document: document,
+        localization: localization,
+        model: model,
+        imageResolver: imageResolver
+      )
+    case .carousel(let component):
+      MosaicCarouselView(
+        component: component,
+        document: document,
+        localization: localization,
+        model: model,
+        imageResolver: imageResolver
+      )
+    case .switchControl(let component):
+      MosaicSwitchView(component: component, localization: localization, model: model)
+    case .countdown(let component):
+      MosaicCountdownView(component: component, localization: localization, model: model)
+    case .tabs(let component):
+      MosaicTabsView(
+        component: component,
+        document: document,
+        localization: localization,
+        model: model,
+        imageResolver: imageResolver
+      )
+    case .timeline(let component):
+      MosaicTimelineView(component: component, localization: localization)
+    case .award(let component):
+      MosaicAwardView(
+        component: component,
+        asset: {
+          guard let assetID = component.emblem?.imageAssetID else { return nil }
+          return document.assets.first { $0.id == assetID }
+        }(),
+        localization: localization,
+        resolver: imageResolver
+      )
+    case .socialProof(let component):
+      MosaicSocialProofView(
+        component: component,
+        asset: {
+          guard let assetID = component.avatar?.assetId else { return nil }
+          return document.assets.first { $0.id == assetID }
+        }(),
+        localization: localization,
+        resolver: imageResolver
+      )
     }
   }
 }
@@ -580,6 +618,7 @@ struct MosaicProductSelectorView: View {
           localization: localization,
           model: model,
           imageResolver: imageResolver,
+          selectionMotion: component.motion?.selection,
           onSelect: { model.selectProduct(cardID: card.id, in: component.id) }
         )
         .frame(
@@ -674,13 +713,13 @@ struct MosaicAuthoredProductCardView: View {
   let localization: MosaicLocalizationResolver
   @ObservedObject var model: MosaicPaywallModel
   let imageResolver: MosaicImageResolver
+  /// The owning Product Selector's `selection` motion, if it declares one.
+  /// Selection is the selector's state, so the motion that describes a change of
+  /// it is authored there and applied here.
+  let selectionMotion: MosaicSelectionMotion?
   let onSelect: () -> Void
 
-  private var style: MosaicSelectionStateStyle {
-    card.styles.resolving(selected: selected)
-  }
-
-  private var borderColor: MosaicRenderedColor {
+  private func borderColor(_ style: MosaicSelectionStateStyle) -> MosaicRenderedColor {
     style.border.color.rendered(in: document, role: .decoration)
   }
 
@@ -694,6 +733,16 @@ struct MosaicAuthoredProductCardView: View {
   }
 
   var body: some View {
+    MosaicSelectionStyledContent(
+      styles: card.styles,
+      selected: selected,
+      motion: selectionMotion,
+      curve: selectionMotion.flatMap { document.resolvedMotionCurve($0.curve) },
+      content: cardBody
+    )
+  }
+
+  private func cardBody(style: MosaicSelectionStateStyle) -> some View {
     Button(action: onSelect) {
       MosaicProductCardContentView(
         card: card,
@@ -702,7 +751,8 @@ struct MosaicAuthoredProductCardView: View {
         document: document,
         localization: localization,
         model: model,
-        imageResolver: imageResolver
+        imageResolver: imageResolver,
+        selectionMotion: selectionMotion
       )
       .padding(.top, style.padding.top)
       .padding(.leading, style.padding.start)
@@ -721,7 +771,8 @@ struct MosaicAuthoredProductCardView: View {
             document: document,
             localization: localization,
             model: model,
-            imageResolver: imageResolver
+            imageResolver: imageResolver,
+            selectionMotion: selectionMotion
           )
           .environment(\.mosaicAxisBounds, parentBounds.constrained(by: card.sizing))
           .padding(overlayPaddingEdges, overlayInset)
@@ -740,9 +791,9 @@ struct MosaicAuthoredProductCardView: View {
     }
     .overlay {
       RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
-        .strokeBorder(borderColor.color, lineWidth: style.border.width)
+        .strokeBorder(borderColor(style).color, lineWidth: style.border.width)
     }
-    .mosaicStyleDiagnostics(borderColor.failure)
+    .mosaicStyleDiagnostics(borderColor(style).failure)
     .opacity(style.opacity)
     .mosaicShadow(style.shadow)
     .mosaicSizing(card.sizing)
@@ -807,6 +858,7 @@ struct MosaicProductCardContentView: View {
   let localization: MosaicLocalizationResolver
   @ObservedObject var model: MosaicPaywallModel
   let imageResolver: MosaicImageResolver
+  let selectionMotion: MosaicSelectionMotion?
 
   private var layoutChildren: [MosaicProductCardChild] {
     card.children.filter { child in
@@ -856,7 +908,8 @@ struct MosaicProductCardContentView: View {
         document: document,
         localization: localization,
         model: model,
-        imageResolver: imageResolver
+        imageResolver: imageResolver,
+        selectionMotion: selectionMotion
       )
       .mosaicStretchWidth(card.direction == .vertical && card.crossAxisAlignment == .stretch)
       if card.mainAxisDistribution == .spaceBetween,
@@ -905,6 +958,7 @@ struct MosaicProductCardChildView: View {
   let localization: MosaicLocalizationResolver
   @ObservedObject var model: MosaicPaywallModel
   let imageResolver: MosaicImageResolver
+  let selectionMotion: MosaicSelectionMotion?
 
   @ViewBuilder
   var body: some View {
@@ -927,7 +981,8 @@ struct MosaicProductCardChildView: View {
           document: document,
           localization: localization,
           model: model,
-          imageResolver: imageResolver
+          imageResolver: imageResolver,
+          selectionMotion: selectionMotion
         )
       }
     }
@@ -945,16 +1000,25 @@ struct MosaicProductBadgeView: View {
   let localization: MosaicLocalizationResolver
   @ObservedObject var model: MosaicPaywallModel
   let imageResolver: MosaicImageResolver
+  /// A badge belongs to a card, and a card's selection is the selector's state,
+  /// so the badge follows the same authored `selection` motion.
+  let selectionMotion: MosaicSelectionMotion?
 
-  private var style: MosaicSelectionStateStyle {
-    badge.styles.resolving(selected: selected)
-  }
-
-  private var borderColor: MosaicRenderedColor {
+  private func borderColor(_ style: MosaicSelectionStateStyle) -> MosaicRenderedColor {
     style.border.color.rendered(in: document, role: .decoration)
   }
 
   var body: some View {
+    MosaicSelectionStyledContent(
+      styles: badge.styles,
+      selected: selected,
+      motion: selectionMotion,
+      curve: selectionMotion.flatMap { document.resolvedMotionCurve($0.curve) },
+      content: badgeBody
+    )
+  }
+
+  private func badgeBody(style: MosaicSelectionStateStyle) -> some View {
     badgeContent
       .environment(\.mosaicAxisBounds, childBounds)
       .padding(.top, style.padding.top)
@@ -971,9 +1035,9 @@ struct MosaicProductBadgeView: View {
       }
       .overlay {
         RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
-          .strokeBorder(borderColor.color, lineWidth: style.border.width)
+          .strokeBorder(borderColor(style).color, lineWidth: style.border.width)
       }
-      .mosaicStyleDiagnostics(borderColor.failure)
+      .mosaicStyleDiagnostics(borderColor(style).failure)
       .opacity(style.opacity)
       .mosaicShadow(style.shadow)
       .mosaicSizing(badge.sizing)

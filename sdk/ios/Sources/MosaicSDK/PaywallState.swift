@@ -747,7 +747,7 @@ extension MosaicPaywallDocument {
   }
 
   public var allNodes: [MosaicNode] {
-    if schemaVersion == mosaicProtocolVersion {
+    if mosaicSupportedProtocolVersions.contains(schemaVersion) {
       return screens.flatMap { $0.layout.content.descendants }
     }
     return layout.content.descendants
@@ -903,6 +903,29 @@ extension MosaicNode {
     case .productSelector(let selector):
       [self] + selector.cards.flatMap(\.descendantNodes)
     default: [self]
+    }
+  }
+
+  /// The authored `motion` block, if this node carries one.
+  ///
+  /// Reading it through the node rather than at each call site is what lets the
+  /// renderer apply `appear` in exactly one place for every component kind.
+  public var motion: MosaicMotion? {
+    switch self {
+    case .stack(let value): value.motion
+    case .text(let value): value.motion
+    case .image(let value): value.motion
+    case .icon(let value): value.motion
+    case .featureList(let value): value.motion
+    case .productSelector(let value): value.motion
+    case .button(let value): value.motion
+    case .carousel(let value): value.motion
+    case .switchControl(let value): value.motion
+    case .countdown(let value): value.motion
+    case .tabs(let value): value.motion
+    case .timeline(let value): value.motion
+    case .award(let value): value.motion
+    case .socialProof(let value): value.motion
     }
   }
 

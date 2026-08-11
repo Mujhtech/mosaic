@@ -245,6 +245,93 @@
       window.isHidden = true
     }
 
+    /// The terminal frame of every authored motion renders exactly the static
+    /// rendering.
+    ///
+    /// This is the pixel-level half of the rule the whole `renderWithoutMotion`
+    /// enhancement tier rests on: a reader that cannot animate draws what an
+    /// animating reader ends at. It compares two renders of the same `0.4`
+    /// document in-process — the driver disabled, which is how every static
+    /// golden is captured, against a controlled driver wound past the end of the
+    /// longest authored motion — so it needs no new baseline file and cannot go
+    /// stale against one.
+    func testProtocolV04MotionAtItsEndRendersTheStaticDocument() async throws {
+      let size = CGSize(width: 390, height: 844)
+      let document = try v04Document()
+      func image(driver: @escaping @autoclosure () -> MosaicMotionDriver) async -> UIImage {
+        let model = MosaicPaywallModel(
+          document: document,
+          requestedLocale: "en",
+          purchaseProvider: MockMosaicPurchaseProvider(
+            products: MosaicProduct.phase1MockProducts
+          ),
+          clock: { Date(timeIntervalSince1970: 1_893_455_998) },
+          onResult: { _ in }
+        )
+        await model.prepare()
+        return render(
+          MosaicPaywall(
+            model: model,
+            imageResolver: .missing,
+            motionDriver: driver(),
+            motionAccessibility: .unrestricted
+          )
+          .environment(\.colorScheme, .light)
+          .environment(\.sizeCategory, .large)
+          .background(Color.white),
+          size: size
+        )
+      }
+
+      let staticRendering = await image(driver: .disabled())
+      // Past the last delay plus the longest curve, and past three 900 ms pulse
+      // cycles, so nothing authored is still running.
+      let ended = await image(driver: .controlled(elapsedMilliseconds: 60_000))
+      let comparison = try compare(actual: ended, expected: staticRendering)
+      XCTAssertEqual(
+        comparison.differentPixelRatio, 0,
+        "A finished animation must be byte-identical to the static rendering."
+      )
+    }
+
+    /// Under reduced motion a video background does not play: the declared
+    /// poster is drawn, and otherwise the declared fallback colour.
+    ///
+    /// Protects the `0.4` accessibility ruling that closes a live `0.3`
+    /// exposure — an autoplaying paywall video can invalidate a customer's App
+    /// Store Reduced Motion declaration. It asserts the absence of the
+    /// unavailable-video diagnostic, because not playing on purpose is a user
+    /// preference rather than a media failure.
+    func testReducedMotionRendersVideoBackgroundPosterWithoutPlayback() async throws {
+      let document = try v03DocumentWithBundledSheetVideo()
+      let model = MosaicPaywallModel(
+        document: document,
+        requestedLocale: "en",
+        purchaseProvider: MockMosaicPurchaseProvider(
+          products: MosaicProduct.phase1MockProducts
+        ),
+        onResult: { _ in }
+      )
+      await model.prepare()
+      model.navigate(to: "details")
+
+      _ = render(
+        MosaicPaywall(
+          model: model,
+          imageResolver: .missing,
+          motionAccessibility: .reduced
+        )
+        .environment(\.colorScheme, .light)
+        .background(Color.white),
+        size: CGSize(width: 390, height: 844)
+      )
+
+      XCTAssertFalse(
+        model.diagnostics.contains { $0.code == "media_video_background_unavailable" },
+        "A video suppressed by reduced motion has not failed and must not diagnose."
+      )
+    }
+
     func testLongGermanAtAccessibilityTextSizeRendersWithoutFailure() async throws {
       let document = try canonicalDocument()
       let model = MosaicPaywallModel(
