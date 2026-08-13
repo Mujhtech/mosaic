@@ -75,10 +75,7 @@ enum MosaicEntitlementSyncRequestBody {
         "platform": MosaicCustomerAccessPlatform.ios.rawValue,
         "appVersion": application.appVersion,
         "sdkVersion": application.sdkVersion,
-        "supportedContractVersions": [
-          mosaicAuthoritativeEntitlementContractVersion,
-          mosaicAuthoritativeEntitlementAuthorityContractVersion,
-        ],
+        "supportedContractVersions": [mosaicAuthoritativeEntitlementContractVersion],
         "capabilities": MosaicEntitlementApplicationMetadata.capabilities.map(\.rawValue),
       ]
     ]
@@ -89,7 +86,7 @@ enum MosaicEntitlementSyncRequestBody {
     }
     return try MosaicCustomerCanonicalJSON.data([
       "authoritativeEntitlementContractVersion":
-        mosaicAuthoritativeEntitlementAuthorityContractVersion,
+        mosaicAuthoritativeEntitlementContractVersion,
       "recordType": "entitlementSyncRequest",
       "payload": payload,
     ])

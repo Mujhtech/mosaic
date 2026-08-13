@@ -4,13 +4,12 @@ import XCTest
 
 @testable import MosaicSDK
 
-/// Protocol 0.4 decoding, validation, and capability reporting.
+/// Motion decoding, validation, and capability reporting.
 ///
-/// `0.3` coverage lives in `ProtocolV03Tests` and is untouched: the two
-/// contracts are read by one validator parameterized by version, and these tests
-/// exist to prove that the parameterization actually distinguishes them rather
-/// than quietly accepting either document under either set of rules.
-final class ProtocolV04Tests: XCTestCase {
+/// The rest of the contract is covered by `ProtocolConformanceTests` and
+/// `ProtocolPresentationTests`; this suite covers the motion vocabulary, the
+/// capability handshake, and the version gate at the reader's entry point.
+final class ProtocolMotionTests: XCTestCase {
 
   /// Every published `0.4` document decodes, and the canonical one carries the
   /// motion it was built to carry.
@@ -51,8 +50,11 @@ final class ProtocolV04Tests: XCTestCase {
 
   func testEveryPublishedV04DocumentFixtureDecodes() throws {
     // The corpora that travel beside the documents are not documents: they carry
-    // frames and announcements rather than a `schemaVersion`.
-    let corpora: Set<String> = ["motion-frames.json", "accessibility-announcement.json"]
+    // frames, announcements, and locale vectors rather than a `schemaVersion`.
+    let corpora: Set<String> = [
+      "motion-frames.json", "accessibility-announcement.json",
+      "rating-announcement.json", "locale-resolution.json",
+    ]
     let names = try v04FixtureNames(in: ".").filter { !corpora.contains($0) }
     XCTAssertEqual(names.count, 6)
     for name in names {
@@ -93,14 +95,12 @@ final class ProtocolV04Tests: XCTestCase {
     }
   }
 
-  /// The two `0.3` cleanups this version bundles.
-  func testV04RemovesProductCardStatesAndConsolidatesTheMarkerVocabulary() throws {
-    XCTAssertFalse(MosaicCapabilityCatalog.v04.contains(.productCardStates))
-    XCTAssertTrue(MosaicCapabilityCatalog.v03.contains(.productCardStates))
-
+  /// `style.productCardStates` is gone, and one marker union serves both
+  /// components.
+  func testRemovedProductCardStatesIsRejectedAndTheMarkerVocabularyIsConsolidated() throws {
     let document = try v04Document()
-    // A `0.4` document that declares the removed capability is rejected as an
-    // unknown capability rather than tolerated.
+    // A document that declares the removed capability is rejected as an unknown
+    // capability rather than tolerated.
     var object = try XCTUnwrap(
       JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any])
     var compatibility = try XCTUnwrap(object["compatibility"] as? [String: Any])
@@ -170,7 +170,7 @@ final class ProtocolV04Tests: XCTestCase {
   private func featureListWithoutMarkerSize() throws -> MosaicFeatureListComponent {
     var object = try XCTUnwrap(
       JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any])
-    try mutateV03Node(id: "features", in: &object) { node in
+    try mutateNode(id: "features", in: &object) { node in
       node.removeValue(forKey: "markerSize")
     }
     let document = try MosaicProtocolDecoder.decode(
@@ -182,74 +182,43 @@ final class ProtocolV04Tests: XCTestCase {
 
   /// Versions are exact identifiers, in both directions.
   ///
-  /// Protects the rule that makes the whole two-reader story safe: `0.4` does
-  /// not read `0.3` documents and `0.3` does not read `0.4` documents, so a
-  /// motion block cannot ride into a `0.3` reader and a `0.3` marker cannot ride
-  /// into a `0.4` one.
-  func testEachVersionReadsOnlyItsOwnContract() throws {
-    var object = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any])
-    object["schemaVersion"] = "0.3"
-    XCTAssertThrowsError(
-      try MosaicProtocolDecoder.decode(JSONSerialization.data(withJSONObject: object))
-    )
-
-    var v03 = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: v03FixtureData()) as? [String: Any])
-    v03["schemaVersion"] = "0.4"
-    XCTAssertThrowsError(
-      try MosaicProtocolDecoder.decode(JSONSerialization.data(withJSONObject: v03))
-    )
-
-    XCTAssertThrowsError(
-      try MosaicProtocolDecoder.decode(#"{"schemaVersion":"0.5"}"#)
-    ) { error in
-      XCTAssertEqual(
-        error as? MosaicProtocolError, .unsupportedSchemaVersion("0.5"))
+  /// Version identifiers are exact, and every version but `0.4` is refused.
+  ///
+  /// Protects the single-version rule (ADR-0028) at the one place it is
+  /// enforced. The retired predecessor is named explicitly because a reader that
+  /// silently accepted it — by numeric ordering, or by tolerating a document
+  /// whose body happens to still parse — is the exact failure the exact-identifier
+  /// rule exists to prevent.
+  func testOnlyTheCurrentContractVersionIsRead() throws {
+    for version in ["0.3", "0.5", "1.0", ""] {
+      var object = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any])
+      object["schemaVersion"] = version
+      XCTAssertThrowsError(
+        try MosaicProtocolDecoder.decode(JSONSerialization.data(withJSONObject: object)),
+        version
+      ) { error in
+        XCTAssertEqual(
+          error as? MosaicProtocolError, .unsupportedSchemaVersion(version), version)
+      }
     }
+
+    XCTAssertEqual(try v04Document().schemaVersion, mosaicProtocolVersion)
   }
 
-  /// A `0.3` document may not carry motion, whatever the shape of the block.
+  /// Capability reporting covers the one contract, motion included.
   ///
-  /// The version guard is what stops `0.4` authoring leaking backwards into the
-  /// release candidate, and it must not depend on the motion happening to be
-  /// malformed.
-  func testMotionOnAV03DocumentIsRejected() throws {
-    var object = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: v03FixtureData()) as? [String: Any])
-    try mutateV03Node(id: "headline", in: &object) { node in
-      node["motion"] = [
-        "appear": [
-          "effect": "fade",
-          "curve": ["type": "motion", "durationMilliseconds": 200, "easing": "linear"],
-          "delayMilliseconds": 0,
-        ]
-      ]
-    }
-    XCTAssertThrowsError(
-      try MosaicProtocolDecoder.decode(JSONSerialization.data(withJSONObject: object))
-    ) { error in
-      XCTAssertEqual(
-        (error as? MosaicProtocolError)?.diagnosticCode, "protocol_invalid_shape")
-    }
-  }
-
-  /// Capability reporting covers both contracts.
-  ///
-  /// Protects the compatibility handshake: a reader that renders `0.4` motion
-  /// but does not say so is indistinguishable from one that cannot, and the
-  /// enhancement tier's whole point is that the difference is visible.
-  func testCapabilityReportCoversBothContractsIncludingMotion() {
+  /// Protects the compatibility handshake: a reader that renders motion but does
+  /// not say so is indistinguishable from one that cannot, and the enhancement
+  /// tier's whole point is that the difference is visible.
+  func testCapabilityReportCoversTheContractIncludingMotion() {
     let report = MosaicSDKCapabilityReport.current
-    XCTAssertEqual(report.supportedSchemaVersions, ["0.3", "0.4"])
+    XCTAssertEqual(report.supportedSchemaVersions, [mosaicProtocolVersion])
 
-    let v04 = Set(report.capabilities.filter { $0.version == "0.4" }.map(\.name))
-    XCTAssertEqual(v04, Set(MosaicCapabilityCatalog.v04))
-    XCTAssertTrue(v04.isSuperset(of: MosaicCapabilityCatalog.motion))
-    XCTAssertFalse(v04.contains(.productCardStates))
-
-    let v03 = Set(report.capabilities.filter { $0.version == "0.3" }.map(\.name))
-    XCTAssertEqual(v03, Set(MosaicCapabilityCatalog.v03))
+    XCTAssertTrue(report.capabilities.allSatisfy { $0.version == mosaicProtocolVersion })
+    let names = Set(report.capabilities.map(\.name))
+    XCTAssertEqual(names, Set(MosaicCapabilityCatalog.current))
+    XCTAssertTrue(names.isSuperset(of: MosaicCapabilityCatalog.motion))
   }
 
   /// Declared capabilities are derived from what the document actually authors,

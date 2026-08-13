@@ -22,7 +22,7 @@ final class EntitlementRestoreSyncTests: XCTestCase {
   private let baseURL = URL(string: "https://api.example.com")!
 
   private func snapshotData(_ name: String) throws -> Data {
-    try authoritativeEntitlementFixtureData("snapshots/\(name)")
+    try entitlementSnapshotData(name)
   }
 
   private func ok(_ data: Data) -> MosaicEntitlementSyncHTTPResponse {

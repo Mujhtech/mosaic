@@ -7,34 +7,32 @@ final class CanonicalFixtureTests: XCTestCase {
   func testDecodesTheSoleRepositoryCanonicalFixtureDirectly() throws {
     let document = try canonicalDocument()
 
-    XCTAssertEqual(document.schemaVersion, "0.3")
+    XCTAssertEqual(document.schemaVersion, mosaicProtocolVersion)
     XCTAssertEqual(document.id, "phase1-complete-paywall")
     XCTAssertEqual(document.initialScreenId, "offer")
     XCTAssertEqual(document.screens.map(\.id), ["offer", "details"])
     XCTAssertEqual(document.screens.map { $0.presentation?.type }, [.screen, .sheet])
-    // The SDK reads both contracts, and reports each one's capabilities against
-    // the version they belong to: `style.productCardStates` exists in `0.3` and
-    // not in `0.4`, so a merged set could not describe either.
-    XCTAssertEqual(MosaicSDKCapabilityReport.current.supportedSchemaVersions, ["0.3", "0.4"])
+    XCTAssertEqual(
+      MosaicSDKCapabilityReport.current.supportedSchemaVersions, [mosaicProtocolVersion])
     XCTAssertEqual(
       Set(
         MosaicSDKCapabilityReport.current.capabilities
-          .filter { $0.version == "0.3" }
+          .filter { $0.version == mosaicProtocolVersion }
           .map(\.name)
       ),
-      Set(MosaicCapabilityCatalog.v03)
+      Set(MosaicCapabilityCatalog.current)
     )
   }
 
-  func testPackagedResourceIsAByteIdenticalCopyOfCurrentV03Source() throws {
-    let canonical = try v03FixtureURL().standardizedFileURL.resolvingSymlinksInPath()
+  func testPackagedResourceIsAByteIdenticalCopyOfTheCanonicalSource() throws {
+    let canonical = try v04FixtureURL().standardizedFileURL.resolvingSymlinksInPath()
     let packageResource =
       canonical
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("sdk/ios/Sources/MosaicSDK/Resources/v0.3/complete-paywall.json")
+      .appendingPathComponent("sdk/ios/Sources/MosaicSDK/Resources/v0.4/complete-paywall.json")
 
     let values = try packageResource.resourceValues(forKeys: [
       .isRegularFileKey, .isSymbolicLinkKey,
@@ -52,13 +50,13 @@ final class CanonicalFixtureTests: XCTestCase {
     }
 
     var unsupportedComponent = try canonicalFixtureObject()
-    try mutateFirstV03Node(type: "text", in: &unsupportedComponent) { node in
+    try mutateFirstNodeOfType(type: "text", in: &unsupportedComponent) { node in
       node["type"] = "webView"
     }
     XCTAssertThrowsError(try MosaicProtocolDecoder.decode(encoded(unsupportedComponent)))
 
     var unknownProperty = try canonicalFixtureObject()
-    try mutateFirstV03Node(type: "button", in: &unknownProperty) { node in
+    try mutateFirstNodeOfType(type: "button", in: &unknownProperty) { node in
       node["swiftUIView"] = "Text"
     }
     XCTAssertThrowsError(try MosaicProtocolDecoder.decode(encoded(unknownProperty)))

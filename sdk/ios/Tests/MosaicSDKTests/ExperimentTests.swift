@@ -7,7 +7,7 @@ final class ExperimentTests: XCTestCase {
   func testCanonicalDeliveryV3AndAssignmentFixturesDecodeAtomically() throws {
     let release = try MosaicConfigurationDeliveryDecoder.decode(
       phase5FixtureData("configuration-delivery/v3/experiment-release.json"))
-    XCTAssertEqual(release.metadata.id, "release_phase5_advanced")
+    XCTAssertEqual(release.metadata.id, "release_experiment")
     XCTAssertEqual(release.experimentAssignments.count, 1)
     XCTAssertEqual(
       release.experimentAssignments.first?.experimentVersionId, "experiment_version_checkout_1")

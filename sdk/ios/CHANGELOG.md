@@ -2,6 +2,59 @@
 
 ## Unreleased
 
+### Single-version contracts (ADR-0028)
+
+- **Paywall Protocol `0.4` is the only readable version.** `0.3` is gone: its
+  decoder path, shape and semantic branches, capability catalog, fixtures,
+  bundled resource, and goldens are deleted. `MosaicSchemaVersion` carries one
+  case, and a document at any other version is rejected atomically with
+  `unsupportedSchemaVersion`, resolving through cached configuration, then
+  bundled fallback, then configuration unavailable.
+- `mosaicProtocolVersion` is now `"0.4"`. `mosaicMotionProtocolVersion` and
+  `mosaicLatestProtocolVersion` are removed as duplicates of it.
+  `MosaicCapabilityCatalog.v03`/`.v04` collapse into `.current`, and
+  `MosaicCapabilityName.productCardStates` is deleted — a document declaring
+  `style.productCardStates` is now rejected as an unsupported capability.
+- **Capability reporting is single-version.** `MosaicSDKCapabilityReport` no
+  longer reports a set per contract. Entries keep their `version` because the
+  Configuration Delivery and Local Preview handshakes put name/version pairs on
+  the wire and a release's `requiredCapabilities` is compared against them.
+- **Configuration Delivery accepts version `3` only,** carrying Paywall Protocol
+  `0.4`. The v1 and v2 dispatch arms are deleted, and with them the projection
+  chain that defined v3 by re-serializing it into a v2 envelope and v2 into a v1
+  one. The shared rules survive under names that describe what they decode:
+  `MosaicConfigurationReleaseDecoder` and
+  `MosaicConfigurationReleaseMaterialDecoder`.
+- **Local Preview negotiates `mosaic.local-preview.v0.4` only,** with
+  `previewProtocolVersion: "0.4"`. `MosaicPreviewCapabilityReport.v03(clientId:)`
+  becomes `.current(clientId:)`.
+- **Authoritative Entitlement is version `2` only.** The `"1"` constant and the
+  synthetic v1 envelope the authority codec used to project through are gone;
+  `MosaicCustomerEntitlementCodec` now reads the current record directly.
+  `mosaicAuthoritativeEntitlementAuthorityContractVersion` is removed —
+  `mosaicAuthoritativeEntitlementContractVersion` is the single constant.
+- **The reduced-motion video rule is unconditional.**
+  `MosaicVideoBackgroundPresentation.resolve` no longer takes a `schemaVersion`:
+  with one readable contract, every document is subject to ADR-0027 ruling 3, so
+  a video background never plays under Reduce Motion.
+- The packaged bundled fallback is synthesized as release *material* rather than
+  as a versioned delivery envelope, and ships the `0.4` canonical document.
+
+### Fixed
+
+- **Configuration Delivery digests are computed over a canonical byte form
+  again.** `DeliveryCanonicalJSON` no longer delegates to `JSONSerialization`,
+  which writes a `Double` with 17 significant digits — `0.04` became
+  `0.040000000000000001` — so any release embedding a paywall with fractional
+  values (opacity, motion amplitude, line-height multipliers) failed its own
+  content digest on Apple platforms alone. Numbers now use the shortest
+  representation that round-trips, matching every other implementation.
+- A release's placement table is derived from the placement decisions that name
+  each paywall, so `paywall(forPlacement:)` and the public `resolve(placement:)`
+  answer with the authored placement key instead of a positional placeholder.
+- An unknown capability name is reported as `unsupportedCapability` rather than
+  as a generic shape error, so diagnostics name the capability that was missing.
+
 - Read Paywall Protocol `0.4`, "Motion", alongside `0.3`. Versions stay exact
   identifiers: the decoder dispatches on `schemaVersion`, a `0.3` document is
   held to the `0.3` rules and a `0.4` document to the `0.4` rules, and neither

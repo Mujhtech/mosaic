@@ -603,7 +603,7 @@ actor MosaicConfigurationClient {
         separator: ","),
       "Mosaic-Placement-Decision-Versions": mosaicSupportedPlacementDecisionVersions.joined(
         separator: ","),
-      "Mosaic-Decision-Features": MosaicConfigurationDeliveryV2Decoder.supportedCapabilityFeatures
+      "Mosaic-Decision-Features": MosaicConfigurationReleaseDecoder.supportedCapabilityFeatures
         .joined(separator: ","),
       "Mosaic-Bucketing-Algorithms": mosaicSupportedBucketingAlgorithms.joined(separator: ","),
       "Mosaic-Experiment-Assignment-Versions": mosaicSupportedExperimentAssignmentVersions.joined(
@@ -614,7 +614,7 @@ actor MosaicConfigurationClient {
       ].joined(separator: ","),
       "Mosaic-Experiment-Schedule-Policies": mosaicExperimentSchedulePolicy,
       "Mosaic-Paywall-Protocol-Versions": mosaicSupportedProtocolVersions.joined(separator: ","),
-      "Mosaic-Paywall-Capabilities": MosaicCapabilityCatalog.v03.map {
+      "Mosaic-Paywall-Capabilities": MosaicCapabilityCatalog.current.map {
         "\($0.rawValue)@\(mosaicProtocolVersion)"
       }.joined(separator: ","),
     ]
@@ -740,7 +740,7 @@ actor MosaicConfigurationClient {
     let data: Data?
     switch bundledFallback {
     case .packaged:
-      data = try? MosaicPackagedConfigurationRelease.data()
+      data = try? DeliveryCanonicalJSON.data(MosaicPackagedConfigurationRelease.material())
     case .data(let value):
       data = value
     }
@@ -749,7 +749,17 @@ actor MosaicConfigurationClient {
       return
     }
     do {
-      let release = try MosaicConfigurationDeliveryDecoder.decode(data)
+      // A host-supplied fallback is a delivered document and is read as one. The
+      // packaged fallback is locally synthesized material, so it is read by the
+      // material decoder — there is no envelope to name a version in.
+      let release: MosaicConfigurationRelease
+      switch bundledFallback {
+      case .packaged:
+        release = try MosaicConfigurationReleaseMaterialDecoder.release(
+          try DeliveryValueForFallback.object(JSONSerialization.jsonObject(with: data)))
+      case .data:
+        release = try MosaicConfigurationDeliveryDecoder.decode(data)
+      }
       accepted = AcceptedRelease(
         release: release,
         source: .bundled,
@@ -819,12 +829,19 @@ private enum MosaicPackagedConfigurationRelease {
     "sha256:" + SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
   }
 
-  static func data() throws -> Data {
+  /// The bundled fallback as release *material* rather than as a delivered
+  /// document.
+  ///
+  /// It carries no Project, Environment mode, Placement Decisions, Entitlement
+  /// references, or Experiment Assignments, so it is not a Configuration
+  /// Delivery release and must not be tagged with a delivery version. It is
+  /// synthesized locally and read by the material decoder directly.
+  static func material() throws -> [String: Any] {
     guard
       let url = MosaicResourceBundle.bundle.url(
         forResource: "complete-paywall",
         withExtension: "json",
-        subdirectory: "v0.3"
+        subdirectory: "v0.4"
       )
         ?? MosaicResourceBundle.bundle.url(
           forResource: "complete-paywall",
@@ -905,14 +922,7 @@ private enum MosaicPackagedConfigurationRelease {
       "assetReferences": assetReferences,
     ]
     release["contentDigest"] = try DeliveryCanonicalJSON.digest(release)
-    return try DeliveryCanonicalJSON.data([
-      // The synthesized release above is deliberately Delivery v1 shaped: the
-      // bundled fallback carries no Project, Environment mode, Placement
-      // Decisions, Entitlement references, or Experiment Assignments. It must
-      // not be tagged with the latest advertised delivery version.
-      "configurationDeliveryVersion": "1",
-      "release": release,
-    ])
+    return release
   }
 }
 

@@ -59,11 +59,8 @@ enum MosaicConfigurationDeliveryV3Decoder {
     projectedRelease["compatibility"] = projectedCompatibility
     projectedRelease.removeValue(forKey: "contentDigest")
     projectedRelease["contentDigest"] = try DeliveryCanonicalJSON.digest(projectedRelease)
-    let projectedRoot: [String: Any] = [
-      "configurationDeliveryVersion": "2", "release": projectedRelease,
-    ]
-    var base = try MosaicConfigurationDeliveryV2Decoder.decode(
-      root: projectedRoot, allowUnreferencedExperimentMaterial: true)
+    var base = try MosaicConfigurationReleaseDecoder.decode(
+      release: projectedRelease, allowUnreferencedExperimentMaterial: true)
     try validateReferences(assignments, release: base)
     base = MosaicConfigurationRelease(
       metadata: .init(

@@ -7,7 +7,7 @@ import XCTest
 /// state they introduce, and the rejection rules that keep their absent values
 /// from being read as defaults.
 @MainActor
-final class ProtocolV03PresentationTests: XCTestCase {
+final class ProtocolPresentationTests: XCTestCase {
 
   // MARK: Decoding
 
@@ -18,7 +18,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
   /// decoder reads the authored value rather than a shape that happens to be
   /// first in each union.
   func testCanonicalFixtureDecodesEveryNewComponentAndItsEdgeShapes() throws {
-    let document = try v03Document()
+    let document = try v04Document()
 
     let tabs = try XCTUnwrap(document.tabsComponents.first)
     XCTAssertEqual(tabs.id, "billing-tabs")
@@ -111,7 +111,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
   // MARK: Runtime tab state
 
   func testTabSelectionSeedsFromInitialTabIdAndDrivesConditionalVisibility() async throws {
-    let document = try v03Document()
+    let document = try v04Document()
     let model = MosaicPaywallModel(
       document: document,
       purchaseProvider: MockMosaicPurchaseProvider(products: MosaicProduct.phase1MockProducts),
@@ -190,7 +190,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
   func testTabVisibilityRulesRejectUnknownSelfAndDescendantReferences() throws {
     XCTAssertThrowsError(
       try MosaicProtocolDecoder.decode(
-        v03FixtureData(named: "invalid/unknown-tab-visibility.json"))
+        v04FixtureData(named: "invalid/unknown-tab-visibility.json"))
     ) { error in
       XCTAssertEqual(
         error as? MosaicProtocolError,
@@ -201,7 +201,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
     // A node inside a panel comparing against its own Tabs component is either
     // vacuously true or unsatisfiable, and both are dead layout.
     var descendant = try v03FixtureObject()
-    try mutateV03Node(id: "billing-tabs-annual-body", in: &descendant) { node in
+    try mutateNode(id: "billing-tabs-annual-body", in: &descendant) { node in
       node["visibility"] = [
         "mode": "tab", "tabsId": "billing-tabs", "equals": "billing-tabs-annual",
       ]
@@ -214,7 +214,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
     }
 
     var selfReference = try v03FixtureObject()
-    try mutateV03Node(id: "billing-tabs", in: &selfReference) { node in
+    try mutateNode(id: "billing-tabs", in: &selfReference) { node in
       node["visibility"] = [
         "mode": "tab", "tabsId": "billing-tabs", "equals": "billing-tabs-annual",
       ]
@@ -228,7 +228,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
 
     // A Tabs component on another screen is not in scope.
     var otherScreen = try v03FixtureObject()
-    try mutateV03Node(id: "support-timeline", in: &otherScreen) { node in
+    try mutateNode(id: "support-timeline", in: &otherScreen) { node in
       node["visibility"] = [
         "mode": "tab", "tabsId": "billing-tabs", "equals": "billing-tabs-annual",
       ]
@@ -243,7 +243,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
 
   func testTabsRejectAnInitialTabIdNoTabDeclares() throws {
     var object = try v03FixtureObject()
-    try mutateV03Node(id: "billing-tabs", in: &object) { node in
+    try mutateNode(id: "billing-tabs", in: &object) { node in
       node["initialTabId"] = "billing-tabs-quarterly"
     }
     XCTAssertThrowsError(try MosaicProtocolDecoder.decode(encoded(object))) { error in
@@ -256,7 +256,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
     // Required, so an absent value is a rejected document rather than the first
     // tab.
     var missing = try v03FixtureObject()
-    try mutateV03Node(id: "billing-tabs", in: &missing) { node in
+    try mutateNode(id: "billing-tabs", in: &missing) { node in
       node.removeValue(forKey: "initialTabId")
     }
     XCTAssertThrowsError(try MosaicProtocolDecoder.decode(encoded(missing)))
@@ -268,7 +268,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
   func testSocialProofRatingBoundRejectsValueAboveMaximumSteps() throws {
     XCTAssertThrowsError(
       try MosaicProtocolDecoder.decode(
-        v03FixtureData(named: "invalid/social-proof-overrated.json"))
+        v04FixtureData(named: "invalid/social-proof-overrated.json"))
     ) { error in
       XCTAssertEqual(
         error as? MosaicProtocolError,
@@ -278,7 +278,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
 
     // maximum 5, step half: 10 steps is the exact bound and 11 is over it.
     var atBound = try v03FixtureObject()
-    try mutateV03Node(id: "rated-review", in: &atBound) { node in
+    try mutateNode(id: "rated-review", in: &atBound) { node in
       var rating = node["rating"] as? [String: Any] ?? [:]
       rating["value"] = 10
       node["rating"] = rating
@@ -286,7 +286,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
     XCTAssertNoThrow(try MosaicProtocolDecoder.decode(encoded(atBound)))
 
     var overBound = try v03FixtureObject()
-    try mutateV03Node(id: "rated-review", in: &overBound) { node in
+    try mutateNode(id: "rated-review", in: &overBound) { node in
       var rating = node["rating"] as? [String: Any] ?? [:]
       rating["value"] = 11
       node["rating"] = rating
@@ -300,7 +300,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
 
     // Integers only: a fractional value must not be rounded into a valid one.
     var fractional = try v03FixtureObject()
-    try mutateV03Node(id: "rated-review", in: &fractional) { node in
+    try mutateNode(id: "rated-review", in: &fractional) { node in
       var rating = node["rating"] as? [String: Any] ?? [:]
       rating["value"] = 4.5
       node["rating"] = rating
@@ -314,7 +314,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
   func testTimelineMarkerAndDescriptionStylesAreRejectedInBothDirections() throws {
     XCTAssertThrowsError(
       try MosaicProtocolDecoder.decode(
-        v03FixtureData(named: "invalid/timeline-unused-marker-style.json"))
+        v04FixtureData(named: "invalid/timeline-unused-marker-style.json"))
     ) { error in
       XCTAssertEqual(
         error as? MosaicProtocolError,
@@ -323,7 +323,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
     }
 
     var missingMarkerStyle = try v03FixtureObject()
-    try mutateV03Node(id: "trial-timeline", in: &missingMarkerStyle) { node in
+    try mutateNode(id: "trial-timeline", in: &missingMarkerStyle) { node in
       node.removeValue(forKey: "markerColor")
     }
     XCTAssertThrowsError(try MosaicProtocolDecoder.decode(encoded(missingMarkerStyle))) { error in
@@ -334,7 +334,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
     }
 
     var unusedDescriptionTypography = try v03FixtureObject()
-    try mutateV03Node(id: "support-timeline", in: &unusedDescriptionTypography) { node in
+    try mutateNode(id: "support-timeline", in: &unusedDescriptionTypography) { node in
       node["descriptionTypography"] = [
         "style": "caption", "fontSize": 13, "lineHeightMultiplier": 1.4,
         "weight": "regular", "color": "text.secondary", "alignment": "start",
@@ -352,7 +352,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
     // An unrecognised marker kind rejects the document; there is no substitute
     // glyph.
     var unknownMarker = try v03FixtureObject()
-    try mutateV03Node(id: "trial-today", in: &unknownMarker) { node in
+    try mutateNode(id: "trial-today", in: &unknownMarker) { node in
       node["marker"] = ["kind": "diamond"]
     }
     XCTAssertThrowsError(try MosaicProtocolDecoder.decode(encoded(unknownMarker)))
@@ -360,13 +360,13 @@ final class ProtocolV03PresentationTests: XCTestCase {
 
   func testAwardSubtitleAndTypographyMustAppearTogether() throws {
     var object = try v03FixtureObject()
-    try mutateV03Node(id: "editor-award", in: &object) { node in
+    try mutateNode(id: "editor-award", in: &object) { node in
       node.removeValue(forKey: "subtitleTypography")
     }
     XCTAssertThrowsError(try MosaicProtocolDecoder.decode(encoded(object)))
 
     var typographyOnly = try v03FixtureObject()
-    try mutateV03Node(id: "press-award", in: &typographyOnly) { node in
+    try mutateNode(id: "press-award", in: &typographyOnly) { node in
       node["subtitleTypography"] = [
         "style": "caption", "fontSize": 13, "lineHeightMultiplier": 1.4,
         "weight": "regular", "color": "text.secondary", "alignment": "start",
@@ -381,7 +381,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
     let tabsNode = try tabsFixtureNode()
 
     var insideButton = try v03FixtureObject()
-    try mutateV03Node(id: "purchase", in: &insideButton) { node in
+    try mutateNode(id: "purchase", in: &insideButton) { node in
       var children = node["children"] as? [[String: Any]] ?? []
       children.append(tabsNode)
       node["children"] = children
@@ -389,7 +389,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
     XCTAssertThrowsError(try MosaicProtocolDecoder.decode(encoded(insideButton)))
 
     var insideCard = try v03FixtureObject()
-    try mutateV03Node(id: "plans-yearly-plan-card", in: &insideCard) { node in
+    try mutateNode(id: "plans-yearly-plan-card", in: &insideCard) { node in
       var children = node["children"] as? [[String: Any]] ?? []
       children.append(tabsNode)
       node["children"] = children
@@ -429,7 +429,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
   /// keeps a truncated corpus from passing over cases it never saw.
   func testRatingAnnouncementMatchesEveryCanonicalConformanceVector() throws {
     let root = try JSONSerialization.jsonObject(
-      with: phase5FixtureData("v0.3/rating-announcement.json")
+      with: phase5FixtureData("v0.4/rating-announcement.json")
     )
     let object = try XCTUnwrap(root as? [String: Any])
     XCTAssertEqual(
@@ -500,7 +500,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
     // The canonical fixture declares both keys, so it contains a rated Social
     // Proof and a Button with in-progress content.
     XCTAssertTrue(
-      Set(try v03Document().compatibility.requiredCapabilities.map(\.name))
+      Set(try v04Document().compatibility.requiredCapabilities.map(\.name))
         .contains(.reservedStrings)
     )
 
@@ -520,7 +520,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
     // with no reader.
     var unusedRating = try v03FixtureObject()
     for id in ["rated-review", "whole-review"] {
-      try mutateV03Node(id: id, in: &unusedRating) { node in
+      try mutateNode(id: id, in: &unusedRating) { node in
         node.removeValue(forKey: "rating")
       }
     }
@@ -601,7 +601,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
   // MARK: Accessibility
 
   func testAccessibilityProjectionExposesTabAndTimelineSemantics() async throws {
-    let document = try v03Document()
+    let document = try v04Document()
     let model = MosaicPaywallModel(
       document: document,
       requestedLocale: "en",
@@ -690,7 +690,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
   /// and reads identically to a correct one under casual inspection.
   func testAccessibilityAnnouncementsMatchEveryCanonicalConformanceVector() async throws {
     let root = try JSONSerialization.jsonObject(
-      with: phase5FixtureData("v0.3/accessibility-announcement.json")
+      with: phase5FixtureData("v0.4/accessibility-announcement.json")
     )
     let object = try XCTUnwrap(root as? [String: Any])
     XCTAssertNil(object["separator"] as? String, "The corpus declares no separator.")
@@ -702,7 +702,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
     )
     XCTAssertEqual(Set(cases.compactMap { $0["id"] as? String }).count, cases.count)
 
-    let document = try v03Document()
+    let document = try v04Document()
     var projections: [String: [MosaicAccessibilityElement]] = [:]
     for locale in Set(cases.compactMap { $0["locale"] as? String }) {
       let model = MosaicPaywallModel(
@@ -799,7 +799,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
   /// occupies the value slot instead of being composed into the label, so the
   /// leading-versus-trailing question cannot arise.
   func testBusyButtonKeepsItsNameAndAnnouncesProgressInTheValueSlot() async throws {
-    let document = try v03Document()
+    let document = try v04Document()
     let model = MosaicPaywallModel(
       document: document,
       requestedLocale: "en",
@@ -830,15 +830,15 @@ final class ProtocolV03PresentationTests: XCTestCase {
   /// indistinguishable from one that passes: reporting success over zero cases
   /// is the defect this guards.
   func testEveryCanonicalInvalidFixtureIsRejected() throws {
-    let directory = try v03FixtureURL(named: "invalid").deletingLastPathComponent()
+    let directory = try v04FixtureURL(named: "invalid").deletingLastPathComponent()
       .appendingPathComponent("invalid")
     let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
       .filter { $0.hasSuffix(".json") && $0 != "rejection-layers.json" }
       .sorted()
 
     XCTAssertEqual(
-      names.count, 12,
-      "protocol/fixtures/v0.3/invalid declares 12 rejection fixtures. Shrinking the corpus "
+      names.count, 20,
+      "protocol/fixtures/v0.4/invalid declares 20 rejection fixtures. Shrinking the corpus "
         + "has to be a deliberate edit, not a silently passing loop."
     )
     XCTAssertEqual(Set(names).count, names.count)
@@ -854,7 +854,7 @@ final class ProtocolV03PresentationTests: XCTestCase {
   private func tabsFixtureNode() throws -> [String: Any] {
     var object = try v03FixtureObject()
     var captured: [String: Any]?
-    try mutateV03Node(id: "billing-tabs", in: &object) { node in
+    try mutateNode(id: "billing-tabs", in: &object) { node in
       var copy = node
       // A distinct id: the global layout ID namespace rejects a duplicate
       // before the placement rule under test can run.

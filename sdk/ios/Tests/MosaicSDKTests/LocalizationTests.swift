@@ -38,7 +38,7 @@ final class LocalizationTests: XCTestCase {
   /// the expectation is filtered accordingly.
   func testCanonicalLocaleResolutionCorpus() throws {
     let corpus = try XCTUnwrap(
-      try JSONSerialization.jsonObject(with: v03FixtureData(named: "locale-resolution.json"))
+      try JSONSerialization.jsonObject(with: v04FixtureData(named: "locale-resolution.json"))
         as? [String: Any])
     let declaration = try XCTUnwrap(corpus["localization"] as? [String: Any])
     let declared = try XCTUnwrap(declaration["locales"] as? [String])

@@ -1,37 +1,28 @@
 import Foundation
 
-/// The release-candidate protocol contract.
+/// Paywall Protocol `0.4`, "Motion" — the one contract this SDK reads.
 ///
-/// It remains the version the SDK negotiates with Configuration Delivery and
-/// Local Preview: `0.4` is a draft that nothing produces in production, and the
-/// backend capability partitioning it needs is a later wave the contract
-/// explicitly defers. Reading a `0.4` document is supported; asking a server for
-/// one is not yet.
-public let mosaicProtocolVersion = "0.3"
-/// Paywall Protocol `0.4`, "Motion". A pure superset of `0.3` apart from the two
-/// cleanups `0.3` itself named for this version.
-public let mosaicMotionProtocolVersion = "0.4"
-public let mosaicLatestProtocolVersion = mosaicMotionProtocolVersion
-/// Every contract this SDK can decode and render. Versions are exact
-/// identifiers: a `0.3` document is read by the `0.3` rules and a `0.4` document
-/// by the `0.4` rules, and neither reads the other.
-public let mosaicSupportedProtocolVersions = [mosaicProtocolVersion, mosaicMotionProtocolVersion]
+/// Under [ADR-0028](../../../../docs/architecture/decisions/0028-single-version-contracts.md)
+/// every Mosaic contract carries exactly one version until GA, so `0.4` is both
+/// the version the SDK decodes and the version it negotiates with Configuration
+/// Delivery and Local Preview. A document claiming any other version is
+/// rejected atomically and resolves through cached configuration, then bundled
+/// fallback, then configuration unavailable.
+public let mosaicProtocolVersion = "0.4"
+/// Kept as a list rather than collapsed into its element so that a post-GA
+/// parallel version widens this constant instead of changing its type.
+public let mosaicSupportedProtocolVersions = [mosaicProtocolVersion]
 
-/// One decodable contract, and the rules that go with it.
+/// The decodable contract, and the rules that go with it.
+///
+/// Version identifiers are exact: a reader declaring `0.4` accepts only `0.4`
+/// and never infers support from numeric ordering. The enum keeps its single
+/// case rather than being deleted so that the decoder's `init(rawValue:)` guard
+/// stays the one place an unsupported version is turned into an error.
 public enum MosaicSchemaVersion: String, Sendable, CaseIterable, Equatable {
-  case v03 = "0.3"
   case v04 = "0.4"
 
-  public var capabilities: [MosaicCapabilityName] {
-    switch self {
-    case .v03: MosaicCapabilityCatalog.v03
-    case .v04: MosaicCapabilityCatalog.v04
-    }
-  }
-
-  /// Whether documents of this version may author motion. Used to keep the one
-  /// shape and semantic validator honest about which contract it is reading.
-  public var supportsMotion: Bool { self == .v04 }
+  public var capabilities: [MosaicCapabilityName] { MosaicCapabilityCatalog.current }
 }
 /// The exact published artifact version. It must stay identical to
 /// `MosaicSDK.podspec` and `StoreKit/MosaicStoreKit.podspec` because it is sent
@@ -88,11 +79,6 @@ public enum MosaicCapabilityName: String, Codable, CaseIterable, Sendable {
   case boxStyle = "style.box"
   case clipping = "style.clipping"
   case typography = "style.typography"
-  /// Removed in `0.4` as a legacy co-derived signal: it was derived exactly
-  /// when Product Selector, Product Card, or Product Badge was, so it carried no
-  /// information of its own. A `0.4` document that declares it is rejected as an
-  /// unknown capability.
-  case productCardStates = "style.productCardStates"
   case staticVisibility = "visibility.static"
   case switchVisibility = "condition.switchVisibility"
   case tabVisibility = "condition.tabVisibility"
@@ -102,7 +88,14 @@ public enum MosaicCapabilityName: String, Codable, CaseIterable, Sendable {
 }
 
 public enum MosaicCapabilityCatalog {
-  public static let v03: [MosaicCapabilityName] = [
+  /// Every capability Paywall Protocol `0.4` defines, which is every capability
+  /// this SDK supports.
+  ///
+  /// `style.productCardStates` is absent because `0.4` removed it as a legacy
+  /// co-derived signal — it was derived exactly when Product Selector, Product
+  /// Card, or Product Badge was, so it carried no information of its own. A
+  /// document declaring it is rejected as an unknown capability.
+  public static let current: [MosaicCapabilityName] = [
     .scrollContainer, .stack, .sizing, .heightSizing, .outerInsets, .screens, .sheets,
     .text, .image, .icon,
     .featureList, .productSelector, .productCard, .productBadge, .button, .carousel,
@@ -111,25 +104,19 @@ public enum MosaicCapabilityCatalog {
     .purchaseAction, .restoreAction, .closeAction, .navigateToAction, .navigateBackAction,
     .openExternalURLAction, .accessibilityMetadata, .assetFallback, .productFallback,
     .normalizedOutcome, .colors, .designTokens, .gradientBackground, .mediaBackground,
-    .shadow, .boxStyle, .clipping, .typography, .productCardStates,
+    .shadow, .boxStyle, .clipping, .typography,
     .staticVisibility, .switchVisibility,
     .tabs, .timeline, .award, .socialProof, .tabVisibility, .reservedStrings,
+    .motionAppear, .motionSelection, .motionLoop,
   ]
-
-  /// `0.4` is `0.3` plus the three motion capabilities, minus the one capability
-  /// `0.3` named for removal.
-  ///
-  /// Expressed as a delta rather than as a second list, because "0.4 is 0.3 plus
-  /// motion minus one co-derived capability" is the whole compatibility claim: a
-  /// copied list would let the two answers drift while each stayed internally
-  /// consistent.
-  public static let v04: [MosaicCapabilityName] =
-    v03.filter { $0 != .productCardStates } + [.motionAppear, .motionSelection, .motionLoop]
 
   /// The three capabilities that carry `renderWithoutMotion` rather than
   /// `rejectDocument`. A reader missing one of these renders the document
   /// statically and completely, which the terminal-state rule guarantees is the
   /// full authored design.
+  ///
+  /// This tier survives the single-version collapse: it is a property of motion
+  /// rather than of versioning (ADR-0028).
   public static let motion: [MosaicCapabilityName] = [
     .motionAppear, .motionSelection, .motionLoop,
   ]
@@ -143,13 +130,12 @@ public struct MosaicSDKCapabilityReport: Sendable, Equatable {
   public init(
     sdkVersion: String = mosaicSDKVersion,
     supportedSchemaVersions: [String] = mosaicSupportedProtocolVersions,
-    /// Reported per version rather than as one merged set: a capability is only
-    /// meaningful next to the contract it belongs to, and `style.productCardStates`
-    /// exists in exactly one of the two.
-    capabilities: [MosaicRequiredCapability] = MosaicSchemaVersion.allCases.flatMap { version in
-      version.capabilities.map {
-        MosaicRequiredCapability(name: $0, version: version.rawValue)
-      }
+    /// Each entry still carries its version. The pair is what the Configuration
+    /// Delivery and Local Preview handshakes put on the wire and what a release's
+    /// `requiredCapabilities` is compared against, so it stays a pair even though
+    /// one version can supply the right-hand side today.
+    capabilities: [MosaicRequiredCapability] = MosaicCapabilityCatalog.current.map {
+      MosaicRequiredCapability(name: $0, version: mosaicProtocolVersion)
     }
   ) {
     self.sdkVersion = sdkVersion
@@ -191,37 +177,34 @@ public struct MosaicPaywallDocument: Decodable, Sendable, Equatable {
     assets = try container.decode([MosaicAsset].self, forKey: .assets)
     products = try container.decode([MosaicProductReference].self, forKey: .products)
 
-    if mosaicSupportedProtocolVersions.contains(schemaVersion) {
-      let decodedScreens = try container.decode([MosaicScreen].self, forKey: .screens)
-      let decodedInitialScreenID = try container.decode(String.self, forKey: .initialScreenId)
-      guard !decodedScreens.isEmpty else {
-        throw DecodingError.dataCorruptedError(
-          forKey: .screens,
-          in: container,
-          debugDescription: "Every supported protocol version requires at least one screen."
-        )
-      }
-      // `invalidReference` is `rejectDocument` in the 0.3 reader policy. A
-      // declared initial screen that no screen defines is a non-conforming
-      // document, so it is rejected here rather than silently rendering the
-      // first screen, which would present a paywall nobody authored.
-      guard
-        let initialLayout = decodedScreens.first(where: { $0.id == decodedInitialScreenID })?.layout
-      else {
-        throw DecodingError.dataCorruptedError(
-          forKey: .initialScreenId,
-          in: container,
-          debugDescription: "initialScreenId does not reference a declared screen."
-        )
-      }
-      screens = decodedScreens
-      initialScreenId = decodedInitialScreenID
-      layout = initialLayout
-    } else {
-      layout = try container.decode(MosaicScrollContainer.self, forKey: .layout)
-      initialScreenId = nil
-      screens = []
+    // `0.4` always declares `screens`; the retired top-level `layout` shape that
+    // an earlier contract also accepted no longer exists in any readable
+    // version, so there is no second branch to take.
+    let decodedScreens = try container.decode([MosaicScreen].self, forKey: .screens)
+    let decodedInitialScreenID = try container.decode(String.self, forKey: .initialScreenId)
+    guard !decodedScreens.isEmpty else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .screens,
+        in: container,
+        debugDescription: "The protocol requires at least one screen."
+      )
     }
+    // `invalidReference` is `rejectDocument` in the reader policy. A declared
+    // initial screen that no screen defines is a non-conforming document, so it
+    // is rejected here rather than silently rendering the first screen, which
+    // would present a paywall nobody authored.
+    guard
+      let initialLayout = decodedScreens.first(where: { $0.id == decodedInitialScreenID })?.layout
+    else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .initialScreenId,
+        in: container,
+        debugDescription: "initialScreenId does not reference a declared screen."
+      )
+    }
+    screens = decodedScreens
+    initialScreenId = decodedInitialScreenID
+    layout = initialLayout
   }
 }
 public struct MosaicScreen: Decodable, Sendable, Equatable, Identifiable {

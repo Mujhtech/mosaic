@@ -1,8 +1,14 @@
 import Foundation
 
-public let mosaicLocalPreviewProtocolVersion = "0.3"
-public let mosaicLocalPreviewWebSocketProtocol = "mosaic.local-preview.v0.3"
-public let mosaicLatestLocalPreviewProtocolVersion = mosaicLocalPreviewProtocolVersion
+/// Local Preview `0.4` — the one Local Preview version (ADR-0028).
+///
+/// Local Preview is version-locked to the paywall contract: its message schema
+/// `$ref`s the paywall schema URN directly, so a paywall replacement is a Local
+/// Preview replacement. Negotiation offers exactly this one subprotocol; a peer
+/// that speaks anything else is refused with `preview.noMutualVersion` and
+/// Studio keeps its last accepted draft.
+public let mosaicLocalPreviewProtocolVersion = "0.4"
+public let mosaicLocalPreviewWebSocketProtocol = "mosaic.local-preview.v0.4"
 public let mosaicSupportedLocalPreviewProtocolVersions = [mosaicLocalPreviewProtocolVersion]
 public let mosaicLocalPreviewMaximumFrameBytes = 2 * 1_024 * 1_024
 public let mosaicIOSPreviewMaximumDocumentBytes = 1_024 * 1_024
@@ -124,7 +130,7 @@ public struct MosaicPreviewCapabilityReport: Sendable, Equatable {
     clientId: String,
     supportedSchemaVersions: [String] = [mosaicProtocolVersion],
     supportedCapabilities: [MosaicPreviewSupportedCapability] =
-      MosaicCapabilityCatalog.v03.map {
+      MosaicCapabilityCatalog.current.map {
         MosaicPreviewSupportedCapability(name: $0.rawValue, version: mosaicProtocolVersion)
       },
     previewCapabilities: [MosaicPreviewCapability] =
@@ -138,18 +144,16 @@ public struct MosaicPreviewCapabilityReport: Sendable, Equatable {
     self.maxDocumentBytes = maxDocumentBytes
   }
 
-  public static func v03(
+  /// The handshake Studio requires before it will send a draft: every document
+  /// capability and every preview capability at exact version `0.4`.
+  public static func current(
     clientId: String,
     maxDocumentBytes: Int = mosaicIOSPreviewMaximumDocumentBytes
   ) -> MosaicPreviewCapabilityReport {
     MosaicPreviewCapabilityReport(
       clientId: clientId,
-      // Local Preview `0.3` is version-locked to Paywall Protocol `0.3` — its
-      // message schema references that paywall schema directly — so this
-      // handshake advertises `0.3` alone even though the decoder also reads
-      // `0.4`. Local Preview `0.4` is a separate, named piece of work.
       supportedSchemaVersions: [mosaicProtocolVersion],
-      supportedCapabilities: MosaicCapabilityCatalog.v03.map {
+      supportedCapabilities: MosaicCapabilityCatalog.current.map {
         MosaicPreviewSupportedCapability(name: $0.rawValue, version: mosaicProtocolVersion)
       },
       previewCapabilities: MosaicPreviewCapabilityName.allCases.map {

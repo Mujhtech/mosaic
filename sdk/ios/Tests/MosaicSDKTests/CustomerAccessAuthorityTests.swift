@@ -118,12 +118,12 @@ final class CustomerAccessAuthorityTests: XCTestCase {
       let fullPayload = fullRoot["payload"] as? [String: Any],
       let authority = fullPayload["authority"] as? [String: Any],
       let authorityDigest = fullPayload["snapshotAuthorityDigest"] as? String,
-      let minimumSupport = fullPayload["minimumSupport"] as? [String: Any],
-      let v1Root = try JSONSerialization.jsonObject(
-        with: authoritativeEntitlementFixtureData("snapshots/snapshot-unchanged.json"))
-        as? [String: Any],
-      var confirmation = v1Root["payload"] as? [String: Any]
+      let minimumSupport = fullPayload["minimumSupport"] as? [String: Any]
     else { throw CanonicalFixtureLookupError.invalidShape }
+    // The canonical unchanged record nests its confirmation under
+    // `payload.unchanged`, beside the authority material this helper replaces.
+    var confirmation = try authoritativeEntitlementRecordBody(
+      "snapshot-unchanged.json", key: "unchanged")
     mutation?(&confirmation)
     return try MosaicCustomerCanonicalJSON.data([
       "authoritativeEntitlementContractVersion": "2",
@@ -141,7 +141,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // Android/Flutter would make cutover behavior platform-dependent.
   func testCanonicalV2FixturesDecodeAndInvalidAuthorityIsRejected() throws {
     let source = try MosaicCustomerAuthorityCodec.decode(
-      authoritativeEntitlementV2FixtureData("source-snapshot.json"))
+      authoritativeEntitlementFixtureData("source-snapshot.json"))
     guard case .snapshot(let snapshot, let authority, _, let support, _) = source else {
       return XCTFail("expected authority snapshot")
     }
@@ -152,7 +152,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
 
     guard
       case .unchanged(_, let confirmation, _, _, _) = try MosaicCustomerAuthorityCodec.decode(
-        authoritativeEntitlementV2FixtureData("snapshot-unchanged.json"))
+        authoritativeEntitlementFixtureData("snapshot-unchanged.json"))
     else { return XCTFail("expected authority confirmation") }
     XCTAssertEqual(confirmation.snapshotVersion, 4)
     XCTAssertEqual(
@@ -161,26 +161,26 @@ final class CustomerAccessAuthorityTests: XCTestCase {
 
     guard
       case .unavailable(_, let reason, _) = try MosaicCustomerAuthorityCodec.decode(
-        authoritativeEntitlementV2FixtureData("authority-unavailable.json"))
+        authoritativeEntitlementFixtureData("authority-unavailable.json"))
     else { return XCTFail("expected unavailable") }
     XCTAssertEqual(reason, .authorityUnknown)
 
     guard
       case .unavailable(_, let policyReason, let minimumSupport) =
         try MosaicCustomerAuthorityCodec.decode(
-          authoritativeEntitlementV2FixtureData("authority-policy-unavailable.json"))
+          authoritativeEntitlementFixtureData("authority-policy-unavailable.json"))
     else { return XCTFail("expected unavailable policy") }
     XCTAssertEqual(policyReason, .policyUnavailable)
     XCTAssertNil(minimumSupport)
 
     XCTAssertThrowsError(
       try MosaicCustomerAuthorityCodec.decode(
-        authoritativeEntitlementV2FixtureData(
+        authoritativeEntitlementFixtureData(
           "invalid/policy-unavailable-with-minimum-support.json")))
 
     var missingSupport = try XCTUnwrap(
       JSONSerialization.jsonObject(
-        with: authoritativeEntitlementV2FixtureData("authority-unavailable.json"))
+        with: authoritativeEntitlementFixtureData("authority-unavailable.json"))
         as? [String: Any])
     var missingSupportPayload = try XCTUnwrap(missingSupport["payload"] as? [String: Any])
     missingSupportPayload.removeValue(forKey: "minimumSupport")
@@ -191,7 +191,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
 
     XCTAssertThrowsError(
       try MosaicCustomerAuthorityCodec.decode(
-        authoritativeEntitlementV2FixtureData("invalid/source-with-cutover-time.json")))
+        authoritativeEntitlementFixtureData("invalid/source-with-cutover-time.json")))
   }
 
   // Risk: readiness enforcement depends on exact app/SDK/capability metadata;
@@ -203,7 +203,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
       knownSnapshotAuthorityDigest:
         "sha256:b659fc1560544193b6599e1e4a82861a55cae857fcad73fa340b611abe877c34",
       application: application)
-    let expected = try authoritativeEntitlementV2FixtureData("sync-request.json")
+    let expected = try authoritativeEntitlementFixtureData("sync-request.json")
     XCTAssertEqual(
       try JSONSerialization.jsonObject(with: encoded) as? NSDictionary,
       try JSONSerialization.jsonObject(with: expected) as? NSDictionary)
@@ -312,7 +312,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
     let full = try authoritativeEntitlementV2SnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
-    let policyUnavailable = try authoritativeEntitlementV2FixtureData(
+    let policyUnavailable = try authoritativeEntitlementFixtureData(
       "authority-policy-unavailable.json")
     let cache = MosaicCustomerEntitlementMemoryCacheStore()
     let client = client(
@@ -341,7 +341,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
     let full = try authoritativeEntitlementV2SnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
-    let policyUnavailable = try authoritativeEntitlementV2FixtureData(
+    let policyUnavailable = try authoritativeEntitlementFixtureData(
       "authority-policy-unavailable.json")
     let cache = MosaicCustomerEntitlementMemoryCacheStore()
     let current = client(
@@ -371,7 +371,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
     let full = try authoritativeEntitlementV2SnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
-    let policyUnavailable = try authoritativeEntitlementV2FixtureData(
+    let policyUnavailable = try authoritativeEntitlementFixtureData(
       "authority-policy-unavailable.json")
     let cache = BlockingAuthorityCache()
     let candidate = client(
@@ -412,7 +412,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
     let recovered = try authoritativeEntitlementV2SnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 5)
-    let policyUnavailable = try authoritativeEntitlementV2FixtureData(
+    let policyUnavailable = try authoritativeEntitlementFixtureData(
       "authority-policy-unavailable.json")
     let transport = AuthoritySyncTransport([full, policyUnavailable, recovered])
     let cache = BlockingAuthorityCache()
@@ -460,7 +460,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
     let full = try authoritativeEntitlementV2SnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
-    let malformed = try authoritativeEntitlementV2FixtureData(
+    let malformed = try authoritativeEntitlementFixtureData(
       "invalid/policy-unavailable-with-minimum-support.json")
     let cache = MosaicCustomerEntitlementMemoryCacheStore()
     let candidate = client(
@@ -490,7 +490,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
     let current = client(
       transport: AuthoritySyncTransport([
         full,
-        try authoritativeEntitlementV2FixtureData("authority-policy-unavailable.json"),
+        try authoritativeEntitlementFixtureData("authority-policy-unavailable.json"),
       ]), cache: cache)
     _ = await current.refresh()
     _ = await current.refresh()
@@ -552,7 +552,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // Risk: a pre-9C cache has no authority epoch. Serving its active entries
   // would silently retain the old provider authority after cutover.
   func testAuthorityAwareBootstrapRejectsLegacyV1CacheAsUnavailable() async throws {
-    let data = try authoritativeEntitlementFixtureData("snapshots/active-subscription.json")
+    let data = try entitlementSnapshotData("active-subscription.json")
     let decoded = try MosaicCustomerEntitlementCodec.decode(data)
     guard case .snapshot(let snapshot) = decoded.record else {
       return XCTFail("expected v1 snapshot")
@@ -792,7 +792,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
     let scopeClient = client(
       transport: AuthoritySyncTransport([
         full,
-        try authoritativeEntitlementV2FixtureData("invalid/unchanged-scope-mismatch.json"),
+        try authoritativeEntitlementFixtureData("invalid/unchanged-scope-mismatch.json"),
       ]))
     _ = await scopeClient.refresh()
     guard case .preserved = await scopeClient.refresh() else {

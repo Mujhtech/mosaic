@@ -156,6 +156,15 @@ enum MosaicCustomerCanonicalJSON {
 /// data, so rejecting an unrecognized one would make *defining a new
 /// Entitlement* a breaking change for every already-shipped SDK.
 enum MosaicCustomerEntitlementCodec {
+  /// Reads a complete Authoritative Entitlement record and returns the snapshot
+  /// or confirmation it carries, ignoring the authority material wrapped around
+  /// it.
+  ///
+  /// This is the entry point for a reader that does not track authority
+  /// transitions. A reader that does uses `MosaicCustomerAuthorityCodec`, which
+  /// validates the authority block and its digest as well. Both read the same
+  /// single contract version (ADR-0028); they differ in how much of it they act
+  /// on, not in which version they accept.
   static func decode(_ data: Data) throws -> MosaicCustomerDecodedRecord {
     guard data.count <= MosaicCustomerEntitlementPolicy.maxRecordBytes else {
       throw MosaicCustomerEntitlementDecodingError.recordTooLarge
@@ -167,18 +176,19 @@ enum MosaicCustomerEntitlementCodec {
       root,
       expected: ["authoritativeEntitlementContractVersion", "recordType", "payload"],
       path: "$")
-    // Exact-match reading. A "2" document is as unreadable to a "1" reader as a
-    // "9.9" document; numeric ordering never implies support.
+    // Exact-match reading. Numeric ordering never implies support: a record at
+    // any other version is as unreadable as one at "9.9".
     guard
       root["authoritativeEntitlementContractVersion"] as? String
         == mosaicAuthoritativeEntitlementContractVersion
     else { throw MosaicCustomerEntitlementDecodingError.unsupportedContractVersion }
 
+    let payload = try Value.object(root["payload"], path: "payload")
     switch root["recordType"] as? String {
     case "customerEntitlementSnapshot":
-      return try decodeSnapshot(Value.object(root["payload"], path: "payload"))
+      return try decodeSnapshot(Value.object(payload["snapshot"], path: "payload.snapshot"))
     case "snapshotUnchanged":
-      return try decodeUnchanged(Value.object(root["payload"], path: "payload"))
+      return try decodeUnchanged(Value.object(payload["unchanged"], path: "payload.unchanged"))
     default:
       throw MosaicCustomerEntitlementDecodingError.unsupportedRecordType
     }
@@ -186,8 +196,15 @@ enum MosaicCustomerEntitlementCodec {
 
   // MARK: Snapshot
 
-  private static func decodeSnapshot(_ payload: [String: Any]) throws -> MosaicCustomerDecodedRecord
-  {
+  /// Decodes the `snapshot` body an Authoritative Entitlement record carries.
+  ///
+  /// This is a record *body* decoder: the envelope — contract version, record
+  /// type, size, and the authority material wrapped around it — is read by
+  /// `MosaicCustomerAuthorityCodec`, which is the single entry point for a
+  /// record arriving from the network or the cache. The body used to be reached
+  /// by re-serializing it into a synthetic v1 envelope; with one contract
+  /// version (ADR-0028) it is called directly.
+  static func decodeSnapshot(_ payload: [String: Any]) throws -> MosaicCustomerDecodedRecord {
     try Value.keys(
       payload,
       required: [
@@ -477,7 +494,8 @@ enum MosaicCustomerEntitlementCodec {
 
   // MARK: Unchanged
 
-  private static func decodeUnchanged(_ payload: [String: Any]) throws
+  /// Decodes the `unchanged` body an Authoritative Entitlement record carries.
+  static func decodeUnchanged(_ payload: [String: Any]) throws
     -> MosaicCustomerDecodedRecord
   {
     try Value.keys(

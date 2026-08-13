@@ -64,46 +64,43 @@ private actor AnalyticsTestTransport: MosaicAnalyticsTransport {
 }
 
 final class AnalyticsTests: XCTestCase {
+  /// Every canonical Analytics Event fixture decodes, and every canonical invalid
+  /// one is rejected.
+  ///
+  /// The corpus is read from the directory rather than from a list copied here,
+  /// so a fixture added or renamed upstream is exercised without an edit and an
+  /// emptied corpus fails instead of silently passing.
   func testCanonicalFixturesDecodeWithClosedEventAndResponseCodecs() throws {
-    let events = [
-      "placement-request.json", "paywall-presentation.json", "product-selection.json",
-      "purchase-started.json", "purchase-completed-client.json",
-      "purchase-completed-provider.json", "purchase-cancelled.json", "purchase-failed.json",
-      "restore-completed.json",
-    ]
+    let events = try analyticsFixtureNames(in: ".")
+    XCTAssertGreaterThanOrEqual(events.count, 6)
     for fixture in events {
       XCTAssertNoThrow(try MosaicAnalyticsCodec.decodeEvent(analyticsFixtureData(fixture)), fixture)
     }
-    XCTAssertEqual(
-      try MosaicAnalyticsCodec.decodeBatch(
-        analyticsFixtureData("batches/monetization-journey.json")
-      )
-      .events.count,
-      6)
-    let edgeCases = try MosaicAnalyticsCodec.decodeBatch(
-      analyticsFixtureData("batches/edge-case-conformance.json"))
-    XCTAssertEqual(edgeCases.events.count, 7)
-    XCTAssertEqual(edgeCases.events.first?.identity?.applicationUserId, "tenant opaque/user 42")
-    for fixture in [
-      "accepted-event.json", "duplicate-event.json", "permanent-rejection.json",
-      "retryable-event.json", "mixed-result-batch.json",
-    ] {
+
+    let journey = try MosaicAnalyticsCodec.decodeBatch(
+      analyticsFixtureData("batches/experiment-journey.json"))
+    XCTAssertEqual(journey.events.count, 5)
+    XCTAssertEqual(journey.events.first?.identity?.installationId, "installation_001")
+
+    let responses = try analyticsFixtureNames(in: "responses")
+    XCTAssertFalse(responses.isEmpty)
+    for fixture in responses {
       XCTAssertNoThrow(
         try MosaicAnalyticsCodec.decodeResponse(analyticsFixtureData("responses/\(fixture)")),
         fixture)
     }
-    for fixture in [
-      "public-sdk-provider-authority.json", "incomplete-rollout-attribution.json",
-      "placement-request-unrelated-attribution.json",
-      "placement-request-unrelated-correlation.json",
-    ] {
+
+    let invalid = try analyticsFixtureNames(in: "invalid")
+      .filter { $0 != "rejection-layers.json" }
+    XCTAssertFalse(invalid.isEmpty)
+    for fixture in invalid {
       XCTAssertThrowsError(
         try MosaicAnalyticsCodec.decodeEvent(analyticsFixtureData("invalid/\(fixture)")), fixture)
     }
   }
 
   func testCodecRejectsUnsafeBoundedFieldsAndIncompleteRuleSetIdentity() throws {
-    let fixture = try analyticsFixtureData("batches/edge-case-conformance.json")
+    let fixture = try analyticsFixtureData("batches/experiment-journey.json")
     let root = try XCTUnwrap(
       JSONSerialization.jsonObject(with: fixture) as? [String: Any])
     let events = try XCTUnwrap(root["events"] as? [[String: Any]])
@@ -130,17 +127,22 @@ final class AnalyticsTests: XCTestCase {
           identity["applicationUserId"] = String(repeating: "€", count: 86)
           event["identity"] = identity
         }))
+    // A closed payload vocabulary: an unsafe value in a bounded enumeration slot
+    // is rejected rather than carried through to the collector.
     XCTAssertThrowsError(
       try MosaicAnalyticsCodec.decodeEvent(
-        encodedEvent(3) { event in
+        encodedEvent(4) { event in
           var payload = event["payload"] as! [String: Any]
-          payload["diagnosticCode"] = "Rendering Failure"
+          payload["outcome"] = "Rendering Failure"
           event["payload"] = payload
         }))
+    // Rule-set identity is all-or-nothing: an id without its version names a
+    // rule set that cannot be pinned to what actually evaluated.
     XCTAssertThrowsError(
       try MosaicAnalyticsCodec.decodeEvent(
         encodedEvent(0) { event in
           var attribution = event["attribution"] as! [String: Any]
+          attribution["placementRuleSetId"] = "rule_set_experiment"
           attribution.removeValue(forKey: "placementRuleSetVersion")
           event["attribution"] = attribution
         }))

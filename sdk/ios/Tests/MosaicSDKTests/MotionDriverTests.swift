@@ -283,7 +283,7 @@ final class MotionDriverTests: XCTestCase {
     let staticOpacity = 0.8
     var object = try XCTUnwrap(
       JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any])
-    try mutateV03Node(id: "purchase", in: &object) { node in
+    try mutateNode(id: "purchase", in: &object) { node in
       var appearance = (node["appearance"] as? [String: Any]) ?? [:]
       appearance["opacity"] = staticOpacity
       node["appearance"] = appearance
@@ -640,66 +640,52 @@ final class MotionDriverTests: XCTestCase {
 
   // MARK: - Video backgrounds
 
-  /// A video background stops for reduced motion on a `0.4` document and only on
-  /// a `0.4` document.
+  /// A video background stops for reduced motion, unconditionally.
   ///
-  /// Protects ADR-0027 ruling 3, which is a scope ruling as much as a behaviour
-  /// one: the fix ships as specified `0.4` behaviour rather than as a `0.3` defect
-  /// patch, so the live `0.3` exposure stays open and visible until `0.4` is
-  /// accepted. An implementation that "helpfully" applied it to `0.3` as well
-  /// would close that exposure silently and diverge from Flutter and Compose.
+  /// Protects ADR-0027 ruling 3. The rule used to be gated on the document
+  /// declaring `0.4`, because it shipped as specified `0.4` behaviour rather than
+  /// as a defect patch to its predecessor; with `0.4` the only readable contract
+  /// (ADR-0028) the gate is gone and every document is subject to it.
   ///
   /// It also pins the two things a diagnostics assertion cannot say: that the
   /// stopped case renders the declared poster, and that it is a preference rather
   /// than a media failure and so records nothing.
-  func testVideoBackgroundStopsUnderReducedMotionOnlyForV04Documents() throws {
+  func testVideoBackgroundStopsUnderReducedMotion() throws {
     let url = try XCTUnwrap(URL(string: "https://cdn.mosaic.dev/video/ambient.mp4"))
     let reducedMotionOnly = MosaicMotionAccessibility(
       prefersReducedMotion: true, allowsVideoAutoplay: true)
 
     func resolve(
-      _ schemaVersion: String,
       _ accessibility: MosaicMotionAccessibility,
       poster: String? = "poster"
     ) -> MosaicVideoBackgroundPresentation {
       MosaicVideoBackgroundPresentation.resolve(
         resolvedSource: url,
         posterID: poster,
-        schemaVersion: schemaVersion,
         accessibility: accessibility
       )
     }
 
-    // `0.4` under reduced motion: the poster, and no player.
+    // Under reduced motion: the poster, and no player.
     XCTAssertEqual(
-      resolve(mosaicMotionProtocolVersion, reducedMotionOnly),
+      resolve(reducedMotionOnly),
       .still(posterID: "poster", recordsUnavailable: false)
     )
     // With no poster declared it is the declared fallback colour, still with no
     // player and still without diagnosing.
     XCTAssertEqual(
-      resolve(mosaicMotionProtocolVersion, reducedMotionOnly, poster: nil),
+      resolve(reducedMotionOnly, poster: nil),
       .still(posterID: nil, recordsUnavailable: false)
     )
-    // `0.3` keeps `0.3`'s behaviour.
-    XCTAssertEqual(resolve(mosaicProtocolVersion, reducedMotionOnly), .play(url: url))
-    // And an unstated version is not treated as `0.4`.
-    XCTAssertEqual(
-      MosaicVideoBackgroundPresentation.resolve(
-        resolvedSource: url, posterID: "poster", schemaVersion: nil,
-        accessibility: reducedMotionOnly),
-      .play(url: url)
-    )
-    // Without the preference, `0.4` plays like everything else.
-    XCTAssertEqual(
-      resolve(mosaicMotionProtocolVersion, .unrestricted), .play(url: url))
+    // Without the preference it plays.
+    XCTAssertEqual(resolve(.unrestricted), .play(url: url))
 
-    // Apple's own Video Autoplay switch is not a protocol rule and is honoured on
-    // every version: a user who turned it off meant it.
+    // Apple's own Video Autoplay switch is a separate, narrower signal and is
+    // honoured independently: a user who turned it off meant it.
     let autoplayOff = MosaicMotionAccessibility(
       prefersReducedMotion: false, allowsVideoAutoplay: false)
     XCTAssertEqual(
-      resolve(mosaicProtocolVersion, autoplayOff),
+      resolve(autoplayOff),
       .still(posterID: "poster", recordsUnavailable: false)
     )
 
@@ -707,8 +693,7 @@ final class MotionDriverTests: XCTestCase {
     // and is the one still frame that diagnoses — on the playing path...
     XCTAssertEqual(
       MosaicVideoBackgroundPresentation.resolve(
-        resolvedSource: nil, posterID: "poster", schemaVersion: mosaicMotionProtocolVersion,
-        accessibility: .unrestricted),
+        resolvedSource: nil, posterID: "poster", accessibility: .unrestricted),
       .still(posterID: "poster", recordsUnavailable: true)
     )
     // ...and equally on the suppressed one. A bundled key the host does not map
@@ -717,8 +702,7 @@ final class MotionDriverTests: XCTestCase {
     // before believing an asset is missing.
     XCTAssertEqual(
       MosaicVideoBackgroundPresentation.resolve(
-        resolvedSource: nil, posterID: "poster", schemaVersion: mosaicMotionProtocolVersion,
-        accessibility: reducedMotionOnly),
+        resolvedSource: nil, posterID: "poster", accessibility: reducedMotionOnly),
       .still(posterID: "poster", recordsUnavailable: true)
     )
     // The converse, and the boundary: a *remote* asset always resolves to its URL
@@ -727,7 +711,7 @@ final class MotionDriverTests: XCTestCase {
     // the ruling forbids — so a remote video that would have failed is reported
     // by the player that actually tried, on the playing path alone.
     XCTAssertEqual(
-      resolve(mosaicMotionProtocolVersion, reducedMotionOnly),
+      resolve(reducedMotionOnly),
       .still(posterID: "poster", recordsUnavailable: false)
     )
   }

@@ -522,7 +522,7 @@ public enum MosaicCountdownText {
   /// lenient parser here would let the renderer disagree with the contract
   /// about what a valid countdown is.
   private static func endDate(_ value: String) -> Date? {
-    MosaicProtocolV03Semantics.canonicalDate(value)
+    MosaicProtocolSemantics.canonicalDate(value)
   }
 }
 
@@ -650,19 +650,17 @@ enum MosaicVideoBackgroundPresentation: Equatable {
   static func resolve(
     resolvedSource: URL?,
     posterID: String?,
-    schemaVersion: String?,
     accessibility: MosaicMotionAccessibility
   ) -> MosaicVideoBackgroundPresentation {
-    // ADR-0027 ruling 3: the reduced-motion fix ships as specified `0.4`
-    // behaviour, not as a `0.3` defect patch. A `0.3` document therefore keeps
-    // `0.3`'s behaviour — the live exposure stays open until `0.4` lands and is
-    // accepted, and is tracked as such rather than closed here. Flutter draws
-    // the same version gate.
-    let reducedMotionStops =
-      accessibility.prefersReducedMotion && schemaVersion == mosaicMotionProtocolVersion
+    // ADR-0027 ruling 3, now unconditional. The rule shipped as specified `0.4`
+    // behaviour rather than as a defect patch to the predecessor, so it used to
+    // be gated on the document's version; with `0.4` the only readable contract
+    // (ADR-0028) every document this reaches is subject to it. An autoplaying
+    // paywall video can invalidate a customer's App Store Reduced Motion
+    // declaration, so reduced motion always stops playback.
+    let reducedMotionStops = accessibility.prefersReducedMotion
     // Video Autoplay is Apple's own, narrower switch rather than a protocol
-    // rule, so it is honoured on every document version: a user who turned it
-    // off meant it, and a `0.3` document is not a licence to ignore it.
+    // rule. It is honoured independently: a user who turned it off meant it.
     let autoplayStops = !accessibility.allowsVideoAutoplay
     // The poster-then-fallback order is the one the existing missing-media
     // policy already uses, reused deliberately rather than introducing a fourth
@@ -825,7 +823,6 @@ struct MosaicBackgroundView: View {
     switch MosaicVideoBackgroundPresentation.resolve(
       resolvedSource: resolvedSource,
       posterID: posterID,
-      schemaVersion: document?.schemaVersion,
       accessibility: motionAccessibility
     ) {
     case .play(let url):

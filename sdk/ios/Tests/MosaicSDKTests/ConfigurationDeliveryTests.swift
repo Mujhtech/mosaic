@@ -4,17 +4,28 @@ import XCTest
 @testable import MosaicSDK
 
 final class ConfigurationDeliveryTests: XCTestCase {
+  /// A release decodes atomically and resolves a placement to the paywall its
+  /// decision names.
+  ///
+  /// Placement resolution runs through `placementDecisions`: a delivery release
+  /// carries decision rule sets rather than the flat placement-to-paywall table
+  /// the retired first delivery version used, so `decision(forPlacement:)` is the
+  /// lookup that has meaning here.
   func testCanonicalReleaseDecodesAtomicallyAndResolvesPlacement() throws {
     let release = try MosaicConfigurationDeliveryDecoder.decode(deliveryFixtureData())
 
-    XCTAssertEqual(release.metadata.id, "configuration_release_1")
-    XCTAssertEqual(release.metadata.environmentKey, "staging")
+    XCTAssertEqual(release.metadata.id, "release_rich")
+    XCTAssertEqual(release.metadata.environmentKey, "production")
+    XCTAssertEqual(release.metadata.environmentMode, .production)
     XCTAssertEqual(release.paywallVersions.count, 1)
+    XCTAssertEqual(release.paywallVersions.first?.protocolVersion, mosaicProtocolVersion)
+    XCTAssertEqual(release.paywallVersions.first?.document.id, "phase1-complete-paywall")
+
+    let decision = try XCTUnwrap(release.decision(forPlacement: "upgrade_prompt"))
     XCTAssertEqual(
-      release.paywall(forPlacement: "onboarding_complete")?.document.id,
-      "navigation-only"
-    )
-    XCTAssertNil(release.paywall(forPlacement: "unknown_placement"))
+      decision.ruleSet.defaultOutcome,
+      .paywall(versionID: "paywall_version_complete", unavailableFallbackKey: nil))
+    XCTAssertNil(release.decision(forPlacement: "unknown_placement"))
   }
 
   func testMalformedAndUnsupportedCanonicalCandidatesAreRejectedAsCompleteReleases() throws {
@@ -33,7 +44,7 @@ final class ConfigurationDeliveryTests: XCTestCase {
 
   func testEveryCanonicalDeliveryV2ReleaseDecodesItsAuthoritativeEnvironmentMode() throws {
     let advanced = try MosaicConfigurationDeliveryDecoder.decode(
-      phase5FixtureData("configuration-delivery/v2/advanced-release.json")
+      phase5FixtureData("configuration-delivery/v3/advanced-release.json")
     )
     XCTAssertEqual(advanced.projectID, "project_alpha")
     XCTAssertEqual(advanced.placementDecisions.map(\.ruleSet.placementKey), ["export_pdf"])
@@ -42,14 +53,14 @@ final class ConfigurationDeliveryTests: XCTestCase {
     XCTAssertEqual(advanced.metadata.environmentMode, .production)
 
     let noPaywall = try MosaicConfigurationDeliveryDecoder.decode(
-      phase5FixtureData("configuration-delivery/v2/no-paywall-release.json")
+      phase5FixtureData("configuration-delivery/v3/no-paywall-release.json")
     )
     XCTAssertTrue(noPaywall.paywallVersions.isEmpty)
     XCTAssertEqual(noPaywall.placementDecisions.first?.ruleSet.defaultOutcome, .noPaywall)
     XCTAssertEqual(noPaywall.metadata.environmentMode, .production)
 
     let staging = try MosaicConfigurationDeliveryDecoder.decode(
-      phase5FixtureData("configuration-delivery/v2/staging-qa-override-release.json")
+      phase5FixtureData("configuration-delivery/v3/staging-qa-override-release.json")
     )
     XCTAssertEqual(staging.metadata.environmentKey, "staging")
     XCTAssertEqual(staging.metadata.environmentMode, .staging)
@@ -66,7 +77,7 @@ final class ConfigurationDeliveryTests: XCTestCase {
     ] {
       XCTAssertThrowsError(
         try MosaicConfigurationDeliveryDecoder.decode(
-          phase5FixtureData("configuration-delivery/v2/invalid/\(name).json")
+          phase5FixtureData("configuration-delivery/v3/invalid/\(name).json")
         ), "Expected \(name) to reject the complete candidate")
     }
   }
@@ -78,7 +89,7 @@ final class ConfigurationDeliveryTests: XCTestCase {
       "overdeclared-features", "qa-override-over-24h",
     ] {
       XCTAssertThrowsError(
-        try MosaicConfigurationDeliveryV2Decoder.validateDecisionFixture(
+        try MosaicConfigurationReleaseDecoder.validateDecisionFixture(
           phase5FixtureData("placement-decision/v1/invalid/\(name).json")
         ), "Expected \(name) to reject standalone Rule Set validation")
     }
@@ -101,7 +112,7 @@ final class ConfigurationClientTests: XCTestCase {
     guard case .updated(let metadata) = await client.refresh() else {
       return XCTFail("Expected a valid 200 release to be accepted.")
     }
-    XCTAssertEqual(metadata.id, "configuration_release_1")
+    XCTAssertEqual(metadata.id, "release_rich")
     guard case .notModified(let unchanged) = await client.refresh() else {
       return XCTFail("Expected 304 to preserve the accepted release.")
     }
@@ -112,7 +123,8 @@ final class ConfigurationClientTests: XCTestCase {
     XCTAssertEqual(requests[1].headers["If-None-Match"], "\"release-one\"")
     XCTAssertEqual(requests[0].headers["Authorization"], "Bearer public_test_key")
     XCTAssertEqual(requests[0].headers["Mosaic-SDK-Platform"], "ios")
-    XCTAssertEqual(requests[0].headers["Mosaic-Configuration-Versions"], "3,2,1")
+    XCTAssertEqual(
+      requests[0].headers["Mosaic-Configuration-Versions"], mosaicConfigurationDeliveryVersion)
     XCTAssertEqual(requests[0].headers["Mosaic-Placement-Decision-Versions"], "1")
     XCTAssertEqual(requests[0].headers["Mosaic-Bucketing-Algorithms"], "sha256_length_prefixed_v1")
     XCTAssertEqual(requests[0].headers["Mosaic-Experiment-Assignment-Versions"], "1")
@@ -127,7 +139,7 @@ final class ConfigurationClientTests: XCTestCase {
       mosaicExperimentSchedulePolicy)
     XCTAssertEqual(
       requests[0].headers["Mosaic-Paywall-Capabilities"],
-      MosaicCapabilityCatalog.v03.map { "\($0.rawValue)@\(mosaicProtocolVersion)" }.joined(
+      MosaicCapabilityCatalog.current.map { "\($0.rawValue)@\(mosaicProtocolVersion)" }.joined(
         separator: ",")
     )
     let storedRecord = await store.record()
@@ -146,14 +158,14 @@ final class ConfigurationClientTests: XCTestCase {
       index, name in
       .response(
         status: 200,
-        data: try phase5FixtureData("configuration-delivery/v2/invalid/\(name).json"),
+        data: try phase5FixtureData("configuration-delivery/v3/invalid/\(name).json"),
         etag: "\"invalid-\(index)\"", cacheControl: nil)
     }
     let transport = QueuedConfigurationTransport(
       steps: [
         .response(
           status: 200,
-          data: try phase5FixtureData("configuration-delivery/v2/advanced-release.json"),
+          data: try phase5FixtureData("configuration-delivery/v3/advanced-release.json"),
           etag: "\"phase-five\"", cacheControl: nil)
       ] + invalidSteps)
     let client = try makeClient(
@@ -227,15 +239,15 @@ final class ConfigurationClientTests: XCTestCase {
     guard case .preserved(let unsupportedMetadata, _, _) = await client.refresh() else {
       return XCTFail("Unsupported refresh must preserve the previous release.")
     }
-    XCTAssertEqual(malformedMetadata.id, "configuration_release_1")
-    XCTAssertEqual(unsupportedMetadata.id, "configuration_release_1")
+    XCTAssertEqual(malformedMetadata.id, "release_rich")
+    XCTAssertEqual(unsupportedMetadata.id, "release_rich")
     guard
       case .resolved(let document, _, let release, _) = await client.resolve(
-        placement: "onboarding_complete"
+        placement: "upgrade_prompt"
       )
     else { return XCTFail("The last known valid Placement should remain resolvable.") }
-    XCTAssertEqual(document.id, "navigation-only")
-    XCTAssertEqual(release.id, "configuration_release_1")
+    XCTAssertEqual(document.id, "phase1-complete-paywall")
+    XCTAssertEqual(release.id, "release_rich")
   }
 
   func testFailedRefreshPreservesAFileCacheAcrossClientReconstruction() async throws {
@@ -283,7 +295,7 @@ final class ConfigurationClientTests: XCTestCase {
     guard case .preserved(let metadata, let source, _) = await reconstructed.refresh() else {
       return XCTFail("A network failure must preserve the reconstructed cache.")
     }
-    XCTAssertEqual(metadata.id, "configuration_release_1")
+    XCTAssertEqual(metadata.id, "release_rich")
     XCTAssertEqual(source, .cache)
   }
 
@@ -296,7 +308,7 @@ final class ConfigurationClientTests: XCTestCase {
     await bundled.bootstrap()
     guard
       case .resolved(_, _, _, let source) = await bundled.resolve(
-        placement: "onboarding_complete"
+        placement: "upgrade_prompt"
       )
     else { return XCTFail("Expected the complete bundled release to resolve its Placement.") }
     XCTAssertEqual(source, .bundled)
@@ -309,7 +321,7 @@ final class ConfigurationClientTests: XCTestCase {
     await unavailable.bootstrap()
     guard
       case .unavailable(let diagnostics) = await unavailable.resolve(
-        placement: "onboarding_complete"
+        placement: "upgrade_prompt"
       )
     else { return XCTFail("Expected explicit unavailable without cache or bundle.") }
     XCTAssertEqual(diagnostics.last?.code, "delivery_configuration_unavailable")
@@ -361,26 +373,28 @@ final class ConfigurationClientTests: XCTestCase {
     guard case .updated(let metadata) = await client.refresh() else {
       return XCTFail("A hosted release must replace a synthetic bundled Environment.")
     }
-    XCTAssertEqual(metadata.environmentID, "environment_staging")
+    XCTAssertEqual(metadata.environmentID, "environment_production")
   }
 
   func testOlderAndCrossEnvironmentResponsesPreserveTheAcceptedHostedRelease() async throws {
     let transport = QueuedConfigurationTransport(steps: [
-      .response(
-        status: 200,
-        data: try deliveryFixtureData(named: "multiple-paywalls.json"),
-        etag: "\"release-three\"",
-        cacheControl: nil
-      ),
+      // Accepted first because it carries the highest release number.
       .response(
         status: 200,
         data: try deliveryFixtureData(),
+        etag: "\"release-three\"",
+        cacheControl: nil
+      ),
+      // An older release number, so it is stale rather than a replacement.
+      .response(
+        status: 200,
+        data: try deliveryFixtureData(named: "advanced-release.json"),
         etag: "\"release-one\"",
         cacheControl: nil
       ),
       .response(
         status: 200,
-        data: try releaseData(environmentID: "environment_production"),
+        data: try releaseData(environmentID: "environment_other"),
         etag: "\"release-four\"",
         cacheControl: nil
       ),
@@ -435,6 +449,19 @@ private func releaseData(environmentID: String) throws -> Data {
   var environment = try XCTUnwrap(release["environment"] as? [String: Any])
   environment["id"] = environmentID
   release["environment"] = environment
+  // A decision rule set names the Environment it was published for, so moving
+  // the release without moving them would make the candidate internally
+  // inconsistent and be rejected as a broken reference rather than as the
+  // cross-Environment response this exercises.
+  if let decisions = release["placementDecisions"] as? [[String: Any]] {
+    release["placementDecisions"] = try decisions.map { envelope -> [String: Any] in
+      var envelope = envelope
+      var ruleSet = try XCTUnwrap(envelope["ruleSet"] as? [String: Any])
+      ruleSet["environmentId"] = environmentID
+      envelope["ruleSet"] = ruleSet
+      return envelope
+    }
+  }
   release.removeValue(forKey: "contentDigest")
   release["contentDigest"] = try DeliveryCanonicalJSON.digest(release)
   envelope["release"] = release

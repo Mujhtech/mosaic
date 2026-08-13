@@ -1,220 +1,228 @@
 {
-  "schemaVersion": "0.3",
+  "schemaVersion": "0.4",
   "id": "phase1-complete-paywall",
   "revision": 1,
   "compatibility": {
     "requiredCapabilities": [
       {
         "name": "layout.scrollContainer",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "layout.stack",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "layout.sizing",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "layout.heightSizing",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "layout.outerInsets",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "navigation.screens",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "navigation.sheets",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.text",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.image",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.icon",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.featureList",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.productSelector",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.productCard",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.productBadge",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.button",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.carousel",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.switch",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.countdown",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.tabs",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.timeline",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.award",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "component.socialProof",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "localization.catalogs",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "localization.rtl",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "localization.productTemplate",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "product.references",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "asset.bundledImage",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "asset.remoteImage",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "asset.bundledVideo",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "asset.remoteVideo",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "action.purchase",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "action.restore",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "action.close",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "action.navigateTo",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "action.navigateBack",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "action.openExternalUrl",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "accessibility.metadata",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "accessibility.reservedStrings",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "fallback.asset",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "fallback.product",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "outcome.normalized",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "style.colors",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "style.designTokens",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "style.gradientBackground",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "style.mediaBackground",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "style.shadow",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "style.box",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "style.clipping",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "style.typography",
-        "version": "0.3"
-      },
-      {
-        "name": "style.productCardStates",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "visibility.static",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "condition.switchVisibility",
-        "version": "0.3"
+        "version": "0.4"
       },
       {
         "name": "condition.tabVisibility",
-        "version": "0.3"
+        "version": "0.4"
+      },
+      {
+        "name": "motion.appear",
+        "version": "0.4"
+      },
+      {
+        "name": "motion.selection",
+        "version": "0.4"
+      },
+      {
+        "name": "motion.loop",
+        "version": "0.4"
       }
     ]
   },
@@ -673,6 +681,17 @@
               "sizing": {
                 "width": "fill",
                 "height": "fit"
+              },
+              "motion": {
+                "appear": {
+                  "effect": "fadeRise",
+                  "riseLogicalSize": 12,
+                  "curve": {
+                    "type": "motionToken",
+                    "id": "motion-entrance"
+                  },
+                  "delayMilliseconds": 0
+                }
               }
             },
             {
@@ -704,6 +723,17 @@
                 "start": 8,
                 "bottom": 0,
                 "end": 8
+              },
+              "motion": {
+                "appear": {
+                  "effect": "fadeRise",
+                  "riseLogicalSize": 12,
+                  "curve": {
+                    "type": "motionToken",
+                    "id": "motion-entrance"
+                  },
+                  "delayMilliseconds": 80
+                }
               }
             },
             {
@@ -1006,7 +1036,10 @@
             {
               "type": "featureList",
               "id": "features",
-              "marker": "checkmark",
+              "marker": {
+                "kind": "icon",
+                "name": "checkmark"
+              },
               "items": [
                 {
                   "id": "unlimited-projects",
@@ -1020,6 +1053,9 @@
                   "text": {
                     "default": "Render with native Flutter, SwiftUI, and Compose controls",
                     "localizationKey": "paywall.feature.native_rendering"
+                  },
+                  "marker": {
+                    "kind": "ordinal"
                   }
                 },
                 {
@@ -1027,6 +1063,10 @@
                   "text": {
                     "default": "Keep a bundled paywall ready when the network is unavailable",
                     "localizationKey": "paywall.feature.offline_ready"
+                  },
+                  "marker": {
+                    "kind": "icon",
+                    "name": "close"
                   }
                 }
               ],
@@ -1038,6 +1078,7 @@
               },
               "gap": 12,
               "markerColor": "action.primary",
+              "markerSize": 18,
               "typography": {
                 "style": "body",
                 "fontSize": 16,
@@ -1067,6 +1108,16 @@
               "sizing": {
                 "width": "fill",
                 "height": "fit"
+              },
+              "motion": {
+                "appear": {
+                  "effect": "fade",
+                  "curve": {
+                    "type": "motionToken",
+                    "id": "motion-entrance-alias"
+                  },
+                  "delayMilliseconds": 160
+                }
               }
             },
             {
@@ -1194,6 +1245,17 @@
               "sizing": {
                 "width": "fill",
                 "height": "fit"
+              },
+              "motion": {
+                "appear": {
+                  "effect": "fade",
+                  "curve": {
+                    "type": "motion",
+                    "durationMilliseconds": 200,
+                    "easing": "linear"
+                  },
+                  "delayMilliseconds": 0
+                }
               }
             },
             {
@@ -1537,6 +1599,14 @@
               "sizing": {
                 "width": "fill",
                 "height": "fit"
+              },
+              "motion": {
+                "selection": {
+                  "curve": {
+                    "type": "motionToken",
+                    "id": "motion-selection"
+                  }
+                }
               }
             },
             {
@@ -1974,6 +2044,14 @@
                 "start": 0,
                 "bottom": 4,
                 "end": 0
+              },
+              "motion": {
+                "selection": {
+                  "curve": {
+                    "type": "motionToken",
+                    "id": "motion-selection"
+                  }
+                }
               }
             },
             {
@@ -2140,6 +2218,28 @@
                   "sizing": {
                     "width": "fill",
                     "height": "fit"
+                  },
+                  "motion": {
+                    "appear": {
+                      "effect": "fade",
+                      "curve": {
+                        "type": "motionToken",
+                        "id": "motion-entrance"
+                      },
+                      "delayMilliseconds": 240
+                    },
+                    "loop": {
+                      "effect": "pulse",
+                      "scaleAmplitude": 0.04,
+                      "opacityAmplitude": 0.12,
+                      "curve": {
+                        "type": "motionToken",
+                        "id": "motion-pulse"
+                      },
+                      "repeat": {
+                        "count": 3
+                      }
+                    }
                   }
                 },
                 {
@@ -2407,6 +2507,17 @@
               "accessibility": {
                 "role": "heading",
                 "level": 1
+              },
+              "motion": {
+                "appear": {
+                  "effect": "fadeRise",
+                  "riseLogicalSize": 8,
+                  "curve": {
+                    "type": "motionToken",
+                    "id": "motion-entrance"
+                  },
+                  "delayMilliseconds": 0
+                }
               }
             },
             {
@@ -2459,6 +2570,20 @@
                 "hint": {
                   "default": "Opens the privacy policy in the system browser",
                   "localizationKey": "paywall.details.privacy.hint"
+                }
+              },
+              "motion": {
+                "loop": {
+                  "effect": "pulse",
+                  "scaleAmplitude": 0.02,
+                  "opacityAmplitude": 0,
+                  "curve": {
+                    "type": "motionToken",
+                    "id": "motion-pulse"
+                  },
+                  "repeat": {
+                    "count": 1
+                  }
                 }
               }
             },
@@ -2618,6 +2743,43 @@
         "value": {
           "type": "shadowToken",
           "id": "floating"
+        }
+      }
+    ],
+    "motions": [
+      {
+        "id": "motion-entrance",
+        "name": "Entrance",
+        "value": {
+          "type": "motion",
+          "durationMilliseconds": 240,
+          "easing": "decelerate"
+        }
+      },
+      {
+        "id": "motion-entrance-alias",
+        "name": "Entrance alias",
+        "value": {
+          "type": "motionToken",
+          "id": "motion-entrance"
+        }
+      },
+      {
+        "id": "motion-selection",
+        "name": "Selection change",
+        "value": {
+          "type": "motion",
+          "durationMilliseconds": 160,
+          "easing": "standard"
+        }
+      },
+      {
+        "id": "motion-pulse",
+        "name": "Call to action pulse",
+        "value": {
+          "type": "motion",
+          "durationMilliseconds": 900,
+          "easing": "standard"
         }
       }
     ]

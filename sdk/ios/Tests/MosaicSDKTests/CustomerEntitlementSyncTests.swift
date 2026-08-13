@@ -41,7 +41,7 @@ final class CustomerEntitlementSyncTests: XCTestCase {
   private let issuedAt = try! contractTimestamp("2026-07-28T12:00:00.000Z")
 
   private func snapshotData(_ name: String) throws -> Data {
-    try authoritativeEntitlementFixtureData("snapshots/\(name)")
+    try entitlementSnapshotData(name)
   }
 
   private func invalidData(_ name: String) throws -> Data {
@@ -51,13 +51,7 @@ final class CustomerEntitlementSyncTests: XCTestCase {
   private func mutatedSnapshotPayload(
     _ name: String, _ mutation: (inout [String: Any]) -> Void
   ) throws -> Data {
-    guard
-      var root = try JSONSerialization.jsonObject(with: try snapshotData(name))
-        as? [String: Any], var payload = root["payload"] as? [String: Any]
-    else { throw CanonicalFixtureLookupError.invalidShape }
-    mutation(&payload)
-    root["payload"] = payload
-    return try JSONSerialization.data(withJSONObject: root)
+    try mutatedEntitlementRecord(name, mutation)
   }
 
   private func ok(_ data: Data, etag: String? = nil, serverDate: Date? = nil)
@@ -123,11 +117,14 @@ final class CustomerEntitlementSyncTests: XCTestCase {
     XCTAssertEqual(request.headers["Content-Type"], "application/json")
     let envelope = try XCTUnwrap(
       JSONSerialization.jsonObject(with: request.body) as? [String: Any])
-    XCTAssertEqual(envelope["authoritativeEntitlementContractVersion"] as? String, "1")
+    XCTAssertEqual(
+      envelope["authoritativeEntitlementContractVersion"] as? String,
+      mosaicAuthoritativeEntitlementContractVersion)
     XCTAssertEqual(envelope["recordType"] as? String, "entitlementSyncRequest")
     let payload = try XCTUnwrap(envelope["payload"] as? [String: Any])
     XCTAssertEqual(
-      payload["supportedAuthoritativeEntitlementContracts"] as? [String], ["1"])
+      payload["supportedAuthoritativeEntitlementContracts"] as? [String],
+      [mosaicAuthoritativeEntitlementContractVersion])
     XCTAssertNotNil(payload["correlationId"] as? String)
     // Nothing already known on a first sync, so neither conditional member is sent.
     XCTAssertNil(payload["knownSnapshotVersion"])
@@ -355,18 +352,15 @@ final class CustomerEntitlementSyncTests: XCTestCase {
   // from a document it rejected.
   func testDigestMismatchPreservesTheCacheAndNeverEmits() async throws {
     let broadcaster = MosaicCustomerEntitlementBroadcaster()
-    var mutated =
-      try JSONSerialization.jsonObject(
-        with: try snapshotData("newer-snapshot.json")) as! [String: Any]
-    var payload = mutated["payload"] as! [String: Any]
-    var entries = payload["entries"] as! [[String: Any]]
-    entries[0]["state"] = "inactive"
-    payload["entries"] = entries
-    mutated["payload"] = payload
+    let mutated = try mutatedEntitlementRecord("newer-snapshot.json") { snapshot in
+      var entries = snapshot["entries"] as! [[String: Any]]
+      entries[0]["state"] = "inactive"
+      snapshot["entries"] = entries
+    }
 
     let transport = StubSyncTransport([
       ok(try snapshotData("active-subscription.json")),
-      ok(try JSONSerialization.data(withJSONObject: mutated)),
+      ok(mutated),
     ])
     let (client, _) = makeClient(transport: transport, broadcaster: broadcaster)
     _ = await client.refresh()

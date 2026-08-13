@@ -170,7 +170,7 @@ final class PaywallStateTests: XCTestCase {
   }
 
   func testUnifiedButtonUsesProgressContentAndRejectsDuplicateAsyncActions() async throws {
-    let document = try v03Document()
+    let document = try v04Document()
     let provider = DeferredPurchaseProvider(products: MosaicProduct.phase1MockProducts)
     let recorder = OutcomeRecorder()
     let model = MosaicPaywallModel(

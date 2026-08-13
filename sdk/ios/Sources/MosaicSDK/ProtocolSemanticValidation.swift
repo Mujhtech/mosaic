@@ -1,11 +1,8 @@
 import Foundation
 
-enum MosaicProtocolV03Semantics {
-  static func validate(
-    _ document: MosaicPaywallDocument,
-    version: MosaicSchemaVersion = .v03
-  ) throws {
-    guard document.schemaVersion == version.rawValue else {
+enum MosaicProtocolSemantics {
+  static func validate(_ document: MosaicPaywallDocument) throws {
+    guard document.schemaVersion == mosaicProtocolVersion else {
       throw MosaicProtocolError.unsupportedSchemaVersion(document.schemaVersion)
     }
     guard (1...Int(Int32.max)).contains(document.revision) else {
@@ -15,11 +12,11 @@ enum MosaicProtocolV03Semantics {
 
     var declared = Set<MosaicCapabilityName>()
     for capability in document.compatibility.requiredCapabilities {
-      guard capability.version == version.rawValue else {
+      guard capability.version == mosaicProtocolVersion else {
         throw MosaicProtocolError.unsupportedCapability(
           name: capability.name.rawValue, version: capability.version)
       }
-      guard version.capabilities.contains(capability.name) else {
+      guard MosaicCapabilityCatalog.current.contains(capability.name) else {
         throw MosaicProtocolError.unsupportedCapability(
           name: capability.name.rawValue, version: capability.version)
       }
@@ -33,7 +30,7 @@ enum MosaicProtocolV03Semantics {
     }
     try validateDesignSystem(designSystem, document: document)
 
-    var state = State(document: document, version: version)
+    var state = State(document: document)
     state.capabilities.formUnion([.scrollContainer, .stack, .screens, .localizationCatalogs])
     if !designSystem.colors.isEmpty || !designSystem.backgrounds.isEmpty
       || !designSystem.shadows.isEmpty
@@ -197,15 +194,7 @@ enum MosaicProtocolV03Semantics {
       state.capabilities.insert(.localizationRTL)
     }
 
-    if version.supportsMotion {
-      try validateMotion(document: document, entries: state.motionEntries)
-      // `0.4` removed `style.productCardStates`: it was derived exactly when
-      // Product Selector, Product Card, or Product Badge was, so it could never
-      // vary independently and carried no information. Removing it from the
-      // derived set here — rather than guarding each insertion — keeps the delta
-      // stated in one place, as the reference derivation does.
-      state.capabilities.remove(.productCardStates)
-    }
+    try validateMotion(document: document, entries: state.motionEntries)
 
     if let missing = state.capabilities.subtracting(declared).first {
       throw violation("protocol_missing_capability_\(missing.rawValue)")
@@ -288,7 +277,6 @@ enum MosaicProtocolV03Semantics {
     var motionEntries: [MotionEntry] = []
     var appearAncestorIDs: [String] = []
     let document: MosaicPaywallDocument
-    let version: MosaicSchemaVersion
 
     mutating func layoutID(_ id: String) throws {
       try identifier(id)
@@ -296,13 +284,8 @@ enum MosaicProtocolV03Semantics {
     }
 
     /// Records a node's authored motion and derives its capabilities.
-    ///
-    /// A `0.3` document cannot reach this with a motion block — the shape
-    /// validator rejects the unknown property first — so the version guard is a
-    /// second lock on the same door rather than the only one.
     mutating func recordMotion(_ motion: MosaicMotion?, id: String) throws {
       guard let motion else { return }
-      guard version.supportsMotion else { throw violation("protocol_motion_not_supported") }
       motionEntries.append(
         MotionEntry(
           nodeID: id,
@@ -446,7 +429,7 @@ enum MosaicProtocolV03Semantics {
       case .productSelector(let component):
         try layoutID(component.id)
         capabilities.formUnion([
-          .productSelector, .productFallback, .normalizedOutcome, .productCardStates,
+          .productSelector, .productFallback, .normalizedOutcome,
           .colors, .boxStyle, .accessibilityMetadata,
         ])
         try logicalSize(component.gap)
@@ -603,7 +586,7 @@ enum MosaicProtocolV03Semantics {
     mutating func tabs(_ component: MosaicTabsComponent, carouselDepth: Int) throws {
       try layoutID(component.id)
       capabilities.formUnion([
-        .tabs, .productCardStates, .typography, .colors, .boxStyle, .accessibilityMetadata,
+        .tabs, .typography, .colors, .boxStyle, .accessibilityMetadata,
       ])
       try logicalSize(component.tabBarGap)
       try logicalSize(component.gap)
@@ -853,7 +836,7 @@ enum MosaicProtocolV03Semantics {
       defer { if opensAppearScope { appearAncestorIDs.removeLast() } }
       try layoutID(card.id)
       capabilities.formUnion([
-        .productCard, .productCardStates, .boxStyle, .colors,
+        .productCard, .boxStyle, .colors,
       ])
       try logicalSize(card.gap)
       guard !card.children.isEmpty else { throw violation("protocol_empty_product_card") }
@@ -898,7 +881,7 @@ enum MosaicProtocolV03Semantics {
       defer { if opensAppearScope { appearAncestorIDs.removeLast() } }
       try layoutID(badge.id)
       capabilities.formUnion([
-        .productBadge, .productCardStates, .boxStyle, .colors,
+        .productBadge, .boxStyle, .colors,
       ])
       try logicalSize(badge.gap)
       guard (1...10).contains(badge.children.count) else {
@@ -920,7 +903,7 @@ enum MosaicProtocolV03Semantics {
     }
 
     func color(_ value: MosaicColor) throws {
-      try MosaicProtocolV03Semantics.color(value)
+      try MosaicProtocolSemantics.color(value)
       guard document.resolvedColor(value) != nil else {
         throw violation("protocol_unknown_or_cyclic_color_token")
       }
@@ -932,7 +915,7 @@ enum MosaicProtocolV03Semantics {
     }
 
     func typography(_ value: MosaicTypography, allowsTruncation: Bool) throws {
-      try MosaicProtocolV03Semantics.typography(value, allowsTruncation: allowsTruncation)
+      try MosaicProtocolSemantics.typography(value, allowsTruncation: allowsTruncation)
       try color(value.color)
     }
 

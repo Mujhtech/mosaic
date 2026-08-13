@@ -293,7 +293,7 @@ extension MosaicLocalPreviewClient {
       let capabilities = compatibility["requiredCapabilities"] as? [[String: Any]]
     {
       let expectedDocumentVersion = mosaicProtocolVersion
-      let supported = Set(MosaicCapabilityCatalog.v03.map(\.rawValue))
+      let supported = Set(MosaicCapabilityCatalog.current.map(\.rawValue))
       for (index, capability) in capabilities.enumerated() {
         guard
           let name = capability["name"] as? String,
@@ -336,7 +336,7 @@ extension MosaicLocalPreviewClient {
     permitsScrollContainer: Bool
   ) -> MosaicPreviewUnsupportedRequirement? {
     guard let type = node["type"] as? String else { return nil }
-    var supported = Set(MosaicLayoutNodeKind.v03PreviewCases.map(\.rawValue))
+    var supported = Set(MosaicLayoutNodeKind.previewCases.map(\.rawValue))
     supported.formUnion(["productCard", "productBadge"])
     if !supported.contains(type) || (!permitsScrollContainer && type == "scrollContainer") {
       let id = (node["id"] as? String).flatMap(safeComponentId)

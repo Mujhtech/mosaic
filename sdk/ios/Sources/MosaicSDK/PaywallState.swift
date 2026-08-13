@@ -812,11 +812,12 @@ extension MosaicPaywallDocument {
     productSelectors.first { $0.id == id }
   }
 
+  /// Every authored node across every screen.
+  ///
+  /// `layout` is only a projection of the initial screen, so walking `screens` is
+  /// the complete answer for every document the decoder can produce.
   public var allNodes: [MosaicNode] {
-    if mosaicSupportedProtocolVersions.contains(schemaVersion) {
-      return screens.flatMap { $0.layout.content.descendants }
-    }
-    return layout.content.descendants
+    screens.flatMap { $0.layout.content.descendants }
   }
 
   public var switches: [MosaicSwitchComponent] {

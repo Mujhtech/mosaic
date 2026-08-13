@@ -5,11 +5,11 @@ import XCTest
 @testable import MosaicSDK
 
 @MainActor
-final class ProtocolV03Tests: XCTestCase {
-  func testCanonicalV03DecodesEveryNewNativeComponentAndStyleState() throws {
-    let document = try v03Document()
+final class ProtocolConformanceTests: XCTestCase {
+  func testCanonicalFixtureDecodesEveryNativeComponentAndStyleState() throws {
+    let document = try v04Document()
 
-    XCTAssertEqual(document.schemaVersion, "0.3")
+    XCTAssertEqual(document.schemaVersion, mosaicProtocolVersion)
     XCTAssertEqual(document.initialScreenId, "offer")
     XCTAssertEqual(document.screens.map(\.id), ["offer", "details"])
     XCTAssertEqual(document.screens.map { $0.presentation?.type }, [.screen, .sheet])
@@ -114,24 +114,24 @@ final class ProtocolV03Tests: XCTestCase {
 
     XCTAssertEqual(
       MosaicSDKCapabilityReport.current.supportedSchemaVersions,
-      ["0.3", "0.4"]
+      [mosaicProtocolVersion]
     )
     XCTAssertEqual(
       Set(
         MosaicSDKCapabilityReport.current.capabilities
-          .filter { $0.version == "0.3" }
+          .filter { $0.version == mosaicProtocolVersion }
           .map(\.name)
       ),
-      Set(MosaicCapabilityCatalog.v03)
+      Set(MosaicCapabilityCatalog.current)
     )
   }
 
-  func testV03EdgeAndExpiredFixturesDecodeWhileNoncanonicalColorFailsClosed() throws {
-    XCTAssertNoThrow(try v03Document(named: "edge-cases.json"))
-    XCTAssertNoThrow(try v03Document(named: "expired-countdown.json"))
-    XCTAssertNoThrow(try v03Document(named: "navigation-only.json"))
+  func testEdgeAndExpiredFixturesDecodeWhileNoncanonicalColorFailsClosed() throws {
+    XCTAssertNoThrow(try v04Document(named: "edge-cases.json"))
+    XCTAssertNoThrow(try v04Document(named: "expired-countdown.json"))
+    XCTAssertNoThrow(try v04Document(named: "navigation-only.json"))
     XCTAssertThrowsError(
-      try MosaicProtocolDecoder.decode(v03FixtureData(named: "invalid/noncanonical-color.json"))
+      try MosaicProtocolDecoder.decode(v04FixtureData(named: "invalid/noncanonical-color.json"))
     ) { error in
       XCTAssertEqual(
         error as? MosaicProtocolError,
@@ -185,7 +185,7 @@ final class ProtocolV03Tests: XCTestCase {
   /// An unresolved token or malformed literal used to render transparent with
   /// no diagnostic, which makes authored content invisible.
   func testUnresolvableColorsRecoverByRoleAndReportTheFailure() throws {
-    let document = try v03Document()
+    let document = try v04Document()
 
     let content = MosaicColor.token("no-such-token").rendered(in: document, role: .content)
     XCTAssertEqual(content.color, Color.primary)
@@ -254,7 +254,7 @@ final class ProtocolV03Tests: XCTestCase {
     }
 
     var sizing = try v03FixtureObject()
-    try mutateV03Node(id: "hero", in: &sizing) { node in
+    try mutateNode(id: "hero", in: &sizing) { node in
       node["sizing"] = ["width": "fill"]
     }
     XCTAssertThrowsError(try MosaicProtocolDecoder.decode(encoded(sizing))) { error in
@@ -315,7 +315,7 @@ final class ProtocolV03Tests: XCTestCase {
   }
 
   func testSwitchVisibilityCarouselStateAndControlledCountdownResetPerModel() throws {
-    let document = try v03Document()
+    let document = try v04Document()
     let first = MosaicPaywallModel(
       document: document,
       purchaseProvider: MockMosaicPurchaseProvider(products: MosaicProduct.phase1MockProducts),
@@ -344,8 +344,8 @@ final class ProtocolV03Tests: XCTestCase {
     XCTAssertEqual(acceptedRevisionModel.carouselPageIndex(for: carousel.id), 1)
   }
 
-  func testV03AccessibilityProjectionTracksNativeRuntimeVisibilityAndSelection() async throws {
-    let document = try v03Document()
+  func testAccessibilityProjectionTracksNativeRuntimeVisibilityAndSelection() async throws {
+    let document = try v04Document()
     let model = MosaicPaywallModel(
       document: document,
       requestedLocale: "ar-EG",
@@ -392,7 +392,7 @@ final class ProtocolV03Tests: XCTestCase {
   }
 
   func testCountdownUsesAbsoluteUTCClockAndCompletedLocalizedText() throws {
-    let document = try v03Document()
+    let document = try v04Document()
     let countdown = try XCTUnwrap(
       document.allNodes.compactMap { node -> MosaicCountdownComponent? in
         guard case .countdown(let value) = node else { return nil }
@@ -421,7 +421,7 @@ final class ProtocolV03Tests: XCTestCase {
   /// Rendering it as the completed text told customers an offer had expired
   /// when the document said no such thing.
   func testUnparseableCountdownEndIsDistinguishedFromCompletion() throws {
-    let document = try v03Document()
+    let document = try v04Document()
     let countdown = try XCTUnwrap(
       document.allNodes.compactMap { node -> MosaicCountdownComponent? in
         guard case .countdown(let value) = node else { return nil }
@@ -466,7 +466,7 @@ final class ProtocolV03Tests: XCTestCase {
     }
   }
 
-  func testV03RejectsUnknownPropertiesAndMissingUsedCapabilities() throws {
+  func testRejectsUnknownPropertiesAndMissingUsedCapabilities() throws {
     var object = try v03FixtureObject()
     var screens = try XCTUnwrap(object["screens"] as? [[String: Any]])
     var layout = try XCTUnwrap(screens[0]["layout"] as? [String: Any])
@@ -512,7 +512,7 @@ final class ProtocolV03Tests: XCTestCase {
   }
 
   func testNavigationPushPopPreservesComponentStateAndRootBackDiagnosesNoOp() throws {
-    let document = try v03Document()
+    let document = try v04Document()
     let model = MosaicPaywallModel(
       document: document,
       purchaseProvider: MockMosaicPurchaseProvider(),
@@ -558,7 +558,7 @@ final class ProtocolV03Tests: XCTestCase {
 
   func testButtonsRejectInteractiveDescendantsUnsafeProgressAndNavigationCycles() throws {
     var object = try v03FixtureObject()
-    try mutateFirstV03Node(type: "button", in: &object) { button in
+    try mutateFirstNodeOfType(type: "button", in: &object) { button in
       var children = button["children"] as? [[String: Any]] ?? []
       children.append(button)
       button["children"] = children
@@ -571,7 +571,7 @@ final class ProtocolV03Tests: XCTestCase {
     }
 
     object = try v03FixtureObject()
-    try mutateFirstV03Node(type: "button", in: &object) { button in
+    try mutateFirstNodeOfType(type: "button", in: &object) { button in
       button["inProgressChildren"] = (button["children"] as? [[String: Any]])?.map { child in
         var child = child
         child["id"] = "\(child["id"] as? String ?? "progress")-progress-test"
@@ -586,7 +586,7 @@ final class ProtocolV03Tests: XCTestCase {
     }
 
     object = try v03FixtureObject()
-    try mutateFirstV03Node(type: "button", in: &object) { button in
+    try mutateFirstNodeOfType(type: "button", in: &object) { button in
       guard (button["action"] as? [String: Any])?["type"] as? String == "close" else { return }
       button["action"] = ["type": "navigateTo", "screenId": "offer"]
     }
@@ -594,7 +594,7 @@ final class ProtocolV03Tests: XCTestCase {
   }
 
   func testAuthoredSelectionUsesCardIdentityAndMapsToProviderProduct() async throws {
-    let document = try v03Document()
+    let document = try v04Document()
     var interactions: [MosaicInteractionOutcome] = []
     let model = MosaicPaywallModel(
       document: document,
@@ -627,7 +627,7 @@ final class ProtocolV03Tests: XCTestCase {
       "Mosaic Pro — $4.99"
     )
 
-    let document = try v03Document()
+    let document = try v04Document()
     let product = MosaicProduct(
       id: "mosaic_pro_monthly",
       title: "",
@@ -649,7 +649,7 @@ final class ProtocolV03Tests: XCTestCase {
     XCTAssertEqual(model.localization.resolve(name.value, for: option), "شهري")
 
     var reusedTemplate = try v03FixtureObject()
-    try mutateFirstV03Node(type: "productCard", in: &reusedTemplate) { card in
+    try mutateFirstNodeOfType(type: "productCard", in: &reusedTemplate) { card in
       guard var children = card["children"] as? [[String: Any]],
         var text = children.first,
         let value = text["value"]
@@ -667,7 +667,7 @@ final class ProtocolV03Tests: XCTestCase {
   }
 
   func testMissingOrEmptyPricesRemoveCardsAndFallbackInAuthoredOrder() async throws {
-    let document = try v03Document()
+    let document = try v04Document()
     let emptyInitialPrice = MosaicProduct(
       id: "mosaic_pro_yearly",
       title: "Yearly",
@@ -717,7 +717,7 @@ final class ProtocolV03Tests: XCTestCase {
 
   func testBlankPriceIsRequiredThroughNestedStackDescendants() async throws {
     var object = try v03FixtureObject()
-    try mutateV03Node(id: "plans-monthly-plan-card", in: &object) { card in
+    try mutateNode(id: "plans-monthly-plan-card", in: &object) { card in
       guard var children = card["children"] as? [[String: Any]],
         let priceIndex = children.firstIndex(where: {
           $0["id"] as? String == "plans-monthly-plan-card-price"
@@ -821,7 +821,7 @@ final class ProtocolV03Tests: XCTestCase {
   }
 
   func testOpenExternalURLRequiresSafeAbsoluteHTTPS() throws {
-    let source = try String(decoding: v03FixtureData(), as: UTF8.self)
+    let source = try String(decoding: v04FixtureData(), as: UTF8.self)
     let original = #""https://example.com/privacy""#
     XCTAssertTrue(source.contains(original))
 
@@ -851,7 +851,7 @@ final class ProtocolV03Tests: XCTestCase {
   }
 
   func testHiddenPurchaseSelectorDisablesItsButtonAndEmitsSafeRuntimeDiagnostic() throws {
-    let document = try v03Document(named: "hidden-purchase-target.json")
+    let document = try v04Document(named: "hidden-purchase-target.json")
     let model = MosaicPaywallModel(
       document: document,
       purchaseProvider: MockMosaicPurchaseProvider(products: MosaicProduct.phase1MockProducts),
@@ -863,7 +863,7 @@ final class ProtocolV03Tests: XCTestCase {
     XCTAssertEqual(model.diagnostics.last?.code, "purchase_hidden_product_selector")
   }
 
-  func testLocalPreviewV03CodecIsExactAndCarriesTheV03DraftUnchanged() throws {
+  func testLocalPreviewCodecIsExactAndCarriesTheDraftUnchanged() throws {
     let codec = MosaicPreviewMessageCodec()
     let messages = try localPreviewV03Objects()
     var decodedDraft: MosaicPreviewDraftUpdate?
@@ -874,7 +874,8 @@ final class ProtocolV03Tests: XCTestCase {
     }
 
     let draft = try XCTUnwrap(decodedDraft)
-    XCTAssertEqual(try MosaicProtocolDecoder.decode(draft.documentData).schemaVersion, "0.3")
+    XCTAssertEqual(
+      try MosaicProtocolDecoder.decode(draft.documentData).schemaVersion, mosaicProtocolVersion)
     XCTAssertNoThrow(
       try MosaicPreviewMessageCodec().decode(
         try JSONSerialization.data(withJSONObject: messages[0], options: [.sortedKeys])
@@ -882,9 +883,9 @@ final class ProtocolV03Tests: XCTestCase {
     )
   }
 
-  func testLocalPreviewV03CapabilityReportAdvertisesExactImplementedCoverage() throws {
+  func testLocalPreviewCapabilityReportAdvertisesExactImplementedCoverage() throws {
     let codec = MosaicPreviewMessageCodec()
-    let report = MosaicPreviewCapabilityReport.v03(clientId: "client_ios_tests")
+    let report = MosaicPreviewCapabilityReport.current(clientId: "client_ios_tests")
     let source = try codec.encode(
       .capabilityReport(report),
       messageId: "msg_ios_v03_report",
@@ -894,16 +895,18 @@ final class ProtocolV03Tests: XCTestCase {
     let object = try XCTUnwrap(
       JSONSerialization.jsonObject(with: Data(source.utf8)) as? [String: Any]
     )
-    XCTAssertEqual(object["previewProtocolVersion"] as? String, "0.3")
+    XCTAssertEqual(
+      object["previewProtocolVersion"] as? String, mosaicLocalPreviewProtocolVersion)
     let payload = try XCTUnwrap(object["payload"] as? [String: Any])
-    XCTAssertEqual(payload["supportedSchemaVersions"] as? [String], ["0.3"])
+    XCTAssertEqual(payload["supportedSchemaVersions"] as? [String], [mosaicProtocolVersion])
     let capabilities = try XCTUnwrap(payload["supportedCapabilities"] as? [[String: Any]])
     XCTAssertEqual(
       Set(capabilities.compactMap { $0["name"] as? String }),
-      Set(MosaicCapabilityCatalog.v03.map(\.rawValue))
+      Set(MosaicCapabilityCatalog.current.map(\.rawValue))
     )
     let preview = try XCTUnwrap(payload["previewCapabilities"] as? [[String: Any]])
-    XCTAssertTrue(preview.allSatisfy { $0["version"] as? String == "0.3" })
+    XCTAssertTrue(
+      preview.allSatisfy { $0["version"] as? String == mosaicLocalPreviewProtocolVersion })
   }
 }
 
@@ -919,11 +922,11 @@ private func button(in document: MosaicPaywallDocument, id: String) throws -> Mo
 /// semantic validator so malformed values can reach the resolver under test.
 private func v03Countdown(endsAt: String) throws -> MosaicCountdownComponent {
   let original = try XCTUnwrap(
-    try v03Document().allNodes.compactMap { node -> MosaicCountdownComponent? in
+    try v04Document().allNodes.compactMap { node -> MosaicCountdownComponent? in
       guard case .countdown(let value) = node else { return nil }
       return value
     }.single)
-  let text = try XCTUnwrap(String(data: try v03FixtureData(), encoding: .utf8))
+  let text = try XCTUnwrap(String(data: try v04FixtureData(), encoding: .utf8))
   let document = try JSONDecoder().decode(
     MosaicPaywallDocument.self,
     from: Data(text.replacingOccurrences(of: original.endsAt, with: endsAt).utf8)
@@ -936,7 +939,7 @@ private func v03Countdown(endsAt: String) throws -> MosaicCountdownComponent {
 }
 
 func v03FixtureObject() throws -> [String: Any] {
-  guard let object = try JSONSerialization.jsonObject(with: v03FixtureData()) as? [String: Any]
+  guard let object = try JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any]
   else { throw CanonicalFixtureLookupError.invalidShape }
   return object
 }
@@ -948,7 +951,7 @@ private func replaceV03LocalizedText(
   in object: inout [String: Any]
 ) throws {
   var localizationKey: String?
-  try mutateV03Node(id: nodeID, in: &object) { node in
+  try mutateNode(id: nodeID, in: &object) { node in
     guard var text = node[property] as? [String: Any],
       let key = text["localizationKey"] as? String
     else { return }
@@ -1011,7 +1014,7 @@ private func localPreviewV03Objects() throws -> [[String: Any]] {
   var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
   while directory.path != "/" {
     let candidate = directory.appendingPathComponent(
-      "protocol/fixtures/local-preview/v0.3/session-flow.messages.json"
+      "protocol/fixtures/local-preview/v0.4/session-flow.messages.json"
     )
     if manager.fileExists(atPath: candidate.path) {
       guard

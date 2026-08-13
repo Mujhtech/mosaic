@@ -12,7 +12,8 @@ import Foundation
 // never `inactive`. `inactive` is a claim about a person and may only ever come
 // from a snapshot Mosaic issued and this SDK fully accepted.
 
-public let mosaicAuthoritativeEntitlementContractVersion = "1"
+/// Authoritative Entitlement `2` — the one version of this contract (ADR-0028).
+public let mosaicAuthoritativeEntitlementContractVersion = "2"
 
 // MARK: - Closed contract vocabularies
 

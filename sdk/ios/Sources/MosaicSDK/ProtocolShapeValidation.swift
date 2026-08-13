@@ -28,17 +28,10 @@ func isSafeMosaicV03ExternalURL(_ raw: String) -> Bool {
   return true
 }
 
-/// The shape gate for every supported contract.
-///
-/// `0.4` is a pure superset of `0.3` apart from two removals, so this is one
-/// validator parameterized by version rather than two that would have to be
-/// kept in step by hand. Every version-specific branch below names the contract
-/// it belongs to.
+/// The shape gate for the Paywall Protocol contract.
 struct MosaicProtocolShape {
-  let version: MosaicSchemaVersion
-
-  static func validate(_ root: [String: Any], version: MosaicSchemaVersion) throws {
-    try MosaicProtocolShape(version: version).document(root)
+  static func validate(_ root: [String: Any]) throws {
+    try MosaicProtocolShape().document(root)
   }
 
   private func document(_ root: [String: Any]) throws {
@@ -57,11 +50,22 @@ struct MosaicProtocolShape {
       compatibility["requiredCapabilities"], at: "$.compatibility.requiredCapabilities"
     )
     for (index, value) in requiredCapabilities.enumerated() {
-      try keys(
-        try object(value, at: "$.compatibility.requiredCapabilities[\(index)]"),
-        required: ["name", "version"],
-        at: "$.compatibility.requiredCapabilities[\(index)]"
-      )
+      let path = "$.compatibility.requiredCapabilities[\(index)]"
+      let capability = try object(value, at: path)
+      try keys(capability, required: ["name", "version"], at: path)
+      // A capability this reader does not know is reported as an unsupported
+      // capability rather than as a malformed document. Deferring to the model
+      // decoder would report the same rejection as a generic shape error, which
+      // tells an operator nothing about which capability was missing — and a
+      // retired capability such as `style.productCardStates` is exactly the case
+      // where that distinction matters.
+      guard let name = capability["name"] as? String else {
+        throw invalid("\(path).name", "expected_string")
+      }
+      guard MosaicCapabilityName(rawValue: name) != nil else {
+        throw MosaicProtocolError.unsupportedCapability(
+          name: name, version: capability["version"] as? String ?? "")
+      }
     }
 
     try localization(root["localization"], at: "$.localization")
@@ -122,13 +126,9 @@ struct MosaicProtocolShape {
 
   private func designSystem(_ value: Any?, at path: String) throws {
     let system = try object(value, at: path)
-    // The motion catalog is required in `0.4` and unknown in `0.3`, so an
-    // absent catalog and a `0.3` document are different failures.
     try keys(
       system,
-      required: version.supportsMotion
-        ? ["colors", "backgrounds", "shadows", "motions"]
-        : ["colors", "backgrounds", "shadows"],
+      required: ["colors", "backgrounds", "shadows", "motions"],
       at: path
     )
     let colors = try array(system["colors"], at: "\(path).colors")
@@ -305,22 +305,13 @@ struct MosaicProtocolShape {
           "type", "id", "marker", "gap", "markerColor", "items", "typography",
           "accessibility",
         ],
-        // `markerSize` is a `0.4` addition: `0.3` sizes the single checkmark it
-        // admits from the list's typography and has no field to override it.
-        optional: version.supportsMotion
-          ? ["markerSize", "appearance", "sizing", "outerInsets", "visibility"]
-          : ["appearance", "sizing", "outerInsets", "visibility"],
+        optional: ["markerSize", "appearance", "sizing", "outerInsets", "visibility"],
         at: path
       )
       try color(node["markerColor"], at: "\(path).markerColor")
-      // `0.3` carries the single constant `"checkmark"`, so a list cannot
-      // express a negated item; `0.4` consolidated onto Timeline's union and
-      // lets an item override the list's glyph.
-      if version.supportsMotion {
-        try marker(node["marker"] as Any, at: "\(path).marker")
-      } else if node["marker"] as? String != MosaicIconName.checkmark.rawValue {
-        throw invalid("\(path).marker", "invalid_marker_kind")
-      }
+      // Feature List shares Timeline's marker union, and an item may override
+      // the list's glyph.
+      try marker(node["marker"] as Any, at: "\(path).marker")
       try typography(node["typography"], at: "\(path).typography", allowsTruncation: false)
       let items = try array(node["items"], at: "\(path).items")
       guard !items.isEmpty else { throw invalid("\(path).items", "expected_nonempty_array") }
@@ -330,7 +321,7 @@ struct MosaicProtocolShape {
         try keys(
           item,
           required: ["id", "text"],
-          optional: version.supportsMotion ? ["marker"] : [],
+          optional: ["marker"],
           at: itemPath
         )
         try localizedText(item["text"], at: "\(itemPath).text")
@@ -436,7 +427,7 @@ struct MosaicProtocolShape {
     try optionalPresentation(node, at: path, appearanceKind: .box, sizingKind: .box)
   }
 
-  /// The marker union Feature List and Timeline share from `0.4` onwards.
+  /// The marker union Feature List and Timeline share.
   private func marker(_ value: Any, at path: String) throws {
     let marker = try object(value, at: path)
     switch marker["kind"] as? String {
@@ -465,7 +456,6 @@ struct MosaicProtocolShape {
   }
 
   private func motion(_ value: Any, at path: String, allows members: Set<String>) throws {
-    guard version.supportsMotion else { throw invalid(path, "unsupported_property") }
     let motion = try object(value, at: path)
     guard !motion.isEmpty else { throw invalid(path, "expected_nonempty_object") }
     try keys(motion, required: [], optional: members, at: path)
@@ -752,9 +742,7 @@ struct MosaicProtocolShape {
       ],
       // Product Card admits motion without admitting visibility, so it names the
       // key rather than inheriting it.
-      optional: version.supportsMotion
-        ? ["sizing", "clipContent", "accessibility", "motion"]
-        : ["sizing", "clipContent", "accessibility"],
+      optional: ["sizing", "clipContent", "accessibility", "motion"],
       at: path
     )
     guard card["type"] as? String == "productCard" else {
@@ -833,7 +821,7 @@ struct MosaicProtocolShape {
         "type", "id", "placement", "direction", "gap", "mainAxisDistribution",
         "crossAxisAlignment", "children", "styles",
       ],
-      optional: version.supportsMotion ? ["sizing", "motion"] : ["sizing"],
+      optional: ["sizing", "motion"],
       at: path
     )
     if let value = badge["motion"] {
@@ -1211,17 +1199,16 @@ struct MosaicProtocolShape {
     }
   }
 
-  /// Every authored node in `0.4` may carry a `motion` block, and an authored
-  /// node is exactly a shape that admits `visibility`.
+  /// Every authored node may carry a `motion` block, and an authored node is
+  /// exactly a shape that admits `visibility`.
   ///
   /// Deriving the allowance from that rather than repeating `"motion"` at
   /// sixteen call sites means a component added later cannot silently reject
-  /// authored motion, and `0.3` cannot silently start accepting it. Product Card
-  /// and Product Badge admit motion without admitting visibility, so they name
-  /// the key themselves.
+  /// authored motion. Product Card and Product Badge admit motion without
+  /// admitting visibility, so they name the key themselves.
   private func permitted(_ required: Set<String>, _ optional: Set<String>) -> Set<String> {
     let all = required.union(optional)
-    guard version.supportsMotion, all.contains("visibility") else { return all }
+    guard all.contains("visibility") else { return all }
     return all.union(["motion"])
   }
 

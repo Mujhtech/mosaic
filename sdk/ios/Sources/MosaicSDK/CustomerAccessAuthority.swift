@@ -1,7 +1,6 @@
 import Foundation
 
 /// Authoritative Entitlement v2. The v1 snapshot remains embedded unchanged.
-public let mosaicAuthoritativeEntitlementAuthorityContractVersion = "2"
 
 public enum MosaicCustomerAccessAuthorityKind: String, Sendable, Equatable, Codable {
   case source
@@ -203,7 +202,7 @@ enum MosaicCustomerAuthorityCodec {
         "authoritativeEntitlementContractVersion", "recordType", "payload",
       ],
       root["authoritativeEntitlementContractVersion"] as? String
-        == mosaicAuthoritativeEntitlementAuthorityContractVersion,
+        == mosaicAuthoritativeEntitlementContractVersion,
       root["recordType"] as? String == "authorityUnavailable",
       var payload = root["payload"] as? [String: Any],
       Set(payload.keys) == ["scope", "result", "reason", "minimumSupport"],
@@ -217,7 +216,7 @@ enum MosaicCustomerAuthorityCodec {
     guard
       let strictData = try? MosaicCustomerCanonicalJSON.data([
         "authoritativeEntitlementContractVersion":
-          mosaicAuthoritativeEntitlementAuthorityContractVersion,
+          mosaicAuthoritativeEntitlementContractVersion,
         "recordType": "authorityUnavailable",
         "payload": payload,
       ]),
@@ -229,7 +228,7 @@ enum MosaicCustomerAuthorityCodec {
     guard
       let probeData = try? MosaicCustomerCanonicalJSON.data([
         "authoritativeEntitlementContractVersion":
-          mosaicAuthoritativeEntitlementAuthorityContractVersion,
+          mosaicAuthoritativeEntitlementContractVersion,
         "recordType": "authorityUnavailable",
         "payload": supportProbe,
       ]),
@@ -248,7 +247,7 @@ enum MosaicCustomerAuthorityCodec {
     try exact(root, ["authoritativeEntitlementContractVersion", "recordType", "payload"], "$")
     guard
       root["authoritativeEntitlementContractVersion"] as? String
-        == mosaicAuthoritativeEntitlementAuthorityContractVersion
+        == mosaicAuthoritativeEntitlementContractVersion
     else { throw MosaicCustomerEntitlementDecodingError.unsupportedContractVersion }
     let payload = try object(root["payload"], "payload")
 
@@ -270,12 +269,7 @@ enum MosaicCustomerAuthorityCodec {
         throw MosaicCustomerEntitlementDecodingError.invalidSemantics(
           code: "authority_digest_mismatch")
       }
-      let v1Data = try MosaicCustomerCanonicalJSON.data([
-        "authoritativeEntitlementContractVersion": mosaicAuthoritativeEntitlementContractVersion,
-        "recordType": "customerEntitlementSnapshot",
-        "payload": rawSnapshot,
-      ])
-      let decoded = try MosaicCustomerEntitlementCodec.decode(v1Data)
+      let decoded = try MosaicCustomerEntitlementCodec.decodeSnapshot(rawSnapshot)
       guard case .snapshot(let snapshot) = decoded.record, decoded.contentDigestValid else {
         throw MosaicCustomerEntitlementDecodingError.invalidSemantics(
           code: "embedded_snapshot_rejected")
@@ -294,12 +288,7 @@ enum MosaicCustomerAuthorityCodec {
         ["authority", "unchanged", "snapshotAuthorityDigest", "minimumSupport"],
         "payload")
       let rawUnchanged = try object(payload["unchanged"], "payload.unchanged")
-      let v1Data = try MosaicCustomerCanonicalJSON.data([
-        "authoritativeEntitlementContractVersion": mosaicAuthoritativeEntitlementContractVersion,
-        "recordType": "snapshotUnchanged",
-        "payload": rawUnchanged,
-      ])
-      let decoded = try MosaicCustomerEntitlementCodec.decode(v1Data)
+      let decoded = try MosaicCustomerEntitlementCodec.decodeUnchanged(rawUnchanged)
       guard case .unchanged(let confirmation) = decoded.record else {
         throw MosaicCustomerEntitlementDecodingError.invalidSemantics(
           code: "embedded_confirmation_rejected")
@@ -367,7 +356,7 @@ enum MosaicCustomerAuthorityCodec {
     }
     return try MosaicCustomerCanonicalJSON.data([
       "authoritativeEntitlementContractVersion":
-        mosaicAuthoritativeEntitlementAuthorityContractVersion,
+        mosaicAuthoritativeEntitlementContractVersion,
       "recordType": "customerEntitlementSnapshot",
       "payload": [
         "authority": rawAuthority,
@@ -431,7 +420,7 @@ enum MosaicCustomerAuthorityCodec {
       "minimumSupport")
     guard
       value["minimumContractVersion"] as? String
-        == mosaicAuthoritativeEntitlementAuthorityContractVersion
+        == mosaicAuthoritativeEntitlementContractVersion
     else { throw shape("minimumSupport.minimumContractVersion", "unsupported") }
     let window = try object(
       value["supportedAppVersionWindow"], "minimumSupport.supportedAppVersionWindow")
@@ -451,7 +440,7 @@ enum MosaicCustomerAuthorityCodec {
       throw shape("minimumSupport.requiredCapabilities", "authority_epoch_required")
     }
     return MosaicCustomerMinimumAccessSupport(
-      minimumContractVersion: mosaicAuthoritativeEntitlementAuthorityContractVersion,
+      minimumContractVersion: mosaicAuthoritativeEntitlementContractVersion,
       minimumSDKVersion: try version(
         value["minimumSdkVersion"], "minimumSupport.minimumSdkVersion"),
       supportedAppVersionWindow: .init(

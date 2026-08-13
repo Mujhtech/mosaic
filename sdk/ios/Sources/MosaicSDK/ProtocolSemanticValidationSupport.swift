@@ -1,6 +1,6 @@
 import Foundation
 
-extension MosaicProtocolV03Semantics {
+extension MosaicProtocolSemantics {
   static func validateNavigationGraph(
     initialScreenID: String,
     screenIDs: Set<String>,

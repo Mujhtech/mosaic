@@ -89,9 +89,9 @@ struct MosaicCustomerEntitlementCacheRecord: Codable, Sendable, Equatable {
 
   var binding: MosaicCustomerSnapshotBinding {
     MosaicCustomerSnapshotBinding(
-      contractVersion: authority == nil
-        ? mosaicAuthoritativeEntitlementContractVersion
-        : mosaicAuthoritativeEntitlementAuthorityContractVersion,
+      // One contract version, whether or not the record carried authority
+      // material (ADR-0028).
+      contractVersion: mosaicAuthoritativeEntitlementContractVersion,
       billingCustomerID: billingCustomerID, projectID: projectID, environmentID: environmentID,
       snapshotVersion: snapshotVersion, asOf: asOf, contentDigestValid: true)
   }

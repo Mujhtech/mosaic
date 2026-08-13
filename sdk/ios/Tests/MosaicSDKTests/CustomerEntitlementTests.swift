@@ -17,7 +17,8 @@ final class CustomerEntitlementVectorTests: XCTestCase {
   // device time backwards.
   func testFreshnessVectorTable() throws {
     let root = try entitlementReferenceVectors("entitlement-freshness-vectors.json")
-    XCTAssertEqual(root["contractVersion"] as? String, "1")
+    XCTAssertEqual(
+      root["contractVersion"] as? String, mosaicAuthoritativeEntitlementContractVersion)
     let vectors = try entitlementVectorList("entitlement-freshness-vectors.json")
     XCTAssertGreaterThanOrEqual(vectors.count, 12)
 

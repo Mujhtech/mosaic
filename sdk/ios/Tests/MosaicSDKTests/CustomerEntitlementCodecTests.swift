@@ -35,13 +35,15 @@ final class CustomerEntitlementCodecTests: XCTestCase {
   // SDK cannot read is caught in CI rather than in production.
   func testEveryCanonicalSnapshotFixtureDecodesWithAValidDigest() throws {
     let names = try authoritativeEntitlementFixtureNames(in: "snapshots")
-    XCTAssertGreaterThanOrEqual(names.count, 13)
+    XCTAssertGreaterThanOrEqual(names.count, 12)
 
     for name in names {
-      let data = try authoritativeEntitlementFixtureData("snapshots/\(name)")
+      let data = try entitlementSnapshotData(name)
       let decoded = try MosaicCustomerEntitlementCodec.decode(data)
       XCTAssertTrue(decoded.contentDigestValid, "digest for \(name)")
-      XCTAssertEqual(decoded.binding.contractVersion, "1", "binding for \(name)")
+      XCTAssertEqual(
+        decoded.binding.contractVersion, mosaicAuthoritativeEntitlementContractVersion,
+        "binding for \(name)")
     }
   }
 
@@ -76,17 +78,10 @@ final class CustomerEntitlementCodecTests: XCTestCase {
   // pending/empty constraints can be checked. A zero-valued confirmation would
   // slide freshness for a placeholder the contract says must be re-issued.
   func testSnapshotUnchangedStillRejectsVersionZero() throws {
-    guard
-      var root = try JSONSerialization.jsonObject(
-        with: authoritativeEntitlementFixtureData("snapshots/snapshot-unchanged.json"))
-        as? [String: Any],
-      var payload = root["payload"] as? [String: Any]
-    else { throw CanonicalFixtureLookupError.invalidShape }
-    payload["snapshotVersion"] = 0
-    root["payload"] = payload
-
-    XCTAssertThrowsError(
-      try MosaicCustomerEntitlementCodec.decode(JSONSerialization.data(withJSONObject: root)))
+    let mutated = try mutatedEntitlementRecord("snapshot-unchanged.json") { unchanged in
+      unchanged["snapshotVersion"] = 0
+    }
+    XCTAssertThrowsError(try MosaicCustomerEntitlementCodec.decode(mutated))
   }
 
   // Risk: the three behavioural fixtures encode product decisions that are easy
@@ -197,6 +192,14 @@ final class CustomerEntitlementCodecTests: XCTestCase {
         XCTAssertNoThrow(try MosaicCustomerEntitlementCodec.decode(data), name)
         continue
       }
+      if name == "unchanged-scope-mismatch.json" {
+        // An authority-scope rule, which lives in the authority envelope this
+        // codec deliberately looks past: it reads the snapshot or confirmation
+        // body and leaves the authority block to `MosaicCustomerAuthorityCodec`.
+        // `CustomerAccessAuthorityTests` owns the rejection.
+        XCTAssertNoThrow(try MosaicCustomerEntitlementCodec.decode(data), name)
+        continue
+      }
       if name == "different-customer-rejected.json"
         || name == "older-snapshot-version-rejected.json"
       {
@@ -266,7 +269,7 @@ final class CustomerEntitlementCodecTests: XCTestCase {
 
   func testSnapshotUnchangedDecodes() throws {
     let decoded = try MosaicCustomerEntitlementCodec.decode(
-      try authoritativeEntitlementFixtureData("snapshots/snapshot-unchanged.json"))
+      try entitlementSnapshotData("snapshot-unchanged.json"))
     guard case .unchanged(let confirmation) = decoded.record else {
       return XCTFail("expected an unchanged confirmation")
     }
@@ -278,7 +281,7 @@ final class CustomerEntitlementCodecTests: XCTestCase {
 
   private func snapshotFixture(_ name: String) throws -> MosaicCustomerEntitlementSnapshot {
     let decoded = try MosaicCustomerEntitlementCodec.decode(
-      try authoritativeEntitlementFixtureData("snapshots/\(name)"))
+      try entitlementSnapshotData(name))
     guard case .snapshot(let snapshot) = decoded.record else {
       throw CanonicalFixtureLookupError.invalidShape
     }
@@ -288,13 +291,6 @@ final class CustomerEntitlementCodecTests: XCTestCase {
   private func mutatedSnapshot(
     _ name: String, _ mutation: (inout [String: Any]) -> Void
   ) throws -> Data {
-    guard
-      var root = try JSONSerialization.jsonObject(
-        with: try authoritativeEntitlementFixtureData("snapshots/\(name)")) as? [String: Any],
-      var payload = root["payload"] as? [String: Any]
-    else { throw CanonicalFixtureLookupError.invalidShape }
-    mutation(&payload)
-    root["payload"] = payload
-    return try JSONSerialization.data(withJSONObject: root)
+    try mutatedEntitlementRecord(name, mutation)
   }
 }

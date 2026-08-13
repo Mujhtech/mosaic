@@ -1,6 +1,12 @@
 import Foundation
 
-enum MosaicConfigurationDeliveryV2Decoder {
+/// The placement-decision, entitlement, and release-envelope rules a
+/// Configuration Delivery release body must satisfy.
+///
+/// Named for what it decodes rather than for a delivery version: Delivery `3` is
+/// the only version (ADR-0028), and it reaches these rules by stripping its
+/// experiment material and handing the remaining release body straight here.
+enum MosaicConfigurationReleaseDecoder {
   private static let supportedFeatures: Set<String> = [
     "condition.all", "condition.any", "condition.not",
     "operator.equals", "operator.not_equals", "operator.in", "operator.not_in",
@@ -30,9 +36,8 @@ enum MosaicConfigurationDeliveryV2Decoder {
   }
 
   static func decode(
-    root: [String: Any], allowUnreferencedExperimentMaterial: Bool = false
+    release: [String: Any], allowUnreferencedExperimentMaterial: Bool = false
   ) throws -> MosaicConfigurationRelease {
-    let release = try object(root["release"], "$.release")
     try exact(
       release,
       [
@@ -182,7 +187,8 @@ enum MosaicConfigurationDeliveryV2Decoder {
       publishedAt: try timestamp(release["publishedAt"], "$.release.publishedAt"),
       contentDigest: digest)
     return .init(
-      metadata: metadata, projectID: projectID, placements: [], placementDecisions: decisions,
+      metadata: metadata, projectID: projectID, placements: base?.placements ?? [],
+      placementDecisions: decisions,
       paywallVersions: paywalls, productReferences: products, entitlementReferences: entitlements,
       assetReferences: assetReferences, experimentAssignments: [])
   }
@@ -237,11 +243,32 @@ enum MosaicConfigurationDeliveryV2Decoder {
     compatibility: [String: Any]
   ) throws -> MosaicConfigurationRelease? {
     guard !paywalls.isEmpty else { return nil }
+    // A release carries decision rule sets rather than a flat placement table,
+    // so the table is derived from them: a paywall's placement key is the key of
+    // the decision whose default outcome names it. This is what makes
+    // `MosaicConfigurationRelease.paywall(forPlacement:)` — and the public
+    // `resolve(placement:)` built on it — answer with the authored key instead of
+    // a positional placeholder. Rule evaluation is a separate question and stays
+    // with `decision(forPlacement:)`.
+    var keysByPaywallID: [String: String] = [:]
+    for raw in (release["placementDecisions"] as? [Any] ?? []) {
+      guard let envelope = raw as? [String: Any],
+        let ruleSet = envelope["ruleSet"] as? [String: Any],
+        let placementKey = ruleSet["placementKey"] as? String,
+        let outcome = ruleSet["defaultOutcome"] as? [String: Any],
+        outcome["type"] as? String == "paywall",
+        let paywallVersionID = outcome["paywallVersionId"] as? String
+      else { continue }
+      keysByPaywallID[paywallVersionID] = placementKey
+    }
     let placements: [[String: Any]] = try paywalls.enumerated().map { index, raw in
       let object = try object(raw, "paywall")
+      let id = try identifier(object["id"], "paywall.id")
       return [
-        "key": "v2_paywall_\(index)",
-        "paywallVersionId": try identifier(object["id"], "paywall.id"),
+        // A paywall no decision names is still addressable, positionally, so a
+        // release stays fully described by its placement table.
+        "key": keysByPaywallID[id] ?? "unreferenced_paywall_\(index)",
+        "paywallVersionId": id,
       ]
     }
     let paywallProductIDs = Set(
@@ -251,13 +278,13 @@ enum MosaicConfigurationDeliveryV2Decoder {
           try string($0, "paywall.productReferenceIds")
         }
       })
-    let legacyProducts = try products.compactMap { raw -> [String: Any]? in
+    let materialProducts = try products.compactMap { raw -> [String: Any]? in
       var item = try object(raw, "product")
       guard let id = item["id"] as? String, paywallProductIDs.contains(id) else { return nil }
       item.removeValue(forKey: "readiness")
       return item
     }
-    var legacyRelease: [String: Any] = [
+    var releaseMaterial: [String: Any] = [
       "id": release["id"]!, "number": release["number"]!,
       "environment": [
         "id": try object(release["environment"], "$.release.environment")["id"]!,
@@ -265,12 +292,11 @@ enum MosaicConfigurationDeliveryV2Decoder {
       ],
       "publishedAt": release["publishedAt"]!,
       "compatibility": ["paywallProtocols": [compatibility], "acceptance": "atomic"],
-      "placements": placements, "paywallVersions": paywalls, "productReferences": legacyProducts,
+      "placements": placements, "paywallVersions": paywalls, "productReferences": materialProducts,
       "assetReferences": assets,
     ]
-    legacyRelease["contentDigest"] = try DeliveryCanonicalJSON.digest(legacyRelease)
-    return try MosaicConfigurationDeliveryDecoder.decode(
-      DeliveryCanonicalJSON.data(["configurationDeliveryVersion": "1", "release": legacyRelease]))
+    releaseMaterial["contentDigest"] = try DeliveryCanonicalJSON.digest(releaseMaterial)
+    return try MosaicConfigurationReleaseMaterialDecoder.release(releaseMaterial)
   }
 
   private static func validateDecision(_ raw: Any, path: String) throws {

@@ -1,6 +1,6 @@
 # Mosaic Apple SDK — native rendering and local Placement decisions
 
-The SDK strictly decodes Mosaic Protocol 0.3 and renders it with native
+The SDK strictly decodes Mosaic Protocol 0.4 and renders it with native
 SwiftUI, and can receive validated draft and mock-commerce revisions from a
 local Mosaic Studio session over WebSockets. It preserves the Phase 1 bundled
 fallback and adds hosted Configuration Delivery v1–v3 plus the provider-neutral
@@ -246,9 +246,9 @@ development-host test process. Mosaic does not expose a macOS renderer.
   the analytics queue then do not survive relaunch, and
   `configurationStatus()` reports `delivery_persistence_unavailable`.
 
-## Protocol 0.3 rendering
+## Protocol 0.4 rendering
 
-Protocol 0.3 uses one to ten named screens.
+Protocol 0.4 uses one to ten named screens.
 The renderer starts at `initialScreenId`, keeps a presentation-local history,
 pushes Screen destinations, presents Sheet destinations with SwiftUI's native
 modal surface over the most recent Screen, and safely pops or dismisses with
@@ -271,7 +271,7 @@ vertically unbounded Scroll Container axis resolves to Fit and records
 
 ### Tabs, Timeline, Award, and Social Proof
 
-`0.3` adds four components. `tabs` presents two through eight labelled panels
+`0.4` carries four presentation components. `tabs` presents two through eight labelled panels
 with exactly one visible at a time, rendered as a native `Button` bar over a
 panel. The selected panel comes from the authored `initialTabId` — there is no
 positional default, so reordering the `tabs` array cannot change which panel
@@ -324,7 +324,7 @@ caller that is told it has a bug. `MosaicPaywallModel.isVisible(_:)` seeds its
 state from the accepted document, so the failure is unreachable there and traps
 rather than erasing an authored node.
 
-Protocol 0.3 also replaces the specialized action components with one native
+Protocol 0.4 also replaces the specialized action components with one native
 SwiftUI `Button` whose vertical or horizontal label may contain noninteractive
 protocol content. Purchase and restore buttons may supply
 `inProgressChildren`; while the provider is running, the button swaps content
@@ -446,7 +446,8 @@ struct PaywallPreview: View {
 ```
 
 The default endpoint is `ws://127.0.0.1:4317/preview`, the default session is
-`session_local_01`, and the client uses `mosaic.local-preview.v0.3`. A custom endpoint must remain local: localhost,
+`session_local_01`, and the client uses `mosaic.local-preview.v0.4`. A custom
+endpoint must remain local: localhost,
 loopback, private LAN, `.local`, IPv6 ULA, and IPv6 link-local hosts are
 accepted; public remote hosts are rejected.
 
@@ -475,7 +476,7 @@ preview overrides without rebuilding the application.
 
 The client reports the exact capabilities for the negotiated Protocol version
 without adding SwiftUI concepts to the platform-neutral contract. Tests consume
-the canonical Local Preview 0.3 flow directly from the repository.
+the canonical Local Preview 0.4 flow directly from the repository.
 
 ## Mock commerce
 
@@ -937,7 +938,7 @@ or full-screen cover. Bundled images and videos remain host-resolved through
 declared placeholder, poster, or colour fallback.
 
 The packaged resource is a byte-identical checked-in copy of the current
-`protocol/fixtures/v0.3/complete-paywall.json`. SwiftPM copies symbolic links
+`protocol/fixtures/v0.4/complete-paywall.json`. SwiftPM copies symbolic links
 without rebasing their targets, so using a repository-relative symlink would
 produce a broken fallback in a built package. A package test prevents the copy
 from drifting; it is not an SDK-owned schema or fixture fork.
@@ -963,10 +964,11 @@ from drifting; it is not an SDK-owned schema or fixture fork.
 - Marker glyphs are decorative in both components; spoken labels remain the
   protocol text. An `ordinal` marker is therefore not announced — position is
   conveyed by list order, not by reading the digit twice.
-- A `0.4` video background does not play under reduced motion: the declared
-  poster renders, then the declared fallback colour, and no player is built.
-  `0.3` documents keep `0.3`'s behaviour, per ADR-0027 ruling 3. Apple's
-  separate Video Autoplay switch is honoured on every document version.
+- A video background does not play under reduced motion: the declared poster
+  renders, then the declared fallback colour, and no player is built. This is
+  ADR-0027 ruling 3, and with `0.4` the only readable contract (ADR-0028) it
+  applies to every document. Apple's separate Video Autoplay switch is honoured
+  independently.
 
 ## Validation
 

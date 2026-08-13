@@ -102,9 +102,9 @@ public struct MosaicTimelineConnector: Decodable, Sendable, Equatable {
 ///
 /// A closed union: an unrecognised `kind` rejects the document rather than
 /// rendering an arbitrary substitute. `0.4` consolidated the two component
-/// vocabularies onto this one, so a Feature List can finally express a negated
-/// item — "not included" on a comparison paywall — which the single `"checkmark"`
-/// constant `0.3` carried could not.
+/// Feature List and Timeline share this vocabulary, so a Feature List can
+/// express a negated item — "not included" on a comparison paywall — which a
+/// single `"checkmark"` constant could not.
 public enum MosaicMarker: Decodable, Sendable, Equatable {
   case dot
   /// The item's or entry's 1-based position, formatted by the platform's locale
@@ -116,22 +116,6 @@ public enum MosaicMarker: Decodable, Sendable, Equatable {
   private enum Kind: String, Decodable { case dot, ordinal, icon }
 
   public init(from decoder: any Decoder) throws {
-    // `0.3` authors a Feature List marker as the bare string `"checkmark"`.
-    // Accepting it here is what lets one renderer draw both contracts: it is
-    // the same glyph the `0.4` icon arm names, so the rendering is identical
-    // and neither version needs a second marker type.
-    if let raw = try? decoder.singleValueContainer().decode(String.self) {
-      guard raw == MosaicIconName.checkmark.rawValue else {
-        throw DecodingError.dataCorrupted(
-          .init(
-            codingPath: decoder.codingPath,
-            debugDescription: "Protocol 0.3 admits only the checkmark marker."
-          )
-        )
-      }
-      self = .icon(name: .checkmark)
-      return
-    }
     let c = try decoder.container(keyedBy: CodingKeys.self)
     switch try c.decode(Kind.self, forKey: .kind) {
     case .dot: self = .dot

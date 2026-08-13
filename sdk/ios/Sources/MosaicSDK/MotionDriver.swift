@@ -115,11 +115,11 @@ public struct MosaicMotionAccessibility: Sendable, Equatable {
 
   /// `UIAccessibility.isVideoAutoplayEnabled`.
   ///
-  /// `0.3` specifies a video background as always autoplaying and control-free,
-  /// which can invalidate a customer's App Store Reduced Motion declaration.
-  /// `0.4` rules that a video background does not play under reduced motion, and
-  /// Apple gives users a second, narrower switch for exactly this; both are
-  /// honoured, because a user who turned off autoplaying video meant it.
+  /// An autoplaying, control-free video background can invalidate a customer's
+  /// App Store Reduced Motion declaration. The protocol rules that a video
+  /// background does not play under reduced motion, and Apple gives users a
+  /// second, narrower switch for exactly this; both are honoured, because a user
+  /// who turned off autoplaying video meant it.
   public let allowsVideoAutoplay: Bool
 
   public init(prefersReducedMotion: Bool, allowsVideoAutoplay: Bool = true) {
@@ -128,11 +128,9 @@ public struct MosaicMotionAccessibility: Sendable, Equatable {
   }
 
   // `permitsVideoPlayback` used to live here, combining the two signals. It is
-  // gone rather than left unused: whether a video may play now depends on the
-  // document's `schemaVersion` as well, and a public helper that answers the
-  // question without asking which contract it is answering for is one a caller
-  // would reasonably believe. `MosaicVideoBackgroundPresentation.resolve` is the
-  // single place that decides.
+  // gone rather than left unused: whether a video may play also depends on
+  // whether the host could resolve the asset at all, which this type cannot see.
+  // `MosaicVideoBackgroundPresentation.resolve` is the single place that decides.
 
   public static let unrestricted = MosaicMotionAccessibility(
     prefersReducedMotion: false, allowsVideoAutoplay: true)

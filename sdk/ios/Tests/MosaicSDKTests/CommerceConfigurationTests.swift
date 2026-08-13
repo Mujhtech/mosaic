@@ -92,18 +92,19 @@ final class CommerceConfigurationTests: XCTestCase {
     XCTAssertEqual(routedSecond, second)
   }
 
-  func testCanonicalRevenueCatSidecarDecodesOnlyForExactReleaseAssociation() throws {
+  func testCanonicalSidecarDecodesOnlyForExactReleaseAssociation() throws {
     let data = try commerceConfigurationFixtureData()
-    let association = revenueCatAssociation()
+    let association = storeKitAssociation()
     let configuration = try MosaicCommerceConfigurationDecoder.decode(
       data,
       association: association
     )
 
-    XCTAssertEqual(configuration.activeProvider.identity.id, "revenuecat")
+    XCTAssertEqual(configuration.activeProvider.identity.id, "app_store")
+    XCTAssertEqual(configuration.activeProvider.activation, .nativeStore)
     XCTAssertEqual(
       configuration.contentDigest,
-      "sha256:4449f3af7e8490aa7141070b427d0cf7d2ca86209d7e344ec85d51fe9f896176"
+      "sha256:4a306573de618a989765713f4ad9ed7134e6fc565aa4767134276eb8b51128f2"
     )
     XCTAssertEqual(
       configuration.productMappings.map(\.mosaicProductID),
@@ -111,13 +112,7 @@ final class CommerceConfigurationTests: XCTestCase {
     )
     XCTAssertEqual(
       configuration.productMappings.map(\.adapterMapping),
-      [
-        .directProduct,
-        .revenueCatPackage(
-          offeringIdentifier: "default",
-          packageIdentifier: "$rc_annual"
-        ),
-      ]
+      [.storeKitProduct, .storeKitProduct, .storeKitProduct]
     )
 
     let wrongAssociation = MosaicCommerceConfigurationAssociation(
@@ -138,11 +133,53 @@ final class CommerceConfigurationTests: XCTestCase {
     }
   }
 
+  /// The RevenueCat sidecar decodes, including the package mapping that no other
+  /// canonical configuration exercises.
+  ///
+  /// `revenueCatPackage` is the one adapter mapping that carries its own
+  /// operands — an offering and a package identifier — so a decoder that
+  /// flattened it to a direct product would route a purchase at the wrong SKU
+  /// while every other fixture still passed.
+  func testRevenueCatSidecarDecodesItsPackageMapping() throws {
+    let association = MosaicCommerceConfigurationAssociation(
+      environmentID: "environment_production",
+      applicationID: "application_ios",
+      storePlatform: .ios,
+      configurationReleaseID: "configuration_release_42",
+      configurationReleaseDigest:
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      mosaicProductIDs: ["mosaic_pro_monthly", "mosaic_pro_yearly", "mosaic_lifetime"],
+      mosaicProductTypes: [
+        "mosaic_pro_monthly": .subscription,
+        "mosaic_pro_yearly": .subscription,
+        "mosaic_lifetime": .oneTimeNonConsumable,
+      ]
+    )
+    let configuration = try MosaicCommerceConfigurationDecoder.decode(
+      try commerceConfigurationFixtureData(named: "revenuecat-configuration.json"),
+      association: association
+    )
+
+    XCTAssertEqual(configuration.activeProvider.identity.id, "revenuecat")
+    XCTAssertEqual(
+      configuration.activeProvider.activation,
+      .providerConnection(id: "provider_connection_revenuecat_production")
+    )
+    XCTAssertEqual(
+      configuration.productMappings.map(\.adapterMapping),
+      [
+        .directProduct,
+        .revenueCatPackage(offeringIdentifier: "default", packageIdentifier: "$rc_annual"),
+        .directProduct,
+      ]
+    )
+  }
+
   func testInvalidCandidatePreservesExactCacheAndReleaseChangeFailsClosed() async throws {
     let store = CommerceMemoryStore()
     let manager = MosaicCommerceConfigurationManager(store: store)
     let data = try commerceConfigurationFixtureData()
-    let association = revenueCatAssociation()
+    let association = storeKitAssociation()
     _ = await manager.bootstrap(association: association)
     _ = await manager.accept(data, source: .remote, association: association)
 
@@ -154,7 +191,7 @@ final class CommerceConfigurationTests: XCTestCase {
     guard case .preserved(let configuration, .remote, let diagnostic) = rejected else {
       return XCTFail("Expected the last exact accepted sidecar to be preserved.")
     }
-    XCTAssertEqual(configuration.id, "commerce_configuration_release_42_ios")
+    XCTAssertEqual(configuration.id, "commerce_configuration_storekit_42")
     XCTAssertEqual(diagnostic.code, "commerce_configuration_invalid_shape")
 
     let nextAssociation = MosaicCommerceConfigurationAssociation(
@@ -188,23 +225,23 @@ final class CommerceConfigurationTests: XCTestCase {
       provider: provider
     )
 
-    let load = await configured.loadProducts(identifiers: ["product_pro_monthly"])
+    let load = await configured.loadProducts(identifiers: ["mosaic_pro_monthly"])
     XCTAssertEqual(
       load,
       .loaded([
         MosaicProduct(
-          id: "product_pro_monthly",
+          id: "mosaic_pro_monthly",
           title: "Pro monthly",
           localizedPrice: "$9.99"
         )
       ])
     )
     let loadedMappingIDs = await provider.loadedMappingIDs()
-    XCTAssertEqual(loadedMappingIDs, ["mapping_acme_pro_monthly_android"])
-    let purchase = await configured.purchase(productID: "product_pro_monthly")
+    XCTAssertEqual(loadedMappingIDs, ["mapping_pro_monthly_local"])
+    let purchase = await configured.purchase(productID: "mosaic_pro_monthly")
     XCTAssertEqual(
       purchase,
-      .pending(productID: "product_pro_monthly", transactionID: nil)
+      .pending(productID: "mosaic_pro_monthly", transactionID: nil)
     )
 
     await provider.setPurchaseFailure(
@@ -218,11 +255,11 @@ final class CommerceConfigurationTests: XCTestCase {
         mosaicProductID: "wrong_product"
       )
     )
-    let failed = await configured.purchase(productID: "product_pro_monthly")
+    let failed = await configured.purchase(productID: "mosaic_pro_monthly")
     guard case .failed(let productID, let diagnosticCode, let diagnostic) = failed else {
       return XCTFail("Expected the custom Provider failure to remain explicit.")
     }
-    XCTAssertEqual(productID, "product_pro_monthly")
+    XCTAssertEqual(productID, "mosaic_pro_monthly")
     XCTAssertEqual(diagnosticCode, diagnostic.code)
     XCTAssertEqual(diagnostic.code, "commerce.purchaseFailed")
     XCTAssertEqual(
@@ -232,7 +269,7 @@ final class CommerceConfigurationTests: XCTestCase {
     XCTAssertTrue(diagnostic.retryable)
     XCTAssertNil(diagnostic.retryAfterSeconds)
     XCTAssertEqual(diagnostic.providerCode, "provider_failure")
-    XCTAssertEqual(diagnostic.mosaicProductID, "product_pro_monthly")
+    XCTAssertEqual(diagnostic.mosaicProductID, "mosaic_pro_monthly")
     XCTAssertEqual(diagnostic.recoveryAction, .retry)
     XCTAssertEqual(diagnostic.correlationID, "ios_provider_purchase_1")
   }
@@ -246,11 +283,11 @@ final class CommerceConfigurationTests: XCTestCase {
     let router = MosaicCommerceProviderRouter()
 
     try await router.install(configuration: configuration, provider: provider)
-    _ = await router.loadProducts(identifiers: ["product_pro_monthly"])
-    let initialPurchase = await router.purchase(productID: "product_pro_monthly")
+    _ = await router.loadProducts(identifiers: ["mosaic_pro_monthly"])
+    let initialPurchase = await router.purchase(productID: "mosaic_pro_monthly")
     XCTAssertEqual(
       initialPurchase,
-      .pending(productID: "product_pro_monthly", transactionID: nil)
+      .pending(productID: "mosaic_pro_monthly", transactionID: nil)
     )
 
     await provider.deferNextInvalidation()
@@ -259,7 +296,7 @@ final class CommerceConfigurationTests: XCTestCase {
     }
     await provider.waitForDeferredInvalidation()
 
-    let purchaseDuringReplacement = await router.purchase(productID: "product_pro_monthly")
+    let purchaseDuringReplacement = await router.purchase(productID: "mosaic_pro_monthly")
     guard
       case .providerUnavailable(
         let productID,
@@ -269,29 +306,29 @@ final class CommerceConfigurationTests: XCTestCase {
     else {
       return XCTFail("Replacement must expose a correlated unavailable diagnostic.")
     }
-    XCTAssertEqual(productID, "product_pro_monthly")
+    XCTAssertEqual(productID, "mosaic_pro_monthly")
     XCTAssertEqual(diagnosticCode, diagnostic.code)
     XCTAssertEqual(diagnostic.code, "commerce.configurationUnavailable")
     XCTAssertEqual(diagnostic.safeMessage, "Commerce configuration is unavailable.")
     XCTAssertTrue(diagnostic.retryable)
     XCTAssertEqual(diagnostic.providerCode, "provider_not_installed")
-    XCTAssertEqual(diagnostic.mosaicProductID, "product_pro_monthly")
+    XCTAssertEqual(diagnostic.mosaicProductID, "mosaic_pro_monthly")
     XCTAssertEqual(diagnostic.recoveryAction, .updateProviderConfiguration)
     XCTAssertTrue(diagnostic.correlationID.hasPrefix("ios_router_purchase_"))
 
     await provider.completeDeferredInvalidation()
     try await replacement.value
-    let purchaseBeforeReload = await router.purchase(productID: "product_pro_monthly")
+    let purchaseBeforeReload = await router.purchase(productID: "mosaic_pro_monthly")
     XCTAssertEqual(
       purchaseBeforeReload,
-      .productUnavailable(productID: "product_pro_monthly")
+      .productUnavailable(productID: "mosaic_pro_monthly")
     )
 
-    _ = await router.loadProducts(identifiers: ["product_pro_monthly"])
-    let purchaseAfterReload = await router.purchase(productID: "product_pro_monthly")
+    _ = await router.loadProducts(identifiers: ["mosaic_pro_monthly"])
+    let purchaseAfterReload = await router.purchase(productID: "mosaic_pro_monthly")
     XCTAssertEqual(
       purchaseAfterReload,
-      .pending(productID: "product_pro_monthly", transactionID: nil)
+      .pending(productID: "mosaic_pro_monthly", transactionID: nil)
     )
     let invalidationCount = await provider.invalidationCount()
     XCTAssertEqual(invalidationCount, 3)
@@ -306,8 +343,23 @@ final class CommerceConfigurationTests: XCTestCase {
       capabilities: [
         MosaicCommerceCapability(name: .productLoading, support: .supported),
         MosaicCommerceCapability(name: .subscriptions, support: .supported),
-        MosaicCommerceCapability(name: .restore, support: .supported),
+        // Drifts from the configuration, which declares `restore` outright.
+        MosaicCommerceCapability(
+          name: .restore,
+          support: .conditional,
+          reasonCode: "host.sessionRequired"
+        ),
         MosaicCommerceCapability(name: .activeEntitlementLookup, support: .supported),
+        MosaicCommerceCapability(
+          name: .asynchronousCommerceUpdates,
+          support: .unsupported,
+          reasonCode: "snapshot.pollOnly"
+        ),
+        MosaicCommerceCapability(
+          name: .localDeliveryAcceptance,
+          support: .unsupported,
+          reasonCode: "snapshot.noFinalizationBoundary"
+        ),
       ]
     )
 
@@ -321,12 +373,12 @@ final class CommerceConfigurationTests: XCTestCase {
         error as? MosaicConfiguredCommerceProviderError,
         .providerCapabilityMismatch(
           name: .restore,
-          expected: MosaicCommerceCapability(
+          expected: MosaicCommerceCapability(name: .restore, support: .supported),
+          actual: MosaicCommerceCapability(
             name: .restore,
             support: .conditional,
             reasonCode: "host.sessionRequired"
-          ),
-          actual: MosaicCommerceCapability(name: .restore, support: .supported)
+          )
         )
       )
     }
@@ -334,14 +386,14 @@ final class CommerceConfigurationTests: XCTestCase {
 
   func testHostedSidecarRequestAndMetadataUseFrozenWireContract() async throws {
     let data = try commerceConfigurationFixtureData()
-    let association = revenueCatAssociation()
+    let association = storeKitAssociation()
     let transport = CommerceTransportStub(
       response: MosaicCommerceConfigurationHTTPResponse(
         statusCode: 200,
         data: data,
         contentType: "application/vnd.mosaic.commerce-configuration+json;version=1",
         etag:
-          "\"sha256:4449f3af7e8490aa7141070b427d0cf7d2ca86209d7e344ec85d51fe9f896176\"",
+          "\"sha256:4a306573de618a989765713f4ad9ed7134e6fc565aa4767134276eb8b51128f2\"",
         configurationReleaseID: "configuration_release_42",
         cacheControl: "private, max-age=60"
       )
@@ -359,7 +411,7 @@ final class CommerceConfigurationTests: XCTestCase {
     guard case .accepted(let configuration, .remote) = result else {
       return XCTFail("Expected a valid hosted sidecar response.")
     }
-    XCTAssertEqual(configuration.id, "commerce_configuration_release_42_ios")
+    XCTAssertEqual(configuration.id, "commerce_configuration_storekit_42")
 
     let capturedRequest = await transport.request()
     let request = try XCTUnwrap(capturedRequest)
@@ -379,18 +431,6 @@ final class CommerceConfigurationTests: XCTestCase {
     )
   }
 
-  private func revenueCatAssociation() -> MosaicCommerceConfigurationAssociation {
-    MosaicCommerceConfigurationAssociation(
-      environmentID: "environment_production",
-      applicationID: "application_ios",
-      storePlatform: .ios,
-      configurationReleaseID: "configuration_release_42",
-      configurationReleaseDigest:
-        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      mosaicProductIDs: ["product_pro_monthly", "product_pro_yearly"]
-    )
-  }
-
   private func sdkLocalAssociation() -> MosaicCommerceConfigurationAssociation {
     MosaicCommerceConfigurationAssociation(
       environmentID: "environment_development",
@@ -399,7 +439,8 @@ final class CommerceConfigurationTests: XCTestCase {
       configurationReleaseID: "configuration_release_local_7",
       configurationReleaseDigest:
         "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      mosaicProductIDs: ["product_pro_monthly"]
+      mosaicProductIDs: ["mosaic_pro_monthly"],
+      mosaicProductTypes: ["mosaic_pro_monthly": .subscription]
     )
   }
 
@@ -481,15 +522,24 @@ private actor RecordingCommerceProvider: MosaicCommerceProvider {
       displayName: "Acme Commerce",
       adapterVersion: "2.3.1"
     ),
+    /// Exactly what `sdk-local-configuration.json` declares. A provider that
+    /// reports anything else is drift, which is what the mismatch gate exists to
+    /// catch.
     capabilities: [MosaicCommerceCapability] = [
       MosaicCommerceCapability(name: .productLoading, support: .supported),
       MosaicCommerceCapability(name: .subscriptions, support: .supported),
-      MosaicCommerceCapability(
-        name: .restore,
-        support: .conditional,
-        reasonCode: "host.sessionRequired"
-      ),
+      MosaicCommerceCapability(name: .restore, support: .supported),
       MosaicCommerceCapability(name: .activeEntitlementLookup, support: .supported),
+      MosaicCommerceCapability(
+        name: .asynchronousCommerceUpdates,
+        support: .unsupported,
+        reasonCode: "snapshot.pollOnly"
+      ),
+      MosaicCommerceCapability(
+        name: .localDeliveryAcceptance,
+        support: .unsupported,
+        reasonCode: "snapshot.noFinalizationBoundary"
+      ),
     ]
   ) {
     self.identity = identity

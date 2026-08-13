@@ -30,7 +30,7 @@ func canonicalFixtureURL(filePath: StaticString = #filePath) throws -> URL {
       directory
       .appendingPathComponent("protocol")
       .appendingPathComponent("fixtures")
-      .appendingPathComponent("v0.3")
+      .appendingPathComponent("v0.4")
       .appendingPathComponent("complete-paywall.json")
     if fileManager.fileExists(atPath: candidate.path) {
       return candidate
@@ -43,36 +43,6 @@ func canonicalFixtureURL(filePath: StaticString = #filePath) throws -> URL {
 
 func canonicalFixtureData() throws -> Data {
   try Data(contentsOf: canonicalFixtureURL())
-}
-
-func v03FixtureURL(named name: String = "complete-paywall.json") throws -> URL {
-  let fileManager = FileManager.default
-  var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-
-  while directory.path != "/" {
-    let candidate =
-      directory
-      .appendingPathComponent("protocol")
-      .appendingPathComponent("fixtures")
-      .appendingPathComponent("v0.3")
-      .appendingPathComponent(name)
-    if fileManager.fileExists(atPath: candidate.path) {
-      return candidate
-    }
-    directory.deleteLastPathComponent()
-  }
-
-  throw CanonicalFixtureLookupError.notFound
-}
-
-func v03FixtureData(named name: String = "complete-paywall.json") throws -> Data {
-  try Data(contentsOf: v03FixtureURL(named: name))
-}
-
-func v03Document(named name: String = "complete-paywall.json") throws
-  -> MosaicPaywallDocument
-{
-  try MosaicProtocolDecoder.decode(v03FixtureData(named: name))
 }
 
 func v04FixtureURL(named name: String = "complete-paywall.json") throws -> URL {
@@ -112,7 +82,9 @@ func v04FixtureNames(in subdirectory: String) throws -> [String] {
     .sorted()
 }
 
-func deliveryFixtureURL(named name: String = "valid-release.json") throws -> URL {
+/// One canonical Configuration Delivery fixture. `rich-release.json` is the
+/// ordinary single-paywall release.
+func deliveryFixtureURL(named name: String = "rich-release.json") throws -> URL {
   let fileManager = FileManager.default
   var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
   while directory.path != "/" {
@@ -121,7 +93,7 @@ func deliveryFixtureURL(named name: String = "valid-release.json") throws -> URL
       .appendingPathComponent("protocol")
       .appendingPathComponent("fixtures")
       .appendingPathComponent("configuration-delivery")
-      .appendingPathComponent("v1")
+      .appendingPathComponent("v3")
       .appendingPathComponent(name)
     if fileManager.fileExists(atPath: candidate.path) { return candidate }
     directory.deleteLastPathComponent()
@@ -129,7 +101,7 @@ func deliveryFixtureURL(named name: String = "valid-release.json") throws -> URL
   throw CanonicalFixtureLookupError.notFound
 }
 
-func deliveryFixtureData(named name: String = "valid-release.json") throws -> Data {
+func deliveryFixtureData(named name: String = "rich-release.json") throws -> Data {
   try Data(contentsOf: deliveryFixtureURL(named: name))
 }
 
@@ -146,7 +118,24 @@ func phase5FixtureData(_ relativePath: String) throws -> Data {
 }
 
 func analyticsFixtureData(_ relativePath: String) throws -> Data {
-  try phase5FixtureData("analytics-event/v1/\(relativePath)")
+  try phase5FixtureData("analytics-event/v2/\(relativePath)")
+}
+
+/// The canonical Analytics Event fixture names in one corpus directory.
+func analyticsFixtureNames(in subdirectory: String) throws -> [String] {
+  let fileManager = FileManager.default
+  var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+  while directory.path != "/" {
+    let candidate = directory.appendingPathComponent(
+      "protocol/fixtures/analytics-event/v2/\(subdirectory)")
+    if fileManager.fileExists(atPath: candidate.path) {
+      return try fileManager.contentsOfDirectory(atPath: candidate.path)
+        .filter { $0.hasSuffix(".json") }
+        .sorted()
+    }
+    directory.deleteLastPathComponent()
+  }
+  throw CanonicalFixtureLookupError.notFound
 }
 
 /// One canonical bucketing vector from
@@ -239,18 +228,85 @@ func entitlementVectorList(_ file: String) throws -> [[String: Any]] {
   return vectors
 }
 
-/// One canonical Authoritative Entitlement v1 fixture.
+/// One canonical Authoritative Entitlement fixture. The contract carries a
+/// single version (ADR-0028), so there is one accessor.
 func authoritativeEntitlementFixtureData(_ relativePath: String) throws -> Data {
-  try phase5FixtureData("authoritative-entitlement/v1/\(relativePath)")
-}
-
-func authoritativeEntitlementV2FixtureData(_ relativePath: String) throws -> Data {
   try phase5FixtureData("authoritative-entitlement/v2/\(relativePath)")
 }
 
-/// Builds an iOS-local v2 wrapper around a contract-valid v1 snapshot. The
-/// canonical authority digest is recomputed so transition tests exercise epoch
-/// ordering rather than corruption handling.
+/// One canonical Authoritative Entitlement snapshot record, by scenario name.
+///
+/// Most scenarios live under `snapshots/`. The two that are not scenario
+/// variants sit at the corpus root: `ios-full-snapshot.json` is the ordinary
+/// active-subscription snapshot and `snapshot-unchanged.json` is the unchanged
+/// confirmation. Mapping them here keeps every suite naming the scenario rather
+/// than the file layout.
+func entitlementSnapshotData(_ name: String) throws -> Data {
+  switch name {
+  case "active-subscription.json":
+    try authoritativeEntitlementFixtureData("ios-full-snapshot.json")
+  case "snapshot-unchanged.json":
+    try authoritativeEntitlementFixtureData("snapshot-unchanged.json")
+  default:
+    try authoritativeEntitlementFixtureData("snapshots/\(name)")
+  }
+}
+
+/// Mutates the body of a canonical entitlement record without recomputing any
+/// digest.
+///
+/// The body is `payload.snapshot` on a snapshot record and `payload.unchanged`
+/// on a confirmation. Digests are deliberately left stale: callers use this to
+/// prove either that a mutation is rejected outright or that the content digest
+/// notices it. A variant that must be *accepted* goes through
+/// `authoritativeEntitlementSnapshotVariant`, which recomputes both digests.
+func mutatedEntitlementRecord(
+  _ name: String,
+  _ mutation: (inout [String: Any]) -> Void
+) throws -> Data {
+  guard
+    var root = try JSONSerialization.jsonObject(with: try entitlementSnapshotData(name))
+      as? [String: Any],
+    var payload = root["payload"] as? [String: Any],
+    let bodyKey = ["snapshot", "unchanged"].first(where: { payload[$0] is [String: Any] }),
+    var body = payload[bodyKey] as? [String: Any]
+  else { throw CanonicalFixtureLookupError.invalidShape }
+  mutation(&body)
+  payload[bodyKey] = body
+  root["payload"] = payload
+  return try JSONSerialization.data(withJSONObject: root)
+}
+
+/// One body of a canonical entitlement record: `snapshot` on a snapshot record,
+/// `unchanged` on a confirmation.
+func authoritativeEntitlementRecordBody(_ name: String, key: String) throws -> [String: Any] {
+  guard
+    let root = try JSONSerialization.jsonObject(with: entitlementSnapshotData(name))
+      as? [String: Any],
+    let payload = root["payload"] as? [String: Any],
+    let body = payload[key] as? [String: Any]
+  else { throw CanonicalFixtureLookupError.invalidShape }
+  return body
+}
+
+/// The `snapshot` a v2 record wraps.
+///
+/// v2 nests what used to be the whole payload under `payload.snapshot`, beside
+/// `authority`, `snapshotAuthorityDigest`, and `minimumSupport`. Tests that
+/// assert on snapshot fields go through here so the extra hop is stated once.
+func authoritativeEntitlementSnapshot(_ relativePath: String) throws -> [String: Any] {
+  guard
+    let root = try JSONSerialization.jsonObject(
+      with: entitlementSnapshotData(relativePath)) as? [String: Any],
+    let payload = root["payload"] as? [String: Any],
+    let snapshot = payload["snapshot"] as? [String: Any]
+  else { throw CanonicalFixtureLookupError.invalidShape }
+  return snapshot
+}
+
+/// Builds an iOS-local authority wrapper around the canonical active-subscription
+/// snapshot. The canonical authority digest is recomputed so transition tests
+/// exercise epoch ordering rather than corruption handling.
 func authoritativeEntitlementV2SnapshotVariant(
   authorityEpoch: Int64,
   authorityKind: MosaicCustomerAccessAuthorityKind,
@@ -259,12 +315,7 @@ func authoritativeEntitlementV2SnapshotVariant(
   applicationID: String = "fixture-application-ios",
   minimumAppVersion: String = "4.0.0"
 ) throws -> Data {
-  guard
-    let v1Root = try JSONSerialization.jsonObject(
-      with: authoritativeEntitlementFixtureData("snapshots/active-subscription.json"))
-      as? [String: Any],
-    var snapshot = v1Root["payload"] as? [String: Any]
-  else { throw CanonicalFixtureLookupError.invalidShape }
+  var snapshot = try authoritativeEntitlementSnapshot("active-subscription.json")
   snapshot["snapshotVersion"] = snapshotVersion
   if snapshotVersion == 0 {
     snapshot.removeValue(forKey: "previousSnapshotVersion")
@@ -318,7 +369,7 @@ func authoritativeEntitlementFixtureNames(in subdirectory: String) throws -> [St
   var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
   while directory.path != "/" {
     let candidate = directory.appendingPathComponent(
-      "protocol/fixtures/authoritative-entitlement/v1/\(subdirectory)")
+      "protocol/fixtures/authoritative-entitlement/v2/\(subdirectory)")
     if fileManager.fileExists(atPath: candidate.path) {
       return try fileManager.contentsOfDirectory(atPath: candidate.path)
         .filter { $0.hasSuffix(".json") }
@@ -330,41 +381,58 @@ func authoritativeEntitlementFixtureNames(in subdirectory: String) throws -> [St
 }
 
 /// Builds an iOS-local, contract-valid snapshot variant without adding or
-/// modifying a canonical shared fixture. The content digest is recomputed after
-/// the mutation so sync tests exercise the acceptance gate rather than the
-/// corruption path.
+/// modifying a canonical shared fixture.
+///
+/// The mutation applies to the inner `payload.snapshot`. Both digests are
+/// recomputed afterwards — the snapshot's own `contentDigest` and the
+/// `snapshotAuthorityDigest` over `{authority, snapshot}` — so sync tests
+/// exercise the acceptance gate rather than the corruption path.
 func authoritativeEntitlementSnapshotVariant(
   _ fixtureName: String = "active-subscription.json",
   mutation: (inout [String: Any]) -> Void
 ) throws -> Data {
   guard
     var root = try JSONSerialization.jsonObject(
-      with: authoritativeEntitlementFixtureData("snapshots/\(fixtureName)")) as? [String: Any],
-    var payload = root["payload"] as? [String: Any]
+      with: entitlementSnapshotData(fixtureName)) as? [String: Any],
+    var payload = root["payload"] as? [String: Any],
+    var snapshot = payload["snapshot"] as? [String: Any],
+    let authority = payload["authority"]
   else { throw CanonicalFixtureLookupError.invalidShape }
 
-  mutation(&payload)
-  var digestInput = payload
+  mutation(&snapshot)
+  var digestInput = snapshot
   digestInput.removeValue(forKey: "contentDigest")
-  payload["contentDigest"] = try MosaicCustomerCanonicalJSON.digest(digestInput)
+  snapshot["contentDigest"] = try MosaicCustomerCanonicalJSON.digest(digestInput)
+  payload["snapshot"] = snapshot
+  payload["snapshotAuthorityDigest"] = try MosaicCustomerCanonicalJSON.digest([
+    "authority": authority, "snapshot": snapshot,
+  ])
   root["payload"] = payload
   return try MosaicCustomerCanonicalJSON.data(root)
 }
 
+/// The never-projected placeholder for the canonical customer: `snapshotVersion`
+/// 0, no entries, no sources, projection pending.
+///
+/// Synthesized rather than read from `source-snapshot.json`, which is the
+/// corpus's *source-authority* scenario and belongs to a different customer.
+/// Tests that replace the placeholder with version one need both records to
+/// describe the same customer, or the replacement is a binding mismatch rather
+/// than the monotonic replacement being exercised.
 func neverProjectedEntitlementPlaceholderData() throws -> Data {
-  try authoritativeEntitlementSnapshotVariant { payload in
-    payload["snapshotId"] = "pending.fixture-customer-0001"
-    payload["snapshotVersion"] = 0
-    payload.removeValue(forKey: "previousSnapshotVersion")
-    payload["entries"] = []
-    payload["sources"] = []
-    payload["projectionStatus"] = [
+  try authoritativeEntitlementSnapshotVariant { snapshot in
+    snapshot["snapshotId"] = "pending.fixture-customer-0001"
+    snapshot["snapshotVersion"] = 0
+    snapshot.removeValue(forKey: "previousSnapshotVersion")
+    snapshot["entries"] = []
+    snapshot["sources"] = []
+    snapshot["projectionStatus"] = [
       "state": "pending",
       "lastProjectedAt": "2026-07-28T11:00:00.000Z",
       "pendingFactCount": 0,
     ]
-    payload["changeReason"] = "initial_projection"
-    payload["entityTag"] = "pending-cs-0001-v0"
+    snapshot["changeReason"] = "initial_projection"
+    snapshot["entityTag"] = "pending-cs-0001-v0"
   }
 }
 
@@ -379,8 +447,10 @@ func contractTimestamp(_ value: String) throws -> Date {
   return date
 }
 
+/// One canonical Commerce Configuration fixture. `storekit-configuration.json`
+/// is the iOS-relevant one and supersedes the retired RevenueCat fixture.
 func commerceConfigurationFixtureData(
-  named name: String = "revenuecat-configuration.json"
+  named name: String = "storekit-configuration.json"
 ) throws -> Data {
   let fileManager = FileManager.default
   var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -390,7 +460,7 @@ func commerceConfigurationFixtureData(
       .appendingPathComponent("protocol")
       .appendingPathComponent("fixtures")
       .appendingPathComponent("commerce-configuration")
-      .appendingPathComponent("v1")
+      .appendingPathComponent("v2")
       .appendingPathComponent(name)
     if fileManager.fileExists(atPath: candidate.path) {
       return try Data(contentsOf: candidate)
@@ -431,7 +501,7 @@ func localPreviewFlowURL(filePath: StaticString = #filePath) throws -> URL {
       .appendingPathComponent("protocol")
       .appendingPathComponent("fixtures")
       .appendingPathComponent("local-preview")
-      .appendingPathComponent("v0.3")
+      .appendingPathComponent("v0.4")
       .appendingPathComponent("session-flow.messages.json")
     if fileManager.fileExists(atPath: candidate.path) {
       return candidate
@@ -487,10 +557,10 @@ func canonicalFixtureReplacing(_ original: String, with replacement: String) thr
   return source.replacingOccurrences(of: original, with: replacement)
 }
 
-/// Mutates the first node of a type in a `0.3` document.
+/// Mutates the first node of a type in a document.
 ///
-/// Every `0.3` document declares `screens`; the retired top-level `layout`
-/// shape it used to also accept no longer exists.
+/// Every document declares `screens`; the retired top-level `layout` shape an
+/// earlier contract also accepted no longer exists.
 func mutateFirstNode(
   type: String,
   in object: inout [String: Any],
@@ -498,11 +568,11 @@ func mutateFirstNode(
 ) throws {
   // Disambiguates from the private same-named stack walker below.
   let mutate: (String, inout [String: Any], (inout [String: Any]) -> Void) throws -> Void =
-    mutateFirstV03Node
+    mutateFirstNodeOfType
   try mutate(type, &object, mutation)
 }
 
-func mutateFirstV03Node(
+func mutateFirstNodeOfType(
   type: String,
   in object: inout [String: Any],
   mutation: (inout [String: Any]) -> Void
@@ -514,7 +584,7 @@ func mutateFirstV03Node(
     guard var layout = screens[index]["layout"] as? [String: Any],
       var content = layout["content"] as? [String: Any]
     else { continue }
-    if mutateFirstV03Node(type: type, in: &content, mutation: mutation) {
+    if mutateFirstNodeOfType(type: type, in: &content, mutation: mutation) {
       layout["content"] = content
       screens[index]["layout"] = layout
       object["screens"] = screens
@@ -524,13 +594,13 @@ func mutateFirstV03Node(
   throw CanonicalFixtureLookupError.invalidShape
 }
 
-func mutateV03Node(
+func mutateNode(
   id: String,
   in object: inout [String: Any],
   mutation: (inout [String: Any]) -> Void
 ) throws {
   var value: Any = object
-  guard mutateV03Node(id: id, in: &value, mutation: mutation),
+  guard mutateNode(id: id, in: &value, mutation: mutation),
     let updated = value as? [String: Any]
   else {
     throw CanonicalFixtureLookupError.invalidShape
@@ -538,7 +608,7 @@ func mutateV03Node(
   object = updated
 }
 
-private func mutateV03Node(
+private func mutateNode(
   id: String,
   in value: inout Any,
   mutation: (inout [String: Any]) -> Void
@@ -551,7 +621,7 @@ private func mutateV03Node(
     }
     for key in object.keys {
       guard var nested = object[key] else { continue }
-      if mutateV03Node(id: id, in: &nested, mutation: mutation) {
+      if mutateNode(id: id, in: &nested, mutation: mutation) {
         object[key] = nested
         value = object
         return true
@@ -560,7 +630,7 @@ private func mutateV03Node(
   } else if var values = value as? [Any] {
     for index in values.indices {
       var nested = values[index]
-      if mutateV03Node(id: id, in: &nested, mutation: mutation) {
+      if mutateNode(id: id, in: &nested, mutation: mutation) {
         values[index] = nested
         value = values
         return true
@@ -570,7 +640,7 @@ private func mutateV03Node(
   return false
 }
 
-private func mutateFirstV03Node(
+private func mutateFirstNodeOfType(
   type: String,
   in stack: inout [String: Any],
   mutation: (inout [String: Any]) -> Void
@@ -585,7 +655,7 @@ private func mutateFirstV03Node(
     let childType = children[index]["type"] as? String
     if childType == "stack" {
       var nested = children[index]
-      if mutateFirstV03Node(type: type, in: &nested, mutation: mutation) {
+      if mutateFirstNodeOfType(type: type, in: &nested, mutation: mutation) {
         children[index] = nested
         stack["children"] = children
         return true
@@ -595,7 +665,7 @@ private func mutateFirstV03Node(
     {
       for pageIndex in pages.indices {
         guard var content = pages[pageIndex]["content"] as? [String: Any] else { continue }
-        if mutateFirstV03Node(type: type, in: &content, mutation: mutation) {
+        if mutateFirstNodeOfType(type: type, in: &content, mutation: mutation) {
           pages[pageIndex]["content"] = content
           children[index]["pages"] = pages
           stack["children"] = children
@@ -606,7 +676,7 @@ private func mutateFirstV03Node(
       for key in ["children", "inProgressChildren"] {
         guard var buttonChildren = children[index][key] as? [[String: Any]] else { continue }
         var wrapper: [String: Any] = ["children": buttonChildren]
-        if mutateFirstV03Node(type: type, in: &wrapper, mutation: mutation),
+        if mutateFirstNodeOfType(type: type, in: &wrapper, mutation: mutation),
           let updated = wrapper["children"] as? [[String: Any]]
         {
           buttonChildren = updated
@@ -618,7 +688,7 @@ private func mutateFirstV03Node(
     } else if childType == "productSelector" {
       guard let cards = children[index]["cards"] as? [[String: Any]] else { continue }
       var wrapper: [String: Any] = ["children": cards]
-      if mutateFirstV03Node(type: type, in: &wrapper, mutation: mutation),
+      if mutateFirstNodeOfType(type: type, in: &wrapper, mutation: mutation),
         let updated = wrapper["children"] as? [[String: Any]]
       {
         children[index]["cards"] = updated
@@ -628,7 +698,7 @@ private func mutateFirstV03Node(
     } else if childType == "productCard" || childType == "productBadge" {
       guard let descendants = children[index]["children"] as? [[String: Any]] else { continue }
       var wrapper: [String: Any] = ["children": descendants]
-      if mutateFirstV03Node(type: type, in: &wrapper, mutation: mutation),
+      if mutateFirstNodeOfType(type: type, in: &wrapper, mutation: mutation),
         let updated = wrapper["children"] as? [[String: Any]]
       {
         children[index]["children"] = updated

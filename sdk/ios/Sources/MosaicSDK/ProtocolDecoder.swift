@@ -40,13 +40,15 @@ public enum MosaicProtocolDecoder {
       )
     }
     // Versions are exact identifiers. A reader declaring `0.4` accepts only
-    // `0.4`, and the rules each document is held to are chosen here, once,
-    // rather than inferred later from the shape of what decoded.
-    guard let version = MosaicSchemaVersion(rawValue: schemaVersion) else {
+    // `0.4` and never infers support from numeric ordering, so a document at any
+    // other version is rejected atomically here — the caller then resolves
+    // through cached configuration, bundled fallback, and finally configuration
+    // unavailable.
+    guard MosaicSchemaVersion(rawValue: schemaVersion) != nil else {
       throw MosaicProtocolError.unsupportedSchemaVersion(schemaVersion)
     }
 
-    try MosaicProtocolShape.validate(root, version: version)
+    try MosaicProtocolShape.validate(root)
 
     let document: MosaicPaywallDocument
     do {
@@ -60,7 +62,7 @@ public enum MosaicProtocolDecoder {
       throw MosaicProtocolError.invalidShape(path: "$", reason: "type_or_enum_mismatch")
     }
 
-    try MosaicProtocolV03Semantics.validate(document, version: version)
+    try MosaicProtocolSemantics.validate(document)
     return document
   }
 
