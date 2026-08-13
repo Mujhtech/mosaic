@@ -1,0 +1,25 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "entitlementSyncRequest",
+  "payload": {
+    "knownAuthorityEpoch": 5,
+    "knownSnapshotVersion": 4,
+    "knownSnapshotAuthorityDigest": "sha256:b659fc1560544193b6599e1e4a82861a55cae857fcad73fa340b611abe877c34",
+    "request": {
+      "applicationId": "fixture-application-ios",
+      "platform": "ios",
+      "appVersion": "4.2.0",
+      "sdkVersion": "2.0.0",
+      "supportedContractVersions": [
+        "2"
+      ],
+      "capabilities": [
+        "authority_epoch",
+        "authority_scope",
+        "urgent_authority_sync",
+        "mosaic_authoritative_targeting"
+      ]
+    },
+    "correlationId": "fixture-sync-correlation-0001"
+  }
+}

@@ -456,6 +456,10 @@
         "request": {
           "$ref": "#/$defs/requestMetadata"
         },
+        "correlationId": {
+          "description": "Opaque client-generated identifier correlating this request with the response and with the client's own logs. Optional: it is diagnostic only and never selects, binds, or infers customer, tenant, scope, or authority. Carried forward from Contract 1, where it was required on the sync request; the entitlement check and restore requests still require it.",
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+        },
         "requestedEntitlementKeys": {
           "description": "Narrows the response to these keys. Unrecognized keys are project data and are accepted; a key the Project does not define simply contributes no entry. Carried forward from Contract 1.",
           "type": "array",

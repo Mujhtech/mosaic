@@ -1,6 +1,12 @@
 # Configuration Delivery Contract v3
 
-Configuration Delivery `3` is the **only** Configuration Delivery contract.
+Configuration Delivery `3` is the **only** Configuration Delivery contract, and
+is a **draft**: it structurally embeds Paywall Protocol `0.4`, which is a draft,
+and a contract cannot carry a stronger guarantee than the one it carries. It was
+`approved` until 2026-08-13; see
+[ADR-0028](../architecture/decisions/0028-single-version-contracts.md) on
+provisional pre-GA statuses.
+
 Delivery `1` and `2` were deleted under the single-version policy in
 [ADR-0028](../architecture/decisions/0028-single-version-contracts.md), and v3
 was re-pinned to carry **Paywall Protocol `0.4`**: `paywallVersion.protocolVersion`

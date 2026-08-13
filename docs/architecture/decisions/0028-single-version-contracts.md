@@ -105,6 +105,19 @@ Two mechanisms explicitly **survive**, because neither is version debt:
   not of versioning, and a validator still asserts that no other capability
   joins the tier.
 
+**Lifecycle statuses are provisional until GA.** A contract's `status` cannot
+be stronger than the status of a contract it structurally depends on: an
+`approved` manifest that embeds a `draft` schema promises a guarantee it cannot
+keep. With one version per contract, dependencies are structural rather than
+negotiated, so this propagates. Configuration Delivery `3` therefore moves from
+`approved` to `draft` (2026-08-13), because it embeds Paywall Protocol `0.4`,
+which is a draft.
+
+This is the second documented exception to the forward-only lifecycle, and it
+exists for the same reason as the first: pre-GA, a status describes an intention
+rather than a promise anyone is relying on. Statuses harden at GA, and from that
+point a status only moves forward.
+
 Version identifiers also remain **exact**. A reader declaring `0.4` accepts only
 `0.4` and must not infer support from numeric ordering. That rule outlives this
 policy; it is what will keep parallel versions apart once they exist.
@@ -163,10 +176,11 @@ internally inconsistent for no stated reason.
   modules and their suites re-pointed at the surviving corpus rather than
   deleted.
 - **The forward-only lifecycle takes a documented exception again.** `approved →
-  deleted` is not a transition the versioning model has. ADR-0026 took it once
-  and called it "not a precedent for any contract with external readers"; that
-  qualifier still holds, and this ADR is the record of taking it deliberately
-  for the rest of the pre-release set.
+  deleted` is not a transition the versioning model has, and neither is
+  `approved → draft`. ADR-0026 took the first once and called it "not a
+  precedent for any contract with external readers"; that qualifier still holds
+  for both, and this ADR is the record of taking them deliberately for the rest
+  of the pre-release set.
 - **Every consuming layer must cut over at once.** The three SDKs, Studio, and
   the backend carry constants, symbols, and fixture paths for the deleted
   versions. Until they are purged the repository is internally inconsistent, and

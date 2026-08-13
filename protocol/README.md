@@ -24,7 +24,7 @@ The complete contract set:
 | --- | --- | --- |
 | Paywall Protocol | `0.4` | draft |
 | Local Preview (development-only) | `0.4` | draft |
-| Configuration Delivery | `3` | approved |
+| Configuration Delivery | `3` | draft |
 | Placement Decision | `1` | approved |
 | Experiment Assignment | `1` | approved |
 | Analytics Event | `2` | approved |

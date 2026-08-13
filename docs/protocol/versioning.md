@@ -17,7 +17,7 @@ The complete contract set is therefore one row per contract:
 | --- | --- | --- |
 | Paywall Protocol | `0.4` | draft |
 | Local Preview (development-only) | `0.4` | draft |
-| Configuration Delivery | `3` | approved |
+| Configuration Delivery | `3` | draft |
 | Placement Decision | `1` | approved |
 | Experiment Assignment | `1` | approved |
 | Analytics Event | `2` | approved |
@@ -37,6 +37,12 @@ identifiers**. A reader declaring `0.4` accepts only `0.4`; it must not infer
 forward or backward support from numeric ordering. That rule is unaffected by
 the single-version policy and outlives it — it is what will keep parallel
 versions apart once GA creates them.
+
+Pre-GA, lifecycle statuses are **provisional**. A contract's `status` cannot be
+stronger than that of a contract it structurally depends on, and with one
+version per contract those dependencies are structural rather than negotiated.
+Configuration Delivery `3` is `draft` because it embeds Paywall Protocol `0.4`,
+which is a draft. Statuses harden at GA, after which a status only moves forward.
 
 Two mechanisms are **not** version debt and are unaffected:
 

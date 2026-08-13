@@ -35,6 +35,25 @@ current snapshot, the server returns a full snapshot. `snapshotUnchanged` is
 eligible only when the digest matches exactly and the authenticated current
 scope, authority epoch, and snapshot version are all unchanged.
 
+The request may also carry an optional `correlationId`: an opaque
+client-generated identifier that correlates the request with its response and
+with the client's own logs. It is **diagnostic only** and never selects, binds,
+or infers customer, tenant, scope, or authority — which is why it is safe to
+accept from a client at all, and why it is optional rather than required.
+
+`correlationId` was **required** on the Contract `1` sync request and was not
+restated when `2` reworked request negotiation around authority scope. That was
+an oversight rather than a supersession: `2` still requires it on the
+entitlement check and restore requests, so a `2` client could correlate every
+request except the one it makes most often. It was restored on 2026-08-13 when
+Contract `1` was deleted (see
+[ADR-0028](../architecture/decisions/0028-single-version-contracts.md)), as
+optional rather than required, so that no already-written `2` request becomes
+invalid.
+`protocol/fixtures/authoritative-entitlement/v2/sync-request-correlated.json`
+exercises it; the other sync fixtures leave it absent, so both branches are
+pinned.
+
 Project, Environment, and Billing Customer IDs are deliberately absent and
 forbidden in the request body. The server derives customer binding from the
 opaque Customer Access Token and tenant/Application binding from SDK

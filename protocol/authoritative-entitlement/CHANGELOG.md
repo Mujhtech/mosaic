@@ -18,6 +18,15 @@ to `fixtures/authoritative-entitlement/v2/`, and every
 `"2"`. No record type, state, uncertainty reason, or fixture scenario was
 dropped.
 
+Optional `correlationId` is restored on the sync request. Contract `1` required
+it and `2` did not restate it when request negotiation was reworked around
+authority scope; `2` still required it on the check and restore requests, so the
+omission was an oversight rather than a supersession. It is diagnostic only and
+never selects, binds, or infers customer, tenant, scope, or authority. Optional
+rather than required, so no already-written `2` request becomes invalid.
+`fixtures/authoritative-entitlement/v2/sync-request-correlated.json` exercises
+it.
+
 The cross-implementation reference vectors in `packages/test-fixtures` were
 rebuilt against the `v2` corpus. Digest values are unchanged, because `2` embeds
 the customer entitlement snapshot body verbatim.

@@ -21,6 +21,7 @@
     "../../fixtures/authoritative-entitlement/v2/authority-policy-unavailable.json",
     "../../fixtures/authoritative-entitlement/v2/sync-request-requested-keys.json",
     "../../fixtures/authoritative-entitlement/v2/sync-request-placeholder.json",
+    "../../fixtures/authoritative-entitlement/v2/sync-request-correlated.json",
     "../../fixtures/authoritative-entitlement/v2/snapshots/active-grace-period.json",
     "../../fixtures/authoritative-entitlement/v2/snapshots/active-trial.json",
     "../../fixtures/authoritative-entitlement/v2/snapshots/billing-retry-access-withheld.json",

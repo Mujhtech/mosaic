@@ -4,6 +4,27 @@ All notable Mosaic protocol changes are recorded here. A contract's artifacts
 become immutable when its `status` reaches `approved`; before that, its review
 gate may still change them. Every Mosaic contract is `approved` as of v1 GA.
 
+## Owner rulings on two single-version follow-ups - 2026-08-13
+
+Status: additive (entitlement), lifecycle (delivery).
+
+**Optional `correlationId` restored on the Authoritative Entitlement `2` sync
+request.** Contract `1` required it; `2` did not restate it when request
+negotiation was reworked around authority scope, while still requiring it on the
+check and restore requests. The owner ruled that an oversight rather than a
+supersession. It is diagnostic only — never a customer, tenant, scope, or
+authority selector — and optional, so no already-written `2` request becomes
+invalid. `fixtures/authoritative-entitlement/v2/sync-request-correlated.json`
+exercises the present branch; the other sync fixtures pin the absent one.
+
+**Configuration Delivery `3` moves `approved` -> `draft`.** It structurally
+embeds Paywall Protocol `0.4`, which is a draft, and a contract cannot carry a
+stronger guarantee than the contract it carries. The owner ruled that pre-GA,
+lifecycle statuses are **provisional** under the single-version policy: a
+contract that structurally depends on a draft is itself a draft, and statuses
+harden at GA. Recorded in ADR-0028 as the second documented exception to the
+forward-only lifecycle.
+
 ## One version per contract: Authoritative Entitlement v2, Billing State Webhook v2 - 2026-08-13
 
 Status: breaking. Owner ruling, single-version contracts. See

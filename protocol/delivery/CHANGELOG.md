@@ -2,7 +2,13 @@
 
 ## Versions 1 and 2 deleted; v3 re-pinned to Paywall 0.4 - 2026-08-13
 
-Status: approved
+Status: draft (2026-08-13; was approved)
+
+`3` structurally embeds Paywall Protocol `0.4`, which is a draft, so `3` cannot
+carry a stronger guarantee than the contract it carries. Pre-GA, lifecycle
+statuses are provisional under the single-version policy: a contract that
+structurally depends on a draft is itself a draft, and statuses harden at GA.
+See [ADR-0028](../../docs/architecture/decisions/0028-single-version-contracts.md).
 
 Owner ruling, single-version contracts
 ([ADR-0028](../../docs/architecture/decisions/0028-single-version-contracts.md)).

@@ -16,7 +16,6 @@ at GA, and the deprecation policy governs from that point.
 
 | Contract | Version | Status | Manifest |
 | --- | --- | --- | --- |
-| Configuration Delivery | `3` | approved | `protocol/compatibility/configuration-delivery/v3.json` |
 | Placement Decision | `1` | approved | `protocol/compatibility/placement-decision/v1.json` |
 | Experiment Assignment | `1` | approved | `protocol/compatibility/experiment-assignment/v1.json` |
 | Analytics Event | `2` | approved | `protocol/compatibility/analytics-event/v2.json` |
@@ -29,9 +28,15 @@ other contract.
 
 ### Draft contracts
 
+Pre-GA, lifecycle statuses are **provisional**: a contract's `status` cannot be
+stronger than that of a contract it structurally depends on. Configuration
+Delivery `3` is a draft because it embeds Paywall Protocol `0.4`, which is one.
+Statuses harden at GA.
+
 | Contract | Version | Status | Manifest |
 | --- | --- | --- | --- |
 | Paywall Protocol | `0.4` | `draft` | `protocol/compatibility/v0.4.json` |
+| Configuration Delivery | `3` | `draft` | `protocol/compatibility/configuration-delivery/v3.json` |
 | Local Preview (development-only) | `0.4` | `draft` | `protocol/compatibility/local-preview/v0.4.json` |
 | Billing Ingestion | `1` | `draft` | `protocol/compatibility/billing-ingestion/v1.json` |
 | Customer Access Token | `1` | `draft` | `protocol/compatibility/customer-access-token/v1.json` |
