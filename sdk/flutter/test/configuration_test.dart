@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
-import 'support/canonical_fixture.dart';
 import 'support/customer_authority_fixture.dart';
 
 /// Answers every sync with one scripted snapshot.
@@ -136,10 +135,9 @@ void main() {
   });
 
   group('authoritative entitlements through the client', () {
-    final snapshot = wrapCustomerSnapshotV2(repositoryFile(
-      'protocol/fixtures/authoritative-entitlement/v1/snapshots/'
-      'active-subscription.json',
-    ).readAsStringSync());
+    final snapshot = customerRecordAcceptedByConfiguredSdk(
+      customerAuthorityFixture('ios-full-snapshot.json'),
+    );
 
     setUp(() => debugDefaultTargetPlatformOverride = TargetPlatform.iOS);
     tearDown(() => debugDefaultTargetPlatformOverride = null);

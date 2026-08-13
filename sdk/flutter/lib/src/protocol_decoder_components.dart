@@ -900,9 +900,9 @@ extension on _DocumentDecoder {
       object,
       required,
       path,
-      optional: isV04 && motion != _MotionSlot.none
-          ? <String>{...optional, 'motion'}
-          : optional,
+      optional: motion == _MotionSlot.none
+          ? optional
+          : <String>{...optional, 'motion'},
     );
   }
 

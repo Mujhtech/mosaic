@@ -147,7 +147,7 @@ MockMosaicPurchaseProvider _fallbackProvider() => MockMosaicPurchaseProvider(
 
 List<Map<String, Object?>> _canonicalFlow() => (jsonDecode(
       repositoryFile(
-        'protocol/fixtures/local-preview/v0.3/session-flow.messages.json',
+        'protocol/fixtures/local-preview/v0.4/session-flow.messages.json',
       ).readAsStringSync(),
     ) as List<Object?>)
         .cast<Map<String, Object?>>();

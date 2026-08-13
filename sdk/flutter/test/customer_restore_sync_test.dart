@@ -49,16 +49,13 @@ final class _ScriptedProvider implements MosaicPurchaseProvider {
 }
 
 void main() {
-  final root = repositoryDirectory(
-    'protocol/fixtures/authoritative-entitlement/v1',
-  );
-  String fixture(String path) => File('${root.path}/$path').readAsStringSync();
+  final root = customerAuthorityFixtureRoot;
 
   final now = DateTime.utc(2026, 7, 28, 12, 30);
 
   MosaicCustomerEntitlementSyncReceived received(String path) =>
       MosaicCustomerEntitlementSyncReceived(
-        source: wrapCustomerSnapshotV2(fixture(path)),
+        source: customerAuthorityFixture(path),
       );
 
   MosaicCustomerEntitlementRuntime runtimeWith(
@@ -77,6 +74,7 @@ void main() {
         applicationId: fixtureAuthorityApplicationId,
         platform: MosaicCustomerAuthorityPlatform.ios,
         applicationVersion: '4.2.0',
+        sdkVersion: fixtureSupportedSdkVersion,
         settings:
             const MosaicCustomerEntitlementSettings(refreshOnResume: false),
         clock: () => now,
@@ -99,7 +97,7 @@ void main() {
       () async {
     final transport = _ScriptedTransport(
       <MosaicCustomerEntitlementSyncResponse>[
-        received('snapshots/active-subscription.json'),
+        received('ios-full-snapshot.json'),
       ],
     );
     final runtime = runtimeWith(transport);
@@ -154,7 +152,7 @@ void main() {
   test('an unchanged snapshot is never reported as restored', () async {
     final transport = _ScriptedTransport(
       <MosaicCustomerEntitlementSyncResponse>[
-        received('snapshots/active-subscription.json'),
+        received('ios-full-snapshot.json'),
         const MosaicCustomerEntitlementSyncNotModified(),
       ],
     );
@@ -233,7 +231,7 @@ void main() {
   test('every restore reports observable stages', () async {
     final transport = _ScriptedTransport(
       <MosaicCustomerEntitlementSyncResponse>[
-        received('snapshots/active-subscription.json'),
+        received('ios-full-snapshot.json'),
       ],
     );
     final runtime = runtimeWith(transport);

@@ -18,20 +18,21 @@ final class MosaicPackageExample extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(title: const Text('Mosaic Flutter Protocol 0.3 / 0.4')),
+        appBar: AppBar(
+          title: const Text('Mosaic Flutter Protocol 0.4'),
+        ),
         body: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
             'Configured ${mosaic.configuration.apiKey}. '
-            'Strict readers: '
-            '${mosaicFlutterCapabilityReport.supportedSchemaVersions.join(', ')}. '
-            'Protocol 0.3 supports ${mosaicProtocolV03Capabilities.length} '
-            'capabilities and Protocol 0.4 supports '
-            '${mosaicProtocolV04Capabilities.length}, including '
+            'Strict reader: Protocol '
+            '${mosaicFlutterCapabilityReport.schemaVersion}, '
+            '${mosaicProtocolCapabilities.length} capabilities including '
             '${mosaicMotionCapabilities.length} motion primitives. '
-            'Configuration Delivery and Local Preview stay pinned to 0.3, '
-            'which is still the release candidate. Run '
-            'examples/flutter-example for the complete native paywall.',
+            'Configuration Delivery v$mosaicConfigurationDeliveryVersion and '
+            'Local Preview $mosaicLocalPreviewProtocolVersion carry the same '
+            'paywall protocol. Run examples/flutter-example for the complete '
+            'native paywall.',
           ),
         ),
       ),

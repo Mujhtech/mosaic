@@ -8,11 +8,11 @@ import 'package:mosaic_sdk/mosaic_sdk.dart';
 import 'support/customer_authority_fixture.dart';
 
 void main() {
-  test('Delivery v2 canonical snapshots decode atomically', () {
+  test('Delivery canonical snapshots decode atomically', () {
     const decoder = MosaicConfigurationDeliveryDecoder();
     final advanced = decoder
-        .decode(_fixture('configuration-delivery/v2/advanced-release.json'));
-    expect(advanced.version, mosaicConfigurationDeliveryVersionV2);
+        .decode(_fixture('configuration-delivery/v3/advanced-release.json'));
+    expect(advanced.version, mosaicConfigurationDeliveryVersion);
     expect(advanced.release.decisionForPlacement('export_pdf'), isNotNull);
     expect(advanced.release.projectId, 'project_alpha');
     expect(advanced.release.paywallVersions, hasLength(3));
@@ -20,11 +20,11 @@ void main() {
         MosaicDeliveredEnvironmentMode.production);
 
     final noPaywall = decoder
-        .decode(_fixture('configuration-delivery/v2/no-paywall-release.json'));
+        .decode(_fixture('configuration-delivery/v3/no-paywall-release.json'));
     expect(noPaywall.release.paywallVersions, isEmpty);
 
     final staging = decoder.decode(
-        _fixture('configuration-delivery/v2/staging-qa-override-release.json'));
+        _fixture('configuration-delivery/v3/staging-qa-override-release.json'));
     expect(staging.release.environment.mode,
         MosaicDeliveredEnvironmentMode.staging);
     expect(
@@ -52,7 +52,7 @@ void main() {
     }
   });
 
-  test('invalid Delivery v2 refreshes retain the atomic last-known-valid',
+  test('invalid Delivery refreshes retain the atomic last-known-valid',
       () async {
     final cache = _MemoryCache();
     final transport = _QueuedTransport(<MosaicConfigurationResponse>[
@@ -70,11 +70,11 @@ void main() {
       cache: cache,
       identityStorage: MosaicMemoryIdentityStorage(),
       bundledFallbackLoader: () async =>
-          _fixture('configuration-delivery/v2/advanced-release.json'),
+          _fixture('configuration-delivery/v3/advanced-release.json'),
     );
     expect(await mosaic.loadConfiguration(), isA<MosaicConfigurationReady>());
     final accepted = mosaic.acceptedConfiguration;
-    expect(accepted!.envelope.version, mosaicConfigurationDeliveryVersionV2);
+    expect(accepted!.envelope.version, mosaicConfigurationDeliveryVersion);
 
     for (var index = 0; index < _invalidDeliveryV2Fixtures.length; index += 1) {
       expect(await mosaic.refreshConfiguration(),
@@ -112,7 +112,7 @@ void main() {
       cache: _MemoryCache(),
       identityStorage: MosaicMemoryIdentityStorage(),
       bundledFallbackLoader: () async =>
-          _fixture('configuration-delivery/v2/no-paywall-release.json'),
+          _fixture('configuration-delivery/v3/no-paywall-release.json'),
     );
     await mosaic.loadConfiguration();
     final resolution = await mosaic.decidePlacement('onboarding_complete');
@@ -123,15 +123,29 @@ void main() {
   test('Mosaic authority never unions provider-observed access', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     try {
-      final v1 = (jsonDecode(_fixture(
-        'authoritative-entitlement/v1/snapshots/'
-        'inactive-expired-subscription.json',
-      )) as Map)
-          .cast<String, Object?>();
-      final payload = (v1['payload']! as Map).cast<String, Object?>()
-        ..['projectId'] = 'project_alpha'
-        ..['environmentId'] = 'environment_production';
-      payload['contentDigest'] = mosaicCustomerContentDigest(payload);
+      // The canonical record is scoped to the fixture Project; this release is
+      // not. Both the authority scope and the snapshot it binds move together,
+      // because a snapshot whose Project disagrees with its authority is a
+      // scope mismatch rather than the case under test.
+      // Reached through `Mosaic.configure`, which owns runtime construction and
+      // exposes no SDK-version seam, so the record's client floor is lowered
+      // rather than injected. The floor itself is covered directly in
+      // customer_entitlement_sync_test.dart.
+      final record =
+          customerRecordAcceptedByConfiguredSdk(customerSnapshotRecordVariant(
+        _fixture(
+          'authoritative-entitlement/v2/snapshots/'
+          'inactive-expired-subscription.json',
+        ),
+        mutate: (authority, snapshot) {
+          final scope = (authority['scope']! as Map).cast<String, Object?>();
+          scope['projectId'] = 'project_alpha';
+          scope['environmentId'] = 'environment_production';
+          authority['scope'] = scope;
+          snapshot['projectId'] = 'project_alpha';
+          snapshot['environmentId'] = 'environment_production';
+        },
+      ));
       final provider = MockMosaicPurchaseProvider(
         products: const <MosaicProduct>[
           MosaicProduct(
@@ -154,10 +168,9 @@ void main() {
         cache: _MemoryCache(),
         identityStorage: MosaicMemoryIdentityStorage(),
         bundledFallbackLoader: () async =>
-            _fixture('configuration-delivery/v2/advanced-release.json'),
+            _fixture('configuration-delivery/v3/advanced-release.json'),
         customerEntitlementCache: MosaicMemoryCustomerEntitlementCache(),
-        customerEntitlementTransport:
-            _EntitlementTransport(wrapCustomerSnapshotV2(jsonEncode(v1))),
+        customerEntitlementTransport: _EntitlementTransport(record),
         customerTokenProvider: (_) async => MosaicCustomerToken(
           value: 'mcat_secret',
           tokenId: 'token-a',
@@ -375,19 +388,19 @@ void main() {
 }
 
 const List<String> _invalidDeliveryV2Fixtures = <String>[
-  'configuration-delivery/v2/invalid/unsupported-operator.json',
-  'configuration-delivery/v2/invalid/invalid-condition-type.json',
-  'configuration-delivery/v2/invalid/duplicate-priority.json',
-  'configuration-delivery/v2/invalid/fallback-cycle.json',
-  'configuration-delivery/v2/invalid/incompatible-source-operator.json',
-  'configuration-delivery/v2/invalid/missing-unavailable-fallback.json',
-  'configuration-delivery/v2/invalid/underdeclared-features.json',
-  'configuration-delivery/v2/invalid/overdeclared-features.json',
-  'configuration-delivery/v2/invalid/release-underdeclared-compatibility.json',
-  'configuration-delivery/v2/invalid/release-overdeclared-compatibility.json',
-  'configuration-delivery/v2/invalid/qa-override-over-24h.json',
-  'configuration-delivery/v2/invalid/production-qa-override.json',
-  'configuration-delivery/v2/invalid/invalid-environment-mode.json',
+  'configuration-delivery/v3/invalid/unsupported-operator.json',
+  'configuration-delivery/v3/invalid/invalid-condition-type.json',
+  'configuration-delivery/v3/invalid/duplicate-priority.json',
+  'configuration-delivery/v3/invalid/fallback-cycle.json',
+  'configuration-delivery/v3/invalid/incompatible-source-operator.json',
+  'configuration-delivery/v3/invalid/missing-unavailable-fallback.json',
+  'configuration-delivery/v3/invalid/underdeclared-features.json',
+  'configuration-delivery/v3/invalid/overdeclared-features.json',
+  'configuration-delivery/v3/invalid/release-underdeclared-compatibility.json',
+  'configuration-delivery/v3/invalid/release-overdeclared-compatibility.json',
+  'configuration-delivery/v3/invalid/qa-override-over-24h.json',
+  'configuration-delivery/v3/invalid/production-qa-override.json',
+  'configuration-delivery/v3/invalid/invalid-environment-mode.json',
 ];
 
 const List<String> _invalidDecisionV1Fixtures = <String>[

@@ -7,15 +7,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
-part 'renderer_v03_visual_tests.dart';
-part 'renderer_v03_product_tests.dart';
+part 'renderer_visual_tests.dart';
+part 'renderer_product_tests.dart';
 
 void main() {
   final root = Directory.current.parent.parent;
 
   MosaicPaywallDocument fixture(String name) =>
       const MosaicProtocolDecoder().decode(
-        File('${root.path}/protocol/fixtures/v0.3/$name').readAsStringSync(),
+        File('${root.path}/protocol/fixtures/v0.4/$name').readAsStringSync(),
       );
 
   const products = <MosaicProduct>[
@@ -37,8 +37,8 @@ void main() {
       localizedPrice: r'$199.99',
     ),
   ];
-  _defineRendererV03VisualTests(root, fixture, products);
-  _defineRendererV03ProductTests(root, fixture, products);
+  _defineRendererVisualTests(root, fixture, products);
+  _defineRendererProductTests(root, fixture, products);
 }
 
 Map<String, Object?> _jsonNode(Map<String, Object?> document, String id) {
@@ -80,9 +80,13 @@ void _suffixFixtureIds(Object? value, String suffix) {
   }
   if (value is! Map<String, Object?>) return;
   final type = value['type'];
+  // A design-system reference names a catalog entry, not a layout node, so it
+  // lives in a different namespace and must survive id rewriting untouched.
+  // `motionToken` is the fourth such catalog.
   final isTokenReference = type == 'colorToken' ||
       type == 'backgroundToken' ||
-      type == 'shadowToken';
+      type == 'shadowToken' ||
+      type == 'motionToken';
   if (!isTokenReference && value['id'] is String) {
     final id = value['id']! as String;
     value['id'] = '$id$suffix';
@@ -92,6 +96,13 @@ void _suffixFixtureIds(Object? value, String suffix) {
   }
 }
 
+/// Pumps [document] with motion pinned to its terminal frame.
+///
+/// The canonical document authors entrance motion, and this suite is about
+/// static rendering, layout, and semantics. The terminal frame is what a
+/// reduced-motion or non-animating renderer shows; frame zero is not, because a
+/// fading node is still fully transparent there and therefore absent from the
+/// semantics tree entirely.
 Future<void> _pump(
   WidgetTester tester,
   MosaicPaywallDocument document, {
@@ -115,6 +126,7 @@ Future<void> _pump(
       home: Scaffold(
         body: MosaicPaywall(
           document: document,
+          motionDriver: const MosaicMotionDriver.disabled(),
           purchaseProvider: purchaseProvider ??
               MockMosaicPurchaseProvider(products: products),
           clock: clock ?? DateTime.now,
@@ -133,7 +145,7 @@ Future<void> _pump(
 
 /// Scrolls [finder] into the viewport before tapping it.
 ///
-/// The v0.3 fixture is taller than the 900x1600 test viewport, so a bare
+/// The canonical fixture is taller than the 900x1600 test viewport, so a bare
 /// `tap()` on a below-the-fold target derives an off-screen offset, misses
 /// silently, and leaves every assertion that depends on the tap vacuous.
 /// Callers keep their own settling policy after the tap.

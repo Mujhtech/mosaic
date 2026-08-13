@@ -4,25 +4,32 @@ import 'package:mosaic_sdk/mosaic_sdk.dart';
 import 'support/configuration_delivery_fixture.dart';
 
 void main() {
-  test('strictly accepts every canonical Delivery v1 release', () {
+  test('strictly accepts every canonical Delivery release', () {
     const decoder = MosaicConfigurationDeliveryDecoder();
     for (final name in <String>[
-      'valid-release.json',
-      'multiple-paywalls.json',
-      'placement-binding.json',
-      'product-reference.json',
-      'asset-reference.json',
+      'rich-release.json',
+      'advanced-release.json',
+      'experiment-release.json',
+      'no-paywall-release.json',
     ]) {
       final envelope = decoder.decode(deliveryFixtureSource(name));
-      expect(envelope.version, mosaicConfigurationDeliveryVersion);
-      expect(envelope.release.placements, isNotEmpty);
-      for (final key in envelope.release.placements.keys) {
-        expect(envelope.release.paywallForPlacement(key), isNotNull);
+      expect(envelope.version, mosaicConfigurationDeliveryVersion,
+          reason: name);
+      // Every Placement is a decision rule set. The release carries at least
+      // one, and each names the paywall it can resolve to.
+      expect(envelope.release.placementDecisions, isNotEmpty, reason: name);
+      for (final key in envelope.release.placementDecisions.keys) {
+        expect(envelope.release.decisionForPlacement(key), isNotNull);
+      }
+      // The contract carries exactly one paywall protocol, and it is the one
+      // this SDK reads.
+      for (final version in envelope.release.paywallVersions.values) {
+        expect(version.document.schemaVersion, mosaicProtocolVersion);
       }
     }
   });
 
-  test('atomically rejects every canonical invalid Delivery v1 release', () {
+  test('atomically rejects every canonical invalid Delivery release', () {
     const decoder = MosaicConfigurationDeliveryDecoder();
     for (final name in <String>[
       'invalid/unsupported-contract-version.json',
@@ -38,13 +45,14 @@ void main() {
     }
   });
 
-  test('Flutter capability request advertises Delivery v3 Experiments', () {
+  test('Flutter capability request advertises one Delivery version', () {
     final actual = const MosaicConfigurationCapabilityRequest(
       applicationVersion: '1.0.0',
     ).toJson();
     expect(actual['sdkVersion'], mosaicFlutterSdkVersion);
-    expect(actual['supportedConfigurationDeliveryVersions'],
-        <String>['1', '2', '3']);
+    // Exactly one Delivery version is offered, and it is the one carrying
+    // Paywall Protocol 0.4.
+    expect(actual['supportedConfigurationDeliveryVersions'], <String>['3']);
     expect(actual['supportedPlacementDecisionContracts'], <String>['1']);
     expect(actual['supportedBucketingAlgorithms'],
         <String>['sha256_length_prefixed_v1']);
@@ -53,11 +61,11 @@ void main() {
         <String>['trusted_server_time_v1']);
   });
 
-  test('hosted transport advertises every exact Protocol 0.3 capability', () {
+  test('hosted transport advertises every exact Protocol 0.4 capability', () {
     expect(
       mosaicPaywallCapabilitiesHeaderValue.split(',').toSet(),
       <String>{
-        for (final capability in mosaicProtocolV03Capabilities)
+        for (final capability in mosaicProtocolCapabilities)
           '$capability@$mosaicProtocolVersion',
       },
     );

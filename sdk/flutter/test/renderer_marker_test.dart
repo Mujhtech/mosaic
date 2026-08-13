@@ -6,7 +6,8 @@ import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 import 'support/canonical_fixture.dart';
 
-/// Protocol 0.4 component rendering, for the delta over `0.3`.
+/// Feature List marker rendering: the authored size and the documented
+/// default, drawn through the marker union Timeline shares.
 void main() {
   String fixture(String name) =>
       repositoryFile('protocol/fixtures/v0.4/$name').readAsStringSync();
@@ -106,16 +107,6 @@ void main() {
     featureList(zero)['markerSize'] = 0;
     expect(
       () => const MosaicProtocolDecoder().decode(jsonEncode(zero)),
-      throwsA(isA<MosaicProtocolException>()),
-    );
-
-    // The field is 0.4 vocabulary. A 0.3 Feature List that declares it names a
-    // key its version has no meaning for, which is a rejection rather than a
-    // silent drop.
-    final v03 = jsonDecode(canonicalFixtureSource())! as Map<String, Object?>;
-    featureList(v03)['markerSize'] = 18;
-    expect(
-      () => const MosaicProtocolDecoder().decode(jsonEncode(v03)),
       throwsA(isA<MosaicProtocolException>()),
     );
   });

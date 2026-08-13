@@ -6,7 +6,7 @@ final RegExp _region = RegExp(r'^(?:[A-Za-z]{2}|[0-9]{3})$');
 /// The canonical comparison form of one locale tag, or `null` when nothing
 /// usable remains.
 ///
-/// This mirrors `protocol/tools/locale-resolution-v0.3.mjs`
+/// This mirrors `protocol/tools/locale-resolution.mjs`
 /// (`canonicalLocaleTag`), the reference implementation of the 2026-08-05
 /// locale-semantics rulings. Placement targeting and catalog lookup share one
 /// rule deliberately: the two subsystems must not disagree about what "the same

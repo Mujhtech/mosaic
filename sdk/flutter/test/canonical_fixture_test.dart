@@ -6,10 +6,10 @@ import 'package:mosaic_sdk/mosaic_sdk.dart';
 import 'support/canonical_fixture.dart';
 
 void main() {
-  test('decodes the repository canonical Protocol 0.3 fixture', () {
+  test('decodes the repository canonical Protocol 0.4 fixture', () {
     final document = decodeCanonicalFixture();
 
-    expect(document.schemaVersion, '0.3');
+    expect(document.schemaVersion, mosaicProtocolVersion);
     expect(document.id, 'phase1-complete-paywall');
     expect(document.revision, 1);
     expect(document.layout.id, 'paywall-scroll');
@@ -19,7 +19,7 @@ void main() {
     expect(document.layout.content.padding.start, 24);
     expect(
       document.compatibility.requiredCapabilities.map((item) => item.name),
-      unorderedEquals(mosaicProtocolV03Capabilities),
+      unorderedEquals(mosaicProtocolCapabilities),
     );
     expect(document.nodes.map((node) => node.type).toSet(), isNotEmpty);
     expect(document.assets.map((asset) => asset.id), contains('hero-image'));
@@ -75,35 +75,25 @@ void main() {
 
   test('capability report is exact and has no custom capabilities', () {
     expect(mosaicFlutterCapabilityReport.sdkVersion, mosaicFlutterSdkVersion);
+    expect(mosaicFlutterCapabilityReport.schemaVersion, '0.4');
     expect(
-      mosaicFlutterCapabilityReport.supportedSchemaVersions,
-      <String>{'0.3', '0.4'},
-    );
-    expect(
-      mosaicFlutterCapabilityReport.capabilitiesFor('0.3'),
-      unorderedEquals(
-        <String>{
-          ...mosaicProtocolV03Capabilities,
-        },
-      ),
+      mosaicFlutterCapabilityReport.capabilities,
+      unorderedEquals(mosaicProtocolCapabilities),
     );
     expect(
       mosaicFlutterCapabilityReport.capabilitiesFor('0.4'),
-      unorderedEquals(
-        <String>{
-          ...mosaicProtocolV04Capabilities,
-        },
-      ),
+      isNotEmpty,
     );
-    expect(mosaicFlutterCapabilityReport.capabilitiesFor('0.3'), isNotEmpty);
-    // A version this SDK does not implement reports nothing rather than
-    // falling back to a neighbouring version's answer.
+    // Version identifiers are exact. A version this SDK does not implement
+    // reports nothing rather than falling back to a neighbouring version's
+    // answer, and that holds for the predecessor as much as for a successor.
+    expect(mosaicFlutterCapabilityReport.capabilitiesFor('0.3'), isEmpty);
     expect(mosaicFlutterCapabilityReport.capabilitiesFor('0.5'), isEmpty);
   });
 
   test('canonical source remains direct JSON rather than an SDK copy', () {
     final value = jsonDecode(canonicalFixtureSource()) as Map<String, Object?>;
     expect(value['id'], 'phase1-complete-paywall');
-    expect(canonicalFixtureFile().path, contains('/protocol/fixtures/v0.3/'));
+    expect(canonicalFixtureFile().path, contains('/protocol/fixtures/v0.4/'));
   });
 }

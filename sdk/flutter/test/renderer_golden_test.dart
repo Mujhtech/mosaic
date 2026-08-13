@@ -14,7 +14,7 @@ import 'support/canonical_fixture.dart';
 /// is the reason a motion bug can never leave a price or a purchase control
 /// looking different from what a motion-less reader draws.
 void main() {
-  const goldenFile = 'goldens/complete_paywall_v04_en.png';
+  const goldenFile = 'goldens/complete_paywall_en.png';
 
   Future<void> pumpCanonical(
     WidgetTester tester, {

@@ -4,8 +4,6 @@ import 'analytics.dart';
 import 'analytics_event.dart';
 import 'experiment_assignment.dart';
 
-const mosaicExperimentAnalyticsContractVersion = '2';
-
 enum MosaicExperimentAnalyticsEventName {
   assigned('experiment_assigned'),
   exposed('experiment_exposed'),
@@ -16,34 +14,11 @@ enum MosaicExperimentAnalyticsEventName {
   final String wireValue;
 }
 
-/// Nonblocking boundary used by the presentation host to enqueue v2 events.
+/// Nonblocking boundary used by the presentation host to enqueue Experiment
+/// events. The host never awaits delivery, so a queueing failure can never
+/// block rendering or purchasing.
 abstract interface class MosaicExperimentAnalyticsSink {
   Future<void> enqueue(Map<String, Object?> event);
-}
-
-final class MosaicExperimentAnalyticsBatch {
-  MosaicExperimentAnalyticsBatch({
-    required this.batchId,
-    required this.sentAt,
-    required Iterable<Map<String, Object?>> events,
-  }) : events = List.unmodifiable(
-          events.map((event) => Map<String, Object?>.unmodifiable(event)),
-        );
-  final String batchId;
-  final DateTime sentAt;
-  final List<Map<String, Object?>> events;
-  Map<String, Object?> toJson() => {
-        'analyticsEventContractVersion': '2',
-        'batchId': batchId,
-        'sentAt': sentAt.toUtc().toIso8601String(),
-        'events': events,
-      };
-  String encode() => jsonEncode(toJson());
-}
-
-abstract interface class MosaicExperimentAnalyticsTransport {
-  Future<MosaicAnalyticsIngestionResponse> sendExperiment(
-      MosaicExperimentAnalyticsBatch batch);
 }
 
 final class MosaicMemoryExperimentAnalyticsSink
@@ -84,7 +59,7 @@ Map<String, Object?> mosaicExperimentAnalyticsEvent({
   };
   final event = <String, Object?>{
     'eventId': mosaicAnalyticsId('event'),
-    'eventSchemaVersion': '2',
+    'eventSchemaVersion': mosaicAnalyticsEventSchemaVersion,
     'eventName': name.wireValue,
     'occurredAt': mosaicAnalyticsTimestamp(DateTime.now().toUtc()),
     'queuedAt': mosaicAnalyticsTimestamp(DateTime.now().toUtc()),
@@ -93,7 +68,9 @@ Map<String, Object?> mosaicExperimentAnalyticsEvent({
     'attribution': attribution,
     'payload': payload,
   };
-  // Enforce the v2 all-or-none tuple before it reaches a durable sink.
+  // Enforce the all-or-none tuple before the draft reaches a durable sink. The
+  // envelope is completed and fully validated by the sink, which stamps the
+  // identity, session, and context this builder cannot see.
   const tuple = {
     'experimentId',
     'experimentVersionId',
@@ -108,119 +85,16 @@ Map<String, Object?> mosaicExperimentAnalyticsEvent({
   return event;
 }
 
-Map<String, Object?> mosaicDecodeExperimentAnalyticsEvent(Object? source) {
-  if (source is! Map) throw const FormatException('Expected v2 event object.');
-  final event = source.cast<String, Object?>();
-  const fields = {
-    'eventId',
-    'eventSchemaVersion',
-    'eventName',
-    'occurredAt',
-    'queuedAt',
-    'authority',
-    'identity',
-    'sessionId',
-    'context',
-    'correlation',
-    'attribution',
-    'payload',
-  };
-  if (event.keys.toSet().difference(fields).isNotEmpty ||
-      !fields.every(event.containsKey) ||
-      event['eventSchemaVersion'] != '2' ||
-      event['authority'] != 'client_observed') {
-    throw const FormatException('Invalid Analytics Event v2 envelope.');
-  }
-  final name = event['eventName'];
-  if (!const {
-    'experiment_assigned',
-    'experiment_exposed',
-    'experiment_fallback_presented',
-    'experiment_assignment_failed',
-  }.contains(name)) {
-    // A conversion event attributed to an Experiment Variant. Analytics Event
-    // v2 is a superset of v1, so the shared event codec owns its structure,
-    // payload, and per-event correlation/attribution allow-lists; the only
-    // difference is the Experiment tuple, which must be complete and present.
-    final decoded = MosaicAnalyticsEvent.fromJson(event);
-    if (decoded.attribution.experiment == null) {
-      throw const FormatException(
-        'A v2 event must carry Experiment attribution.',
-      );
-    }
-    return Map.unmodifiable(event);
-  }
-  Map<String, Object?> object(String key) {
-    final value = event[key];
-    if (value is! Map) throw FormatException('$key must be an object.');
-    return value.cast<String, Object?>();
-  }
-
-  final correlation = object('correlation');
-  final attribution = object('attribution');
-  final payload = object('payload');
-  const tuple = {
-    'experimentId',
-    'experimentVersionId',
-    'experimentVariantId',
-    'experimentAllocationVersion',
-  };
-  if (!attribution.keys.toSet().containsAll(tuple) ||
-      correlation['placementRequestId'] is! String ||
-      (name == 'experiment_exposed' ||
-              name == 'experiment_fallback_presented') &&
-          correlation['paywallPresentationId'] is! String) {
-    throw const FormatException('Invalid Experiment correlation.');
-  }
-  // Analytics minimization: each event may carry only the correlation and
-  // attribution identifiers its own semantics justify. Anything else is a
-  // rejected document, not an ignorable extra field.
-  const presentationCorrelation = {
-    'placementRequestId',
-    'paywallPresentationId'
-  };
-  final allowedCorrelation =
-      name == 'experiment_exposed' || name == 'experiment_fallback_presented'
-          ? presentationCorrelation
-          : const {'placementRequestId'};
-  const decidedPlacementAttribution = {
-    'configurationReleaseId',
-    'placementId',
-    'placementRuleSetId',
-    'placementRuleSetVersion',
-    'winningRuleId',
-    ...tuple,
-  };
-  final allowedAttribution = name == 'experiment_exposed'
-      ? const {
-          'paywallId',
-          'paywallVersionId',
-          ...decidedPlacementAttribution,
-        }
-      : decidedPlacementAttribution;
-  if (correlation.keys.toSet().difference(allowedCorrelation).isNotEmpty ||
-      attribution.keys.toSet().difference(allowedAttribution).isNotEmpty) {
+/// Decodes an Experiment analytics event through the single shared event
+/// codec, and requires the Experiment tuple the shared codec permits but does
+/// not demand on a conversion event.
+MosaicAnalyticsEvent mosaicDecodeExperimentAnalyticsEvent(Object? source) {
+  if (source is! Map) throw const FormatException('Expected event object.');
+  final event = MosaicAnalyticsEvent.fromJson(source.cast<String, Object?>());
+  if (event.attribution.experiment == null) {
     throw const FormatException(
-      'Experiment event carries unrelated correlation or attribution.',
+      'An Experiment analytics event must carry Experiment attribution.',
     );
   }
-  if (name == 'experiment_exposed' &&
-      (attribution['paywallId'] is! String ||
-          attribution['paywallVersionId'] is! String ||
-          payload['productReadiness'] != 'ready' ||
-          payload['providerCapability'] != 'accepted' ||
-          payload['qaOverride'] == true)) {
-    throw const FormatException('Invalid Experiment exposure.');
-  }
-  if (name == 'experiment_fallback_presented' &&
-      (payload['reason'] is! String ||
-          payload['presentedPaywallId'] is! String ||
-          payload['presentedPaywallVersionId'] is! String)) {
-    throw const FormatException('Invalid Experiment fallback.');
-  }
-  if (utf8.encode(jsonEncode(event)).length >
-      mosaicAnalyticsMaximumEventBytes) {
-    throw const FormatException('Experiment event exceeds 32 KiB.');
-  }
-  return Map.unmodifiable(event);
+  return event;
 }

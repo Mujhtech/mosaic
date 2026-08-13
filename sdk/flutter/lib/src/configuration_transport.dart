@@ -59,10 +59,9 @@ typedef MosaicHttpClientFactory = HttpClient Function();
 
 HttpClient _newHttpClient() => HttpClient();
 
-final String mosaicPaywallCapabilitiesHeaderValue =
-    mosaicProtocolV03Capabilities
-        .map((capability) => '$capability@$mosaicProtocolVersion')
-        .join(',');
+final String mosaicPaywallCapabilitiesHeaderValue = mosaicProtocolCapabilities
+    .map((String capability) => '$capability@$mosaicProtocolVersion')
+    .join(',');
 
 /// Native HTTP transport for the Environment-scoped public SDK endpoint.
 final class MosaicIoConfigurationTransport
@@ -112,9 +111,7 @@ final class MosaicIoConfigurationTransport
       ..headers.set('Mosaic-SDK-Version', mosaicFlutterSdkVersion)
       ..headers.set(
         'Mosaic-Configuration-Versions',
-        '$mosaicConfigurationDeliveryVersion,'
-            '$mosaicConfigurationDeliveryVersionV2,'
-            '$mosaicConfigurationDeliveryVersionV3',
+        mosaicConfigurationDeliveryVersion,
       )
       ..headers.set('Mosaic-Paywall-Protocol-Versions', mosaicProtocolVersion)
       ..headers.set(
@@ -169,11 +166,8 @@ final class MosaicIoConfigurationTransport
     final contentType = response.headers.contentType;
     if (contentType == null ||
         contentType.mimeType != 'application/vnd.mosaic.configuration+json' ||
-        !const <String>{
-          mosaicConfigurationDeliveryVersion,
-          mosaicConfigurationDeliveryVersionV2,
-          mosaicConfigurationDeliveryVersionV3,
-        }.contains(contentType.parameters['version'])) {
+        contentType.parameters['version'] !=
+            mosaicConfigurationDeliveryVersion) {
       return const MosaicConfigurationFailedResponse(
         diagnosticCode: 'configuration.refresh.invalidContentType',
       );
@@ -209,7 +203,7 @@ final class MosaicIoConfigurationTransport
     final decodedEnvelope = jsonDecode(source);
     if (decodedEnvelope is Map &&
         decodedEnvelope['configurationDeliveryVersion'] ==
-            mosaicConfigurationDeliveryVersionV3 &&
+            mosaicConfigurationDeliveryVersion &&
         serverTime == null) {
       return const MosaicConfigurationFailedResponse(
         diagnosticCode: 'configuration.refresh.missingServerTime',

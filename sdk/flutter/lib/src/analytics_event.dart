@@ -1,16 +1,12 @@
 import 'dart:convert';
 
-const String mosaicAnalyticsEventContractVersion = '1';
+/// The single Analytics Event Contract version this SDK reads and writes.
+/// The API echoes the submitted batch contract version in its acknowledgement,
+/// so an acknowledgement declaring any other version is rejected atomically.
+const String mosaicAnalyticsEventContractVersion = '2';
 
-/// Analytics Event Contract v2, used for Experiment events. The API echoes the
-/// submitted batch contract version in its acknowledgement, so a v2 batch is
-/// acknowledged with a v2 response.
-const String mosaicAnalyticsEventContractVersionV2 = '2';
-const String mosaicAnalyticsEventSchemaVersion = '1';
-
-/// Analytics Event v2 event schema version. An event declares it exactly when
-/// it carries Experiment attribution.
-const String mosaicAnalyticsEventSchemaVersionV2 = '2';
+/// The single Analytics Event schema version every event declares.
+const String mosaicAnalyticsEventSchemaVersion = '2';
 const int mosaicAnalyticsMaximumEventBytes = 32 * 1024;
 const int mosaicAnalyticsMaximumBatchBytes = 512 * 1024;
 const int mosaicAnalyticsMaximumSendBatchSize = 50;
@@ -56,7 +52,11 @@ enum MosaicAnalyticsEventName {
   restoreCompleted('restore_completed'),
   restoreNothingFound('restore_nothing_found'),
   restoreCancelled('restore_cancelled'),
-  restoreFailed('restore_failed');
+  restoreFailed('restore_failed'),
+  experimentAssigned('experiment_assigned'),
+  experimentExposed('experiment_exposed'),
+  experimentFallbackPresented('experiment_fallback_presented'),
+  experimentAssignmentFailed('experiment_assignment_failed');
 
   const MosaicAnalyticsEventName(this.wireValue);
   final String wireValue;
@@ -75,7 +75,9 @@ extension MosaicAnalyticsEventPriorityValue on MosaicAnalyticsEventName {
         MosaicAnalyticsEventName.productLoadStarted ||
         MosaicAnalyticsEventName.productLoadCompleted ||
         MosaicAnalyticsEventName.productLoadFailed ||
-        MosaicAnalyticsEventName.paywallActionSelected =>
+        MosaicAnalyticsEventName.paywallActionSelected ||
+        MosaicAnalyticsEventName.experimentAssigned ||
+        MosaicAnalyticsEventName.experimentAssignmentFailed =>
           MosaicAnalyticsEventPriority.low,
         MosaicAnalyticsEventName.placementPaywallSelected ||
         MosaicAnalyticsEventName.placementNoPaywall ||
@@ -87,7 +89,9 @@ extension MosaicAnalyticsEventPriorityValue on MosaicAnalyticsEventName {
           MosaicAnalyticsEventPriority.decision,
         MosaicAnalyticsEventName.paywallPresented ||
         MosaicAnalyticsEventName.paywallDismissed ||
-        MosaicAnalyticsEventName.paywallRenderFailed =>
+        MosaicAnalyticsEventName.paywallRenderFailed ||
+        MosaicAnalyticsEventName.experimentExposed ||
+        MosaicAnalyticsEventName.experimentFallbackPresented =>
           MosaicAnalyticsEventPriority.presentation,
         _ => MosaicAnalyticsEventPriority.outcome,
       };
@@ -212,8 +216,19 @@ final class MosaicExperimentAttribution {
   };
 }
 
-/// Events that may carry the Experiment tuple, per the Analytics Event v1 to v2
-/// migration contract. Every other event forbids it.
+/// Events whose entire purpose is to report an Experiment. Each one requires
+/// the Experiment tuple and is rejected without it.
+const Set<MosaicAnalyticsEventName> mosaicExperimentEvents =
+    <MosaicAnalyticsEventName>{
+  MosaicAnalyticsEventName.experimentAssigned,
+  MosaicAnalyticsEventName.experimentExposed,
+  MosaicAnalyticsEventName.experimentFallbackPresented,
+  MosaicAnalyticsEventName.experimentAssignmentFailed,
+};
+
+/// Conversion events that may carry the Experiment tuple. Experiment results
+/// join conversions to exposures on that tuple, so only the events that can be
+/// a conversion are permitted to carry it; every other event forbids it.
 const Set<MosaicAnalyticsEventName> mosaicExperimentAttributableEvents =
     <MosaicAnalyticsEventName>{
   MosaicAnalyticsEventName.productSelected,
@@ -253,7 +268,8 @@ final class MosaicAnalyticsAttribution {
   final String? providerId;
   final String? providerProductMappingId;
 
-  /// Present only on an Analytics Event v2 conversion event.
+  /// Present on an Experiment event, and on a conversion event attributed to
+  /// an Experiment Variant.
   final MosaicExperimentAttribution? experiment;
 
   Map<String, Object> toJson() => <String, Object>{
@@ -276,7 +292,7 @@ final class MosaicAnalyticsAttribution {
       };
 }
 
-/// Immutable Analytics Event Contract v1 record.
+/// Immutable Analytics Event Contract record.
 final class MosaicAnalyticsEvent {
   MosaicAnalyticsEvent({
     required this.eventId,
@@ -308,11 +324,8 @@ final class MosaicAnalyticsEvent {
   final MosaicAnalyticsAttribution attribution;
   final Map<String, Object?> payload;
 
-  /// `2` exactly when the event carries Experiment attribution. Analytics Event
-  /// v2 is a superset of v1: the tuple is the only reason to move an event.
-  String get eventSchemaVersion => attribution.experiment == null
-      ? mosaicAnalyticsEventSchemaVersion
-      : mosaicAnalyticsEventSchemaVersionV2;
+  /// Every event declares the one Analytics Event schema version.
+  String get eventSchemaVersion => mosaicAnalyticsEventSchemaVersion;
 
   Map<String, Object?> toJson() => <String, Object?>{
         'eventId': eventId,
@@ -352,9 +365,7 @@ final class MosaicAnalyticsEvent {
       'attribution',
       'payload',
     });
-    final schemaVersion = json['eventSchemaVersion'];
-    if (schemaVersion != mosaicAnalyticsEventSchemaVersion &&
-        schemaVersion != mosaicAnalyticsEventSchemaVersionV2) {
+    if (json['eventSchemaVersion'] != mosaicAnalyticsEventSchemaVersion) {
       throw const FormatException('Unsupported event schema.');
     }
     Map<String, Object?> object(String key) {
@@ -365,7 +376,7 @@ final class MosaicAnalyticsEvent {
 
     final identityJson = json['identity'];
     final contextJson = json['context'];
-    final event = MosaicAnalyticsEvent(
+    return MosaicAnalyticsEvent(
       eventId: _identifier(json['eventId'], 'eventId'),
       name: MosaicAnalyticsEventName.parse(json['eventName']),
       occurredAt: _timestamp(json['occurredAt'], 'occurredAt'),
@@ -380,15 +391,6 @@ final class MosaicAnalyticsEvent {
       attribution: _decodeAttribution(object('attribution')),
       payload: object('payload'),
     );
-    // The declared schema version must match the attribution it carries: the
-    // tuple is only valid on v2, and a v2 event without it would be a v1 event
-    // relabelled, which no Mosaic SDK emits.
-    if (event.eventSchemaVersion != schemaVersion) {
-      throw const FormatException(
-        'Event schema version disagrees with Experiment attribution.',
-      );
-    }
-    return event;
   }
 
   void _validate() {
@@ -402,6 +404,13 @@ final class MosaicAnalyticsEvent {
         authority == 'client_observed') {
       throw const FormatException(
           'Public SDK authority cannot confirm provider events.');
+    }
+    // An Experiment event is observed by the client that made the assignment,
+    // so the contract accepts no other authority for it.
+    if (mosaicExperimentEvents.contains(name) &&
+        authority != 'client_observed') {
+      throw const FormatException(
+          'Experiment events accept only client-observed authority.');
     }
     if (authority == 'client_observed' &&
         (identity == null || sessionId == null || context == null)) {
@@ -424,7 +433,7 @@ final class MosaicAnalyticsEvent {
       }
     }
     if (sessionId case final session?) _identifier(session, 'sessionId');
-    _validateContext(context, eventSchemaVersion);
+    _validateContext(context);
     for (final entry in correlation.toJson().entries) {
       _identifier(entry.value, entry.key);
     }
@@ -439,11 +448,16 @@ final class MosaicAnalyticsEvent {
       }
     }
     if (attribution.experiment != null &&
-        !mosaicExperimentAttributableEvents.contains(name)) {
+        !mosaicExperimentAttributableEvents.contains(name) &&
+        !mosaicExperimentEvents.contains(name)) {
       throw const FormatException(
         'Experiment attribution is not permitted on this event.',
       );
     }
+    if (attribution.experiment == null && mosaicExperimentEvents.contains(name))
+      throw const FormatException(
+        'An Experiment event requires Experiment attribution.',
+      );
     _validateEventRelationships(name, correlation, attribution);
     _validatePayload(name, payload);
     if (utf8.encode(jsonEncode(toJson())).length >
@@ -474,7 +488,7 @@ final class MosaicAnalyticsBatch {
   final DateTime sentAt;
   final List<MosaicAnalyticsEvent> events;
   Map<String, Object> toJson() => <String, Object>{
-        'analyticsEventContractVersion': '1',
+        'analyticsEventContractVersion': mosaicAnalyticsEventContractVersion,
         'batchId': _identifier(batchId, 'batchId'),
         'sentAt': mosaicAnalyticsTimestamp(sentAt),
         'events': events.map((e) => e.toJson()).toList(growable: false),
@@ -491,7 +505,8 @@ final class MosaicAnalyticsBatch {
       'sentAt',
       'events',
     });
-    if (json['analyticsEventContractVersion'] != '1') {
+    if (json['analyticsEventContractVersion'] !=
+        mosaicAnalyticsEventContractVersion) {
       throw const FormatException('Unsupported analytics batch version.');
     }
     final values = json['events'];
@@ -574,13 +589,10 @@ final class MosaicAnalyticsIngestionResponse {
   final DateTime receivedAt;
   final List<MosaicAnalyticsIngestionResult> results;
 
-  /// Decodes an ingestion acknowledgement. [contractVersion] must be the exact
-  /// contract version of the submitted batch: the API echoes it, so accepting
-  /// any other value would let a v1 batch be acknowledged as v2 or vice versa.
-  factory MosaicAnalyticsIngestionResponse.decode(
-    String source, {
-    String contractVersion = mosaicAnalyticsEventContractVersion,
-  }) {
+  /// Decodes an ingestion acknowledgement. The API echoes the contract version
+  /// of the submitted batch, so an acknowledgement declaring any other version
+  /// is rejected rather than partially accepted.
+  factory MosaicAnalyticsIngestionResponse.decode(String source) {
     final value = jsonDecode(source);
     if (value is! Map) throw const FormatException('Expected response object.');
     final json = value.cast<String, Object?>();
@@ -590,11 +602,8 @@ final class MosaicAnalyticsIngestionResponse {
       'receivedAt',
       'results'
     });
-    if (contractVersion != mosaicAnalyticsEventContractVersion &&
-        contractVersion != mosaicAnalyticsEventContractVersionV2) {
-      throw const FormatException('Unsupported expected response version.');
-    }
-    if (json['analyticsEventContractVersion'] != contractVersion)
+    if (json['analyticsEventContractVersion'] !=
+        mosaicAnalyticsEventContractVersion)
       throw const FormatException('Unsupported response version.');
     final values = json['results'];
     if (values is! List || values.isEmpty || values.length > 100)
@@ -926,7 +935,40 @@ void _validatePayload(
       required: {'providerId', 'durationMs', 'diagnosticCode', 'retryable'},
       allowed: {'providerId', 'durationMs', 'diagnosticCode', 'retryable'}
     ),
+    MosaicAnalyticsEventName.experimentAssigned: (
+      required: {'assignmentKeyType', 'bucketingAlgorithm', 'bucket', 'source'},
+      allowed: {'assignmentKeyType', 'bucketingAlgorithm', 'bucket', 'source'}
+    ),
+    MosaicAnalyticsEventName.experimentExposed: (
+      required: {
+        'assignmentKeyType',
+        'bucketingAlgorithm',
+        'productReadiness',
+        'providerCapability'
+      },
+      allowed: {
+        'assignmentKeyType',
+        'bucketingAlgorithm',
+        'productReadiness',
+        'providerCapability',
+        'qaOverride'
+      }
+    ),
+    MosaicAnalyticsEventName.experimentFallbackPresented: (
+      required: {'reason', 'presentedPaywallId', 'presentedPaywallVersionId'},
+      allowed: {
+        'reason',
+        'presentedPaywallId',
+        'presentedPaywallVersionId',
+        'diagnosticCode'
+      }
+    ),
+    MosaicAnalyticsEventName.experimentAssignmentFailed: (
+      required: {'diagnosticCode', 'retryable'},
+      allowed: {'diagnosticCode', 'retryable'}
+    ),
   };
+  final isExperimentEvent = mosaicExperimentEvents.contains(name);
   final spec = specs[name]!;
   _closed(payload, spec.allowed);
   if (!payload.keys.toSet().containsAll(spec.required))
@@ -969,6 +1011,13 @@ void _validatePayload(
             'unsupported_product_type',
             'metadata_unavailable',
           },
+        MosaicAnalyticsEventName.experimentFallbackPresented => const {
+            'configuration_incompatible',
+            'product_unavailable',
+            'provider_unavailable',
+            'rendering_failed',
+            'time_unreliable',
+          },
         _ => const {
             'no_safe_decision',
             'configuration_incompatible',
@@ -984,7 +1033,13 @@ void _validatePayload(
     'navigate_back',
     'open_external_url',
   });
-  oneOf('source', const {'default', 'user'});
+  oneOf(
+      'source',
+      name == MosaicAnalyticsEventName.experimentAssigned
+          ? const {'deterministic', 'qa_override'}
+          : const {'default', 'user'});
+  oneOf('productReadiness', const {'ready'});
+  oneOf('providerCapability', const {'accepted'});
   oneOf('outcome', const {'purchased', 'already_entitled'});
   oneOf('confirmationSource', const {
     'trusted_provider_integration',
@@ -1001,19 +1056,38 @@ void _validatePayload(
     'bucketingAlgorithm',
     'providerId',
     'linkedClientEventId',
+    'presentedPaywallId',
+    'presentedPaywallVersionId',
   }) {
     if (payload[key] != null) _identifier(payload[key], key);
   }
+  // Rollout bucketing and Experiment bucketing are separate algorithms with
+  // separate canonical identifiers; neither event kind may claim the other's.
+  final bucketingAlgorithm = isExperimentEvent
+      ? 'experiment_sha256_length_prefixed_v1'
+      : 'sha256_length_prefixed_v1';
   if (payload['bucketingAlgorithm'] != null &&
-      payload['bucketingAlgorithm'] != 'sha256_length_prefixed_v1') {
+      payload['bucketingAlgorithm'] != bucketingAlgorithm) {
     throw const FormatException('Invalid bucketing algorithm.');
   }
-  final bucket = payload['rolloutBucket'];
-  if (bucket != null && (bucket is! int || bucket < 0 || bucket > 9999)) {
-    throw const FormatException('Invalid rollout bucket.');
+  for (final key in const {'rolloutBucket', 'bucket'}) {
+    final value = payload[key];
+    if (value != null && (value is! int || value < 0 || value > 9999)) {
+      throw const FormatException('Invalid rollout bucket.');
+    }
+  }
+  if (payload['qaOverride'] != null && payload['qaOverride'] is! bool) {
+    throw const FormatException('Invalid QA override value.');
+  }
+  // A QA-overridden assignment is not a statistically valid exposure, so it is
+  // never reported as one.
+  if (name == MosaicAnalyticsEventName.experimentExposed &&
+      payload['qaOverride'] == true) {
+    throw const FormatException('A QA override cannot report an exposure.');
   }
   // Rollout attribution is atomic: a bucket without its key type and bucketing
-  // algorithm cannot be interpreted, so a partial tuple is never valid.
+  // algorithm cannot be interpreted, so a partial tuple is never valid. An
+  // Experiment event reports its bucket under `bucket` and is not a rollout.
   const rolloutTuple = {
     'assignmentKeyType',
     'bucketingAlgorithm',
@@ -1021,7 +1095,8 @@ void _validatePayload(
   };
   final presentRollout =
       rolloutTuple.where((key) => payload[key] != null).toSet();
-  if (presentRollout.isNotEmpty &&
+  if (!isExperimentEvent &&
+      presentRollout.isNotEmpty &&
       presentRollout.length != rolloutTuple.length) {
     throw const FormatException('Incomplete rollout attribution.');
   }
@@ -1067,7 +1142,7 @@ void _validatePayload(
     throw const FormatException('Invalid retryable value.');
 }
 
-void _validateContext(MosaicAnalyticsContext? context, String schemaVersion) {
+void _validateContext(MosaicAnalyticsContext? context) {
   if (context == null) return;
   if (!const {'ios', 'android'}.contains(context.platform) ||
       !const {'flutter', 'ios', 'android'}.contains(context.sdkFamily)) {
@@ -1079,15 +1154,12 @@ void _validateContext(MosaicAnalyticsContext? context, String schemaVersion) {
           !versionPattern.hasMatch(context.applicationVersion!)) {
     throw const FormatException('Invalid analytics version context.');
   }
-  // Configuration Delivery v3 may only be reported on a v2 event: the v1
-  // context enum stops at 2 in the canonical schema.
-  final deliveryVersions = schemaVersion == mosaicAnalyticsEventSchemaVersionV2
-      ? const <String>{'1', '2', '3'}
-      : const <String>{'1', '2'};
+  // Each companion contract carries exactly one version, so an event reporting
+  // any other version is describing a contract this SDK cannot have used.
   if (context.configurationDeliveryVersion != null &&
-          !deliveryVersions.contains(context.configurationDeliveryVersion) ||
+          context.configurationDeliveryVersion != '3' ||
       context.commerceProviderContractVersion != null &&
-          !const {'1', '2'}.contains(context.commerceProviderContractVersion)) {
+          context.commerceProviderContractVersion != '2') {
     throw const FormatException('Invalid analytics Contract context.');
   }
   if (context.locale != null &&
@@ -1152,6 +1224,13 @@ void _validateEventRelationships(
     MosaicAnalyticsEventName.restoreFailed =>
       restore,
     MosaicAnalyticsEventName.paywallRenderFailed => true,
+    MosaicAnalyticsEventName.experimentAssigned ||
+    MosaicAnalyticsEventName.experimentAssignmentFailed =>
+      placement,
+    MosaicAnalyticsEventName.experimentExposed =>
+      placement && presentation && paywall,
+    MosaicAnalyticsEventName.experimentFallbackPresented =>
+      placement && presentation,
   };
   if (!valid) {
     throw const FormatException(
@@ -1185,8 +1264,13 @@ void _validateEventRelationships(
     MosaicAnalyticsEventName.placementNoPaywall ||
     MosaicAnalyticsEventName.placementFallbackUsed ||
     MosaicAnalyticsEventName.placementUnavailable ||
-    MosaicAnalyticsEventName.placementEvaluationFailed =>
+    MosaicAnalyticsEventName.placementEvaluationFailed ||
+    MosaicAnalyticsEventName.experimentAssigned ||
+    MosaicAnalyticsEventName.experimentAssignmentFailed =>
       placementCorrelation,
+    MosaicAnalyticsEventName.experimentExposed ||
+    MosaicAnalyticsEventName.experimentFallbackPresented =>
+      presentationCorrelation,
     MosaicAnalyticsEventName.paywallPresented ||
     MosaicAnalyticsEventName.paywallDismissed ||
     MosaicAnalyticsEventName.paywallActionSelected ||
@@ -1239,6 +1323,16 @@ void _validateEventRelationships(
     // every other event, including `product_unavailable`.
     ...MosaicExperimentAttribution.jsonKeys,
   };
+  // An Experiment event reports a decided Placement and its Variant, and never
+  // the Product identifiers a conversion event carries.
+  const experimentPlacementAttribution = <String>{
+    ...placementAttribution,
+    ...MosaicExperimentAttribution.jsonKeys,
+  };
+  const experimentPaywallAttribution = <String>{
+    ...paywallAttribution,
+    ...MosaicExperimentAttribution.jsonKeys,
+  };
   final allowedAttribution = switch (name) {
     MosaicAnalyticsEventName.placementRequested ||
     MosaicAnalyticsEventName.placementNoPaywall ||
@@ -1270,6 +1364,11 @@ void _validateEventRelationships(
     MosaicAnalyticsEventName.purchaseCancelled ||
     MosaicAnalyticsEventName.purchaseFailed =>
       productAttribution,
+    MosaicAnalyticsEventName.experimentAssigned ||
+    MosaicAnalyticsEventName.experimentAssignmentFailed ||
+    MosaicAnalyticsEventName.experimentFallbackPresented =>
+      experimentPlacementAttribution,
+    MosaicAnalyticsEventName.experimentExposed => experimentPaywallAttribution,
   };
   if (!allowedAttribution.containsAll(attribution.toJson().keys)) {
     throw const FormatException('Attribution is not valid for event type.');

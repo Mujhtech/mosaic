@@ -290,21 +290,18 @@ extension on _MosaicPaywallState {
         'Video poster is unavailable; the fallback colour is used.',
       );
     }
-    // Protocol 0.4 ruling: under reduced motion a video background does not
-    // play. The declared poster is rendered if it is available and the declared
+    // Under reduced motion a video background does not play. The declared poster is rendered if it is available and the declared
     // fallback colour otherwise — the same resolution order the existing
     // missing-media policy already uses, deliberately, so this reuses a path
     // three renderers have implemented rather than adding a fourth outcome.
     // No frame of the video is shown, playback is never started and paused,
-    // and no control is offered. 0.3 documents keep 0.3's behaviour: the
-    // ruling ships as specified 0.4 behaviour, not as a 0.3 defect patch.
+    // and no control is offered.
     final videoAsset = widget.document.videoAsset(video.assetId)!;
-    if (_reducedMotion &&
-        widget.document.schemaVersion == mosaicProtocolVersionV04) {
+    if (_reducedMotion) {
       // Availability and playability are decided independently. Whether the
       // media exists is a fact about the document and the host's asset
       // resolution; whether it plays is a fact about the customer's settings.
-      // An operator debugging a 0.4 paywall on a reduced-motion device must
+      // An operator debugging a paywall on a reduced-motion device must
       // still be told the video could not be resolved, so the same diagnostic
       // the playing path would raise is raised here — and the converse holds
       // too: a resolvable video that is deliberately not played is not a broken

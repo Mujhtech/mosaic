@@ -219,7 +219,6 @@ MosaicConfigurationRelease _release() => MosaicConfigurationRelease(
       publishedAt: '2026-07-24T00:00:00Z',
       contentDigest: _releaseDigest,
       requiredCapabilities: const <MosaicRequiredCapability>[],
-      placements: const <String, String>{},
       paywallVersions: const <String, MosaicDeliveredPaywallVersion>{},
       productReferences: const <String, MosaicDeliveredProductReference>{
         'product_pro_monthly': MosaicDeliveredProductReference(

@@ -29,7 +29,7 @@ const _products = <MosaicProduct>[
 ];
 
 /// Rendering, interaction, and accessibility for the four components Protocol
-/// 0.3 adds, driven by the canonical fixture rather than a local document.
+/// the protocol adds, driven by the canonical fixture rather than a local one.
 void main() {
   testWidgets('Tabs opens its authored initial panel, not the first one',
       (tester) async {
@@ -127,8 +127,16 @@ void main() {
       <String>['Day 7'],
     );
     expect(find.text('Day 7'), findsOneWidget);
-    // Markers and the connector are decorative: drawn, never announced.
-    expect(find.text('2'), findsOneWidget);
+    // Markers and the connector are decorative: drawn, never announced. The
+    // finder is scoped to the Timeline because the shared marker union means an
+    // ordinal glyph is no longer unique to it — the Feature List draws them too.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('mosaic-trial-timeline')),
+        matching: find.text('2'),
+      ),
+      findsOneWidget,
+    );
     expect(
       _elementLabels(tester, 'mosaic-trial-timeline-trial-reminder'),
       isNot(contains('2')),
@@ -302,6 +310,9 @@ Future<void> _pump(
         child: Scaffold(
           body: MosaicPaywall(
             document: decodeCanonicalFixture(),
+            // Terminal-frame rendering: this suite asserts announcements and
+            // touch targets, not motion.
+            motionDriver: const MosaicMotionDriver.disabled(),
             purchaseProvider: purchaseProvider ??
                 MockMosaicPurchaseProvider(products: _products),
             requestedLocale: requestedLocale,

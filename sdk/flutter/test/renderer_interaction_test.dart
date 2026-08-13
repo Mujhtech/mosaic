@@ -45,7 +45,7 @@ void main() {
     );
   });
 
-  testWidgets('renders the Protocol 0.3 controls with native Flutter widgets',
+  testWidgets('renders the Protocol 0.4 controls with native Flutter widgets',
       (tester) async {
     await _pumpPaywall(tester, MockMosaicPurchaseProvider(products: _products));
 
@@ -166,11 +166,11 @@ void main() {
         reason: name,
       );
     }
-    // Presentation events are not conversion events and stay on v1 without the
-    // tuple: carrying it there would be a minimization violation.
+    // Presentation events are not conversion events and carry no Experiment
+    // tuple: attaching one there would be a minimization violation.
     final presented =
         events.singleWhere((item) => item['eventName'] == 'paywall_presented');
-    expect(presented['eventSchemaVersion'], '1');
+    expect(presented['eventSchemaVersion'], '2');
     expect(
       (presented['attribution']! as Map).containsKey('experimentId'),
       isFalse,

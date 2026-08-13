@@ -187,17 +187,23 @@ void _expectPlacementResolves(
   String placementKey,
   String expectedDigest,
 ) {
-  final resolution = mosaic.resolvePlacement(placementKey);
-  expect(resolution, isA<MosaicPlacementResolved>(),
-      reason: 'Placement "$placementKey" must resolve to a Paywall.');
-  final resolved = resolution as MosaicPlacementResolved;
-  expect(resolved.configuration.envelope.release.contentDigest, expectedDigest);
-  expect(resolved.paywallVersion.document.screens, isNotEmpty);
-  stdout.writeln(
-    'placement $placementKey -> paywall ${resolved.paywallVersion.paywallId} '
-    'document ${resolved.paywallVersion.document.id} '
-    'screens ${resolved.paywallVersion.document.screens.length}',
-  );
+  final accepted = mosaic.acceptedConfiguration;
+  expect(accepted, isNotNull,
+      reason: 'Placement "$placementKey" needs accepted configuration.');
+  final ruleSet = accepted!.envelope.release.decisionForPlacement(placementKey);
+  expect(ruleSet, isNotNull,
+      reason: 'Placement "$placementKey" must carry a decision rule set.');
+  expect(accepted.envelope.release.contentDigest, expectedDigest);
+  final paywalls = accepted.envelope.release.paywallVersions.values;
+  expect(paywalls, isNotEmpty);
+  for (final paywall in paywalls) {
+    expect(paywall.document.screens, isNotEmpty);
+    stdout.writeln(
+      'placement $placementKey -> paywall ${paywall.paywallId} '
+      'document ${paywall.document.id} '
+      'screens ${paywall.document.screens.length}',
+    );
+  }
 }
 
 void _report(MosaicAcceptedConfiguration accepted, String label) {

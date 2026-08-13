@@ -10,51 +10,102 @@ void main() {
   final root = Directory.current.parent.parent;
 
   String fixture(String name) => File(
-        '${root.path}/protocol/fixtures/v0.3/$name',
+        '${root.path}/protocol/fixtures/v0.4/$name',
       ).readAsStringSync();
 
-  test('strictly decodes every canonical valid Protocol 0.3 fixture', () {
-    for (final name in <String>[
-      'complete-paywall.json',
-      'edge-cases.json',
-      'expired-countdown.json',
-      'hidden-purchase-target.json',
-      'navigation-only.json',
-    ]) {
-      final document = const MosaicProtocolDecoder().decode(fixture(name));
-      expect(document.schemaVersion, mosaicProtocolVersion, reason: name);
-      expect(document.initialScreenId, isNotNull, reason: name);
-      expect(document.screens, isNotEmpty, reason: name);
+  test('rejects any schemaVersion other than the implemented one', () {
+    // Versions are exact identifiers, not ranges, and support is never inferred
+    // from numeric ordering: the retired predecessor is refused exactly as
+    // firmly as an unknown successor. Both resolve through the safe-failure
+    // chain rather than being read on a best-effort basis.
+    for (final version in const <String>['0.3', '0.5', '1.0', '', 'latest']) {
+      final source =
+          jsonDecode(fixture('complete-paywall.json'))! as Map<String, Object?>;
+      source['schemaVersion'] = version;
       expect(
-        document.screens.every(
-          (screen) =>
-              screen.layout.content.direction == MosaicStackDirection.vertical,
+        () => const MosaicProtocolDecoder().decode(jsonEncode(source)),
+        throwsA(
+          isA<MosaicProtocolException>().having(
+            (error) => error.rejection,
+            'rejection',
+            MosaicProtocolRejection.unsupportedSchemaVersion,
+          ),
         ),
-        isTrue,
-        reason: name,
+        reason: version,
       );
     }
   });
 
-  test('rejects every canonical invalid Protocol 0.3 fixture atomically', () {
-    // The corpus is enumerated from disk rather than listed here, so a fixture
-    // the protocol agent adds cannot pass by never being read. The count is
-    // asserted for the same reason: a scan over an empty or mis-resolved
-    // directory would otherwise report success having checked nothing.
-    final invalid = canonicalFixtureFiles(
-      repositoryDirectory('protocol/fixtures/v0.3/invalid'),
+  test('strictly decodes every canonical valid Protocol 0.4 fixture', () {
+    final directory = repositoryDirectory('protocol/fixtures/v0.4');
+    final decoded = <String>{};
+    for (final file in canonicalFixtureFiles(directory)) {
+      final name = file.uri.pathSegments.last;
+      // Conformance-vector corpora, not paywall documents. They live beside
+      // the documents because they are versioned with the same contract, but
+      // they carry vectors rather than a `schemaVersion` and a screen tree.
+      if (const <String>{
+        'motion-frames.json',
+        'accessibility-announcement.json',
+        'rating-announcement.json',
+        'locale-resolution.json',
+      }.contains(name)) {
+        continue;
+      }
+      final document =
+          const MosaicProtocolDecoder().decode(file.readAsStringSync());
+      expect(document.schemaVersion, '0.4', reason: name);
+      decoded.add(name);
+    }
+    // Named rather than counted. The sweep is directory-driven, so a fixture
+    // that stops being swept — renamed, moved, or newly excluded — would
+    // otherwise reduce coverage silently while the test still passed.
+    expect(
+      decoded,
+      containsAll(<String>{
+        'complete-paywall.json',
+        'edge-cases.json',
+        'expired-countdown.json',
+        'hidden-purchase-target.json',
+        'navigation-only.json',
+        'screen-round-trip.json',
+      }),
     );
-    expect(invalid, hasLength(12));
-    for (final file in invalid) {
+  });
+
+  test('rejects every canonical invalid Protocol 0.4 fixture atomically', () {
+    final directory = repositoryDirectory('protocol/fixtures/v0.4/invalid');
+    final rejected = <String>{};
+    for (final file in canonicalFixtureFiles(directory)) {
+      final name = file.uri.pathSegments.last;
       expect(
         () => const MosaicProtocolDecoder().decode(file.readAsStringSync()),
         throwsA(isA<MosaicProtocolException>()),
-        reason: file.uri.pathSegments.last,
+        reason: name,
       );
+      rejected.add(name);
     }
+    // The motion rejections are the point of this sweep: a document that
+    // authors unsafe or incoherent motion must not reach a renderer at all.
+    expect(
+      rejected,
+      containsAll(<String>{
+        'nested-appear-motion.json',
+        'two-loops-on-one-screen.json',
+        'loop-motion-below-flash-floor.json',
+        'loop-motion-outside-button.json',
+        'rise-on-fade-appear.json',
+        'unknown-motion-token.json',
+        'unused-motion-token.json',
+        // A token reached only from another *unreached* token. Usage is
+        // reachability from node reference sites, so a pair of orphans cannot
+        // vouch for each other.
+        'unused-token-transitive.json',
+      }),
+    );
   });
 
-  test('0.3 reader rejects unknown fields and unknown components atomically',
+  test('the reader rejects unknown fields and unknown components atomically',
       () {
     final source =
         jsonDecode(fixture('complete-paywall.json'))! as Map<String, Object?>;
@@ -177,27 +228,30 @@ void main() {
     );
   });
 
-  test('bundled fallback safely replaces a rejected 0.3 candidate', () async {
+  test('bundled fallback safely replaces a rejected candidate', () async {
     final result = await const MosaicPaywallLoader().load(
       candidateDocument: fixture('invalid/noncanonical-color.json'),
       bundledFallbackLoader: () async => fixture('complete-paywall.json'),
     );
 
     expect(result, isA<MosaicPaywallLoaded>());
-    expect((result as MosaicPaywallLoaded).document.schemaVersion, '0.3');
+    expect(
+      (result as MosaicPaywallLoaded).document.schemaVersion,
+      mosaicProtocolVersion,
+    );
     expect(result.source, MosaicPaywallDocumentSource.bundledFallback);
   });
 
-  test('capability report is exact for Protocol 0.3 support', () {
+  test('capability report is exact for the implemented protocol', () {
     final document = const MosaicProtocolDecoder().decode(
       fixture('complete-paywall.json'),
     );
     expect(
-      mosaicFlutterCapabilityReport.capabilitiesFor('0.3'),
-      unorderedEquals(mosaicProtocolV03Capabilities),
+      mosaicFlutterCapabilityReport.capabilities,
+      unorderedEquals(mosaicProtocolCapabilities),
     );
     expect(
-      mosaicProtocolV03Capabilities,
+      mosaicProtocolCapabilities,
       document.compatibility.requiredCapabilities
           .map((capability) => capability.name)
           .toSet(),
@@ -205,7 +259,7 @@ void main() {
     expect(
       document.compatibility.requiredCapabilities
           .map((capability) => capability.version),
-      everyElement('0.3'),
+      everyElement(mosaicProtocolVersion),
     );
   });
 

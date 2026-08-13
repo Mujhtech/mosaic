@@ -4,12 +4,9 @@ import 'sha256.dart';
 
 /// The exact Authoritative Entitlement Contract version this SDK reads.
 ///
-/// Reading is exact-match. A `"2"` document is as unreadable to a `"1"` reader
-/// as a `"9.9"` document; numeric ordering never implies support.
-const String mosaicAuthoritativeEntitlementContractVersion = '1';
-
-/// Authority-aware wrapper used for every Phase 9C SDK synchronization.
-const String mosaicAuthoritativeEntitlementContractVersionV2 = '2';
+/// Reading is exact-match: numeric ordering never implies support, so a
+/// document at any other version is unreadable rather than degraded.
+const String mosaicAuthoritativeEntitlementContractVersion = '2';
 
 const List<String> mosaicCustomerAuthorityCapabilities = <String>[
   'authority_epoch',
@@ -1020,8 +1017,7 @@ final class MosaicCustomerUnchangedRecord extends MosaicCustomerSyncRecord {
   final MosaicCustomerSnapshotUnchanged unchanged;
 }
 
-/// Reads Authoritative Entitlement Contract v1 records from the SDK sync
-/// surface.
+/// Reads the snapshot payloads an Authoritative Entitlement record carries.
 ///
 /// Reading is closed and whole-document: any unknown version, record type,
 /// field, or enumeration member rejects the entire record. The single
@@ -1605,7 +1601,7 @@ final class MosaicCustomerEntitlementDecoder {
 }
 
 // ---------------------------------------------------------------------------
-// Authority-aware v2 wrapper
+// Authority-aware record wrapper
 // ---------------------------------------------------------------------------
 
 sealed class MosaicCustomerAuthoritySyncRecord {
@@ -1667,9 +1663,11 @@ String mosaicCustomerSnapshotAuthorityDigest(
       <String, Object?>{'authority': authority, 'snapshot': snapshot},
     )))}';
 
-/// Strict reader for the v2 authority wrapper. The embedded snapshot continues
-/// to be decoded by the frozen v1 reader; v2 changes its authority, not its
-/// customer-access vocabulary.
+/// Strict reader for a whole Authoritative Entitlement record.
+///
+/// The authority wrapper carries the scope and epoch; the embedded snapshot is
+/// read by [MosaicCustomerEntitlementDecoder], which owns the customer-access
+/// vocabulary.
 final class MosaicCustomerAuthorityDecoder {
   const MosaicCustomerAuthorityDecoder();
 
@@ -1692,7 +1690,7 @@ final class MosaicCustomerAuthorityDecoder {
       if (envelope.length != envelopeKeys.length ||
           !envelopeKeys.every(envelope.containsKey) ||
           envelope['authoritativeEntitlementContractVersion'] !=
-              mosaicAuthoritativeEntitlementContractVersionV2 ||
+              mosaicAuthoritativeEntitlementContractVersion ||
           envelope['recordType'] != 'authorityUnavailable') {
         return null;
       }
@@ -1745,7 +1743,7 @@ final class MosaicCustomerAuthorityDecoder {
       'payload',
     });
     if (fields.raw['authoritativeEntitlementContractVersion'] !=
-        mosaicAuthoritativeEntitlementContractVersionV2) {
+        mosaicAuthoritativeEntitlementContractVersion) {
       throw const MosaicCustomerEntitlementFormatException(
         'unsupported_contract_version',
       );
@@ -1777,14 +1775,8 @@ final class MosaicCustomerAuthorityDecoder {
     final rawAuthority = fields.object('authority');
     final rawSnapshot = fields.object('snapshot');
     final digest = fields.digest('snapshotAuthorityDigest');
-    final v1Envelope = <String, Object?>{
-      'authoritativeEntitlementContractVersion':
-          mosaicAuthoritativeEntitlementContractVersion,
-      'recordType': 'customerEntitlementSnapshot',
-      'payload': rawSnapshot,
-    };
-    final decoded = const MosaicCustomerEntitlementDecoder()
-        .decodeObject(v1Envelope) as MosaicCustomerSnapshotRecord;
+    final decoded =
+        const MosaicCustomerEntitlementDecoder()._snapshotRecord(rawSnapshot);
     return MosaicCustomerAuthoritySnapshotRecord(
       authority: _authority(rawAuthority),
       snapshotRecord: decoded,
@@ -1806,24 +1798,18 @@ final class MosaicCustomerAuthorityDecoder {
       'snapshotAuthorityDigest',
       'minimumSupport',
     });
-    final v1Envelope = <String, Object?>{
-      'authoritativeEntitlementContractVersion':
-          mosaicAuthoritativeEntitlementContractVersion,
-      'recordType': 'snapshotUnchanged',
-      'payload': fields.object('unchanged'),
-    };
-    final decoded = const MosaicCustomerEntitlementDecoder()
-        .decodeObject(v1Envelope) as MosaicCustomerUnchangedRecord;
+    final unchanged = const MosaicCustomerEntitlementDecoder()
+        ._unchanged(fields.object('unchanged'));
     final authority = _authority(fields.object('authority'));
-    if (decoded.unchanged.projectId != authority.scope.projectId ||
-        decoded.unchanged.environmentId != authority.scope.environmentId) {
+    if (unchanged.projectId != authority.scope.projectId ||
+        unchanged.environmentId != authority.scope.environmentId) {
       throw const MosaicCustomerEntitlementFormatException(
         'semantic_invariant_violated',
       );
     }
     return MosaicCustomerAuthorityUnchangedRecord(
       authority: authority,
-      unchanged: decoded.unchanged,
+      unchanged: unchanged,
       snapshotAuthorityDigest: fields.digest('snapshotAuthorityDigest'),
       minimumSupport: _minimumSupport(fields.object('minimumSupport')),
     );

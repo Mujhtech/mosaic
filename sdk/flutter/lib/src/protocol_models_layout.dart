@@ -6,7 +6,7 @@ sealed class MosaicNode {
   final String id;
 
   /// Authored Protocol 0.4 motion, or `null` for a node that declares none and
-  /// for every node of a 0.3 document.
+  /// for every node of a document.
   ///
   /// Motion never reaches the accessibility tree: a node mid-entrance is
   /// already present, focusable, and announceable, and a pulsing button
@@ -40,7 +40,7 @@ sealed class MosaicStackNode extends MosaicNode {
   double get gap;
 }
 
-/// Protocol 0.3 generalized Stack.
+/// Protocol 0.4 generalized Stack.
 final class MosaicStackComponent extends MosaicStackNode {
   MosaicStackComponent({
     required super.id,
@@ -205,7 +205,7 @@ final class MosaicFeatureListComponent extends MosaicComponent {
 
   /// The glyph every item carries unless the item overrides it.
   ///
-  /// Protocol 0.3 authors this as the single constant `"checkmark"`, which is
+  /// Protocol 0.4 authors this as the single constant `"checkmark"`, which is
   /// exactly this default, so both versions read through one field. Marker
   /// colour and size stay component-level, as they are on Timeline.
   final MosaicMarker marker;
@@ -269,7 +269,7 @@ final class MosaicSelectionStateStyle {
   final MosaicShadow? shadow;
 }
 
-/// Presence-aware, recursive Protocol 0.3 Selected overrides.
+/// Presence-aware, recursive Protocol 0.4 Selected overrides.
 ///
 /// Shared by every two-state selectable box: Product Card, Product Badge, and
 /// the Tabs tab controls.

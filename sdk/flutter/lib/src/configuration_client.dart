@@ -127,8 +127,6 @@ final class MosaicConfigurationCapabilityRequest {
         'sdkVersion': mosaicFlutterSdkVersion,
         'supportedConfigurationDeliveryVersions': const <String>[
           mosaicConfigurationDeliveryVersion,
-          mosaicConfigurationDeliveryVersionV2,
-          mosaicConfigurationDeliveryVersionV3,
         ],
         'supportedPlacementDecisionContracts': const <String>[
           mosaicPlacementDecisionVersion,
@@ -160,7 +158,7 @@ final class MosaicConfigurationCapabilityRequest {
             'version': mosaicProtocolVersion,
             'capabilities': <Map<String, String>>[
               for (final capability
-                  in mosaicProtocolV03Capabilities.toList()..sort())
+                  in mosaicProtocolCapabilities.toList()..sort())
                 <String, String>{
                   'name': capability,
                   'version': mosaicProtocolVersion,

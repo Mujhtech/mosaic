@@ -7,31 +7,16 @@ part of 'protocol.dart';
 /// own runtime selection state, `loop` on Button alone.
 enum _MotionSlot {
   /// The screen Scroll Container, which is viewport-owned rather than
-  /// authored — the same reason `0.3` excludes it from `sizing`.
+  /// authored — the same reason the protocol excludes it from `sizing`.
   none,
   node,
   selectable,
   button,
 }
 
-/// One decode of one document, bound to the schema version it declared.
-///
-/// The version is carried as receiver state rather than threaded through every
-/// helper because almost every decoding rule is shared: `0.4` is `0.3` plus
-/// motion, minus one co-derived capability, with one consolidated marker
-/// vocabulary. Passing a version parameter into eighty helpers would make the
-/// three differences invisible among the identical arguments.
+/// One decode of one document.
 final class _DocumentDecoder {
-  const _DocumentDecoder(this.schemaVersion);
-
-  final String schemaVersion;
-
-  /// Whether this document is read under Paywall Protocol 0.4.
-  bool get isV04 => schemaVersion == mosaicProtocolVersionV04;
-
-  /// The capabilities a document of this version may declare.
-  Set<String> get supportedCapabilities =>
-      isV04 ? mosaicProtocolV04Capabilities : mosaicProtocolV03Capabilities;
+  const _DocumentDecoder();
 
   MosaicPaywallDocument _decodeDocument(Map<String, Object?> root) {
     _expectKeys(
@@ -53,7 +38,7 @@ final class _DocumentDecoder {
     final screenValues = _list(root['screens'], r'$.screens');
     if (screenValues.isEmpty || screenValues.length > 10) {
       throw const MosaicProtocolException(
-        'Protocol 0.3 screens must contain between 1 and 10 entries.',
+        'Protocol 0.4 screens must contain between 1 and 10 entries.',
       );
     }
     final screens = <MosaicPaywallScreen>[
@@ -63,7 +48,7 @@ final class _DocumentDecoder {
     if (screens.length > 1 &&
         screens.any((screen) => screen.accessibilityLabel == null)) {
       throw const MosaicProtocolException(
-        'Every Protocol 0.3 Paywall Screen must have an accessibilityLabel '
+        'Every Protocol 0.4 Paywall Screen must have an accessibilityLabel '
         'when the document contains multiple screens.',
       );
     }
@@ -77,14 +62,10 @@ final class _DocumentDecoder {
       );
     }
     final document = MosaicPaywallDocument(
-      schemaVersion: schemaVersion,
+      schemaVersion: mosaicProtocolVersion,
       id: _identifier(root['id'], r'$.id'),
       revision: _positiveInteger(root['revision'], r'$.revision'),
-      compatibility: _compatibilityFor(
-        root['compatibility'],
-        version: schemaVersion,
-        supported: supportedCapabilities,
-      ),
+      compatibility: _compatibility(root['compatibility']),
       localization: _localization(root['localization']),
       designSystem: _docDesignSystem(root['designSystem']),
       assets: _docAssets(root['assets']),
@@ -137,11 +118,7 @@ final class _DocumentDecoder {
         : MosaicScreenPresentation.screen;
   }
 
-  MosaicDocumentCompatibility _compatibilityFor(
-    Object? value, {
-    required String version,
-    required Set<String> supported,
-  }) {
+  MosaicDocumentCompatibility _compatibility(Object? value) {
     const path = r'$.compatibility';
     final object = _object(value, path);
     _expectKeys(object, const <String>{'requiredCapabilities'}, path);
@@ -162,7 +139,8 @@ final class _DocumentDecoder {
       final name = _string(capability['name'], '$capabilityPath.name');
       final capabilityVersion =
           _string(capability['version'], '$capabilityPath.version');
-      if (!supported.contains(name) || capabilityVersion != version) {
+      if (!mosaicProtocolCapabilities.contains(name) ||
+          capabilityVersion != mosaicProtocolVersion) {
         throw MosaicProtocolException.unsupportedCapability(
           'Unsupported capability "$name@$capabilityVersion" at '
           '$capabilityPath.',
@@ -226,8 +204,8 @@ final class _DocumentDecoder {
         'children',
       },
       path,
-      optional: <String>{
-        if (isV04) 'motion',
+      optional: const <String>{
+        'motion',
         'appearance',
         'sizing',
         'outerInsets',
@@ -294,7 +272,7 @@ final class _DocumentDecoder {
       'closeButton' ||
       'legalText' =>
         throw MosaicProtocolException.unsupportedCapability(
-          'Protocol 0.3 cannot contain "$type" at $path.type; it was removed '
+          'Protocol 0.4 cannot contain "$type" at $path.type; it was removed '
           'with the protocol version that defined it.',
         ),
       _ => throw MosaicProtocolException.unsupportedCapability(
@@ -413,26 +391,16 @@ final class _DocumentDecoder {
         'typography',
         'accessibility',
       },
-      optional: <String>{
+      optional: const <String>{
         'appearance',
         'sizing',
         'outerInsets',
         'visibility',
-        // Authorable only from 0.4. A 0.3 Feature List that declares it is an
-        // unknown key, which is a rejection rather than a silent drop.
-        if (isV04) 'markerSize',
+        'markerSize',
       },
     );
-    // 0.3 has one constant glyph and cannot express a negated item; 0.4
-    // consolidates onto the union Timeline already used. The 0.3 constant means
-    // exactly the checkmark icon arm of that union, so both versions decode
-    // into one field and the renderer needs no version branch.
-    final marker = isV04
-        ? _marker(object['marker'], '$path.marker')
-        : () {
-            _expectConst(object['marker'], 'checkmark', '$path.marker');
-            return const MosaicIconMarker(MosaicIconName.checkmark);
-          }();
+    // The shared marker union, the same one Timeline uses.
+    final marker = _marker(object['marker'], '$path.marker');
     final items = _nonEmptyList(object['items'], '$path.items');
     final typography = _docTypography(
       object['typography'],
@@ -560,11 +528,11 @@ final class _DocumentDecoder {
         'styles',
       },
       path,
-      optional: <String>{
-        if (isV04) 'motion',
+      optional: const <String>{
+        'motion',
         'clipContent',
         'accessibility',
-        'sizing'
+        'sizing',
       },
     );
     _expectConst(object['type'], 'productCard', '$path.type');
@@ -642,7 +610,7 @@ final class _DocumentDecoder {
         'styles',
       },
       path,
-      optional: <String>{if (isV04) 'motion', 'sizing'},
+      optional: const <String>{'motion', 'sizing'},
     );
     _expectConst(object['type'], 'productBadge', '$path.type');
     final children = _nonEmptyList(object['children'], '$path.children');
@@ -746,8 +714,8 @@ final class _DocumentDecoder {
         'children',
       },
       path,
-      optional: <String>{
-        if (isV04) 'motion',
+      optional: const <String>{
+        'motion',
         'appearance',
         'sizing',
         'outerInsets',

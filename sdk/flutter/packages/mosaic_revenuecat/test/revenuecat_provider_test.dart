@@ -33,25 +33,25 @@ void main() {
     );
 
     final loaded = await provider.loadProducts(
-      const <String>['product_pro_monthly', 'product_pro_yearly'],
+      const <String>['mosaic_pro_monthly', 'mosaic_pro_yearly'],
     );
     expect(loaded, isA<MosaicProductsLoaded>());
     expect(
       (loaded as MosaicProductsLoaded).products.map((product) => product.id),
-      <String>['product_pro_monthly', 'product_pro_yearly'],
+      <String>['mosaic_pro_monthly', 'mosaic_pro_yearly'],
     );
     expect(loaded.products.first.localizedPrice, r'$9.99');
     expect(loaded.products.first.billingPeriod?.unit,
         MosaicBillingPeriodUnit.month);
 
     expect(
-      await provider.purchase('product_pro_monthly'),
+      await provider.purchase('mosaic_pro_monthly'),
       isA<MosaicPurchased>(),
     );
     expect(client.purchaseParameters.first.product, same(setup.monthly));
     expect(client.purchaseParameters.first.package, isNull);
 
-    final yearly = await provider.purchase('product_pro_yearly');
+    final yearly = await provider.purchase('mosaic_pro_yearly');
     expect(yearly, isA<MosaicPurchased>());
     expect(client.purchaseParameters.last.package, same(setup.yearlyPackage));
     expect(
@@ -79,25 +79,25 @@ void main() {
       ],
     );
     final provider = setup.provider(client);
-    await provider.loadProducts(const <String>['product_pro_monthly']);
+    await provider.loadProducts(const <String>['mosaic_pro_monthly']);
 
     expect(
-      await provider.purchase('product_pro_monthly'),
+      await provider.purchase('mosaic_pro_monthly'),
       isA<MosaicPurchaseCancelled>(),
     );
     expect(
-      await provider.purchase('product_pro_monthly'),
+      await provider.purchase('mosaic_pro_monthly'),
       isA<MosaicPurchasePending>(),
     );
     expect(
-      await provider.purchase('product_pro_monthly'),
+      await provider.purchase('mosaic_pro_monthly'),
       isA<MosaicPurchaseProductUnavailable>(),
     );
     expect(
-      await provider.purchase('product_pro_monthly'),
+      await provider.purchase('mosaic_pro_monthly'),
       isA<MosaicAlreadyEntitled>(),
     );
-    final unavailable = await provider.purchase('product_pro_monthly')
+    final unavailable = await provider.purchase('mosaic_pro_monthly')
         as MosaicPurchaseProviderUnavailable;
     expect(unavailable.diagnostic?.retryable, isTrue);
     expect(unavailable.diagnostic?.safeMessage, isNotEmpty);
@@ -123,20 +123,20 @@ void main() {
     final provider = setup.provider(client);
 
     expect(
-      await provider.loadProducts(const <String>['product_pro_monthly']),
+      await provider.loadProducts(const <String>['mosaic_pro_monthly']),
       isA<MosaicProductsUnavailable>(),
     );
     expect(
-      await provider.purchase('product_pro_monthly'),
+      await provider.purchase('mosaic_pro_monthly'),
       isA<MosaicPurchaseProductUnavailable>(),
     );
 
     expect(
-      await provider.loadProducts(const <String>['product_pro_monthly']),
+      await provider.loadProducts(const <String>['mosaic_pro_monthly']),
       isA<MosaicProductsLoaded>(),
     );
     expect(
-      await provider.purchase('product_pro_monthly'),
+      await provider.purchase('mosaic_pro_monthly'),
       isA<MosaicPurchased>(),
     );
   });
@@ -469,7 +469,7 @@ String _fixtureSource() {
   var directory = Directory.current.absolute;
   while (true) {
     final file = File(
-      '${directory.path}/protocol/fixtures/commerce-configuration/v1/'
+      '${directory.path}/protocol/fixtures/commerce-configuration/v2/'
       'revenuecat-configuration.json',
     );
     if (file.existsSync()) return file.readAsStringSync();
@@ -495,19 +495,21 @@ MosaicConfigurationRelease _releaseFor(String source) {
     publishedAt: '2026-07-23T12:00:00Z',
     contentDigest: association['contentDigest']! as String,
     requiredCapabilities: const <MosaicRequiredCapability>[],
-    placements: const <String, String>{},
     paywallVersions: const <String, MosaicDeliveredPaywallVersion>{},
-    productReferences: const <String, MosaicDeliveredProductReference>{
-      'product_pro_monthly': MosaicDeliveredProductReference(
-        id: 'product_pro_monthly',
-        type: MosaicDeliveredProductType.subscription,
-        fallbackDisplayName: 'Pro Monthly',
-      ),
-      'product_pro_yearly': MosaicDeliveredProductReference(
-        id: 'product_pro_yearly',
-        type: MosaicDeliveredProductType.subscription,
-        fallbackDisplayName: 'Pro Yearly',
-      ),
+    // Derived from the fixture's own mappings rather than restated here: the
+    // decoder requires the release's Product set to equal the configuration's
+    // exactly, so a hand-written list drifts silently the moment the canonical
+    // fixture gains or renames a Product.
+    productReferences: <String, MosaicDeliveredProductReference>{
+      for (final raw in configuration['productMappings']! as List<Object?>)
+        (raw! as Map<String, Object?>)['mosaicProductId']! as String:
+            MosaicDeliveredProductReference(
+          id: (raw as Map<String, Object?>)['mosaicProductId']! as String,
+          type: raw['productType'] == 'subscription'
+              ? MosaicDeliveredProductType.subscription
+              : MosaicDeliveredProductType.oneTimeNonConsumable,
+          fallbackDisplayName: raw['mosaicProductId']! as String,
+        ),
     },
     assetReferences: const <String, MosaicDeliveredAssetReference>{},
   );

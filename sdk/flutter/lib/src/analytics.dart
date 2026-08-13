@@ -90,8 +90,7 @@ abstract interface class MosaicAnalyticsTransport {
   Future<MosaicAnalyticsIngestionResponse> send(MosaicAnalyticsBatch batch);
 }
 
-final class MosaicIoAnalyticsTransport
-    implements MosaicAnalyticsTransport, MosaicExperimentAnalyticsTransport {
+final class MosaicIoAnalyticsTransport implements MosaicAnalyticsTransport {
   const MosaicIoAnalyticsTransport({
     required this.baseUrl,
     required this.publicSdkKey,
@@ -103,17 +102,9 @@ final class MosaicIoAnalyticsTransport
 
   @override
   Future<MosaicAnalyticsIngestionResponse> send(MosaicAnalyticsBatch batch) =>
-      _send(batch.encode(), mosaicAnalyticsEventContractVersion);
+      _send(batch.encode());
 
-  @override
-  Future<MosaicAnalyticsIngestionResponse> sendExperiment(
-          MosaicExperimentAnalyticsBatch batch) =>
-      _send(batch.encode(), mosaicAnalyticsEventContractVersionV2);
-
-  Future<MosaicAnalyticsIngestionResponse> _send(
-    String encoded,
-    String contractVersion,
-  ) async {
+  Future<MosaicAnalyticsIngestionResponse> _send(String encoded) async {
     final client = HttpClient()..connectionTimeout = timeout;
     try {
       final endpoint = baseUrl.resolve('/v1/sdk/events/batch');
@@ -127,10 +118,7 @@ final class MosaicIoAnalyticsTransport
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw HttpException('Analytics ingestion unavailable.', uri: endpoint);
       }
-      return MosaicAnalyticsIngestionResponse.decode(
-        body,
-        contractVersion: contractVersion,
-      );
+      return MosaicAnalyticsIngestionResponse.decode(body);
     } finally {
       client.close(force: true);
     }
@@ -210,51 +198,15 @@ final class _QueuedAnalyticsEvent {
       {required this.event,
       required this.encoded,
       this.attempts = 0,
-      this.notBefore})
-      : experimentEvent = null;
-  _QueuedAnalyticsEvent.experiment({
-    required Map<String, Object?> event,
-    required this.encoded,
-    this.attempts = 0,
-    this.notBefore,
-  })  : event = null,
-        experimentEvent = Map.unmodifiable(event);
-  final MosaicAnalyticsEvent? event;
-  final Map<String, Object?>? experimentEvent;
+      this.notBefore});
+  final MosaicAnalyticsEvent event;
   final String encoded;
   int attempts;
   DateTime? notBefore;
   int get bytes => utf8.encode(encoded).length;
-  bool get isExperiment => experimentEvent != null;
-  String get eventId =>
-      event?.eventId ?? experimentEvent!['eventId']! as String;
-  DateTime get occurredAt =>
-      event?.occurredAt ??
-      DateTime.parse(experimentEvent!['occurredAt']! as String).toUtc();
-  MosaicAnalyticsEventPriority get priority {
-    final normal = event;
-    if (normal != null) return normal.name.priority;
-    final name = experimentEvent!['eventName'];
-    return switch (name) {
-      'experiment_assigned' ||
-      'experiment_assignment_failed' =>
-        MosaicAnalyticsEventPriority.low,
-      'experiment_exposed' ||
-      'experiment_fallback_presented' =>
-        MosaicAnalyticsEventPriority.presentation,
-      // An attributed conversion event keeps the priority of its shared event
-      // name, so overflow eviction still protects purchase outcomes.
-      _ => _sharedEventPriority(name) ?? MosaicAnalyticsEventPriority.low,
-    };
-  }
-
-  static MosaicAnalyticsEventPriority? _sharedEventPriority(Object? name) {
-    try {
-      return MosaicAnalyticsEventName.parse(name).priority;
-    } on FormatException {
-      return null;
-    }
-  }
+  String get eventId => event.eventId;
+  DateTime get occurredAt => event.occurredAt;
+  MosaicAnalyticsEventPriority get priority => event.name.priority;
 
   Map<String, Object?> toJson() => {
         'event': jsonDecode(encoded),
@@ -417,16 +369,8 @@ final class MosaicAnalyticsRuntime
         attribution: attribution,
         payload: payload,
       );
-      final encoded = event.encode();
-      // An event carrying Experiment attribution is an Analytics Event v2
-      // document and must be delivered in a v2 batch. Versions are never mixed
-      // inside one batch.
-      final queued = event.attribution.experiment == null
-          ? _QueuedAnalyticsEvent(event: event, encoded: encoded)
-          : _QueuedAnalyticsEvent.experiment(
-              event: event.toJson(),
-              encoded: encoded,
-            );
+      final queued =
+          _QueuedAnalyticsEvent(event: event, encoded: event.encode());
       _dropExpired(clock().toUtc());
       _makeRoom(queued);
       if (_queue.length >= mosaicAnalyticsMaximumQueueEvents ||
@@ -451,7 +395,7 @@ final class MosaicAnalyticsRuntime
         final now = clock().toUtc();
         final identity = await identityController.load();
         final event = Map<String, Object?>.from(draft)
-          ..['eventSchemaVersion'] = '2'
+          ..['eventSchemaVersion'] = mosaicAnalyticsEventSchemaVersion
           ..['queuedAt'] = mosaicAnalyticsTimestamp(now)
           ..['identity'] = MosaicAnalyticsIdentity(
             installationId: identity.installationId,
@@ -461,10 +405,9 @@ final class MosaicAnalyticsRuntime
           ..['sessionId'] = _activeSession(now)
           ..['context'] = context.toJson();
         final validated = mosaicDecodeExperimentAnalyticsEvent(event);
-        final encoded = jsonEncode(validated);
-        final queued = _QueuedAnalyticsEvent.experiment(
+        final queued = _QueuedAnalyticsEvent(
           event: validated,
-          encoded: encoded,
+          encoded: validated.encode(),
         );
         _dropExpired(now);
         _makeRoom(queued);
@@ -484,7 +427,6 @@ final class MosaicAnalyticsRuntime
 
   Future<MosaicAnalyticsFlushResult> _performFlush() async {
     MosaicAnalyticsBatch? batch;
-    MosaicExperimentAnalyticsBatch? experimentBatch;
     List<_QueuedAnalyticsEvent> sent = const [];
     await _serialize(() async {
       await _ensureLoaded();
@@ -495,27 +437,12 @@ final class MosaicAnalyticsRuntime
           .where((e) => e.notBefore == null || !e.notBefore!.isAfter(now))
           .toList();
       final selected = <_QueuedAnalyticsEvent>[];
-      final experiment = eligible.isEmpty ? null : eligible.first.isExperiment;
-      for (final item in eligible
-          .where((item) => item.isExperiment == experiment)
-          .take(mosaicAnalyticsMaximumSendBatchSize)) {
-        final encoded = experiment == true
-            ? MosaicExperimentAnalyticsBatch(
-                batchId: _newId('batch'),
-                sentAt: now,
-                events: [
-                  ...selected.map((e) => e.experimentEvent!),
-                  item.experimentEvent!,
-                ],
-              ).encode()
-            : MosaicAnalyticsBatch(
-                batchId: _newId('batch'),
-                sentAt: now,
-                events: [
-                  ...selected.map((e) => e.event!),
-                  item.event!,
-                ],
-              ).encode();
+      for (final item in eligible.take(mosaicAnalyticsMaximumSendBatchSize)) {
+        final encoded = MosaicAnalyticsBatch(
+          batchId: _newId('batch'),
+          sentAt: now,
+          events: [...selected.map((e) => e.event), item.event],
+        ).encode();
         if (utf8.encode(encoded).length > mosaicAnalyticsMaximumBatchBytes) {
           break;
         }
@@ -523,46 +450,25 @@ final class MosaicAnalyticsRuntime
       }
       if (selected.isNotEmpty) {
         sent = selected;
-        if (experiment == true) {
-          experimentBatch = MosaicExperimentAnalyticsBatch(
-            batchId: _newId('batch'),
-            sentAt: now,
-            events: selected.map((e) => e.experimentEvent!),
-          );
-        } else {
-          batch = MosaicAnalyticsBatch(
-            batchId: _newId('batch'),
-            sentAt: now,
-            events: selected.map((e) => e.event!),
-          );
-        }
+        batch = MosaicAnalyticsBatch(
+          batchId: _newId('batch'),
+          sentAt: now,
+          events: selected.map((e) => e.event),
+        );
       }
       await _persistSafely();
     });
     if (!collectionEnabled) return const MosaicAnalyticsFlushDisabled();
-    if (batch == null && experimentBatch == null) {
-      return const MosaicAnalyticsFlushEmpty();
-    }
+    if (batch == null) return const MosaicAnalyticsFlushEmpty();
     MosaicAnalyticsIngestionResponse response;
     try {
-      if (experimentBatch case final value?) {
-        final experimentTransport = transport;
-        if (experimentTransport is! MosaicExperimentAnalyticsTransport) {
-          throw const FormatException('Analytics v2 transport unavailable.');
-        }
-        response =
-            await (experimentTransport as MosaicExperimentAnalyticsTransport)
-                .sendExperiment(value);
-      } else {
-        response = await transport.send(batch!);
-      }
+      response = await transport.send(batch!);
     } on Object {
       await _retainAfterFailure(sent, 'analytics.delivery_unavailable');
       return const MosaicAnalyticsFlushDeferred(
           safeCode: 'analytics.delivery_unavailable');
     }
-    final sentBatchId = experimentBatch?.batchId ?? batch!.batchId;
-    var malformed = response.batchId != sentBatchId ||
+    var malformed = response.batchId != batch!.batchId ||
         response.results.length != sent.length;
     final ids = sent.map((e) => e.eventId).toSet();
     malformed = malformed ||
@@ -743,24 +649,13 @@ final class MosaicAnalyticsRuntime
         final notBefore = item['notBefore'] == null
             ? null
             : DateTime.parse(item['notBefore'] as String).toUtc();
-        if (eventJson['eventSchemaVersion'] == '2') {
-          final validated = mosaicDecodeExperimentAnalyticsEvent(eventJson);
-          final encoded = jsonEncode(validated);
-          _queue.add(_QueuedAnalyticsEvent.experiment(
-            event: validated,
-            encoded: encoded,
-            attempts: attempts,
-            notBefore: notBefore,
-          ));
-        } else {
-          final event = MosaicAnalyticsEvent.fromJson(eventJson);
-          _queue.add(_QueuedAnalyticsEvent(
-            event: event,
-            encoded: event.encode(),
-            attempts: attempts,
-            notBefore: notBefore,
-          ));
-        }
+        final event = MosaicAnalyticsEvent.fromJson(eventJson);
+        _queue.add(_QueuedAnalyticsEvent(
+          event: event,
+          encoded: event.encode(),
+          attempts: attempts,
+          notBefore: notBefore,
+        ));
       }
       _sessionId = json['sessionId'] as String?;
       _lastActivityAt = json['lastActivityAt'] == null
@@ -943,7 +838,7 @@ final class MosaicAnalyticsPresentationContext {
 
   /// Attribution for a conversion event: Product attribution plus the
   /// Experiment tuple when this presentation is attributed to a Variant. Only
-  /// the conversion events named by the v1-to-v2 migration contract may use it.
+  /// the conversion events in [mosaicExperimentAttributableEvents] may use it.
   MosaicAnalyticsAttribution forConversion(String mosaicProductId) =>
       MosaicAnalyticsAttribution(
         configurationReleaseId: attribution.configurationReleaseId,

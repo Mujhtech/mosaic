@@ -11,7 +11,8 @@ import 'protocol.dart';
 
 part 'preview_client_runtime.dart';
 
-const String mosaicLocalPreviewWebSocketProtocol = 'mosaic.local-preview.v0.3';
+const String mosaicLocalPreviewWebSocketProtocol =
+    'mosaic.local-preview.v$mosaicLocalPreviewProtocolVersion';
 const List<String> mosaicLocalPreviewWebSocketProtocols = <String>[
   mosaicLocalPreviewWebSocketProtocol,
 ];

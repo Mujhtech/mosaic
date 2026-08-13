@@ -1,4 +1,4 @@
-part of 'renderer_v03_test.dart';
+part of 'renderer_test.dart';
 
 /// Restricts [matching] to the canonical fixture's Product Selector subtree.
 ///
@@ -9,7 +9,7 @@ Finder _inSelector(Finder matching) => find.descendant(
       matching: matching,
     );
 
-void _defineRendererV03ProductTests(
+void _defineRendererProductTests(
     Directory root,
     MosaicPaywallDocument Function(String) fixture,
     List<MosaicProduct> products) {
@@ -92,7 +92,7 @@ void _defineRendererV03ProductTests(
       'fallback card semantics merge visible passive labels in source order',
       (tester) async {
     final source = jsonDecode(
-      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.4/complete-paywall.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     final extraText = _jsonNodeCopy(source, 'offer-page-one-title')
@@ -301,7 +301,7 @@ void _defineRendererV03ProductTests(
   testWidgets('locale changes reconcile an unavailable current card',
       (tester) async {
     final source = jsonDecode(
-      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.4/complete-paywall.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     final monthlyPrice = _jsonNode(
@@ -519,7 +519,7 @@ void _defineRendererV03ProductTests(
   testWidgets('vertical selector follows source order and stretches cards',
       (tester) async {
     final source = jsonDecode(
-      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.4/complete-paywall.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     _jsonNode(source, 'plans')['direction'] = 'vertical';
@@ -606,6 +606,9 @@ void _defineRendererV03ProductTests(
           ),
           child: MosaicPaywall(
             document: document,
+            // Terminal-frame rendering: the assertion is about RTL layout and
+            // semantics under text scaling, not about the entrance animation.
+            motionDriver: const MosaicMotionDriver.disabled(),
             purchaseProvider: MockMosaicPurchaseProvider(products: products),
             requestedLocale: 'ar',
             clock: () => DateTime.utc(2030, 12, 30),

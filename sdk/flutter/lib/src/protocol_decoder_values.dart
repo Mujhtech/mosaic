@@ -364,11 +364,8 @@ extension on _DocumentDecoder {
     final object = _object(value, path);
     _expectKeys(
       object,
-      // The fourth catalog is required in 0.4 and may be empty. It does not
-      // exist in 0.3, where declaring it is an unknown property.
-      isV04
-          ? const <String>{'colors', 'backgrounds', 'shadows', 'motions'}
-          : const <String>{'colors', 'backgrounds', 'shadows'},
+      // The fourth catalog is required and may be empty.
+      const <String>{'colors', 'backgrounds', 'shadows', 'motions'},
       path,
     );
     List<MosaicDesignToken<T>> decode<T>(
@@ -409,9 +406,7 @@ extension on _DocumentDecoder {
       colors: decode<MosaicColorValue>('colors', _docColor),
       backgrounds: decode<MosaicBackground>('backgrounds', _docBackground),
       shadows: decode<MosaicShadow>('shadows', _docShadow),
-      motions: isV04
-          ? decode<MosaicMotion>('motions', _motion)
-          : const <MosaicDesignToken<MosaicMotion>>[],
+      motions: decode<MosaicMotion>('motions', _motion),
     );
   }
 
@@ -517,10 +512,7 @@ extension on _DocumentDecoder {
       object,
       const <String>{'id', 'text'},
       path,
-      // A per-item override is a 0.4 addition. In 0.3 the list's single
-      // "checkmark" constant is the only glyph a list can express, so an item
-      // marker there is an unknown property rather than a silent no-op.
-      optional: isV04 ? const <String>{'marker'} : const <String>{},
+      optional: const <String>{'marker'},
     );
     return MosaicFeatureListItem(
       id: _identifier(object['id'], '$path.id'),
@@ -531,7 +523,7 @@ extension on _DocumentDecoder {
     );
   }
 
-  /// The shared Protocol 0.4 marker union, used by Feature List and Timeline.
+  /// The shared marker union, used by Feature List and Timeline.
   MosaicMarker _marker(Object? value, String path) {
     final object = _object(value, path);
     final kind = _enumValue(
@@ -575,8 +567,8 @@ extension on _DocumentDecoder {
       path,
     );
     return MosaicInlineMotion(
-      // Integers throughout, per the 0.3 doctrine that Dart, Swift, Kotlin,
-      // and JavaScript must not disagree about a rounded fraction.
+      // Integers throughout, so that Dart, Swift, Kotlin, and JavaScript
+      // cannot disagree about a rounded fraction.
       durationMilliseconds: _integerInRange(
         object['durationMilliseconds'],
         '$path.durationMilliseconds',
@@ -600,7 +592,7 @@ extension on _DocumentDecoder {
     _MotionSlot slot,
   ) {
     if (!object.containsKey('motion')) return null;
-    if (!isV04 || slot == _MotionSlot.none) {
+    if (slot == _MotionSlot.none) {
       throw MosaicProtocolException(
         'Unknown properties motion at $path.',
       );

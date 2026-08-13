@@ -175,7 +175,7 @@ void main() {
       '$root/protocol/fixtures/configuration-delivery/v3/experiment-release.json',
     ).readAsStringSync();
     final envelope = const MosaicConfigurationDeliveryDecoder().decode(source);
-    expect(envelope.version, mosaicConfigurationDeliveryVersionV3);
+    expect(envelope.version, mosaicConfigurationDeliveryVersion);
     expect(envelope.release.experimentAssignments, hasLength(1));
   });
 
@@ -296,14 +296,14 @@ void main() {
     final running = _deliveryV3((_) {});
     final stopped = _deliveryV3((release) {
       release['id'] = 'release_phase7_stopped';
-      release['number'] = 13;
+      release['number'] = 16;
       final assignment = (release['experimentAssignments'] as List).single
           as Map<String, Object?>;
       assignment['lifecycle'] = 'stopped';
     });
     final invalid = _deliveryV3((release) {
       release['id'] = 'release_phase7_invalid';
-      release['number'] = 14;
+      release['number'] = 17;
       final assignment = (release['experimentAssignments'] as List).single
           as Map<String, Object?>;
       final variant = (assignment['variants'] as List).last as Map;

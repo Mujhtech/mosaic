@@ -15,7 +15,7 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
   }
   if (document.designSystem == null) {
     throw const MosaicProtocolException(
-      'Protocol 0.3 requires a document design system.',
+      'Protocol 0.4 requires a document design system.',
     );
   }
   _requireUnique(
@@ -24,20 +24,20 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
   );
   if (document.initialScreen?.presentation != MosaicScreenPresentation.screen) {
     throw const MosaicProtocolException(
-      'Protocol 0.3 initial screen must use Screen presentation.',
+      'Protocol 0.4 initial screen must use Screen presentation.',
     );
   }
-  _validateV03DesignSystem(document);
+  _validateDesignSystem(document);
   for (final screen in document.screens) {
     if (screen.layout.content.direction != MosaicStackDirection.vertical) {
       throw MosaicProtocolException(
-        'Protocol 0.3 screen ${screen.id} root scroll content must be a '
+        'Protocol 0.4 screen ${screen.id} root scroll content must be a '
         'vertical Stack.',
       );
     }
     if (screen.layout.content.children.isEmpty) {
       throw MosaicProtocolException(
-        'Protocol 0.3 screen ${screen.id} root Stack must contain at least '
+        'Protocol 0.4 screen ${screen.id} root Stack must contain at least '
         'one child.',
       );
     }
@@ -72,7 +72,7 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
     <String>[...nodes.map((node) => node.id), ...pageIds, ...tabIds],
     'layout tree node, Carousel page, or Tabs entry identifier',
   );
-  _validateV03RuntimeSemantics(document);
+  _validateRuntimeSemantics(document);
 
   _requireUnique(
     document.assets.map((asset) => asset.id),
@@ -121,7 +121,7 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
       referencedAssets.add(avatar.assetId);
     }
   }
-  for (final background in _allV03Backgrounds(document)) {
+  for (final background in _allBackgrounds(document)) {
     final resolved = document.resolveBackground(background);
     switch (resolved) {
       case MosaicImageBackground():
@@ -236,7 +236,7 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
 
 /// Protocol 0.4 motion rules that the shape of a document cannot express.
 ///
-/// A 0.3 document has no motion vocabulary at all, so every check here is a
+/// A document without motion has nothing to check here, so every check is a
 /// no-op for it: the decoder has already rejected a `motion` block and an
 /// unknown `motions` catalog.
 void _validateMotionSemantics(
@@ -443,7 +443,7 @@ void _validateProductCardStructure(MosaicProductCardComponent card) {
   }
 }
 
-void _validateV03DesignSystem(MosaicPaywallDocument document) {
+void _validateDesignSystem(MosaicPaywallDocument document) {
   final designSystem = document.designSystem!;
   for (final category in <Iterable<({String id, String name})>>[
     designSystem.colors.map((token) => (id: token.id, name: token.name)),
@@ -455,22 +455,22 @@ void _validateV03DesignSystem(MosaicPaywallDocument document) {
     _requireUnique(category.map((token) => token.name), 'design token name');
   }
 
-  for (final color in _allV03Colors(document)) {
+  for (final color in _allColors(document)) {
     document.resolveColor(color);
   }
-  for (final background in _allV03Backgrounds(document)) {
+  for (final background in _allBackgrounds(document)) {
     final resolved = document.resolveBackground(background);
     for (final color in _backgroundColors(resolved)) {
       document.resolveColor(color);
     }
   }
-  for (final shadow in _allV03Shadows(document)) {
+  for (final shadow in _allShadows(document)) {
     final resolved = document.resolveShadow(shadow);
     document.resolveColor(resolved.color);
   }
 }
 
-Iterable<MosaicBackground> _allV03Backgrounds(
+Iterable<MosaicBackground> _allBackgrounds(
   MosaicPaywallDocument document,
 ) sync* {
   yield* document.designSystem!.backgrounds.map((token) => token.value);
@@ -500,7 +500,7 @@ Iterable<MosaicBackground> _allV03Backgrounds(
   }
 }
 
-Iterable<MosaicShadow> _allV03Shadows(MosaicPaywallDocument document) sync* {
+Iterable<MosaicShadow> _allShadows(MosaicPaywallDocument document) sync* {
   yield* document.designSystem!.shadows.map((token) => token.value);
   for (final node in document.nodes) {
     if (_nodeAppearance(node)?.shadow case final shadow?) yield shadow;
@@ -535,9 +535,9 @@ Iterable<MosaicColorValue> _backgroundColors(
   }
 }
 
-Iterable<MosaicColorValue> _allV03Colors(MosaicPaywallDocument document) sync* {
+Iterable<MosaicColorValue> _allColors(MosaicPaywallDocument document) sync* {
   yield* document.designSystem!.colors.map((token) => token.value);
-  for (final background in _allV03Backgrounds(document)) {
+  for (final background in _allBackgrounds(document)) {
     yield* _backgroundColors(document.resolveBackground(background));
   }
   for (final node in document.nodes) {
@@ -589,7 +589,7 @@ Iterable<MosaicColorValue> _allV03Colors(MosaicPaywallDocument document) sync* {
   }
 }
 
-void _validateV03RuntimeSemantics(MosaicPaywallDocument document) {
+void _validateRuntimeSemantics(MosaicPaywallDocument document) {
   final screenByNodeId = _v03ScreenByNodeId(document);
   final switches = <String, MosaicSwitchComponent>{
     for (final node in document.nodes.whereType<MosaicSwitchComponent>())
@@ -777,7 +777,7 @@ void _validateV03RuntimeSemantics(MosaicPaywallDocument document) {
   void visitGraph(String screenId) {
     if (!active.add(screenId)) {
       throw const MosaicProtocolException(
-        'Protocol 0.3 navigateTo graph must be acyclic.',
+        'Protocol 0.4 navigateTo graph must be acyclic.',
       );
     }
     if (visited.add(screenId)) {
@@ -792,7 +792,7 @@ void _validateV03RuntimeSemantics(MosaicPaywallDocument document) {
   final unreachable = screenIds.difference(visited);
   if (unreachable.isNotEmpty) {
     throw MosaicProtocolException(
-      'Protocol 0.3 contains unreachable Paywall Screens: '
+      'Protocol 0.4 contains unreachable Paywall Screens: '
       '${unreachable.join(', ')}.',
     );
   }

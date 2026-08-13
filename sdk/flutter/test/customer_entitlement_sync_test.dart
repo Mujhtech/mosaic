@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
-import 'support/canonical_fixture.dart';
 import 'support/customer_authority_fixture.dart';
 
 /// Records what the runtime asked for and replays scripted answers.
@@ -102,14 +101,21 @@ final class _PolicyInvalidationCache implements MosaicCustomerEntitlementCache {
   Future<void> removeOtherRecords(String namespace) async {}
 }
 
+/// The canonical never-projected placeholder is published under a `source`
+/// authority, and Mosaic states no access at all under one. These tests are
+/// about version zero being replaced by version one, so the placeholder is
+/// restated under the same `mosaic` authority every other iOS record carries.
+void _asMosaicAuthority(Map<String, Object?> authority) {
+  authority
+    ..['authorityEpoch'] = 5
+    ..['authorityKind'] = 'mosaic'
+    ..['transitionState'] = 'stabilizing'
+    ..['cutoverAt'] = '2026-07-28T12:30:00.000Z';
+}
+
 void main() {
-  final root = repositoryDirectory(
-    'protocol/fixtures/authoritative-entitlement/v1',
-  );
-  final authorityRoot = repositoryDirectory(
-    'protocol/fixtures/authoritative-entitlement/v2',
-  );
-  String fixture(String path) => File('${root.path}/$path').readAsStringSync();
+  final root = customerAuthorityFixtureRoot;
+  String fixture(String path) => customerAuthorityFixture(path);
 
   late DateTime now;
   DateTime clock() => now;
@@ -124,37 +130,41 @@ void main() {
 
   MosaicCustomerEntitlementSyncReceived received(String path) =>
       MosaicCustomerEntitlementSyncReceived(
-        source: path.endsWith('snapshot-unchanged.json')
-            ? wrapCustomerUnchangedV2(
-                fixture(path),
-                fixture('snapshots/active-subscription.json'),
-              )
-            : wrapCustomerSnapshotV2(fixture(path)),
+        source: fixture(path),
       );
 
+  String neverProjectedPlaceholder() => customerSnapshotRecordVariant(
+        fixture('source-snapshot.json'),
+        mutate: (authority, snapshot) => _asMosaicAuthority(authority),
+      );
+
+  /// Version [version] of the same never-projected customer: the placeholder
+  /// with the canonical entitlement graph spliced in and its freshness window
+  /// moved forward. Both digests are recomputed by the variant builder.
   String firstProjectedSnapshot(int version) {
-    final envelope = jsonDecode(
-      fixture('snapshots/never-projected-placeholder.json'),
-    ) as Map<String, Object?>;
-    final payload = (envelope['payload']! as Map).cast<String, Object?>();
-    final projected = (jsonDecode(
-      fixture('snapshots/active-subscription.json'),
-    ) as Map<String, Object?>)['payload']! as Map<String, Object?>;
-    payload['snapshotVersion'] = version;
-    payload['entityTag'] = 'cs-0001-v$version';
-    payload.remove('previousSnapshotVersion');
-    payload['issuedAt'] = '2026-07-29T10:00:00.000Z';
-    payload['asOf'] = '2026-07-29T09:59:58.000Z';
-    payload['refreshAfter'] = '2026-07-29T11:00:00.000Z';
-    payload['validUntil'] = '2026-08-05T10:00:00.000Z';
-    payload['entries'] = projected['entries'];
-    payload['sources'] = projected['sources'];
-    payload['projectionStatus'] = <String, Object?>{
-      'state': 'current',
-      'lastProjectedAt': '2026-07-29T09:59:58.000Z',
-    };
-    payload['contentDigest'] = mosaicCustomerContentDigest(payload);
-    return jsonEncode(envelope);
+    final projected = ((jsonDecode(fixture('ios-full-snapshot.json'))
+            as Map<String, Object?>)['payload']!
+        as Map<String, Object?>)['snapshot']! as Map<String, Object?>;
+    return customerSnapshotRecordVariant(
+      fixture('source-snapshot.json'),
+      mutate: (authority, snapshot) {
+        _asMosaicAuthority(authority);
+        snapshot
+          ..['snapshotVersion'] = version
+          ..['entityTag'] = 'cs-0001-v$version'
+          ..remove('previousSnapshotVersion')
+          ..['issuedAt'] = '2026-07-29T10:00:00.000Z'
+          ..['asOf'] = '2026-07-29T09:59:58.000Z'
+          ..['refreshAfter'] = '2026-07-29T11:00:00.000Z'
+          ..['validUntil'] = '2026-08-05T10:00:00.000Z'
+          ..['entries'] = projected['entries']
+          ..['sources'] = projected['sources']
+          ..['projectionStatus'] = <String, Object?>{
+            'state': 'current',
+            'lastProjectedAt': '2026-07-29T09:59:58.000Z',
+          };
+      },
+    );
   }
 
   MosaicCustomerEntitlementRuntime runtimeWith(
@@ -162,6 +172,7 @@ void main() {
     MosaicCustomerEntitlementCache? cache,
     MosaicCustomerTokenProvider? tokenProvider,
     void Function(String code, {required bool severe})? onDiagnostic,
+    String sdkVersion = fixtureSupportedSdkVersion,
   }) =>
       MosaicCustomerEntitlementRuntime(
         baseUrl: Uri.parse('https://api.mosaic.test'),
@@ -172,6 +183,7 @@ void main() {
         applicationId: fixtureAuthorityApplicationId,
         platform: MosaicCustomerAuthorityPlatform.ios,
         applicationVersion: '4.2.0',
+        sdkVersion: sdkVersion,
         settings: const MosaicCustomerEntitlementSettings(
           refreshOnResume: false,
         ),
@@ -203,12 +215,8 @@ void main() {
       );
 
   test('the sync request matches the canonical conditional fixture shape', () {
-    final canonicalRoot = repositoryDirectory(
-      'protocol/fixtures/authoritative-entitlement/v2',
-    );
-    final canonical = jsonDecode(
-      File('${canonicalRoot.path}/sync-request.json').readAsStringSync(),
-    ) as Map<String, Object?>;
+    final canonical =
+        jsonDecode(fixture('sync-request.json')) as Map<String, Object?>;
     final encoded = mosaicEncodeEntitlementSyncRequest(
       MosaicCustomerEntitlementSyncRequest(
         baseUrl: Uri.parse('https://api.mosaic.test'),
@@ -238,13 +246,20 @@ void main() {
     // and the server answers snapshotUnchanged only when told which version
     // the caller holds.
     final request = payload['request']! as Map<String, Object?>;
-    expect(request['supportedContractVersions'], <String>['1', '2']);
+    final canonicalPayload = canonical['payload']! as Map<String, Object?>;
+    final canonicalRequest =
+        canonicalPayload['request']! as Map<String, Object?>;
+    // ADR-0028: the contract carries exactly one version, so the request
+    // offers exactly one and a record claiming any other is rejected whole.
+    expect(
+      request['supportedContractVersions'],
+      canonicalRequest['supportedContractVersions'],
+    );
     expect(payload['knownAuthorityEpoch'], 5);
     expect(payload['knownSnapshotVersion'], 4);
     expect(
       payload['knownSnapshotAuthorityDigest'],
-      (canonical['payload']!
-          as Map<String, Object?>)['knownSnapshotAuthorityDigest'],
+      canonicalPayload['knownSnapshotAuthorityDigest'],
     );
     expect(request.containsKey('projectId'), isFalse);
     expect(request.containsKey('environmentId'), isFalse);
@@ -269,8 +284,7 @@ void main() {
       ),
     );
     final canonical = jsonDecode(
-      File('${authorityRoot.path}/sync-request-without-known-digest.json')
-          .readAsStringSync(),
+      fixture('sync-request-without-known-digest.json'),
     ) as Map<String, Object?>;
     final payload = encoded['payload']! as Map<String, Object?>;
     final canonicalPayload = canonical['payload']! as Map<String, Object?>;
@@ -285,7 +299,7 @@ void main() {
   test('a newer snapshot is accepted and emitted once', () async {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
     ]);
     final runtime = runtimeWith(transport);
     final updates = <MosaicCustomerEntitlementUpdate>[];
@@ -308,16 +322,50 @@ void main() {
     runtime.dispose();
   });
 
-  test('persistence commits before state and a failed replacement is invisible',
+  test('a record whose stated client floor this build misses grants nothing',
       () async {
-    final active = fixture('snapshots/active-subscription.json');
+    // The canonical corpus declares `minimumSupport.minimumSdkVersion` at
+    // "2.0.0". Every other test in this file injects an SDK version that meets
+    // it; here a deliberately older build is injected against the same verbatim
+    // record, so the gate stays covered. A regression that stopped reading
+    // minimumSupport would otherwise pass the whole suite while granting access
+    // to a client the server declared unsupported.
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
       MosaicCustomerEntitlementSyncReceived(
-        source: wrapCustomerSnapshotV2(active, epoch: 5),
+        source: fixture('ios-full-snapshot.json'),
+      ),
+    ]);
+    final runtime = runtimeWith(transport, sdkVersion: '1.9.9');
+
+    final result = await runtime.refresh();
+
+    expect(
+      result,
+      isA<MosaicCustomerEntitlementUnavailable>().having(
+        (value) => value.reasonCode,
+        'reasonCode',
+        'entitlements.authority.unsupported_client',
+      ),
+    );
+    expect(runtime.snapshot, isNull);
+    final check = runtime.checkCustomerEntitlement('pro');
+    expect(check.state, MosaicCustomerAccessState.unavailable);
+    expect(check.state, isNot(MosaicCustomerAccessState.inactive));
+    expect(runtime.diagnostics.minimumSupport?.minimumSdkVersion, '2.0.0');
+    runtime.dispose();
+  });
+
+  test('persistence commits before state and a failed replacement is invisible',
+      () async {
+    final active = fixture('ios-full-snapshot.json');
+    final transport =
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+      MosaicCustomerEntitlementSyncReceived(
+        source: customerSnapshotRecordVariant(active, authorityEpoch: 5),
       ),
       MosaicCustomerEntitlementSyncReceived(
-        source: wrapCustomerSnapshotV2(active, epoch: 6),
+        source: customerSnapshotRecordVariant(active, authorityEpoch: 6),
       ),
     ]);
     final cache = _ControlledCache()..controlNextWrite(fail: false);
@@ -380,12 +428,10 @@ void main() {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
       MosaicCustomerEntitlementSyncReceived(
-        source: wrapCustomerSnapshotV2(
-          fixture('snapshots/never-projected-placeholder.json'),
-        ),
+        source: neverProjectedPlaceholder(),
       ),
       MosaicCustomerEntitlementSyncReceived(
-        source: wrapCustomerSnapshotV2(firstProjectedSnapshot(1)),
+        source: firstProjectedSnapshot(1),
       ),
     ]);
     final runtime = runtimeWith(transport);
@@ -418,7 +464,7 @@ void main() {
 
   test('version zero cannot carry projected entitlement content', () {
     expect(
-      () => const MosaicCustomerEntitlementDecoder().decode(
+      () => const MosaicCustomerAuthorityDecoder().decode(
         firstProjectedSnapshot(0),
       ),
       throwsA(
@@ -435,7 +481,7 @@ void main() {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
       received('snapshots/newer-snapshot.json'),
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
     ]);
     // The newer fixture is issued at 14:00, so the device clock is set after
     // it: a clock earlier than issuance is the unreliable-clock path, not the
@@ -467,14 +513,14 @@ void main() {
 
   test('a higher authority epoch replaces state without version inference',
       () async {
-    final active = fixture('snapshots/active-subscription.json');
+    final active = fixture('ios-full-snapshot.json');
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
       MosaicCustomerEntitlementSyncReceived(
-        source: wrapCustomerSnapshotV2(active, epoch: 5),
+        source: customerSnapshotRecordVariant(active, authorityEpoch: 5),
       ),
       MosaicCustomerEntitlementSyncReceived(
-        source: wrapCustomerSnapshotV2(active, epoch: 6),
+        source: customerSnapshotRecordVariant(active, authorityEpoch: 6),
       ),
     ]);
     final runtime = runtimeWith(transport);
@@ -495,8 +541,8 @@ void main() {
   test('the canonical unchanged record is what slides the window', () async {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
-      received('snapshots/snapshot-unchanged.json'),
+      received('ios-full-snapshot.json'),
+      received('snapshot-unchanged.json'),
     ]);
     final runtime = runtimeWith(transport);
 
@@ -518,7 +564,7 @@ void main() {
     expect(transport.requests.last.knownSnapshotVersion, 4);
     expect(transport.requests.last.knownAuthorityEpoch, 5);
     final accepted = const MosaicCustomerAuthorityDecoder().decode(
-      wrapCustomerSnapshotV2(fixture('snapshots/active-subscription.json')),
+      fixture('ios-full-snapshot.json'),
     ) as MosaicCustomerAuthoritySnapshotRecord;
     expect(
       transport.requests.last.knownSnapshotAuthorityDigest,
@@ -533,10 +579,10 @@ void main() {
     final cache = MosaicMemoryCustomerEntitlementCache();
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
       MosaicCustomerEntitlementSyncReceived(
         source: File(
-          '${authorityRoot.path}/authority-policy-unavailable.json',
+          '${root.path}/authority-policy-unavailable.json',
         ).readAsStringSync(),
       ),
     ]);
@@ -576,7 +622,7 @@ void main() {
 
     final restored = runtimeWith(
       _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-        received('snapshots/active-subscription.json'),
+        received('ios-full-snapshot.json'),
       ]),
       cache: cache,
     );
@@ -605,14 +651,14 @@ void main() {
       () async {
     final cache = MosaicMemoryCustomerEntitlementCache();
     final wrongScope = jsonDecode(File(
-      '${authorityRoot.path}/authority-policy-unavailable.json',
+      '${root.path}/authority-policy-unavailable.json',
     ).readAsStringSync()) as Map<String, Object?>;
     final payload = wrongScope['payload']! as Map<String, Object?>;
     final scope = payload['scope']! as Map<String, Object?>;
     scope['environmentId'] = 'fixture-environment-staging';
     final runtime = runtimeWith(
       _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-        received('snapshots/active-subscription.json'),
+        received('ios-full-snapshot.json'),
         MosaicCustomerEntitlementSyncReceived(source: jsonEncode(wrongScope)),
       ]),
       cache: cache,
@@ -652,10 +698,10 @@ void main() {
     final cache = _PolicyInvalidationCache();
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
       MosaicCustomerEntitlementSyncReceived(
         source: File(
-          '${authorityRoot.path}/authority-policy-unavailable.json',
+          '${root.path}/authority-policy-unavailable.json',
         ).readAsStringSync(),
       ),
     ]);
@@ -687,13 +733,13 @@ void main() {
     final severeCodes = <String>[];
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
       MosaicCustomerEntitlementSyncReceived(
         source: File(
-          '${authorityRoot.path}/authority-policy-unavailable.json',
+          '${root.path}/authority-policy-unavailable.json',
         ).readAsStringSync(),
       ),
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
     ]);
     final runtime = runtimeWith(
       transport,
@@ -748,10 +794,10 @@ void main() {
       ..failClear = false;
     final runtime = runtimeWith(
       _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-        received('snapshots/active-subscription.json'),
+        received('ios-full-snapshot.json'),
         MosaicCustomerEntitlementSyncReceived(
           source: File(
-            '${authorityRoot.path}/authority-policy-unavailable.json',
+            '${root.path}/authority-policy-unavailable.json',
           ).readAsStringSync(),
         ),
       ]),
@@ -768,7 +814,7 @@ void main() {
 
     final restarted = runtimeWith(
       _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-        received('snapshots/active-subscription.json'),
+        received('ios-full-snapshot.json'),
       ]),
       cache: cache,
     );
@@ -786,10 +832,10 @@ void main() {
     final cache = MosaicMemoryCustomerEntitlementCache();
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
       MosaicCustomerEntitlementSyncReceived(
         source: File(
-          '${authorityRoot.path}/invalid/policy-unavailable-with-minimum-support.json',
+          '${root.path}/invalid/policy-unavailable-with-minimum-support.json',
         ).readAsStringSync(),
       ),
     ]);
@@ -822,12 +868,12 @@ void main() {
       () async {
     final cache = MosaicMemoryCustomerEntitlementCache();
     final malformed = jsonDecode(File(
-      '${authorityRoot.path}/invalid/policy-unavailable-with-minimum-support.json',
+      '${root.path}/invalid/policy-unavailable-with-minimum-support.json',
     ).readAsStringSync()) as Map<String, Object?>;
     malformed['unexpected'] = true;
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
       MosaicCustomerEntitlementSyncReceived(source: jsonEncode(malformed)),
     ]);
     final runtime = runtimeWith(transport, cache: cache);
@@ -858,7 +904,7 @@ void main() {
       final cache = MosaicMemoryCustomerEntitlementCache();
       final seedRuntime = runtimeWith(
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-          received('snapshots/active-subscription.json'),
+          received('ios-full-snapshot.json'),
         ]),
         cache: cache,
       );
@@ -916,7 +962,7 @@ void main() {
       await cache.write(namespace, stale);
       final transport =
           _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-        received('snapshots/active-subscription.json'),
+        received('ios-full-snapshot.json'),
       ]);
       final runtime = runtimeWith(transport, cache: cache);
 
@@ -936,7 +982,7 @@ void main() {
   test('a bodyless 304 preserves the cache without sliding it', () async {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
       const MosaicCustomerEntitlementSyncNotModified(),
     ]);
     final runtime = runtimeWith(transport);
@@ -960,14 +1006,11 @@ void main() {
   test('an unchanged record for another customer confirms nothing', () async {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
       MosaicCustomerEntitlementSyncReceived(
-        source: wrapCustomerUnchangedV2(
-          fixture('snapshots/snapshot-unchanged.json').replaceFirst(
-            'fixture-customer-0001',
-            'fixture-customer-0002',
-          ),
-          fixture('snapshots/active-subscription.json'),
+        source: fixture('snapshot-unchanged.json').replaceFirst(
+          'fixture-customer-0001',
+          'fixture-customer-0002',
         ),
       ),
     ]);
@@ -1013,7 +1056,7 @@ void main() {
   test('an absent entitlement key reads unknown, never inactive', () async {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
     ]);
     final runtime = runtimeWith(transport);
     await runtime.refresh();
@@ -1044,7 +1087,7 @@ void main() {
   test('concurrent refreshes coalesce onto one request', () async {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
     ])
           ..gate = Completer<void>();
     final runtime = runtimeWith(transport);
@@ -1061,7 +1104,7 @@ void main() {
   test('an expired cache reports unknown, never inactive', () async {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
     ]);
     final runtime = runtimeWith(transport);
     await runtime.refresh();
@@ -1082,7 +1125,7 @@ void main() {
       () async {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
     ]);
     final runtime = runtimeWith(transport);
     await runtime.refresh();
@@ -1104,7 +1147,7 @@ void main() {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
       const MosaicCustomerEntitlementSyncUnauthorized(),
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
     ]);
     final runtime = runtimeWith(
       transport,
@@ -1140,7 +1183,7 @@ void main() {
       () async {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
       const MosaicCustomerEntitlementSyncFailed(
         diagnosticCode: 'entitlements.sync.networkFailed',
       ),
@@ -1163,7 +1206,7 @@ void main() {
     final cache = MosaicMemoryCustomerEntitlementCache();
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
     ]);
     final runtime = runtimeWith(transport, cache: cache);
     await runtime.bindIdentity(
@@ -1204,7 +1247,7 @@ void main() {
     final cache = MosaicMemoryCustomerEntitlementCache();
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
     ]);
     final runtime = runtimeWith(transport, cache: cache);
     await runtime.bindIdentity(
@@ -1232,7 +1275,7 @@ void main() {
     final severeCodes = <String>[];
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
       received('snapshots/test-source-sandbox-grant.json'),
     ]);
     final runtime = runtimeWith(
@@ -1274,11 +1317,9 @@ void main() {
   test('a rejected document leaves the accepted snapshot in place', () async {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
-      received('snapshots/active-subscription.json'),
+      received('ios-full-snapshot.json'),
       MosaicCustomerEntitlementSyncReceived(
-        source: wrapCustomerSnapshotV2(
-          fixture('invalid/snapshot-entry-unknown-field.json'),
-        ),
+        source: fixture('invalid/snapshot-entry-unknown-field.json'),
       ),
     ]);
     final runtime = runtimeWith(transport);

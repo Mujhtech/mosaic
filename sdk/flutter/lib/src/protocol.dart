@@ -9,27 +9,14 @@ part 'protocol_decoder_values.dart';
 part 'protocol_validation.dart';
 part 'protocol_validation_support.dart';
 
-/// The release-candidate Paywall Protocol version.
+/// The Paywall Protocol version, and the only one this SDK reads.
 ///
-/// Everything that negotiates on the wire — Configuration Delivery and Local
-/// Preview — stays pinned to this version. Local Preview `0.3` `$ref`s the
-/// `0.3` paywall schema directly, and Configuration Delivery `v3` carries
-/// exactly one paywall protocol, so advertising `0.4` there would claim a
-/// contract neither of them has been bumped to.
-const String mosaicProtocolVersion = '0.3';
-
-/// The draft Paywall Protocol version this SDK can additionally read.
-///
-/// `0.4` is a pure superset of `0.3` apart from two removals `0.3` itself named
-/// for it, plus the three motion primitives. It carries no compatibility
-/// guarantee; nothing produces it in production yet.
-const String mosaicProtocolVersionV04 = '0.4';
-
-/// Every paywall schema version [MosaicProtocolDecoder] accepts.
-const Set<String> mosaicSupportedProtocolVersions = <String>{
-  mosaicProtocolVersion,
-  mosaicProtocolVersionV04,
-};
+/// Every contract carries exactly one version until GA (ADR-0028), so
+/// everything that negotiates on the wire — Configuration Delivery and Local
+/// Preview — carries this version too. Versions are exact identifiers rather
+/// than ranges: a document declaring anything else is rejected atomically and
+/// resolves through cached configuration, then bundled fallback.
+const String mosaicProtocolVersion = '0.4';
 
 const String mosaicFlutterSdkVersion = '0.3.0-dev.1';
 
@@ -52,8 +39,14 @@ const Map<String, List<String>> mosaicReservedAccessibilityKeys =
   'mosaic.a11y.in_progress': <String>[],
 };
 
-/// Every Protocol 0.3 capability implemented by this Flutter SDK.
-const Set<String> mosaicProtocolV03Capabilities = <String>{
+/// Every Protocol 0.4 capability implemented by this Flutter SDK.
+///
+/// `style.productCardStates` is deliberately absent. It was derived exactly
+/// when `component.productSelector`, `component.productCard`, or
+/// `component.productBadge` was derived — `styles` is required on all three —
+/// so it could never vary independently and carried no information. A document
+/// that declares it is rejected as an unknown capability.
+const Set<String> mosaicProtocolCapabilities = <String>{
   'layout.scrollContainer',
   'layout.stack',
   'layout.sizing',
@@ -103,33 +96,20 @@ const Set<String> mosaicProtocolV03Capabilities = <String>{
   'style.box',
   'style.clipping',
   'style.typography',
-  'style.productCardStates',
   'visibility.static',
   'condition.switchVisibility',
   'condition.tabVisibility',
+  ...mosaicMotionCapabilities,
 };
 
-/// Every Protocol 0.4 capability implemented by this Flutter SDK.
+/// The three enhancement-tier motion capabilities.
 ///
-/// `0.4` is `0.3` plus the three motion primitives, minus
-/// `style.productCardStates`. That capability was derived exactly when
-/// `component.productSelector`, `component.productCard`, or
-/// `component.productBadge` was derived — `styles` is required on all three —
-/// so it could never vary independently and carried no information. `0.3`
-/// named it for removal here and `0.4` removes it: a `0.4` document that
-/// declares it is rejected as an unknown capability.
-final Set<String> mosaicProtocolV04Capabilities = Set<String>.unmodifiable(
-  <String>{
-    ...mosaicProtocolV03Capabilities,
-    ...mosaicMotionCapabilities,
-  }..remove('style.productCardStates'),
-);
-
-/// The three enhancement-tier capabilities `0.4` introduces.
-///
-/// Granularity is three rather than one by the `0.3` distinguishability test: a
-/// renderer that can cross-fade a selection but has no per-node entrance driver
-/// is a real renderer, and one capability could not say so.
+/// These are the only capabilities that degrade instead of rejecting: every
+/// animation's terminal state is byte-identical to the static rendering, so a
+/// renderer that cannot animate still renders the authored result. Granularity
+/// is three rather than one because a renderer that can cross-fade a selection
+/// but has no per-node entrance driver is a real renderer, and one capability
+/// could not say so.
 const Set<String> mosaicMotionCapabilities = <String>{
   'motion.appear',
   'motion.selection',
@@ -140,37 +120,29 @@ const Set<String> mosaicMotionCapabilities = <String>{
 final class MosaicCapabilityReport {
   MosaicCapabilityReport({
     required this.sdkVersion,
-    required Map<String, Set<String>> capabilitiesBySchemaVersion,
-  }) : capabilitiesBySchemaVersion = Map.unmodifiable(<String, Set<String>>{
-          for (final entry in capabilitiesBySchemaVersion.entries)
-            entry.key: Set<String>.unmodifiable(entry.value),
-        });
+    required this.schemaVersion,
+    required Set<String> capabilities,
+  }) : capabilities = Set<String>.unmodifiable(capabilities);
 
   final String sdkVersion;
 
-  /// Schema version to the capabilities this SDK implements at that version.
-  ///
-  /// Keyed by version rather than flattened to one capability-to-version map
-  /// because most capabilities exist at both versions, and a flattened map
-  /// would have to pick one and silently under-report the other.
-  final Map<String, Set<String>> capabilitiesBySchemaVersion;
+  /// The single paywall schema version this SDK reads.
+  final String schemaVersion;
 
-  Set<String> get supportedSchemaVersions =>
-      Set<String>.unmodifiable(capabilitiesBySchemaVersion.keys);
+  /// The capabilities this SDK implements at [schemaVersion].
+  final Set<String> capabilities;
 
-  /// The capabilities implemented at [schemaVersion], or an empty set when this
-  /// SDK does not implement that version at all.
+  /// The capabilities implemented at [schemaVersion], or an empty set for any
+  /// other version — this SDK does not implement one.
   Set<String> capabilitiesFor(String schemaVersion) =>
-      capabilitiesBySchemaVersion[schemaVersion] ?? const <String>{};
+      schemaVersion == this.schemaVersion ? capabilities : const <String>{};
 }
 
 final MosaicCapabilityReport mosaicFlutterCapabilityReport =
     MosaicCapabilityReport(
   sdkVersion: mosaicFlutterSdkVersion,
-  capabilitiesBySchemaVersion: <String, Set<String>>{
-    mosaicProtocolVersion: mosaicProtocolV03Capabilities,
-    mosaicProtocolVersionV04: mosaicProtocolV04Capabilities,
-  },
+  schemaVersion: mosaicProtocolVersion,
+  capabilities: mosaicProtocolCapabilities,
 );
 
 enum MosaicLocaleDirection { ltr, rtl }
@@ -213,7 +185,7 @@ enum MosaicIconName {
   chevronForward,
 }
 
-/// A frozen Protocol 0.3 semantic token or canonical literal sRGB color.
+/// A frozen Protocol 0.4 semantic token or canonical literal sRGB color.
 final class MosaicColorValue {
   const MosaicColorValue._(this.value, this.isLiteral, this.isToken);
 
@@ -389,8 +361,7 @@ final class MosaicDesignSystem {
   final List<MosaicDesignToken<MosaicBackground>> backgrounds;
   final List<MosaicDesignToken<MosaicShadow>> shadows;
 
-  /// The fourth catalog, added by Protocol 0.4. Required and possibly empty
-  /// there; always empty for a 0.3 document, which has no motion vocabulary.
+  /// The fourth catalog. Required by the schema and possibly empty.
   final List<MosaicDesignToken<MosaicMotion>> motions;
 }
 
@@ -738,7 +709,7 @@ MosaicAccessibilityAnnouncement mosaicAccessibilityAnnouncement(
       decorative.add('connector');
     default:
       throw MosaicProtocolException(
-        '${node.type} has no composed announcement contract in Protocol 0.3.',
+        '${node.type} has no composed announcement contract in Protocol 0.4.',
       );
   }
 
@@ -1159,15 +1130,14 @@ final class MosaicProtocolDecoder {
 
     final root = _object(value, r'$');
     final schemaVersion = _string(root['schemaVersion'], r'$.schemaVersion');
-    // Versions are exact identifiers, never ranges: a 0.4 reader accepts only
-    // 0.4 and a 0.3 reader only 0.3. This SDK implements both, so it dispatches
-    // on the declared version rather than widening either reader.
-    if (!mosaicSupportedProtocolVersions.contains(schemaVersion)) {
+    // Versions are exact identifiers, never ranges. This reader implements
+    // exactly one, and support is never inferred from numeric ordering.
+    if (schemaVersion != mosaicProtocolVersion) {
       throw MosaicProtocolException.unsupportedSchemaVersion(
         'Unsupported schemaVersion "$schemaVersion" at \$.schemaVersion.',
       );
     }
-    return _DocumentDecoder(schemaVersion)._decodeDocument(root);
+    return const _DocumentDecoder()._decodeDocument(root);
   }
 }
 

@@ -1,18 +1,14 @@
 import 'dart:convert';
 
-import 'commerce_configuration_v2.dart';
 import 'configuration_delivery.dart';
 import 'sha256.dart';
 
-const String mosaicCommerceConfigurationVersion = '1';
-const List<String> mosaicSupportedCommerceConfigurationVersions = <String>[
-  '2',
-  '1',
-];
-const List<String> mosaicSupportedCommerceProviderContractVersions = <String>[
-  '2',
-  '1',
-];
+/// The single Commerce Configuration contract version this SDK reads.
+///
+/// ADR-0028 collapsed every Mosaic contract to exactly one version, so this is
+/// both the version the SDK negotiates and the version every accepted sidecar
+/// declares. A document claiming any other version is rejected atomically.
+const String mosaicCommerceConfigurationContractVersion = '2';
 const int mosaicMaximumCommerceConfigurationBytes = 1024 * 1024;
 
 final class MosaicCommerceConfigurationException implements Exception {
@@ -307,7 +303,7 @@ final class MosaicCommerceFreshness {
 
 final class MosaicCommerceConfiguration {
   MosaicCommerceConfiguration({
-    this.version = mosaicCommerceConfigurationVersion,
+    this.version = mosaicCommerceConfigurationContractVersion,
     required this.id,
     required this.environmentId,
     required this.applicationId,
@@ -334,6 +330,12 @@ final class MosaicCommerceConfiguration {
         });
 
   final String id;
+
+  /// The Commerce Configuration contract this sidecar was read under.
+  ///
+  /// Exactly one contract version exists, so a decoded configuration always
+  /// reports [mosaicCommerceConfigurationContractVersion]. The field is
+  /// retained as the widening point for a future parallel version.
   final String version;
   final String environmentId;
   final String applicationId;
@@ -364,7 +366,7 @@ final class MosaicCommerceConfiguration {
 
 final class MosaicCommerceConfigurationEnvelope {
   const MosaicCommerceConfigurationEnvelope({
-    required this.version,
+    this.version = mosaicCommerceConfigurationContractVersion,
     required this.configuration,
     required this.source,
   });
@@ -374,7 +376,7 @@ final class MosaicCommerceConfigurationEnvelope {
   final String source;
 }
 
-/// Strict Commerce Configuration v1 reader.
+/// Strict reader for the single Commerce Configuration contract.
 ///
 /// The complete sidecar is validated before use. Its canonical digest and
 /// Environment, Application, platform, Release ID, Release digest, and Product
@@ -388,6 +390,93 @@ final class MosaicCommerceConfigurationDecoder {
     required String expectedApplicationId,
     required MosaicStorePlatform expectedStorePlatform,
   }) {
+    final root = _root(source);
+    const path = r'$.configuration';
+    final raw = _object(root['configuration'], path);
+    _expectKeys(
+      raw,
+      const <String>{
+        'id',
+        'environmentId',
+        'applicationId',
+        'storePlatform',
+        'configurationRelease',
+        'contentDigest',
+        'activeProvider',
+        'productMappings',
+        'entitlementMappings',
+        'freshness',
+        'diagnostics',
+      },
+      path,
+    );
+    final release =
+        _object(raw['configurationRelease'], '$path.configurationRelease');
+    _expectKeys(
+      release,
+      const <String>{'id', 'contentDigest'},
+      '$path.configurationRelease',
+    );
+    final platform = _enumValue(
+      raw['storePlatform'],
+      '$path.storePlatform',
+      MosaicStorePlatform.values,
+      (value) => value.wireValue,
+    );
+    final provider = _activeProvider(
+      raw['activeProvider'],
+      '$path.activeProvider',
+      platform,
+    );
+    final diagnostics = _diagnostics(raw['diagnostics'], '$path.diagnostics');
+    // Freshness decoding can append a diagnostic, so it must run before the
+    // configuration copies the list.
+    final freshness = _freshness(
+      raw['freshness'],
+      '$path.freshness',
+      provider.activation.source,
+      diagnostics,
+    );
+    final configuration = MosaicCommerceConfiguration(
+      id: _identifier(raw['id'], '$path.id'),
+      environmentId: _identifier(raw['environmentId'], '$path.environmentId'),
+      applicationId: _identifier(raw['applicationId'], '$path.applicationId'),
+      storePlatform: platform,
+      configurationReleaseId:
+          _identifier(release['id'], '$path.configurationRelease.id'),
+      configurationReleaseDigest: _digest(
+        release['contentDigest'],
+        '$path.configurationRelease.contentDigest',
+      ),
+      contentDigest: _digest(raw['contentDigest'], '$path.contentDigest'),
+      activeProvider: provider,
+      productMappings: _productMappings(
+        raw['productMappings'],
+        '$path.productMappings',
+        provider.identity.id,
+      ),
+      entitlementMappings: _entitlementMappings(
+        raw['entitlementMappings'],
+        '$path.entitlementMappings',
+      ),
+      freshness: freshness,
+      diagnostics: diagnostics,
+    );
+    _validateDigest(raw, configuration.contentDigest);
+    _validateReleaseScope(
+      configuration,
+      expectedRelease: expectedRelease,
+      expectedApplicationId: expectedApplicationId,
+      expectedStorePlatform: expectedStorePlatform,
+    );
+    return MosaicCommerceConfigurationEnvelope(
+      configuration: configuration,
+      source: source,
+    );
+  }
+
+  /// Parses the envelope and rejects anything that is not this contract.
+  Map<String, Object?> _root(String source) {
     if (utf8.encode(source).length > mosaicMaximumCommerceConfigurationBytes) {
       throw const MosaicCommerceConfigurationException(
         'The commerce configuration exceeds the SDK byte limit.',
@@ -405,116 +494,30 @@ final class MosaicCommerceConfigurationDecoder {
     final root = _object(decoded, r'$');
     _expectKeys(
       root,
-      const <String>{
-        'commerceConfigurationVersion',
-        'configuration',
-      },
+      const <String>{'commerceConfigurationVersion', 'configuration'},
       r'$',
     );
     final version = _string(
       root['commerceConfigurationVersion'],
       r'$.commerceConfigurationVersion',
     );
-    if (version == '2') {
-      return MosaicCommerceConfigurationV2Decoder.decode(
-        source,
-        expectedRelease: expectedRelease,
-        expectedApplicationId: expectedApplicationId,
-        expectedStorePlatform: expectedStorePlatform,
-      );
-    }
-    if (version != mosaicCommerceConfigurationVersion) {
+    if (version != mosaicCommerceConfigurationContractVersion) {
       throw const MosaicCommerceConfigurationException(
         'The Commerce Configuration version is unsupported.',
       );
     }
-    final rawConfiguration = _object(root['configuration'], r'$.configuration');
-    final configuration = _configuration(rawConfiguration);
-    _validateDigest(rawConfiguration, configuration.contentDigest);
-    _validateAssociation(
-      configuration,
-      expectedRelease: expectedRelease,
-      expectedApplicationId: expectedApplicationId,
-      expectedStorePlatform: expectedStorePlatform,
-    );
-    return MosaicCommerceConfigurationEnvelope(
-      version: version,
-      configuration: configuration,
-      source: source,
-    );
+    return root;
   }
 
-  MosaicCommerceConfiguration _configuration(Map<String, Object?> value) {
-    const path = r'$.configuration';
-    _expectKeys(
-      value,
-      const <String>{
-        'id',
-        'environmentId',
-        'applicationId',
-        'storePlatform',
-        'configurationRelease',
-        'contentDigest',
-        'activeProvider',
-        'productMappings',
-        'entitlementMappings',
-        'freshness',
-        'diagnostics',
-      },
-      path,
-    );
-    final release =
-        _object(value['configurationRelease'], '$path.configurationRelease');
-    _expectKeys(
-      release,
-      const <String>{'id', 'contentDigest'},
-      '$path.configurationRelease',
-    );
-    final activeProvider =
-        _activeProvider(value['activeProvider'], '$path.activeProvider');
-    final products = _productMappings(
-      value['productMappings'],
-      '$path.productMappings',
-      activeProvider.identity.id,
-    );
-    final entitlements = _entitlementMappings(
-      value['entitlementMappings'],
-      '$path.entitlementMappings',
-    );
-    return MosaicCommerceConfiguration(
-      id: _identifier(value['id'], '$path.id'),
-      environmentId: _identifier(value['environmentId'], '$path.environmentId'),
-      applicationId: _identifier(value['applicationId'], '$path.applicationId'),
-      storePlatform: _enumValue(
-        value['storePlatform'],
-        '$path.storePlatform',
-        MosaicStorePlatform.values,
-        (item) => item.wireValue,
-      ),
-      configurationReleaseId:
-          _identifier(release['id'], '$path.configurationRelease.id'),
-      configurationReleaseDigest: _digest(
-        release['contentDigest'],
-        '$path.configurationRelease.contentDigest',
-      ),
-      contentDigest: _digest(value['contentDigest'], '$path.contentDigest'),
-      activeProvider: activeProvider,
-      productMappings: products,
-      entitlementMappings: entitlements,
-      freshness: _freshness(
-        value['freshness'],
-        '$path.freshness',
-        activeProvider.activation.source,
-      ),
-      diagnostics: _diagnostics(value['diagnostics'], '$path.diagnostics'),
-    );
-  }
-
-  MosaicActiveProvider _activeProvider(Object? value, String path) {
+  MosaicActiveProvider _activeProvider(
+    Object? value,
+    String path,
+    MosaicStorePlatform platform,
+  ) {
     final object = _object(value, path);
     _expectKeys(
       object,
-      const <String>{'identity', 'activation', 'capabilities'},
+      const <String>{'identity', 'activation', 'capabilities', 'recoveryMode'},
       path,
     );
     final identity = _object(object['identity'], '$path.identity');
@@ -523,57 +526,10 @@ final class MosaicCommerceConfigurationDecoder {
       const <String>{'id', 'displayName', 'adapterVersion'},
       '$path.identity',
     );
-    final activation = _activation(object['activation'], '$path.activation');
-    final values = _list(object['capabilities'], '$path.capabilities', 1, 13);
-    final capabilities = <MosaicProviderCapability>[];
-    final seen = <MosaicProviderCapabilityName>{};
-    for (var index = 0; index < values.length; index += 1) {
-      final itemPath = '$path.capabilities[$index]';
-      final item = _object(values[index], itemPath);
-      _expectKeys(
-        item,
-        const <String>{'name', 'support'},
-        itemPath,
-        optional: const <String>{'reasonCode'},
-      );
-      final name = _enumValue(
-        item['name'],
-        '$itemPath.name',
-        _v1CapabilityNames,
-        (value) => value.wireValue,
-      );
-      if (!seen.add(name)) {
-        throw const MosaicCommerceConfigurationException(
-          'The active Provider contains duplicate capabilities.',
-        );
-      }
-      final support = _enumValue(
-        item['support'],
-        '$itemPath.support',
-        MosaicProviderCapabilitySupport.values,
-        (value) => value.name,
-      );
-      final reasonCode = item.containsKey('reasonCode')
-          ? _reasonCode(item['reasonCode'], '$itemPath.reasonCode')
-          : null;
-      if (support == MosaicProviderCapabilitySupport.supported
-          ? reasonCode != null
-          : reasonCode == null) {
-        throw const MosaicCommerceConfigurationException(
-          'A Provider capability has inconsistent support details.',
-        );
-      }
-      capabilities.add(
-        MosaicProviderCapability(
-          name: name,
-          support: support,
-          reasonCode: reasonCode,
-        ),
-      );
-    }
+    final providerId = _identifier(identity['id'], '$path.identity.id');
     return MosaicActiveProvider(
       identity: MosaicProviderIdentity(
-        id: _identifier(identity['id'], '$path.identity.id'),
+        id: providerId,
         displayName: _safeText(
           identity['displayName'],
           '$path.identity.displayName',
@@ -585,12 +541,28 @@ final class MosaicCommerceConfigurationDecoder {
           64,
         ),
       ),
-      activation: activation,
-      capabilities: capabilities,
+      activation: _activation(
+        object['activation'],
+        '$path.activation',
+        platform,
+        providerId,
+      ),
+      capabilities: _capabilities(object['capabilities'], '$path.capabilities'),
+      recoveryMode: _enumValue(
+        object['recoveryMode'],
+        '$path.recoveryMode',
+        MosaicCommerceRecoveryMode.values,
+        (value) => value.name,
+      ),
     );
   }
 
-  MosaicProviderActivation _activation(Object? value, String path) {
+  MosaicProviderActivation _activation(
+    Object? value,
+    String path,
+    MosaicStorePlatform platform,
+    String providerId,
+  ) {
     final object = _object(value, path);
     final source = _string(object['source'], '$path.source');
     switch (source) {
@@ -607,17 +579,23 @@ final class MosaicCommerceConfigurationDecoder {
           ),
         );
       case 'sdkLocal':
-        _expectKeys(
-          object,
-          const <String>{'source', 'localSnapshotId'},
-          path,
-        );
+        _expectKeys(object, const <String>{'source', 'localSnapshotId'}, path);
         return MosaicSdkLocalProviderActivation(
           localSnapshotId: _identifier(
             object['localSnapshotId'],
             '$path.localSnapshotId',
           ),
         );
+      case 'nativeStore':
+        _expectKeys(object, const <String>{'source'}, path);
+        if (platform == MosaicStorePlatform.ios && providerId != 'app_store' ||
+            platform == MosaicStorePlatform.android &&
+                providerId != 'google_play') {
+          throw const MosaicCommerceConfigurationException(
+            'The native Provider does not match the store platform.',
+          );
+        }
+        return const MosaicNativeStoreProviderActivation();
       default:
         throw const MosaicCommerceConfigurationException(
           'The Provider activation source is unsupported.',
@@ -625,24 +603,73 @@ final class MosaicCommerceConfigurationDecoder {
     }
   }
 
+  List<MosaicProviderCapability> _capabilities(Object? value, String path) {
+    final values = _list(value, path, 1, 19);
+    final capabilities = <MosaicProviderCapability>[];
+    final seen = <MosaicProviderCapabilityName>{};
+    for (var index = 0; index < values.length; index += 1) {
+      final itemPath = '$path[$index]';
+      final item = _object(values[index], itemPath);
+      _expectKeys(
+        item,
+        const <String>{'name', 'support'},
+        itemPath,
+        optional: const <String>{'reasonCode'},
+      );
+      final name = _enumValue(
+        item['name'],
+        '$itemPath.name',
+        MosaicProviderCapabilityName.values,
+        (value) => value.wireValue,
+      );
+      final support = _enumValue(
+        item['support'],
+        '$itemPath.support',
+        MosaicProviderCapabilitySupport.values,
+        (value) => value.name,
+      );
+      final reasonCode = item.containsKey('reasonCode')
+          ? _reasonCode(item['reasonCode'], '$itemPath.reasonCode')
+          : null;
+      if (!seen.add(name) ||
+          (support == MosaicProviderCapabilitySupport.supported
+              ? reasonCode != null
+              : reasonCode == null)) {
+        throw const MosaicCommerceConfigurationException(
+          'A Provider capability is invalid or duplicated.',
+        );
+      }
+      capabilities.add(
+        MosaicProviderCapability(
+          name: name,
+          support: support,
+          reasonCode: reasonCode,
+        ),
+      );
+    }
+    return capabilities;
+  }
+
   List<MosaicCommerceProductMapping> _productMappings(
     Object? value,
     String path,
     String providerId,
   ) {
-    final entries = _list(value, path, 1, 256);
-    final result = <MosaicCommerceProductMapping>[];
+    final values = _list(value, path, 1, 256);
     final productIds = <String>{};
     final mappingIds = <String>{};
     final targets = <String>{};
-    for (var index = 0; index < entries.length; index += 1) {
+    final result = <MosaicCommerceProductMapping>[];
+    for (var index = 0; index < values.length; index += 1) {
       final itemPath = '$path[$index]';
-      final object = _object(entries[index], itemPath);
+      final object = _object(values[index], itemPath);
       _expectKeys(
         object,
         const <String>{
           'mosaicProductId',
           'mappingId',
+          'productType',
+          'entitlementKeys',
           'providerProductReference',
           'adapterMapping',
         },
@@ -651,25 +678,35 @@ final class MosaicCommerceConfigurationDecoder {
       final productId =
           _identifier(object['mosaicProductId'], '$itemPath.mosaicProductId');
       final mappingId = _identifier(object['mappingId'], '$itemPath.mappingId');
+      final productType = _enumValue(
+        object['productType'],
+        '$itemPath.productType',
+        MosaicCommerceProductType.values,
+        (value) => value.wireValue,
+      );
       final reference = _opaqueProviderIdentifier(
         object['providerProductReference'],
         '$itemPath.providerProductReference',
       );
       final adapter =
-          _adapterMapping(object['adapterMapping'], '$itemPath.adapterMapping');
-      final target =
-          '$reference:${jsonEncode(_canonicalize(object['adapterMapping']))}';
+          _object(object['adapterMapping'], '$itemPath.adapterMapping');
+      final adapterMapping = _adapterMapping(
+        adapter,
+        '$itemPath.adapterMapping',
+        providerId,
+        productType,
+      );
+      final entitlementKeys =
+          _list(object['entitlementKeys'], '$itemPath.entitlementKeys', 0, 32)
+              .map((item) => _entitlementKey(item, '$itemPath.entitlementKeys'))
+              .toList(growable: false);
+      final target = '$reference:${jsonEncode(_canonicalize(adapter))}';
       if (!productIds.add(productId) ||
           !mappingIds.add(mappingId) ||
-          !targets.add(target)) {
+          !targets.add(target) ||
+          entitlementKeys.toSet().length != entitlementKeys.length) {
         throw const MosaicCommerceConfigurationException(
           'The commerce configuration contains ambiguous Product mappings.',
-        );
-      }
-      if (adapter is MosaicRevenueCatPackageMapping &&
-          providerId != 'revenuecat') {
-        throw const MosaicCommerceConfigurationException(
-          'A RevenueCat Package mapping requires the RevenueCat Provider.',
         );
       }
       result.add(
@@ -677,39 +714,85 @@ final class MosaicCommerceConfigurationDecoder {
           mosaicProductId: productId,
           mappingId: mappingId,
           providerProductReference: reference,
-          adapterMapping: adapter,
+          adapterMapping: adapterMapping,
+          productType: productType,
+          entitlementKeys: List.unmodifiable(entitlementKeys),
         ),
       );
     }
     return result;
   }
 
-  MosaicAdapterMapping _adapterMapping(Object? value, String path) {
-    final object = _object(value, path);
-    final kind = _string(object['kind'], '$path.kind');
-    switch (kind) {
+  MosaicAdapterMapping _adapterMapping(
+    Map<String, Object?> adapter,
+    String path,
+    String providerId,
+    MosaicCommerceProductType productType,
+  ) {
+    switch (_string(adapter['kind'], '$path.kind')) {
       case 'directProduct':
-        _expectKeys(object, const <String>{'kind'}, path);
+        _expectKeys(adapter, const <String>{'kind'}, path);
         return const MosaicDirectProductMapping();
       case 'revenueCatPackage':
         _expectKeys(
-          object,
-          const <String>{
-            'kind',
-            'offeringIdentifier',
-            'packageIdentifier',
-          },
+          adapter,
+          const <String>{'kind', 'offeringIdentifier', 'packageIdentifier'},
           path,
         );
+        if (providerId != 'revenuecat') {
+          throw const MosaicCommerceConfigurationException(
+            'A RevenueCat Package mapping requires the RevenueCat Provider.',
+          );
+        }
         return MosaicRevenueCatPackageMapping(
           offeringIdentifier: _opaqueProviderIdentifier(
-            object['offeringIdentifier'],
+            adapter['offeringIdentifier'],
             '$path.offeringIdentifier',
           ),
           packageIdentifier: _opaqueProviderIdentifier(
-            object['packageIdentifier'],
+            adapter['packageIdentifier'],
             '$path.packageIdentifier',
           ),
+        );
+      case 'storeKitProduct':
+        _expectKeys(adapter, const <String>{'kind'}, path);
+        if (providerId != 'app_store') {
+          throw const MosaicCommerceConfigurationException(
+            'A StoreKit mapping requires the App Store Provider.',
+          );
+        }
+        return const MosaicStoreKitProductMapping();
+      case 'googlePlayProduct':
+        _expectKeys(
+          adapter,
+          const <String>{'kind'},
+          path,
+          optional: const <String>{'basePlanId', 'offerId'},
+        );
+        if (providerId != 'google_play') {
+          throw const MosaicCommerceConfigurationException(
+            'A Google Play mapping requires the Google Play Provider.',
+          );
+        }
+        final basePlanId = adapter.containsKey('basePlanId')
+            ? _opaqueProviderIdentifier(
+                adapter['basePlanId'],
+                '$path.basePlanId',
+              )
+            : null;
+        final offerId = adapter.containsKey('offerId')
+            ? _opaqueProviderIdentifier(adapter['offerId'], '$path.offerId')
+            : null;
+        if (productType == MosaicCommerceProductType.subscription
+            ? basePlanId == null
+            : basePlanId != null || offerId != null) {
+          throw const MosaicCommerceConfigurationException(
+            'The Google Play mapping does not match its Product type.',
+          );
+        }
+        return MosaicGooglePlayProductMapping(
+          basePlanId: basePlanId,
+          offerId: offerId,
         );
       default:
         throw const MosaicCommerceConfigurationException(
@@ -722,39 +805,34 @@ final class MosaicCommerceConfigurationDecoder {
     Object? value,
     String path,
   ) {
-    final entries = _list(value, path, 1, 128);
-    final result = <MosaicCommerceEntitlementMapping>[];
-    final mosaicIds = <String>{};
+    final values = _list(value, path, 0, 128);
+    final keys = <String>{};
     final providerIds = <String>{};
-    for (var index = 0; index < entries.length; index += 1) {
+    final result = <MosaicCommerceEntitlementMapping>[];
+    for (var index = 0; index < values.length; index += 1) {
       final itemPath = '$path[$index]';
-      final object = _object(entries[index], itemPath);
+      final item = _object(values[index], itemPath);
       _expectKeys(
-        object,
-        const <String>{
-          'mosaicEntitlementKey',
-          'providerEntitlementIdentifier',
-        },
+        item,
+        const <String>{'mosaicEntitlementKey', 'providerEntitlementIdentifier'},
         itemPath,
       );
-      final mosaicId = _patternString(
-        object['mosaicEntitlementKey'],
+      final key = _entitlementKey(
+        item['mosaicEntitlementKey'],
         '$itemPath.mosaicEntitlementKey',
-        _entitlementPattern,
-        64,
       );
       final providerIdentifier = _opaqueProviderIdentifier(
-        object['providerEntitlementIdentifier'],
+        item['providerEntitlementIdentifier'],
         '$itemPath.providerEntitlementIdentifier',
       );
-      if (!mosaicIds.add(mosaicId) || !providerIds.add(providerIdentifier)) {
+      if (!keys.add(key) || !providerIds.add(providerIdentifier)) {
         throw const MosaicCommerceConfigurationException(
           'The commerce configuration contains ambiguous Entitlement mappings.',
         );
       }
       result.add(
         MosaicCommerceEntitlementMapping(
-          mosaicEntitlementKey: mosaicId,
+          mosaicEntitlementKey: key,
           providerEntitlementIdentifier: providerIdentifier,
         ),
       );
@@ -766,8 +844,20 @@ final class MosaicCommerceConfigurationDecoder {
     Object? value,
     String path,
     String activationSource,
+    List<MosaicCommerceDiagnostic> diagnostics,
   ) {
     final object = _object(value, path);
+    return _string(object['source'], '$path.source') ==
+            'nativeStoreConfiguration'
+        ? _nativeStoreFreshness(object, path, activationSource, diagnostics)
+        : _synchronizedFreshness(object, path, activationSource);
+  }
+
+  MosaicCommerceFreshness _synchronizedFreshness(
+    Map<String, Object?> object,
+    String path,
+    String activationSource,
+  ) {
     _expectKeys(
       object,
       const <String>{
@@ -830,11 +920,89 @@ final class MosaicCommerceConfigurationDecoder {
     );
   }
 
+  MosaicCommerceFreshness _nativeStoreFreshness(
+    Map<String, Object?> object,
+    String path,
+    String activationSource,
+    List<MosaicCommerceDiagnostic> diagnostics,
+  ) {
+    _expectKeys(
+      object,
+      const <String>{'source', 'status', 'configuredAt'},
+      path,
+      optional: const <String>{'observation'},
+    );
+    if (activationSource != 'nativeStore') {
+      throw const MosaicCommerceConfigurationException(
+        'Native commerce freshness is invalid.',
+      );
+    }
+    final configuredAt =
+        _timestamp(object['configuredAt'], '$path.configuredAt');
+    DateTime? observedAt;
+    DateTime? expiresAt;
+    String? environment;
+    if (object['observation'] case final Object observationValue) {
+      final observation = _object(observationValue, '$path.observation');
+      _expectKeys(
+        observation,
+        const <String>{'environment', 'observedAt'},
+        '$path.observation',
+        optional: const <String>{'expiresAt'},
+      );
+      environment = _observationEnvironment(
+        observation['environment'],
+        '$path.observation.environment',
+      );
+      observedAt =
+          _timestamp(observation['observedAt'], '$path.observation.observedAt');
+      expiresAt = observation.containsKey('expiresAt')
+          ? _timestamp(observation['expiresAt'], '$path.observation.expiresAt')
+          : null;
+      if (expiresAt != null && expiresAt.isBefore(observedAt)) {
+        throw const MosaicCommerceConfigurationException(
+          'Native commerce freshness timestamps are inconsistent.',
+        );
+      }
+    } else {
+      diagnostics.add(
+        MosaicCommerceDiagnostic(
+          code: 'commerce.freshness.unobserved',
+          safeMessage: 'The native store configuration carries no Provider '
+              'observation, so its freshness is unknown.',
+          severity: MosaicCommerceDiagnosticSeverity.warning,
+          retryable: false,
+          correlationId: 'commerce_freshness_unobserved',
+          recoveryAction: MosaicCommerceRecoveryAction.none,
+        ),
+      );
+    }
+    return MosaicCommerceFreshness(
+      source: MosaicCommerceFreshnessSource.nativeStoreConfiguration,
+      status: _enumValue(
+        object['status'],
+        '$path.status',
+        MosaicCommerceFreshnessStatus.values,
+        (value) => value.name,
+      ),
+      // A native-store configuration without an observation says nothing about
+      // when the Provider last looked. Reporting the configuration time as the
+      // observation, and as the staleness horizon, would make never-observed
+      // state read as freshly observed, so absence is propagated as absence.
+      providerObservedAt: observedAt,
+      synchronizedAt: configuredAt,
+      staleAt: expiresAt ?? observedAt,
+      expiresAt: expiresAt,
+      configuredAt: configuredAt,
+      observationEnvironment: environment,
+    );
+  }
+
   List<MosaicCommerceDiagnostic> _diagnostics(Object? value, String path) {
-    final entries = _list(value, path, 0, 32);
+    final values = _list(value, path, 0, 32);
     return <MosaicCommerceDiagnostic>[
-      for (var index = 0; index < entries.length; index += 1)
-        _diagnostic(entries[index], '$path[$index]'),
+      for (var index = 0; index < values.length; index += 1)
+        _diagnostic(values[index], '$path[$index]'),
     ];
   }
 
@@ -858,15 +1026,11 @@ final class MosaicCommerceConfigurationDecoder {
       },
     );
     final retryable = _boolean(object['retryable'], '$path.retryable');
-    final retryAfter = object.containsKey('retryAfterSeconds')
-        ? _integer(
-            object['retryAfterSeconds'],
-            '$path.retryAfterSeconds',
-            1,
-            86400,
-          )
-        : null;
-    if (!retryable && retryAfter != null) {
+    final rawRetryAfter = object['retryAfterSeconds'];
+    final retryAfterSeconds = rawRetryAfter == null
+        ? null
+        : _integer(rawRetryAfter, '$path.retryAfterSeconds', 1, 86400);
+    if (retryAfterSeconds != null && !retryable) {
       throw const MosaicCommerceConfigurationException(
         'A non-retryable diagnostic cannot include retry-after.',
       );
@@ -883,7 +1047,7 @@ final class MosaicCommerceConfigurationDecoder {
       retryable: retryable,
       correlationId:
           _identifier(object['correlationId'], '$path.correlationId'),
-      retryAfterSeconds: retryAfter,
+      retryAfterSeconds: retryAfterSeconds,
       providerCode: object.containsKey('providerCode')
           ? _safeProviderCode(object['providerCode'], '$path.providerCode')
           : null,
@@ -901,10 +1065,7 @@ final class MosaicCommerceConfigurationDecoder {
     );
   }
 
-  void _validateDigest(
-    Map<String, Object?> rawConfiguration,
-    String expected,
-  ) {
+  void _validateDigest(Map<String, Object?> rawConfiguration, String expected) {
     final material = Map<String, Object?>.of(rawConfiguration)
       ..remove('contentDigest');
     final actual =
@@ -916,31 +1077,42 @@ final class MosaicCommerceConfigurationDecoder {
     }
   }
 
-  void _validateAssociation(
+  void _validateReleaseScope(
     MosaicCommerceConfiguration configuration, {
     required MosaicConfigurationRelease expectedRelease,
     required String expectedApplicationId,
     required MosaicStorePlatform expectedStorePlatform,
   }) {
+    final mappedProducts = configuration.productMappings
+        .map((mapping) => mapping.mosaicProductId)
+        .toSet();
     if (configuration.environmentId != expectedRelease.environment.id ||
         configuration.applicationId != expectedApplicationId ||
         configuration.storePlatform != expectedStorePlatform ||
         configuration.configurationReleaseId != expectedRelease.id ||
         configuration.configurationReleaseDigest !=
-            expectedRelease.contentDigest) {
+            expectedRelease.contentDigest ||
+        mappedProducts.length != expectedRelease.productReferences.length ||
+        !mappedProducts.containsAll(expectedRelease.productReferences.keys)) {
       throw const MosaicCommerceConfigurationException(
         'The commerce configuration does not match the accepted release scope.',
       );
     }
-    final expectedProducts = expectedRelease.productReferences.keys.toSet();
-    final mappedProducts = configuration.productMappings
-        .map((mapping) => mapping.mosaicProductId)
-        .toSet();
-    if (expectedProducts.length != mappedProducts.length ||
-        !expectedProducts.containsAll(mappedProducts)) {
-      throw const MosaicCommerceConfigurationException(
-        'The commerce Product mappings do not match the accepted release.',
-      );
+    for (final mapping in configuration.productMappings) {
+      final expected =
+          expectedRelease.productReferences[mapping.mosaicProductId];
+      final expectedType = switch (expected?.type) {
+        MosaicDeliveredProductType.subscription =>
+          MosaicCommerceProductType.subscription,
+        MosaicDeliveredProductType.oneTimeNonConsumable =>
+          MosaicCommerceProductType.oneTimeNonConsumable,
+        null => null,
+      };
+      if (expected == null || mapping.productType != expectedType) {
+        throw const MosaicCommerceConfigurationException(
+          'The commerce Product mappings do not match the accepted release.',
+        );
+      }
     }
   }
 }
@@ -1010,6 +1182,9 @@ String _patternString(
 String _identifier(Object? value, String path) =>
     _patternString(value, path, _identifierPattern, 128);
 
+String _entitlementKey(Object? value, String path) =>
+    _patternString(value, path, _entitlementPattern, 64);
+
 String _digest(Object? value, String path) =>
     _patternString(value, path, _digestPattern, 71);
 
@@ -1024,6 +1199,14 @@ String _safeProviderCode(Object? value, String path) =>
 
 String _opaqueProviderIdentifier(Object? value, String path) =>
     _patternString(value, path, _safeTextPattern, 256);
+
+String _observationEnvironment(Object? value, String path) {
+  final text = _string(value, path);
+  if (!const <String>{'test', 'production', 'unknown'}.contains(text)) {
+    throw MosaicCommerceConfigurationException('$path is unsupported.');
+  }
+  return text;
+}
 
 bool _boolean(Object? value, String path) {
   if (value is! bool) {
@@ -1108,20 +1291,3 @@ final RegExp _credentialPattern = RegExp(
   r'(?:^|[^A-Za-z0-9])(?:sk_|appl_|goog_|rcb_)[A-Za-z0-9_-]{8,}|authorization\s*:|bearer\s+',
   caseSensitive: false,
 );
-
-const List<MosaicProviderCapabilityName> _v1CapabilityNames =
-    <MosaicProviderCapabilityName>[
-  MosaicProviderCapabilityName.productLoading,
-  MosaicProviderCapabilityName.subscriptions,
-  MosaicProviderCapabilityName.oneTimeNonConsumables,
-  MosaicProviderCapabilityName.trials,
-  MosaicProviderCapabilityName.introductoryOffers,
-  MosaicProviderCapabilityName.promotionalOffers,
-  MosaicProviderCapabilityName.restore,
-  MosaicProviderCapabilityName.activeEntitlementLookup,
-  MosaicProviderCapabilityName.pendingPurchases,
-  MosaicProviderCapabilityName.deferredPurchases,
-  MosaicProviderCapabilityName.serverConfirmedTransactions,
-  MosaicProviderCapabilityName.productSynchronization,
-  MosaicProviderCapabilityName.providerDiagnostics,
-];

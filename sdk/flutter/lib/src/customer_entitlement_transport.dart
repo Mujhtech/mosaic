@@ -136,7 +136,7 @@ Map<String, Object?> mosaicEncodeEntitlementSyncRequest(
   }
   return <String, Object?>{
     'authoritativeEntitlementContractVersion':
-        mosaicAuthoritativeEntitlementContractVersionV2,
+        mosaicAuthoritativeEntitlementContractVersion,
     'recordType': 'entitlementSyncRequest',
     'payload': <String, Object?>{
       if (request.knownAuthorityEpoch != null)
@@ -152,7 +152,6 @@ Map<String, Object?> mosaicEncodeEntitlementSyncRequest(
         'sdkVersion': mosaicFlutterSdkVersion,
         'supportedContractVersions': <String>[
           mosaicAuthoritativeEntitlementContractVersion,
-          mosaicAuthoritativeEntitlementContractVersionV2,
         ],
         'capabilities': mosaicCustomerAuthorityCapabilities,
       },

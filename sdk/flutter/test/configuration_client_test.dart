@@ -95,8 +95,9 @@ void main() {
         second.acceptedConfiguration!.source, MosaicConfigurationSource.cache);
     expect(second.acceptedConfiguration!.trustedNow, isNotNull);
     expect(
-      second.resolvePlacement('onboarding_complete'),
-      isA<MosaicPlacementResolved>(),
+      second.acceptedConfiguration!.envelope.release
+          .decisionForPlacement('upgrade_prompt'),
+      isNotNull,
     );
     expect(secondTransport.fetches, 0);
   });
@@ -178,7 +179,7 @@ void main() {
         await mosaic.refreshConfiguration(), isA<MosaicConfigurationUpdated>());
     expect(
       mosaic.acceptedConfiguration!.envelope.release.environment.id,
-      'environment_staging',
+      'environment_production',
     );
   });
 
@@ -193,7 +194,7 @@ void main() {
     );
     final transport = _Transport(<MosaicConfigurationResponse>[
       MosaicConfigurationUpdatedResponse(
-        source: _releaseWithEnvironment('environment_production'),
+        source: _releaseWithEnvironment('environment_staging'),
         etag: '"release-2"',
       ),
     ]);
@@ -205,13 +206,13 @@ void main() {
     expect(cache.writes, 0);
     expect(
       mosaic.acceptedConfiguration!.envelope.release.environment.id,
-      'environment_staging',
+      'environment_production',
     );
   });
 
   test('invalid remote sidecar retains the atomically cached release pair',
       () async {
-    final releaseSource = deliveryFixtureSource('product-reference.json');
+    final releaseSource = deliveryFixtureSource();
     final validSidecar = _commerceForRelease(releaseSource);
     final invalidSidecar =
         validSidecar.replaceFirst('application_ios', 'application_other');
@@ -252,7 +253,7 @@ void main() {
   });
 
   test('commerce 304 reuses only the validated cached release pair', () async {
-    final releaseSource = deliveryFixtureSource('product-reference.json');
+    final releaseSource = deliveryFixtureSource();
     final sidecar = _commerceForRelease(releaseSource);
     final sidecarDigest =
         ((jsonDecode(sidecar) as Map<String, Object?>)['configuration']!
@@ -324,7 +325,25 @@ String _releaseWithEnvironment(String environmentId) {
   final envelope = jsonDecode(deliveryFixtureSource()) as Map<String, Object?>;
   final release = envelope['release']! as Map<String, Object?>;
   final environment = release['environment']! as Map<String, Object?>;
+  final previousId = environment['id'];
   environment['id'] = environmentId;
+  // Placement decisions and Experiment assignments each restate the
+  // Environment they belong to, and the release is rejected when they
+  // disagree. Rewriting only the header would produce a release that fails
+  // decoding, which would make this test pass for the wrong reason.
+  void rebind(Object? value) {
+    if (value is List<Object?>) {
+      value.forEach(rebind);
+      return;
+    }
+    if (value is! Map<String, Object?>) return;
+    if (value['environmentId'] == previousId) {
+      value['environmentId'] = environmentId;
+    }
+    value.values.forEach(rebind);
+  }
+
+  rebind(release);
   release.remove('contentDigest');
   release['contentDigest'] =
       'sha256:${mosaicSha256String(jsonEncode(_canonicalize(release)))}';
@@ -374,6 +393,9 @@ String _commerceForRelease(String releaseSource) {
           'support': 'supported',
         },
       ],
+      // An SDK-local provider owns its own recovery; the contract requires the
+      // mode to be stated rather than inferred from the activation source.
+      'recoveryMode': 'providerDefined',
     },
     'productMappings': <Object?>[
       for (final raw in products) _commerceProductMapping(raw),
@@ -396,7 +418,7 @@ String _commerceForRelease(String releaseSource) {
   configuration['contentDigest'] =
       'sha256:${mosaicSha256String(jsonEncode(_canonicalize(configuration)))}';
   return jsonEncode(<String, Object?>{
-    'commerceConfigurationVersion': '1',
+    'commerceConfigurationVersion': '2',
     'configuration': configuration,
   });
 }
@@ -407,6 +429,10 @@ Map<String, Object?> _commerceProductMapping(Object? raw) {
   return <String, Object?>{
     'mosaicProductId': id,
     'mappingId': 'mapping_$id',
+    // The mapping restates the Product's type and the Entitlements it grants;
+    // both are required, and the type must agree with the release's reference.
+    'productType': product['type'],
+    'entitlementKeys': const <String>['pro'],
     'providerProductReference': 'provider.$id',
     'adapterMapping': <String, Object?>{'kind': 'directProduct'},
   };

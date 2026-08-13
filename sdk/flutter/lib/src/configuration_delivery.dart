@@ -6,9 +6,9 @@ import 'placement_decision.dart';
 import 'protocol.dart';
 import 'sha256.dart';
 
-const String mosaicConfigurationDeliveryVersion = '1';
-const String mosaicConfigurationDeliveryVersionV2 = '2';
-const String mosaicConfigurationDeliveryVersionV3 = '3';
+/// The Configuration Delivery contract version, and the only one this SDK
+/// reads. It carries Paywall Protocol [mosaicProtocolVersion].
+const String mosaicConfigurationDeliveryVersion = '3';
 const int mosaicMaximumConfigurationBytes = 8 * 1024 * 1024;
 
 final class MosaicConfigurationDeliveryException implements Exception {
@@ -20,18 +20,28 @@ final class MosaicConfigurationDeliveryException implements Exception {
   String toString() => 'MosaicConfigurationDeliveryException: $message';
 }
 
-final class _MosaicDecisionCompatibility {
-  _MosaicDecisionCompatibility({
+final class _MosaicReleaseCompatibility {
+  _MosaicReleaseCompatibility({
     required Iterable<String> requiredFeatures,
     required Iterable<String> bucketingAlgorithms,
     required Iterable<MosaicRequiredCapability> paywallCapabilities,
+    required Iterable<String> experimentFeatures,
+    required Iterable<String> experimentAlgorithms,
+    required Iterable<String> experimentSchedulePolicies,
   })  : requiredFeatures = Set.unmodifiable(requiredFeatures),
         bucketingAlgorithms = Set.unmodifiable(bucketingAlgorithms),
-        paywallCapabilities = List.unmodifiable(paywallCapabilities);
+        paywallCapabilities = List.unmodifiable(paywallCapabilities),
+        experimentFeatures = Set.unmodifiable(experimentFeatures),
+        experimentAlgorithms = Set.unmodifiable(experimentAlgorithms),
+        experimentSchedulePolicies =
+            Set.unmodifiable(experimentSchedulePolicies);
 
   final Set<String> requiredFeatures;
   final Set<String> bucketingAlgorithms;
   final List<MosaicRequiredCapability> paywallCapabilities;
+  final Set<String> experimentFeatures;
+  final Set<String> experimentAlgorithms;
+  final Set<String> experimentSchedulePolicies;
 }
 
 final class MosaicConfigurationDeliveryEnvelope {
@@ -54,7 +64,6 @@ final class MosaicConfigurationRelease {
     required this.publishedAt,
     required this.contentDigest,
     required Iterable<MosaicRequiredCapability> requiredCapabilities,
-    required Map<String, String> placements,
     required Map<String, MosaicDeliveredPaywallVersion> paywallVersions,
     required Map<String, MosaicDeliveredProductReference> productReferences,
     required Map<String, MosaicDeliveredAssetReference> assetReferences,
@@ -64,7 +73,6 @@ final class MosaicConfigurationRelease {
         const {},
     Iterable<MosaicExperimentAssignment> experimentAssignments = const [],
   })  : requiredCapabilities = List.unmodifiable(requiredCapabilities),
-        placements = Map.unmodifiable(placements),
         paywallVersions = Map.unmodifiable(paywallVersions),
         productReferences = Map.unmodifiable(productReferences),
         assetReferences = Map.unmodifiable(assetReferences),
@@ -83,7 +91,6 @@ final class MosaicConfigurationRelease {
   final String contentDigest;
   final String? projectId;
   final List<MosaicRequiredCapability> requiredCapabilities;
-  final Map<String, String> placements;
   final Map<String, MosaicDeliveredPaywallVersion> paywallVersions;
   final Map<String, MosaicDeliveredProductReference> productReferences;
   final Map<String, MosaicDeliveredAssetReference> assetReferences;
@@ -92,11 +99,6 @@ final class MosaicConfigurationRelease {
 
   /// Canonical Experiment candidates ordered by stable Experiment ID.
   final List<MosaicExperimentAssignment> experimentAssignments;
-
-  MosaicDeliveredPaywallVersion? paywallForPlacement(String key) {
-    final versionId = placements[key];
-    return versionId == null ? null : paywallVersions[versionId];
-  }
 
   MosaicPlacementRuleSet? decisionForPlacement(String key) =>
       placementDecisions[key];
@@ -191,10 +193,10 @@ final class MosaicDeliveredAssetReference {
   final Uri url;
 }
 
-/// Strict, atomic reader for Configuration Delivery Contract v1.
+/// Strict, atomic reader for the Configuration Delivery contract.
 ///
-/// Every included Protocol 0.3 document and every cross-release reference is
-/// validated before an envelope is returned.
+/// Every included Protocol [mosaicProtocolVersion] document and every
+/// cross-release reference is validated before an envelope is returned.
 final class MosaicConfigurationDeliveryDecoder {
   const MosaicConfigurationDeliveryDecoder({
     this.protocolDecoder = const MosaicProtocolDecoder(),
@@ -226,19 +228,13 @@ final class MosaicConfigurationDeliveryDecoder {
       envelope['configurationDeliveryVersion'],
       r'$.configurationDeliveryVersion',
     );
-    if (version != mosaicConfigurationDeliveryVersion &&
-        version != mosaicConfigurationDeliveryVersionV2 &&
-        version != mosaicConfigurationDeliveryVersionV3) {
+    if (version != mosaicConfigurationDeliveryVersion) {
       throw const MosaicConfigurationDeliveryException(
         'The Configuration Delivery version is unsupported.',
       );
     }
     final releaseObject = _object(envelope['release'], r'$.release');
-    final release = version == mosaicConfigurationDeliveryVersionV3
-        ? _releaseV3(releaseObject)
-        : version == mosaicConfigurationDeliveryVersionV2
-            ? _releaseV2(releaseObject)
-            : _release(releaseObject);
+    final release = _release(releaseObject);
     _validateReleaseDigest(envelope, release.contentDigest);
     return MosaicConfigurationDeliveryEnvelope(
       version: version,
@@ -247,159 +243,7 @@ final class MosaicConfigurationDeliveryDecoder {
     );
   }
 
-  MosaicConfigurationRelease _releaseV3(Map<String, Object?> object) {
-    final expected = <String>{
-      'id',
-      'number',
-      'projectId',
-      'environment',
-      'publishedAt',
-      'contentDigest',
-      'compatibility',
-      'placementDecisions',
-      'paywallVersions',
-      'productReferences',
-      'entitlementReferences',
-      'assetReferences',
-      'experimentAssignments',
-    };
-    if (object.keys.toSet().difference(expected).isNotEmpty ||
-        !expected.every(object.containsKey)) {
-      throw const MosaicConfigurationDeliveryException(
-        'The Delivery v3 release fields are invalid.',
-      );
-    }
-    final compatibility =
-        _object(object['compatibility'], r'$.release.compatibility');
-    _expectKeys(
-        compatibility,
-        const {
-          'placementDecisionContracts',
-          'paywallProtocols',
-          'acceptance',
-          'experimentAssignmentContracts',
-        },
-        r'$.release.compatibility');
-    final declarations = _list(compatibility['experimentAssignmentContracts'],
-        r'$.release.compatibility.experimentAssignmentContracts',
-        minimum: 1, maximum: 1);
-    final declaration = _object(declarations.single,
-        r'$.release.compatibility.experimentAssignmentContracts[0]');
-    _expectKeys(
-        declaration,
-        const {
-          'version',
-          'requiredFeatures',
-          'bucketingAlgorithms',
-          'schedulePolicies',
-        },
-        r'$.release.compatibility.experimentAssignmentContracts[0]');
-    if (_string(declaration['version'], 'version') != '1') {
-      throw const MosaicConfigurationDeliveryException(
-          'Unsupported Experiment contract.');
-    }
-    final v2 = Map<String, Object?>.from(object)
-      ..remove('experimentAssignments');
-    v2['compatibility'] = Map<String, Object?>.from(compatibility)
-      ..remove('experimentAssignmentContracts');
-    final base = _releaseV2(v2);
-    final assignmentValues = _list(
-        object['experimentAssignments'], r'$.release.experimentAssignments',
-        maximum: 128);
-    final assignments = <MosaicExperimentAssignment>[];
-    final experimentIds = <String>{};
-    final experimentVersionIds = <String>{};
-    for (final source in assignmentValues) {
-      final MosaicExperimentAssignment assignment;
-      try {
-        assignment = const MosaicExperimentAssignmentDecoder().decodeEmbedded(
-            source,
-            production: base.environment.mode ==
-                MosaicDeliveredEnvironmentMode.production);
-      } on FormatException {
-        throw const MosaicConfigurationDeliveryException(
-          'The release contains an invalid Experiment Assignment.',
-        );
-      }
-      if (assignment.projectId != base.projectId ||
-          assignment.environmentId != base.environment.id ||
-          !experimentIds.add(assignment.experimentId) ||
-          !experimentVersionIds.add(assignment.experimentVersionId) ||
-          !_placementContainsControlOutcome(base.placementDecisions.values,
-              assignment.placementId, assignment.controlPaywallVersionId) ||
-          assignment.variants.any((variant) {
-            final paywall = base.paywallVersions[variant.paywallVersionId];
-            return paywall?.paywallId != variant.paywallId ||
-                !_sameSet(
-                  paywall!.productReferenceIds,
-                  variant.requiredProductIds,
-                );
-          }) ||
-          assignment.group != null &&
-              !assignment.group!.members.any(
-                  (member) => member.experimentId == assignment.experimentId)) {
-        throw const MosaicConfigurationDeliveryException(
-          'The release contains inconsistent Experiment references.',
-        );
-      }
-      assignments.add(assignment);
-    }
-    final requiredFeatures = <String>{};
-    final requiredAlgorithms = <String>{};
-    for (final assignment in assignments) {
-      requiredFeatures.addAll({
-        'allocation.ranges',
-        'fallback.normal_placement',
-        'schedule.trusted_server_time',
-        'assignment.${switch (assignment.assignmentPolicy) {
-          MosaicExperimentAssignmentPolicy.installation => 'installation',
-          MosaicExperimentAssignmentPolicy.identifiedUser => 'identified_user',
-          MosaicExperimentAssignmentPolicy.identifiedUserOrInstallation =>
-            'identified_user_or_installation',
-        }}',
-        if (assignment.group != null) 'group.mutual_exclusion',
-        if (assignment.qaOverrides.isNotEmpty) 'override.qa',
-      });
-      requiredAlgorithms.add(mosaicExperimentBucketingAlgorithm);
-      if (assignment.group != null)
-        requiredAlgorithms.add(mosaicExperimentGroupBucketingAlgorithm);
-    }
-    Set<String> strings(Object? value, String path) =>
-        _list(value, path, maximum: 16)
-            .map((item) => _string(item, path))
-            .toSet();
-    if (!_sameSet(strings(declaration['requiredFeatures'], 'features'),
-            requiredFeatures) ||
-        !_sameSet(strings(declaration['bucketingAlgorithms'], 'algorithms'),
-            requiredAlgorithms) ||
-        !_sameSet(
-            strings(declaration['schedulePolicies'], 'policies'),
-            assignments.isEmpty
-                ? const <String>{}
-                : const {mosaicExperimentSchedulePolicy})) {
-      throw const MosaicConfigurationDeliveryException(
-        'Release Experiment compatibility must exactly match embedded requirements.',
-      );
-    }
-    return MosaicConfigurationRelease(
-      id: base.id,
-      number: base.number,
-      projectId: base.projectId,
-      environment: base.environment,
-      publishedAt: base.publishedAt,
-      contentDigest: base.contentDigest,
-      requiredCapabilities: base.requiredCapabilities,
-      placements: base.placements,
-      placementDecisions: base.placementDecisions,
-      paywallVersions: base.paywallVersions,
-      productReferences: base.productReferences,
-      entitlementReferences: base.entitlementReferences,
-      assetReferences: base.assetReferences,
-      experimentAssignments: assignments,
-    );
-  }
-
-  MosaicConfigurationRelease _releaseV2(Map<String, Object?> object) {
+  MosaicConfigurationRelease _release(Map<String, Object?> object) {
     const path = r'$.release';
     _expectKeys(
       object,
@@ -416,6 +260,7 @@ final class MosaicConfigurationDeliveryDecoder {
         'productReferences',
         'entitlementReferences',
         'assetReferences',
+        'experimentAssignments',
       },
       path,
     );
@@ -441,14 +286,14 @@ final class MosaicConfigurationDeliveryDecoder {
           maximumLength: 64),
       mode: environmentMode,
     );
-    final compatibility = _compatibilityV2(object['compatibility']);
+    final compatibility = _compatibility(object['compatibility']);
     final assets = _assetReferences(object['assetReferences']);
     final paywalls = _paywallVersions(
       object['paywallVersions'],
       assets,
       allowEmpty: true,
     );
-    final products = _productReferencesV2(object['productReferences']);
+    final products = _productReferences(object['productReferences']);
     final entitlements =
         _entitlementReferences(object['entitlementReferences']);
     final decisions = <String, MosaicPlacementRuleSet>{};
@@ -493,7 +338,15 @@ final class MosaicConfigurationDeliveryDecoder {
         'Release decision compatibility must exactly match embedded requirements.',
       );
     }
-    _validateV2References(decisions, paywalls, products, entitlements);
+    _validateReferences(decisions, paywalls, products, entitlements);
+    final assignments = _experimentAssignments(
+      object['experimentAssignments'],
+      projectId: projectId,
+      environment: environment,
+      decisions: decisions,
+      paywalls: paywalls,
+    );
+    _validateExperimentCompatibility(compatibility, assignments);
     return MosaicConfigurationRelease(
       id: _identifier(object['id'], '$path.id'),
       number:
@@ -503,21 +356,117 @@ final class MosaicConfigurationDeliveryDecoder {
       publishedAt: _timestamp(object['publishedAt'], '$path.publishedAt'),
       contentDigest: _digest(object['contentDigest'], '$path.contentDigest'),
       requiredCapabilities: compatibility.paywallCapabilities,
-      placements: const {},
       placementDecisions: decisions,
       paywallVersions: paywalls,
       productReferences: products,
       entitlementReferences: entitlements,
       assetReferences: assets,
+      experimentAssignments: assignments,
     );
   }
 
-  _MosaicDecisionCompatibility _compatibilityV2(Object? value) {
+  List<MosaicExperimentAssignment> _experimentAssignments(
+    Object? value, {
+    required String projectId,
+    required MosaicDeliveredEnvironment environment,
+    required Map<String, MosaicPlacementRuleSet> decisions,
+    required Map<String, MosaicDeliveredPaywallVersion> paywalls,
+  }) {
+    final values =
+        _list(value, r'$.release.experimentAssignments', maximum: 128);
+    final assignments = <MosaicExperimentAssignment>[];
+    final experimentIds = <String>{};
+    final experimentVersionIds = <String>{};
+    for (final source in values) {
+      final MosaicExperimentAssignment assignment;
+      try {
+        assignment = const MosaicExperimentAssignmentDecoder().decodeEmbedded(
+            source,
+            production:
+                environment.mode == MosaicDeliveredEnvironmentMode.production);
+      } on FormatException {
+        throw const MosaicConfigurationDeliveryException(
+          'The release contains an invalid Experiment Assignment.',
+        );
+      }
+      if (assignment.projectId != projectId ||
+          assignment.environmentId != environment.id ||
+          !experimentIds.add(assignment.experimentId) ||
+          !experimentVersionIds.add(assignment.experimentVersionId) ||
+          !_placementContainsControlOutcome(decisions.values,
+              assignment.placementId, assignment.controlPaywallVersionId) ||
+          assignment.variants.any((variant) {
+            final paywall = paywalls[variant.paywallVersionId];
+            return paywall?.paywallId != variant.paywallId ||
+                !_sameSet(
+                  paywall!.productReferenceIds,
+                  variant.requiredProductIds,
+                );
+          }) ||
+          assignment.group != null &&
+              !assignment.group!.members.any(
+                  (member) => member.experimentId == assignment.experimentId)) {
+        throw const MosaicConfigurationDeliveryException(
+          'The release contains inconsistent Experiment references.',
+        );
+      }
+      assignments.add(assignment);
+    }
+    return assignments;
+  }
+
+  /// The declared Experiment compatibility must match what is embedded exactly:
+  /// an over-declaration claims a feature nothing needs, and an
+  /// under-declaration hides one a reader must have.
+  void _validateExperimentCompatibility(
+    _MosaicReleaseCompatibility compatibility,
+    List<MosaicExperimentAssignment> assignments,
+  ) {
+    final requiredFeatures = <String>{};
+    final requiredAlgorithms = <String>{};
+    for (final assignment in assignments) {
+      requiredFeatures.addAll({
+        'allocation.ranges',
+        'fallback.normal_placement',
+        'schedule.trusted_server_time',
+        'assignment.${switch (assignment.assignmentPolicy) {
+          MosaicExperimentAssignmentPolicy.installation => 'installation',
+          MosaicExperimentAssignmentPolicy.identifiedUser => 'identified_user',
+          MosaicExperimentAssignmentPolicy.identifiedUserOrInstallation =>
+            'identified_user_or_installation',
+        }}',
+        if (assignment.group != null) 'group.mutual_exclusion',
+        if (assignment.qaOverrides.isNotEmpty) 'override.qa',
+      });
+      requiredAlgorithms.add(mosaicExperimentBucketingAlgorithm);
+      if (assignment.group != null) {
+        requiredAlgorithms.add(mosaicExperimentGroupBucketingAlgorithm);
+      }
+    }
+    if (!_sameSet(compatibility.experimentFeatures, requiredFeatures) ||
+        !_sameSet(compatibility.experimentAlgorithms, requiredAlgorithms) ||
+        !_sameSet(
+            compatibility.experimentSchedulePolicies,
+            assignments.isEmpty
+                ? const <String>{}
+                : const {mosaicExperimentSchedulePolicy})) {
+      throw const MosaicConfigurationDeliveryException(
+        'Release Experiment compatibility must exactly match embedded requirements.',
+      );
+    }
+  }
+
+  _MosaicReleaseCompatibility _compatibility(Object? value) {
     const path = r'$.release.compatibility';
     final object = _object(value, path);
     _expectKeys(
         object,
-        const {'placementDecisionContracts', 'paywallProtocols', 'acceptance'},
+        const {
+          'placementDecisionContracts',
+          'paywallProtocols',
+          'acceptance',
+          'experimentAssignmentContracts',
+        },
         path);
     if (_string(object['acceptance'], '$path.acceptance') != 'atomic') {
       throw const MosaicConfigurationDeliveryException(
@@ -553,92 +502,43 @@ final class MosaicConfigurationDeliveryDecoder {
       throw const MosaicConfigurationDeliveryException(
           'Unsupported rollout algorithm.');
     }
-    final projected = <String, Object?>{
-      'paywallProtocols': object['paywallProtocols'],
-      'acceptance': object['acceptance'],
-    };
-    return _MosaicDecisionCompatibility(
+    const experimentPath = '$path.experimentAssignmentContracts';
+    final experiments = _list(
+        object['experimentAssignmentContracts'], experimentPath,
+        minimum: 1, maximum: 1);
+    final experiment = _object(experiments.single, '$experimentPath[0]');
+    _expectKeys(
+        experiment,
+        const {
+          'version',
+          'requiredFeatures',
+          'bucketingAlgorithms',
+          'schedulePolicies',
+        },
+        '$experimentPath[0]');
+    if (_string(experiment['version'], '$experimentPath[0].version') != '1') {
+      throw const MosaicConfigurationDeliveryException(
+          'Unsupported Experiment contract.');
+    }
+    Set<String> strings(String key) =>
+        _list(experiment[key], '$experimentPath[0].$key', maximum: 16)
+            .map((item) => _string(item, '$experimentPath[0].$key'))
+            .toSet();
+    return _MosaicReleaseCompatibility(
       requiredFeatures: features,
       bucketingAlgorithms: algorithms,
-      paywallCapabilities:
-          _compatibility(projected, allowEmptyCapabilities: true),
+      paywallCapabilities: _paywallCapabilities(object),
+      experimentFeatures: strings('requiredFeatures'),
+      experimentAlgorithms: strings('bucketingAlgorithms'),
+      experimentSchedulePolicies: strings('schedulePolicies'),
     );
   }
 
-  MosaicConfigurationRelease _release(Map<String, Object?> object) {
-    const path = r'$.release';
-    _expectKeys(
-      object,
-      const <String>{
-        'id',
-        'number',
-        'environment',
-        'publishedAt',
-        'contentDigest',
-        'compatibility',
-        'placements',
-        'paywallVersions',
-        'productReferences',
-        'assetReferences',
-      },
-      path,
-    );
-    final requiredCapabilities = _compatibility(object['compatibility']);
-    final assetReferences = _assetReferences(object['assetReferences']);
-    final paywallVersions = _paywallVersions(
-      object['paywallVersions'],
-      assetReferences,
-    );
-    final placements = _placements(object['placements'], paywallVersions);
-    final productReferences = _productReferences(object['productReferences']);
-    _validateCompleteReferences(
-      requiredCapabilities: requiredCapabilities,
-      placements: placements,
-      paywallVersions: paywallVersions,
-      productReferences: productReferences,
-      assetReferences: assetReferences,
-    );
-    final environment = _object(object['environment'], '$path.environment');
-    _expectKeys(
-      environment,
-      const <String>{'id', 'key'},
-      '$path.environment',
-    );
-    return MosaicConfigurationRelease(
-      id: _identifier(object['id'], '$path.id'),
-      number:
-          _integer(object['number'], '$path.number', maximum: 9007199254740991),
-      environment: MosaicDeliveredEnvironment(
-        id: _identifier(environment['id'], '$path.environment.id'),
-        key: _patternString(
-          environment['key'],
-          '$path.environment.key',
-          _environmentKeyPattern,
-          maximumLength: 64,
-        ),
-      ),
-      publishedAt: _timestamp(object['publishedAt'], '$path.publishedAt'),
-      contentDigest: _digest(object['contentDigest'], '$path.contentDigest'),
-      requiredCapabilities: requiredCapabilities,
-      placements: placements,
-      paywallVersions: paywallVersions,
-      productReferences: productReferences,
-      assetReferences: assetReferences,
-    );
-  }
-
-  List<MosaicRequiredCapability> _compatibility(
-    Object? value, {
-    bool allowEmptyCapabilities = false,
-  }) {
+  /// The paywall-protocol arm of an already key-checked compatibility object.
+  List<MosaicRequiredCapability> _paywallCapabilities(
+    Map<String, Object?> object,
+  ) {
     const path = r'$.release.compatibility';
-    final object = _object(value, path);
-    _expectKeys(object, const <String>{'paywallProtocols', 'acceptance'}, path);
-    if (_string(object['acceptance'], '$path.acceptance') != 'atomic') {
-      throw const MosaicConfigurationDeliveryException(
-        'Configuration releases must use atomic acceptance.',
-      );
-    }
     final protocols = _list(
       object['paywallProtocols'],
       '$path.paywallProtocols',
@@ -660,7 +560,7 @@ final class MosaicConfigurationDeliveryDecoder {
     final entries = _list(
       protocol['requiredCapabilities'],
       '$path.paywallProtocols[0].requiredCapabilities',
-      minimum: allowEmptyCapabilities ? 0 : 1,
+      minimum: 0,
       maximum: 128,
     );
     final seen = <String>{};
@@ -683,7 +583,7 @@ final class MosaicConfigurationDeliveryDecoder {
     _expectKeys(object, const <String>{'name', 'version'}, path);
     final name = _string(object['name'], '$path.name');
     final version = _string(object['version'], '$path.version');
-    if (!mosaicProtocolV03Capabilities.contains(name) ||
+    if (!mosaicProtocolCapabilities.contains(name) ||
         version != mosaicProtocolVersion) {
       throw const MosaicConfigurationDeliveryException(
         'The release requires an unsupported Paywall capability.',
@@ -851,91 +751,7 @@ final class MosaicConfigurationDeliveryDecoder {
     return result;
   }
 
-  Map<String, String> _placements(
-    Object? value,
-    Map<String, MosaicDeliveredPaywallVersion> paywallVersions,
-  ) {
-    const path = r'$.release.placements';
-    final entries = _list(value, path, minimum: 1, maximum: 256);
-    final result = <String, String>{};
-    for (var index = 0; index < entries.length; index += 1) {
-      final entryPath = '$path[$index]';
-      final object = _object(entries[index], entryPath);
-      _expectKeys(
-        object,
-        const <String>{'key', 'paywallVersionId'},
-        entryPath,
-      );
-      final key = _patternString(
-        object['key'],
-        '$entryPath.key',
-        _placementKeyPattern,
-        maximumLength: 64,
-      );
-      final versionId = _identifier(
-          object['paywallVersionId'], '$entryPath.paywallVersionId');
-      if (result.containsKey(key)) {
-        throw const MosaicConfigurationDeliveryException(
-          'The release contains a duplicate Placement key.',
-        );
-      }
-      if (!paywallVersions.containsKey(versionId)) {
-        throw const MosaicConfigurationDeliveryException(
-          'A Placement references an unknown Paywall Version.',
-        );
-      }
-      result[key] = versionId;
-    }
-    if (!_sameSet(result.values, paywallVersions.keys)) {
-      throw const MosaicConfigurationDeliveryException(
-        'Every Paywall Version must be referenced by a Placement.',
-      );
-    }
-    return result;
-  }
-
   Map<String, MosaicDeliveredProductReference> _productReferences(
-      Object? value) {
-    const path = r'$.release.productReferences';
-    final entries = _list(value, path, maximum: 1024);
-    final result = <String, MosaicDeliveredProductReference>{};
-    for (var index = 0; index < entries.length; index += 1) {
-      final entryPath = '$path[$index]';
-      final object = _object(entries[index], entryPath);
-      _expectKeys(
-        object,
-        const <String>{'id', 'type', 'fallbackDisplayName'},
-        entryPath,
-      );
-      final id = _identifier(object['id'], '$entryPath.id');
-      if (result.containsKey(id)) {
-        throw const MosaicConfigurationDeliveryException(
-          'The release contains a duplicate Product reference.',
-        );
-      }
-      final type = _string(object['type'], '$entryPath.type');
-      final displayName = _boundedSafeString(
-        object['fallbackDisplayName'],
-        '$entryPath.fallbackDisplayName',
-        maximumLength: 160,
-      );
-      result[id] = MosaicDeliveredProductReference(
-        id: id,
-        type: switch (type) {
-          'subscription' => MosaicDeliveredProductType.subscription,
-          'one_time_non_consumable' =>
-            MosaicDeliveredProductType.oneTimeNonConsumable,
-          _ => throw const MosaicConfigurationDeliveryException(
-              'A Product reference uses an unsupported type.',
-            ),
-        },
-        fallbackDisplayName: displayName,
-      );
-    }
-    return result;
-  }
-
-  Map<String, MosaicDeliveredProductReference> _productReferencesV2(
       Object? value) {
     const path = r'$.release.productReferences';
     final entries = _list(value, path, maximum: 1024);
@@ -1002,7 +818,7 @@ final class MosaicConfigurationDeliveryDecoder {
     return result;
   }
 
-  void _validateV2References(
+  void _validateReferences(
     Map<String, MosaicPlacementRuleSet> decisions,
     Map<String, MosaicDeliveredPaywallVersion> paywalls,
     Map<String, MosaicDeliveredProductReference> products,
@@ -1143,44 +959,6 @@ final class MosaicConfigurationDeliveryDecoder {
       );
     }
     return result;
-  }
-
-  void _validateCompleteReferences({
-    required List<MosaicRequiredCapability> requiredCapabilities,
-    required Map<String, String> placements,
-    required Map<String, MosaicDeliveredPaywallVersion> paywallVersions,
-    required Map<String, MosaicDeliveredProductReference> productReferences,
-    required Map<String, MosaicDeliveredAssetReference> assetReferences,
-  }) {
-    final expectedProducts = <String>{};
-    final expectedAssets = <String>{};
-    final expectedCapabilities = <String>{};
-    for (final version in paywallVersions.values) {
-      expectedProducts.addAll(version.productReferenceIds);
-      expectedAssets.addAll(version.assetBindings.values);
-      expectedCapabilities.addAll(
-        version.document.compatibility.requiredCapabilities.map(
-          (capability) => '${capability.name}@${capability.version}',
-        ),
-      );
-    }
-    if (!_sameSet(expectedProducts, productReferences.keys) ||
-        !_sameSet(expectedAssets, assetReferences.keys) ||
-        !_sameSet(
-          expectedCapabilities,
-          requiredCapabilities.map(
-            (capability) => '${capability.name}@${capability.version}',
-          ),
-        )) {
-      throw const MosaicConfigurationDeliveryException(
-        'The release contains an inconsistent complete reference set.',
-      );
-    }
-    if (placements.isEmpty) {
-      throw const MosaicConfigurationDeliveryException(
-        'The release must contain at least one Placement.',
-      );
-    }
   }
 
   void _validateReleaseDigest(

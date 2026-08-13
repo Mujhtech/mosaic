@@ -2,13 +2,31 @@
 
 ## Unreleased
 
-- **Read Paywall Protocol 0.4 "Motion" alongside 0.3.** The decoder dispatches
-  on `schemaVersion`; versions stay exact identifiers, so a 0.3 document is
-  still read as 0.3 and gains no motion vocabulary. `0.4` adds the
+- **One version per contract (ADR-0028).** Paywall Protocol `0.3` support is
+  deleted outright: the decoder reads `0.4` only, and a document declaring any
+  other version — the retired predecessor as firmly as an unknown successor —
+  is rejected atomically as `unsupportedSchemaVersion` and resolves through
+  last-accepted configuration, then bundled fallback, then configuration
+  unavailable. Configuration Delivery accepts `v3` only and now carries Paywall
+  `0.4`; its `v1` and `v2` readers and the projection chain that defined `v3`
+  in terms of them are gone. Local Preview negotiates
+  `mosaic.local-preview.v0.4` only. Commerce Configuration, Commerce Provider,
+  Analytics Event, and Authoritative Entitlement each read `v2` only.
+- **`MosaicCapabilityReport` reports one version.** `capabilitiesBySchemaVersion`
+  and `supportedSchemaVersions` are replaced by `schemaVersion` and
+  `capabilities`; `capabilitiesFor(version)` survives and returns an empty set
+  for any version other than the implemented one. `mosaicProtocolV03Capabilities`
+  and `mosaicProtocolV04Capabilities` collapse into `mosaicProtocolCapabilities`,
+  and `mosaicProtocolVersionV04` / `mosaicSupportedProtocolVersions` are deleted.
+- **`resolvePlacement` and `MosaicPlacementResolved` are removed.** They read the
+  Delivery `v1` `placements` map, which no longer exists; every Placement now
+  resolves through `decidePlacement` and its rule set. `MosaicConfigurationRelease.placements`
+  and `paywallForPlacement` are deleted with it.
+- **Read Paywall Protocol 0.4 "Motion".** `0.4` adds the
   `designSystem.motions` catalog, `motionToken`/inline motion references, and
-  per-node `motion` blocks, and applies the two cleanups `0.3` named for it:
-  `style.productCardStates` is gone from the capability vocabulary, and Feature
-  List and Timeline share one `dot`/`ordinal`/`icon` marker union with an
+  per-node `motion` blocks, and applies the two cleanups its predecessor named
+  for it: `style.productCardStates` is gone from the capability vocabulary, and
+  Feature List and Timeline share one `dot`/`ordinal`/`icon` marker union with an
   optional per-item override, so a list can finally express a negated item.
 - Add the three motion primitives, rendered with native Flutter widgets.
   **appear** fades or fade-rises a node once when it enters a screen, travelling

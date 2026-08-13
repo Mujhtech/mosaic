@@ -150,7 +150,8 @@ final class MosaicNodeMotion {
 
 /// The glyph beside a Feature List item or at a Timeline entry's position.
 ///
-/// One closed union shared by both components. `0.3` carried Feature List's
+/// One closed union shared by both components. An earlier contract carried
+/// Feature List's
 /// single `"checkmark"` constant beside Timeline's three-arm union, which meant
 /// a list could not express a negated item; `0.4` consolidates on this shape.
 sealed class MosaicMarker {
@@ -172,7 +173,7 @@ final class MosaicIconMarker extends MosaicMarker {
   final MosaicIconName name;
 }
 
-/// Retained `0.3` spelling of the shared marker union.
+/// Retained spelling of the shared marker union.
 typedef MosaicTimelineMarker = MosaicMarker;
 typedef MosaicTimelineDotMarker = MosaicDotMarker;
 typedef MosaicTimelineOrdinalMarker = MosaicOrdinalMarker;

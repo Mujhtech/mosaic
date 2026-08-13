@@ -4,7 +4,7 @@ File deliveryFixture(String relativePath) {
   var directory = Directory.current.absolute;
   while (true) {
     final candidate = File(
-      '${directory.path}/protocol/fixtures/configuration-delivery/v1/'
+      '${directory.path}/protocol/fixtures/configuration-delivery/v3/'
       '$relativePath',
     );
     if (candidate.existsSync()) return candidate;
@@ -16,5 +16,5 @@ File deliveryFixture(String relativePath) {
   }
 }
 
-String deliveryFixtureSource([String name = 'valid-release.json']) =>
+String deliveryFixtureSource([String name = 'rich-release.json']) =>
     deliveryFixture(name).readAsStringSync();

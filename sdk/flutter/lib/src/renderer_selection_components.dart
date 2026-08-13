@@ -82,7 +82,7 @@ extension on _MosaicPaywallState {
 
   /// Tabs `selection` animates the tab control's style, not the panel swap.
   ///
-  /// `0.3` visibility semantics remove a hidden node from layout, the
+  /// Visibility semantics remove a hidden node from layout, the
   /// accessibility tree, and focus order; animating that removal would need a
   /// "present but not focusable" third state the protocol does not have.
   Widget _buildTabControl(

@@ -5,42 +5,33 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 void main() {
-  test('decodes the canonical RevenueCat sidecar with exact mappings', () {
-    final source = _fixtureSource('revenuecat-configuration.json');
+  test('rejects a sidecar declaring any version but the single contract', () {
+    final source = _fixtureSource('storekit-configuration.json');
     final release = _releaseFor(source);
+    final root = jsonDecode(source) as Map<String, Object?>;
+    root['commerceConfigurationVersion'] = '1';
 
-    final envelope = const MosaicCommerceConfigurationDecoder().decode(
-      source,
-      expectedRelease: release,
-      expectedApplicationId: 'application_ios',
-      expectedStorePlatform: MosaicStorePlatform.ios,
-    );
-
-    expect(envelope.version, '1');
-    expect(envelope.configuration.activeProvider.identity.id, 'revenuecat');
     expect(
-      envelope.configuration
-          .mappingForProduct('product_pro_monthly')!
-          .adapterMapping,
-      isA<MosaicDirectProductMapping>(),
-    );
-    expect(
-      envelope.configuration
-          .mappingForProduct('product_pro_yearly')!
-          .adapterMapping,
-      isA<MosaicRevenueCatPackageMapping>(),
+      () => const MosaicCommerceConfigurationDecoder().decode(
+        jsonEncode(root),
+        expectedRelease: release,
+        expectedApplicationId: 'application_ios',
+        expectedStorePlatform: MosaicStorePlatform.ios,
+      ),
+      throwsA(isA<MosaicCommerceConfigurationException>()),
     );
   });
 
-  test('decodes canonical native-store v2 mappings without changing v1', () {
-    final storeKit = _v2FixtureSource('storekit-configuration.json');
+  test('decodes canonical native-store mappings', () {
+    final storeKit = _fixtureSource('storekit-configuration.json');
     final storeKitEnvelope = const MosaicCommerceConfigurationDecoder().decode(
       storeKit,
       expectedRelease: _releaseFor(storeKit),
       expectedApplicationId: 'application_ios',
       expectedStorePlatform: MosaicStorePlatform.ios,
     );
-    expect(storeKitEnvelope.version, '2');
+    expect(
+        storeKitEnvelope.version, mosaicCommerceConfigurationContractVersion);
     expect(
       storeKitEnvelope.configuration.activeProvider.activation,
       isA<MosaicNativeStoreProviderActivation>(),
@@ -51,8 +42,17 @@ void main() {
           .adapterMapping,
       isA<MosaicStoreKitProductMapping>(),
     );
+    // An unobserved native-store configuration must report unknown freshness
+    // and raise the warning, rather than passing the configuration time off as
+    // an observation.
+    expect(storeKitEnvelope.configuration.freshness.providerObservedAt, isNull);
+    expect(storeKitEnvelope.configuration.freshness.staleAt, isNull);
+    expect(
+      storeKitEnvelope.configuration.diagnostics.single.code,
+      'commerce.freshness.unobserved',
+    );
 
-    final google = _v2FixtureSource('google-play-configuration.json');
+    final google = _fixtureSource('google-play-configuration.json');
     final googleEnvelope = const MosaicCommerceConfigurationDecoder().decode(
       google,
       expectedRelease: _releaseFor(google),
@@ -75,7 +75,7 @@ void main() {
   });
 
   test('rejects unknown fields, digest changes, and release mismatches', () {
-    final source = _fixtureSource('revenuecat-configuration.json');
+    final source = _fixtureSource('storekit-configuration.json');
     final release = _releaseFor(source);
     final unknown = jsonDecode(source) as Map<String, Object?>;
     (unknown['configuration']! as Map<String, Object?>)['apiKey'] = 'forbidden';
@@ -118,7 +118,7 @@ void main() {
 
   test('hosted transport revalidates only an exact retained sidecar pair',
       () async {
-    final source = _fixtureSource('revenuecat-configuration.json');
+    final source = _fixtureSource('storekit-configuration.json');
     final release = _releaseFor(source);
     final contentDigest =
         ((jsonDecode(source) as Map<String, Object?>)['configuration']!
@@ -181,9 +181,9 @@ void main() {
     final updated = first as MosaicCommerceConfigurationUpdatedResponse;
     expect(updated.etag, exactEtag);
     expect(receivedIfNoneMatch.single, isNull);
-    expect(acceptedVersions, '2,1');
-    expect(acceptedContractVersions, '2,1');
-    expect(accept, mosaicCommerceConfigurationAccept);
+    expect(acceptedVersions, mosaicCommerceConfigurationContractVersion);
+    expect(acceptedContractVersions, mosaicCommerceProviderContractVersion);
+    expect(accept, mosaicCommerceConfigurationContentType);
 
     final second = await transport.fetch(
       MosaicCommerceConfigurationRequest(
@@ -214,7 +214,7 @@ void main() {
   });
 
   test('hosted transport rejects 304 without a valid retained pair', () async {
-    final source = _fixtureSource('revenuecat-configuration.json');
+    final source = _fixtureSource('storekit-configuration.json');
     final release = _releaseFor(source);
     String? receivedIfNoneMatch;
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -254,25 +254,12 @@ String _fixtureSource(String name) {
   var directory = Directory.current.absolute;
   while (true) {
     final file = File(
-      '${directory.path}/protocol/fixtures/commerce-configuration/v1/$name',
+      '${directory.path}/protocol/fixtures/commerce-configuration/'
+      'v$mosaicCommerceConfigurationContractVersion/$name',
     );
     if (file.existsSync()) return file.readAsStringSync();
     if (directory.parent.path == directory.path) {
       throw StateError('Cannot locate Commerce Configuration fixtures.');
-    }
-    directory = directory.parent;
-  }
-}
-
-String _v2FixtureSource(String name) {
-  var directory = Directory.current.absolute;
-  while (true) {
-    final file = File(
-      '${directory.path}/protocol/fixtures/commerce-configuration/v2/$name',
-    );
-    if (file.existsSync()) return file.readAsStringSync();
-    if (directory.parent.path == directory.path) {
-      throw StateError('Cannot locate Commerce Configuration v2 fixtures.');
     }
     directory = directory.parent;
   }
@@ -306,7 +293,6 @@ MosaicConfigurationRelease _releaseFor(String sidecarSource) {
     publishedAt: '2026-07-23T12:00:00Z',
     contentDigest: association['contentDigest']! as String,
     requiredCapabilities: const <MosaicRequiredCapability>[],
-    placements: const <String, String>{},
     paywallVersions: const <String, MosaicDeliveredPaywallVersion>{},
     productReferences: productReferences,
     assetReferences: const <String, MosaicDeliveredAssetReference>{},

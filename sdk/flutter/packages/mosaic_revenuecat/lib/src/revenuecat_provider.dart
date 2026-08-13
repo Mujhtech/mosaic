@@ -63,7 +63,7 @@ final class MosaicRevenueCatPurchaseProvider implements MosaicCommerceProvider {
             '1.0.0' ||
         !_capabilitiesMatch(
           commerceConfiguration.activeProvider.capabilities,
-          _revenueCatCapabilities(commerceConfiguration.version),
+          _revenueCatRuntimeCapabilities,
         )) {
       throw ArgumentError(
         'RevenueCat adapter identity or capabilities are incompatible.',
@@ -579,30 +579,6 @@ const _revenueCatRuntimeCapabilities = <MosaicProviderCapability>[
     support: MosaicProviderCapabilitySupport.supported,
   ),
 ];
-
-const _revenueCatV1Capabilities = <MosaicProviderCapability>[
-  MosaicProviderCapability(
-    name: MosaicProviderCapabilityName.productLoading,
-    support: MosaicProviderCapabilitySupport.supported,
-  ),
-  MosaicProviderCapability(
-    name: MosaicProviderCapabilityName.subscriptions,
-    support: MosaicProviderCapabilitySupport.supported,
-  ),
-  MosaicProviderCapability(
-    name: MosaicProviderCapabilityName.restore,
-    support: MosaicProviderCapabilitySupport.supported,
-  ),
-  MosaicProviderCapability(
-    name: MosaicProviderCapabilityName.activeEntitlementLookup,
-    support: MosaicProviderCapabilitySupport.supported,
-  ),
-];
-
-List<MosaicProviderCapability> _revenueCatCapabilities(String version) =>
-    version == mosaicCommerceConfigurationVersion
-        ? _revenueCatV1Capabilities
-        : _revenueCatRuntimeCapabilities;
 
 bool _capabilitiesMatch(
   List<MosaicProviderCapability> expected,

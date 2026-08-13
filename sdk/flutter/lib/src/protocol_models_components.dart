@@ -54,7 +54,7 @@ final class MosaicOpenExternalUrlAction extends MosaicAction {
   String get type => 'openExternalUrl';
 }
 
-/// Protocol 0.3's single native control container.
+/// Protocol 0.4's single native control container.
 final class MosaicButtonComponent extends MosaicComponent {
   MosaicButtonComponent({
     required super.id,

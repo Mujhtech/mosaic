@@ -5,24 +5,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 import 'support/canonical_fixture.dart';
+import 'support/customer_authority_fixture.dart';
 
-/// Conformance against the canonical Authoritative Entitlement v1 fixtures.
+/// Conformance against the canonical Authoritative Entitlement fixtures.
 ///
-/// The SDK entitlement sync surface carries exactly two record types. Fixtures
-/// for the other surfaces are asserted to be *rejected here*, which documents
-/// the boundary rather than pretending the SDK reads a trusted-server record.
+/// ADR-0028 leaves the contract at one version, so a whole record is read by
+/// [MosaicCustomerAuthorityDecoder] and the snapshot it wraps is reached
+/// through `snapshotRecord`. The sync surface carries three record types;
+/// fixtures for the other surfaces are asserted to be *rejected here*, which
+/// documents the boundary rather than pretending the SDK reads a
+/// trusted-server record.
 void main() {
-  const decoder = MosaicCustomerEntitlementDecoder();
-  final root = repositoryDirectory(
-    'protocol/fixtures/authoritative-entitlement/v1',
-  );
+  const authorityDecoder = MosaicCustomerAuthorityDecoder();
+  const recordDecoder = MosaicCustomerEntitlementDecoder();
+  final root = customerAuthorityFixtureRoot;
 
-  group('canonical authority-aware v2 fixtures', () {
-    const authorityDecoder = MosaicCustomerAuthorityDecoder();
-    final v2Root = repositoryDirectory(
-      'protocol/fixtures/authoritative-entitlement/v2',
-    );
-    for (final name in const <String>[
+  group('canonical records', () {
+    // The per-scenario snapshots plus the top-level records, which are where
+    // the confirmation and authority-unavailable record types live.
+    final names = <String>[
+      for (final file
+          in canonicalFixtureFiles(Directory('${root.path}/snapshots')))
+        'snapshots/${file.uri.pathSegments.last}',
       'ios-full-snapshot.json',
       'android-full-snapshot.json',
       'source-snapshot.json',
@@ -30,70 +34,63 @@ void main() {
       'android-snapshot-unchanged.json',
       'authority-unavailable.json',
       'authority-policy-unavailable.json',
-    ]) {
-      test('$name decodes at the authority boundary', () {
-        final record = authorityDecoder.decode(
-          File('${v2Root.path}/$name').readAsStringSync(),
-        );
-        if (record case final MosaicCustomerAuthoritySnapshotRecord snapshot) {
-          expect(snapshot.snapshotRecord.contentDigestValid, isTrue);
-          expect(snapshot.snapshotAuthorityDigestValid, isTrue);
-        } else if (record
-            case final MosaicCustomerAuthorityUnavailableRecord unavailable) {
-          if (unavailable.reason ==
-              MosaicCustomerAuthorityUnavailableReason.policyUnavailable) {
-            expect(unavailable.minimumSupport, isNull);
-          } else {
-            expect(unavailable.minimumSupport, isNotNull);
-          }
-        }
-      });
-    }
+    ];
 
-    for (final file in canonicalFixtureFiles(
-      Directory('${v2Root.path}/invalid'),
-    )) {
-      if (file.uri.pathSegments.last == 'rejection-layers.json') continue;
-      test('${file.uri.pathSegments.last} is rejected by the SDK reader', () {
-        expect(
-          () => authorityDecoder.decode(file.readAsStringSync()),
-          throwsA(isA<MosaicCustomerEntitlementFormatException>()),
-        );
-      });
-    }
-  });
-
-  group('canonical snapshot fixtures', () {
-    for (final file
-        in canonicalFixtureFiles(Directory('${root.path}/snapshots'))) {
-      final name = file.uri.pathSegments.last;
+    for (final name in names) {
       test('$name is read whole', () {
-        final record = decoder.decode(file.readAsStringSync());
+        final record = authorityDecoder.decode(customerAuthorityFixture(name));
         switch (record) {
-          case MosaicCustomerSnapshotRecord(
-              :final snapshot,
-              :final contentDigestValid
+          case MosaicCustomerAuthoritySnapshotRecord(
+              :final snapshotRecord,
+              :final snapshotAuthorityDigestValid
             ):
-            // Every published snapshot digests to the value it carries. A
-            // failure here means Dart's canonical serialization has drifted
-            // from the four other implementations.
-            expect(contentDigestValid, isTrue);
-            expect(snapshot.snapshotVersion, greaterThanOrEqualTo(0));
-            expect(snapshot.correlationId, isNotEmpty);
-          case MosaicCustomerUnchangedRecord(:final unchanged):
+            // Every published record digests to both values it carries: the
+            // snapshot's own content digest and the digest binding that
+            // snapshot to its authority. A failure here means Dart's canonical
+            // serialization has drifted from the other implementations.
+            expect(snapshotRecord.contentDigestValid, isTrue);
+            expect(snapshotAuthorityDigestValid, isTrue);
+            expect(
+              snapshotRecord.snapshot.snapshotVersion,
+              greaterThanOrEqualTo(0),
+            );
+            expect(snapshotRecord.snapshot.correlationId, isNotEmpty);
+          case MosaicCustomerAuthorityUnchangedRecord(
+              :final unchanged,
+              :final snapshotAuthorityDigest
+            ):
+            // A confirmation never carries version zero: there is nothing for
+            // it to confirm.
             expect(unchanged.snapshotVersion, greaterThan(0));
+            expect(snapshotAuthorityDigest, isNotEmpty);
+          case MosaicCustomerAuthorityUnavailableRecord(
+              :final reason,
+              :final minimumSupport
+            ):
+            // A policy instruction is the one record forbidden to state a
+            // client floor; every other unavailable reason must state one.
+            expect(
+              minimumSupport,
+              reason ==
+                      MosaicCustomerAuthorityUnavailableReason.policyUnavailable
+                  ? isNull
+                  : isNotNull,
+            );
         }
       });
     }
+
+    MosaicCustomerEntitlementSnapshot snapshot(String name) =>
+        (authorityDecoder.decode(customerAuthorityFixture('snapshots/$name'))
+                as MosaicCustomerAuthoritySnapshotRecord)
+            .snapshotRecord
+            .snapshot;
 
     test('a permanent source reports no finite expiry', () {
       // Reporting the subscription's end date when a lifetime purchase also
       // contributes would tell a lifetime purchaser their access expires.
-      final record = decoder.decode(
-        File('${root.path}/snapshots/permanent-source-no-finite-expiry.json')
-            .readAsStringSync(),
-      ) as MosaicCustomerSnapshotRecord;
-      final entry = record.snapshot.entries.first;
+      final entry =
+          snapshot('permanent-source-no-finite-expiry.json').entries.first;
       expect(entry.state, MosaicCustomerEntitlementState.active);
       expect(entry.endKnown, isTrue);
       expect(entry.effectiveEnd, isNull);
@@ -101,33 +98,27 @@ void main() {
     });
 
     test('a test-derived source is flagged on the source it came from', () {
-      final record = decoder.decode(
-        File('${root.path}/snapshots/test-source-sandbox-grant.json')
-            .readAsStringSync(),
-      ) as MosaicCustomerSnapshotRecord;
       expect(
-        record.snapshot.sources.any((source) => source.isTestSource),
+        snapshot('test-source-sandbox-grant.json')
+            .sources
+            .any((source) => source.isTestSource),
         isTrue,
       );
     });
 
     test('an unknown entry keeps a non-definite uncertainty', () {
-      final record = decoder.decode(
-        File('${root.path}/snapshots/unknown-state-identity-unresolved.json')
-            .readAsStringSync(),
-      ) as MosaicCustomerSnapshotRecord;
-      final entry = record.snapshot.entries.first;
+      final entry =
+          snapshot('unknown-state-identity-unresolved.json').entries.first;
       expect(entry.state, MosaicCustomerEntitlementState.unknown);
       expect(entry.uncertainty?.isDefinite, isFalse);
       expect(entry.uncertainty?.since, isNotNull);
     });
 
     test('bounded offline caching states its grace window explicitly', () {
-      final record = decoder.decode(
-        File('${root.path}/snapshots/bounded-offline-cache.json')
-            .readAsStringSync(),
-      ) as MosaicCustomerSnapshotRecord;
-      expect(record.snapshot.staleGraceSeconds, greaterThan(0));
+      expect(
+        snapshot('bounded-offline-cache.json').staleGraceSeconds,
+        greaterThan(0),
+      );
     });
   });
 
@@ -152,9 +143,13 @@ void main() {
         String? reasonCode;
         var digestValid = true;
         try {
-          final record = decoder.decode(source);
-          if (record is MosaicCustomerSnapshotRecord) {
-            digestValid = record.contentDigestValid;
+          final record = authorityDecoder.decode(source);
+          if (record is MosaicCustomerAuthoritySnapshotRecord) {
+            // Both digests, exactly as the acceptance gate combines them: a
+            // record whose snapshot is intact but whose authority binding is
+            // not has still failed.
+            digestValid = record.snapshotRecord.contentDigestValid &&
+                record.snapshotAuthorityDigestValid;
           }
         } on MosaicCustomerEntitlementFormatException catch (error) {
           reasonCode = error.reasonCode;
@@ -177,7 +172,7 @@ void main() {
       // owns it. rejection-layers.json classifies it as semantic.
       expect(layers['older-snapshot-version-rejected.json'], 'semantic');
       expect(
-        () => decoder.decode(
+        () => authorityDecoder.decode(
           File('${invalid.path}/older-snapshot-version-rejected.json')
               .readAsStringSync(),
         ),
@@ -193,18 +188,18 @@ void main() {
 
     test('a digest computed over another customer fails binding', () {
       expect(layers['different-customer-rejected.json'], 'semantic');
-      final record = decoder.decode(
+      final record = authorityDecoder.decode(
         File('${invalid.path}/different-customer-rejected.json')
             .readAsStringSync(),
-      ) as MosaicCustomerSnapshotRecord;
+      ) as MosaicCustomerAuthoritySnapshotRecord;
       // The document is structurally readable; the digest is exactly what
       // catches the binding failure, which is what the digest exists for.
-      expect(record.contentDigestValid, isFalse);
+      expect(record.snapshotRecord.contentDigestValid, isFalse);
     });
 
     test('an unknown field rejects the whole record', () {
       expect(
-        () => decoder.decode(
+        () => authorityDecoder.decode(
           File('${invalid.path}/snapshot-entry-unknown-field.json')
               .readAsStringSync(),
         ),
@@ -220,7 +215,7 @@ void main() {
 
     test('an unsupported contract version rejects before anything else', () {
       expect(
-        () => decoder.decode(
+        () => authorityDecoder.decode(
           File('${invalid.path}/unknown-contract-version.json')
               .readAsStringSync(),
         ),
@@ -240,11 +235,12 @@ void main() {
       // reader is entitled to infer intent from, and the semantic validator is
       // where the defect is caught.
       expect(layers['snapshot-carries-signed-payload-value.json'], 'semantic');
-      final record = decoder.decode(
+      final record = authorityDecoder.decode(
         File('${invalid.path}/snapshot-carries-signed-payload-value.json')
             .readAsStringSync(),
-      ) as MosaicCustomerSnapshotRecord;
-      expect(record.contentDigestValid, isTrue);
+      ) as MosaicCustomerAuthoritySnapshotRecord;
+      expect(record.snapshotRecord.contentDigestValid, isTrue);
+      expect(record.snapshotAuthorityDigestValid, isTrue);
     });
   });
 
@@ -258,8 +254,17 @@ void main() {
           in canonicalFixtureFiles(Directory('${root.path}/$directory'))) {
         final name = file.uri.pathSegments.last;
         test('$directory/$name is not read by the SDK sync surface', () {
+          final source = file.readAsStringSync();
+          // These records are envelope-valid at the current contract version,
+          // so what refuses them is the closed record-type set rather than a
+          // version check. Both readers refuse: the whole-record reader the
+          // runtime uses, and the snapshot reader it delegates to.
           expect(
-            () => decoder.decode(file.readAsStringSync()),
+            () => authorityDecoder.decode(source),
+            throwsA(isA<MosaicCustomerEntitlementFormatException>()),
+          );
+          expect(
+            () => recordDecoder.decode(source),
             throwsA(
               isA<MosaicCustomerEntitlementFormatException>().having(
                 (error) => error.reasonCode,

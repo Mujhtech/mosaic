@@ -5,7 +5,7 @@ import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 import 'support/canonical_fixture.dart';
 
-/// Decoding and semantic-rule coverage for the four components Protocol 0.3
+/// Decoding and semantic-rule coverage for the four components Protocol 0.4
 /// adds, plus the runtime-state and visibility contract Tabs introduces.
 void main() {
   MosaicPaywallDocument document() => decodeCanonicalFixture();
@@ -266,7 +266,7 @@ void main() {
   group('reserved accessibility strings', () {
     test('matches every canonical rating-announcement vector', () {
       final corpus = jsonDecode(
-        repositoryFile('protocol/fixtures/v0.3/rating-announcement.json')
+        repositoryFile('protocol/fixtures/v0.4/rating-announcement.json')
             .readAsStringSync(),
       )! as Map<String, Object?>;
       final cases =
@@ -305,7 +305,7 @@ void main() {
 
     test('matches every canonical accessibility-announcement vector', () {
       final corpus = jsonDecode(
-        repositoryFile('protocol/fixtures/v0.3/accessibility-announcement.json')
+        repositoryFile('protocol/fixtures/v0.4/accessibility-announcement.json')
             .readAsStringSync(),
       )! as Map<String, Object?>;
       final cases =

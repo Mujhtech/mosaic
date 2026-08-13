@@ -14,7 +14,7 @@ void _validateLocalizationSemantics(MosaicPaywallDocument document) {
     );
   }
 
-  _validateV03ProductTemplates(document);
+  _validateProductTemplates(document);
 
   final localizedTexts = _localizedTexts(document);
   final referencedKeys = <String>{};
@@ -133,7 +133,7 @@ void _validateReservedAccessibilityKeys(
 final RegExp _productTemplatePattern =
     RegExp(r'\{\{\s*product\.(name|price)\s*\}\}');
 
-void _validateV03ProductTemplates(MosaicPaywallDocument document) {
+void _validateProductTemplates(MosaicPaywallDocument document) {
   final allowed = Set<MosaicLocalizedText>.identity();
   void visitCardNode(MosaicNode node) {
     if (node case final MosaicTextComponent text) {
@@ -298,7 +298,6 @@ void _validateCapabilities(
   MosaicPaywallDocument document,
   List<MosaicNode> nodes,
 ) {
-  final isV04 = document.schemaVersion == mosaicProtocolVersionV04;
   final expected = <String>{
     'localization.catalogs',
     'navigation.screens',
@@ -323,9 +322,8 @@ void _validateCapabilities(
   }
   if (document.products.isNotEmpty) expected.add('product.references');
   final designSystem = document.designSystem!;
-  // Deliberately blind to `motions`. 0.4 inherits this derivation from 0.3
-  // unchanged, and a motion catalog already derives its own capabilities at the
-  // reference site — `motion.appear`, `motion.selection`, `motion.loop` — while
+  // Deliberately blind to `motions`. A motion catalog already derives its own
+  // capabilities at the reference site — `motion.appear`, `motion.selection`, `motion.loop` — while
   // the unused-token rule guarantees the catalog is non-empty only when a node
   // reaches it. Adding `motions` here would make a motion-only document declare
   // a style capability the protocol never derives for it, and reject a valid
@@ -335,22 +333,22 @@ void _validateCapabilities(
       designSystem.shadows.isNotEmpty) {
     expected.add('style.designTokens');
   }
-  if (_allV03Backgrounds(document).map(document.resolveBackground).any(
+  if (_allBackgrounds(document).map(document.resolveBackground).any(
         (background) =>
             background is MosaicLinearGradientBackground ||
             background is MosaicRadialGradientBackground,
       )) {
     expected.add('style.gradientBackground');
   }
-  if (_allV03Backgrounds(document).map(document.resolveBackground).any(
+  if (_allBackgrounds(document).map(document.resolveBackground).any(
         (background) =>
             background is MosaicImageBackground ||
             background is MosaicVideoBackground,
       )) {
     expected.add('style.mediaBackground');
   }
-  if (_allV03Shadows(document).isNotEmpty) expected.add('style.shadow');
-  if (_allV03Colors(document).isNotEmpty) expected.add('style.colors');
+  if (_allShadows(document).isNotEmpty) expected.add('style.shadow');
+  if (_allColors(document).isNotEmpty) expected.add('style.colors');
   for (final asset in document.assets) {
     final remote = asset.source is MosaicRemoteAssetSource;
     if (asset is MosaicImageAsset) {
@@ -404,18 +402,6 @@ void _validateCapabilities(
       expected
         ..add('fallback.product')
         ..add('outcome.normalized');
-    }
-    // `style.productCardStates` was derived exactly when one of the three
-    // components that require `styles` was derived, so it could never vary
-    // independently and carried no information. 0.3 named it for removal and
-    // 0.4 removes it; deriving it there would demand a capability the 0.4
-    // vocabulary no longer contains.
-    if (!isV04 &&
-        (node is MosaicProductSelectorComponent ||
-            node is MosaicProductCardComponent ||
-            node is MosaicProductBadgeComponent ||
-            node is MosaicTabsComponent)) {
-      expected.add('style.productCardStates');
     }
     // A motion capability is derived exactly when that motion is authored. The
     // unused-capability check below then actively protects the enhancement

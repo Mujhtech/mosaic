@@ -15,9 +15,13 @@ void main() {
     final mosaic = Mosaic.configure(
       publicSdkKey: 'mos_public_sdk_test.secret',
       baseUrl: Uri.parse('https://mosaic.example'),
-      purchaseProvider: MockMosaicPurchaseProvider(),
+      // The decision refuses a paywall whose products the provider cannot
+      // offer, so the canonical release's three products must be available for
+      // this test to be about rendering rather than about commerce.
+      purchaseProvider: MockMosaicPurchaseProvider(products: _richProducts),
       transport: transport,
       cache: _EmptyCache(),
+      identityStorage: MosaicMemoryIdentityStorage(),
       bundledFallbackLoader: () async => deliveryFixtureSource(),
     );
     await tester.runAsync(mosaic.loadConfiguration);
@@ -25,12 +29,18 @@ void main() {
       MaterialApp(
         home: MosaicPlacementHost(
           mosaic: mosaic,
-          placementKey: 'onboarding_complete',
+          placementKey: 'upgrade_prompt',
           onResult: (_) {},
           externalUrlOpener: (_) async => true,
         ),
       ),
     );
+    // Every Placement resolves through a decision rule set, which reads
+    // identity asynchronously before it can select a paywall.
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pump();
 
     expect(find.byKey(const ValueKey<String>('mosaic-view-details')),
@@ -193,8 +203,26 @@ void main() {
   });
 }
 
+const List<MosaicProduct> _richProducts = <MosaicProduct>[
+  MosaicProduct(
+    id: 'mosaic_pro_monthly',
+    title: 'Monthly',
+    localizedPrice: r'$9.99',
+  ),
+  MosaicProduct(
+    id: 'mosaic_pro_yearly',
+    title: 'Yearly',
+    localizedPrice: r'$79.99',
+  ),
+  MosaicProduct(
+    id: 'mosaic_pro_lifetime',
+    title: 'Lifetime',
+    localizedPrice: r'$199.99',
+  ),
+];
+
 String _advancedDeliverySource() => repositoryFile(
-      'protocol/fixtures/configuration-delivery/v2/advanced-release.json',
+      'protocol/fixtures/configuration-delivery/v3/advanced-release.json',
     ).readAsStringSync();
 
 List<String> _queuedEventNames(MosaicMemoryAnalyticsStorage storage) {

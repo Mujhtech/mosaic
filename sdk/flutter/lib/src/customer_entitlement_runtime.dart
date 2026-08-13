@@ -87,6 +87,7 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
     this.applicationId,
     this.platform,
     this.applicationVersion,
+    this.sdkVersion = mosaicFlutterSdkVersion,
     this.settings = const MosaicCustomerEntitlementSettings(),
     this.timeout = const Duration(seconds: 5),
     this.clock = _systemClock,
@@ -109,6 +110,14 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
   final Duration timeout;
   final MosaicCustomerEntitlementClock clock;
   final String? applicationId;
+
+  /// The SDK version compared against a record's `minimumSdkVersion` floor.
+  ///
+  /// Injectable so a test can read a canonical record verbatim rather than
+  /// rewriting the floor it declares. Rewriting the fixture would mean the
+  /// support gate is never exercised against the version the contract actually
+  /// publishes, which is the one thing this comparison exists to check.
+  final String sdkVersion;
   final MosaicCustomerAuthorityPlatform? platform;
   final String? applicationVersion;
   final void Function(String diagnosticCode, {required bool severe})?
@@ -721,7 +730,7 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
     }
     final source = jsonEncode(<String, Object?>{
       'authoritativeEntitlementContractVersion':
-          mosaicAuthoritativeEntitlementContractVersionV2,
+          mosaicAuthoritativeEntitlementContractVersion,
       'recordType': 'customerEntitlementSnapshot',
       'payload': <String, Object?>{
         'authority': mosaicCustomerAuthorityToJson(decoded.authority),
@@ -942,7 +951,7 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
     final appVersion = applicationVersion;
     if (appVersion == null) return false;
     final sdkComparison =
-        _compareVersions(mosaicFlutterSdkVersion, support.minimumSdkVersion);
+        _compareVersions(sdkVersion, support.minimumSdkVersion);
     final minimumAppComparison = _compareVersions(
       appVersion,
       support.supportedAppVersionWindow.minimumInclusive,

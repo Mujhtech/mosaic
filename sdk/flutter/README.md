@@ -1,4 +1,4 @@
-# Mosaic Flutter SDK — Configuration Delivery v1/v2/v3
+# Mosaic Flutter SDK — Protocol 0.4, Configuration Delivery v3
 
 ## Experiments
 
@@ -23,7 +23,7 @@ Experiment tuple whenever the presented Paywall is a successfully exposed
 original Variant: `product_selected`, `purchase_started`,
 `purchase_completed_client`, and the rest of the purchase lifecycle. Experiment
 results join a conversion to an exposure solely on that tuple, so a conversion
-emitted on v1 would silently count as zero. Conversions from a fallback
+emitted without it would silently count as zero. Conversions from a fallback
 presentation or a QA override are emitted without the tuple, because neither is
 an exposed Variant presentation and attributing them to the Variant would count
 a normal-Paywall outcome as a Variant outcome. Presentation, Placement, restore,
@@ -34,19 +34,19 @@ subject digests, is backup-excluded, and is atomically bounded to 256 records
 and 180 days. Trusted server and local receipt anchors are cached with Delivery
 v3 so valid schedules remain evaluable across restart.
 
-This package provides a strict reader for Mosaic Protocol 0.3
+This package provides a strict reader for Mosaic Protocol 0.4
 and renders it with native Flutter widgets. It includes hosted Configuration
-Delivery v1/v2/v3, persistent cache and bundled-release fallback, Placements,
+Delivery v3, persistent cache and bundled-release fallback, Placements,
 localization and RTL,
 bundled fallback loading, mock commerce, normalized results, diagnostics,
-accessibility semantics, native rendering, Local Preview 0.3 support, and the
-provider-neutral Commerce Configuration v1/v2 custom-provider boundary, and
-Analytics Event Contract v1/v2 collection with a persistent bounded queue.
+accessibility semantics, native rendering, Local Preview 0.4 support, and the
+provider-neutral Commerce Configuration v2 custom-provider boundary, and
+Analytics Event Contract v2 collection with a persistent bounded queue.
 
-Protocol 0.3 replaces 0.2 outright. There is no migration path and no dual
-version support: a 0.2 document is an unknown version to this reader and is
-rejected atomically, resolving through last-accepted, then bundled fallback,
-then configuration unavailable.
+Every contract carries exactly one version until GA (ADR-0028). There is no
+migration path and no dual-version support: a document or release at any other
+version is unknown to this reader and is rejected atomically, resolving through
+last-accepted, then bundled fallback, then configuration unavailable.
 
 ## Protocol 0.4 — Motion
 
@@ -163,11 +163,11 @@ not resolve or embed RevenueCat, StoreKit, or Google Play Billing.
 
 ## Advanced Placement decisions
 
-Delivery v2 adds strict Placement Decision v1 decoding and local deterministic
-evaluation while preserving Delivery v1 and `MosaicPlacementHost`. A candidate
+Delivery v3 carries strict Placement Decision v1 decoding and local
+deterministic evaluation behind `MosaicPlacementHost`. A candidate
 is accepted only after all Rules, immutable Paywalls, exact Product and
 Entitlement references, exact embedded/release compatibility unions,
-Paywall-unavailable fallback paths, and digests validate. Delivery v2 also
+Paywall-unavailable fallback paths, and digests validate. It also
 requires an explicit development, staging, or production Environment mode;
 QA overrides are accepted only in development or staging and for at most 24
 hours. Rejected candidates leave the complete last-known-valid release intact.
@@ -545,7 +545,7 @@ single `mosaicFlutterSdkVersion` constant.
 
 Configure the provider-neutral client with an environment-scoped public SDK
 key and hosted/self-hosted base URL. Loading reads cache then the bundled
-Delivery v1/v2 release without networking; refresh is an explicit host action:
+Delivery v3 release without networking; refresh is an explicit host action:
 
 ```dart
 final mosaic = Mosaic.configure(
@@ -587,7 +587,7 @@ MosaicPlacementHost(
 )
 ```
 
-An accepted release is strict and atomic: every embedded Protocol 0.3 paywall,
+An accepted release is strict and atomic: every embedded Protocol 0.4 paywall,
 digest, Placement reference, product reference, asset binding, and capability
 set must validate before the SDK replaces memory or its cache. Requests send
 Flutter SDK capability metadata, use a short timeout, and revalidate strong
@@ -597,13 +597,13 @@ Concurrent manual refreshes coalesce. Presentation never fetches.
 
 ## Commerce Configuration and custom Providers
 
-Commerce Configuration v1 and v2 are optional immutable sidecars. v1 remains
-the closed RevenueCat/custom-provider contract. v2 adds credential-free native
-Store activation, exact StoreKit/Google mapping snapshots, immutable Product
+Commerce Configuration v2 is an optional immutable sidecar covering the
+RevenueCat/custom-provider contract plus credential-free native Store
+activation, exact StoreKit/Google mapping snapshots, immutable Product
 grants, explicit recovery modes, and delayed commerce-update acceptance. When configured,
 the SDK requires its Environment, Application, store platform, Configuration
 Release ID, release digest, Product set, and canonical content digest to match
-the accepted Delivery v1 release. Unknown fields, mappings, versions,
+the accepted Delivery v3 release. Unknown fields, mappings, versions,
 credentials, ambiguous mappings, and mismatches reject the complete pair. The
 release and sidecar bytes share one crash-safe cache record.
 
@@ -613,7 +613,7 @@ hosted route automatically:
 `GET /v1/sdk/commerce-configuration?applicationId=<registered-application-id>`
 
 The request reuses the public SDK key and advertises Commerce Configuration
-and Provider Contract versions `2,1`, preferring v2 while retaining v1 fallback. Tests, local
+and Provider Contract version `2`. Tests, local
 Studio integrations, and self-hosted deployments may replace this narrow
 transport with `commerceConfigurationLoader`. Hosted responses are revalidated
 with `If-None-Match` only after the exact sidecar ETag, canonical content
@@ -714,7 +714,7 @@ completes a Flutter frame.
 
 The client:
 
-- advertises and uses `mosaic.local-preview.v0.3` for the full connection;
+- advertises and uses `mosaic.local-preview.v0.4` for the full connection;
 - sends `previewClientConnected` then `capabilityReport`;
 - reports exact schema, renderer, and preview capability versions for the
   negotiated protocol;
@@ -757,8 +757,8 @@ and withhold incompatible or oversized compact UTF-8 drafts before sending.
   purchase/Switch references, passive content bounds, Carousel nesting, and
   Countdown ordering.
 - The package contains no JSON Schema or fixture copy. Conformance tests read
-  the canonical Protocol and Local Preview 0.3 fixtures directly.
-- Configuration resolves last-known-valid cache → bundled Delivery v1/v2 release
+  the canonical Protocol and Local Preview 0.4 fixtures directly.
+- Configuration resolves last-known-valid cache → bundled Delivery v3 release
   → `configurationUnavailable`; explicit refresh may replace it with a fully
   validated remote release.
 - A missing component image uses its declared placeholder. Decorative media
@@ -786,7 +786,7 @@ BCP-47 extensions (`en-US-u-ca-buddhist`), and Java `Locale.toString` extension
 markers (`en_US_#u-rg-gbzzzz`) all resolve to `en-US`; `PT_br` resolves to
 `pt-BR`; `zh-Hans-CN` is preserved. `0.3` defines no language+region reduction,
 so `zh-Hans-CN` reduces to `zh`, never to `zh-CN`. Conformance is bound to
-`protocol/fixtures/v0.3/locale-resolution.json`.
+`protocol/fixtures/v0.4/locale-resolution.json`.
 
 Catalog lookup — and only catalog lookup — recovers the leading language subtag
 when a tag has no canonical form, so `en-US-verylongsubtag` still reaches the
@@ -878,7 +878,7 @@ same code for the same situation.
   history deterministically; acceptance dismisses a presented Sheet, because
   the reset history no longer contains it and a stale modal would hold the
   reset paywall behind an inaccessible barrier.
-- Protocol 0.3 Button descendants render as native Flutter content inside one
+- Protocol 0.4 Button descendants render as native Flutter content inside one
   48-point-minimum hit target and one merged semantics control. Purchase and
   restore swap to localized `inProgressChildren` and all asynchronous actions
   reject duplicate taps while busy.
@@ -945,7 +945,7 @@ flutter test --no-pub \
 ```
 
 That opt-in test verifies the negotiated WebSocket subprotocol, identity and
-capability relay, an edited Protocol 0.3 draft, and the returned
+capability relay, an edited Protocol 0.4 draft, and the returned
 `draftAccepted` acknowledgement. The normal offline suite compiles and skips
 it when no relay is running.
 

@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 File canonicalFixtureFile() {
-  return repositoryFile('protocol/fixtures/v0.3/complete-paywall.json');
+  return repositoryFile('protocol/fixtures/v0.4/complete-paywall.json');
 }
 
 File repositoryFile(String relativePath) {

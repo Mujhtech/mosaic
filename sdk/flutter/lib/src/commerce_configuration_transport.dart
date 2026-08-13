@@ -7,14 +7,13 @@ import 'configuration_delivery.dart';
 import 'configuration_transport.dart';
 import 'protocol.dart';
 
-const String mosaicCommerceProviderContractVersion = '1';
+/// The single Commerce Provider Contract version this SDK implements.
+const String mosaicCommerceProviderContractVersion = '2';
+
+/// The only media type this SDK sends in `Accept` and accepts in a response.
 const String mosaicCommerceConfigurationContentType =
-    'application/vnd.mosaic.commerce-configuration+json;version=1';
-const String mosaicCommerceConfigurationContentTypeV2 =
-    'application/vnd.mosaic.commerce-configuration+json;version=2';
-const String mosaicCommerceConfigurationAccept =
-    '$mosaicCommerceConfigurationContentTypeV2, '
-    '$mosaicCommerceConfigurationContentType;q=0.9';
+    'application/vnd.mosaic.commerce-configuration+json;'
+    'version=$mosaicCommerceConfigurationContractVersion';
 
 final class MosaicRetainedCommerceConfiguration {
   const MosaicRetainedCommerceConfiguration({
@@ -67,7 +66,7 @@ abstract interface class MosaicCommerceConfigurationTransport {
   );
 }
 
-/// Default hosted transport for the frozen Commerce Configuration v1 route.
+/// Default hosted transport for the Commerce Configuration route.
 final class MosaicIoCommerceConfigurationLoader
     implements MosaicCommerceConfigurationTransport {
   const MosaicIoCommerceConfigurationLoader({
@@ -121,17 +120,20 @@ final class MosaicIoCommerceConfigurationLoader
         HttpHeaders.authorizationHeader,
         'Bearer $publicSdkKey',
       )
-      ..headers.set(HttpHeaders.acceptHeader, mosaicCommerceConfigurationAccept)
+      ..headers.set(
+        HttpHeaders.acceptHeader,
+        mosaicCommerceConfigurationContentType,
+      )
       ..headers.set(HttpHeaders.acceptEncodingHeader, 'gzip')
       ..headers.set('Mosaic-SDK-Platform', 'flutter')
       ..headers.set('Mosaic-SDK-Version', mosaicFlutterSdkVersion)
       ..headers.set(
         'Mosaic-Commerce-Configuration-Versions',
-        mosaicSupportedCommerceConfigurationVersions.join(','),
+        mosaicCommerceConfigurationContractVersion,
       )
       ..headers.set(
         'Mosaic-Commerce-Provider-Contract-Versions',
-        mosaicSupportedCommerceProviderContractVersions.join(','),
+        mosaicCommerceProviderContractVersion,
       );
     if (retained != null) {
       httpRequest.headers.set(HttpHeaders.ifNoneMatchHeader, retained.etag);
@@ -152,8 +154,7 @@ final class MosaicIoCommerceConfigurationLoader
     }
     final contentType = response.headers.value(HttpHeaders.contentTypeHeader);
     if (response.statusCode != HttpStatus.ok ||
-        contentType != mosaicCommerceConfigurationContentType &&
-            contentType != mosaicCommerceConfigurationContentTypeV2 ||
+        contentType != mosaicCommerceConfigurationContentType ||
         response.headers.value('Mosaic-Configuration-Release-Id') !=
             request.release.id) {
       return const MosaicCommerceConfigurationFailedResponse();

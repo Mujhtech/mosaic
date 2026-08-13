@@ -123,10 +123,10 @@ final class MosaicLocaleResolver {
       }
     }
 
-    // The Protocol 0.3 candidate chain, in order. A requested locale with no
+    // The Protocol 0.4 candidate chain, in order. A requested locale with no
     // canonical form contributes no candidate rather than matching anything,
     // which leaves the declared fallback and default exactly as they are. There
-    // is no language-plus-region reduction step in 0.3: `zh-Hans-CN` reduces to
+    // is no language-plus-region reduction step: `zh-Hans-CN` reduces to
     // `zh`, never to `zh-CN`.
     add(requested);
     if (requested != null) add(requested.split('-').first);

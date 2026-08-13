@@ -1,6 +1,6 @@
-part of 'renderer_v03_test.dart';
+part of 'renderer_test.dart';
 
-void _defineRendererV03VisualTests(
+void _defineRendererVisualTests(
     Directory root,
     MosaicPaywallDocument Function(String) fixture,
     List<MosaicProduct> products) {
@@ -29,7 +29,7 @@ void _defineRendererV03VisualTests(
     expect(headline.style?.color, const Color(0xFF17324D));
   });
 
-  testWidgets('renders the complete 0.3 fixture with native runtime controls',
+  testWidgets('renders the complete canonical fixture with native controls',
       (tester) async {
     final document = fixture('complete-paywall.json');
     await _pump(
@@ -75,7 +75,7 @@ void _defineRendererV03VisualTests(
   testWidgets('uses physical clockwise gradient angles without RTL mirroring',
       (tester) async {
     final source = jsonDecode(
-      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.4/complete-paywall.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     final designSystem = source['designSystem']! as Map<String, Object?>;
@@ -125,7 +125,7 @@ void _defineRendererV03VisualTests(
   testWidgets('unbounded Fill falls back to Fit with full semantics',
       (tester) async {
     final source = jsonDecode(
-      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.4/complete-paywall.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     (_jsonNode(source, 'headline')['sizing']!
@@ -160,7 +160,7 @@ void _defineRendererV03VisualTests(
   testWidgets('fixed height clips visuals without truncating semantics',
       (tester) async {
     final source = jsonDecode(
-      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.4/complete-paywall.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     (_jsonNode(source, 'headline')['sizing']!
@@ -324,7 +324,7 @@ void _defineRendererV03VisualTests(
   testWidgets('Sheet back restores the previous Sheet and coherent history',
       (tester) async {
     final source = jsonDecode(
-      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.4/complete-paywall.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     final screens = source['screens']! as List<Object?>;
@@ -412,7 +412,7 @@ void _defineRendererV03VisualTests(
   testWidgets('navigateBack at the initial screen is a diagnostic no-op',
       (tester) async {
     final source = jsonDecode(
-      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.4/complete-paywall.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     (_jsonNode(source, 'close')['action']! as Map<String, Object?>)
@@ -494,7 +494,7 @@ void _defineRendererV03VisualTests(
   testWidgets('Button keeps a 48 point target with narrow authored sizing',
       (tester) async {
     final source = jsonDecode(
-      File('${root.path}/protocol/fixtures/v0.3/complete-paywall.json')
+      File('${root.path}/protocol/fixtures/v0.4/complete-paywall.json')
           .readAsStringSync(),
     )! as Map<String, Object?>;
     _jsonNode(source, 'close')['sizing'] = <String, Object?>{
@@ -545,14 +545,14 @@ void _defineRendererV03VisualTests(
     final semantics = tester.ensureSemantics();
     final resetFixture = jsonDecode(
       File(
-        '${root.path}/protocol/fixtures/local-preview/v0.3/'
+        '${root.path}/protocol/fixtures/local-preview/v0.4/'
         'accepted-revision-runtime-reset.json',
       ).readAsStringSync(),
     )! as Map<String, Object?>;
     final expected =
         resetFixture['expectedRuntimeAfterAcceptance']! as Map<String, Object?>;
     final source = File(
-      '${root.path}/protocol/fixtures/v0.3/complete-paywall.json',
+      '${root.path}/protocol/fixtures/v0.4/complete-paywall.json',
     ).readAsStringSync();
     var document = const MosaicProtocolDecoder().decode(source);
     late StateSetter rebuild;

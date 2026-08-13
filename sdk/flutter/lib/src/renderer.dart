@@ -198,7 +198,7 @@ final class _MosaicPaywallHostState extends State<MosaicPaywallHost> {
   }
 }
 
-/// Native Flutter renderer for a fully validated Protocol 0.3 document.
+/// Native Flutter renderer for a fully validated Protocol 0.4 document.
 ///
 /// This embedded widget reports terminal results but never dismisses routes,
 /// sheets, dialogs, or other host-owned presentation UI.
@@ -884,7 +884,7 @@ final class _MosaicDecorativeVideoState extends State<MosaicDecorativeVideo> {
 }
 
 /// Native horizontally paged Carousel that measures every page before
-/// presenting the largest-page height required by Protocol 0.3.
+/// presenting the largest-page height required by Protocol 0.4.
 final class MosaicCarouselViewport extends StatefulWidget {
   const MosaicCarouselViewport({
     required this.resetToken,

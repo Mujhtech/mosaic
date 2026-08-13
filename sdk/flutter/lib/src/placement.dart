@@ -18,24 +18,6 @@ import 'placement_identity.dart';
 import 'presentation.dart';
 import 'renderer.dart';
 
-sealed class MosaicPlacementResolution {
-  const MosaicPlacementResolution();
-}
-
-final class MosaicPlacementResolved extends MosaicPlacementResolution {
-  const MosaicPlacementResolved({
-    required this.placementKey,
-    required this.paywallVersion,
-    required this.configuration,
-    this.decision,
-  });
-
-  final String placementKey;
-  final MosaicDeliveredPaywallVersion paywallVersion;
-  final MosaicAcceptedConfiguration configuration;
-  final MosaicPlacementDecisionResult? decision;
-}
-
 sealed class MosaicPlacementDecisionResolution {
   const MosaicPlacementDecisionResolution();
 }
@@ -79,7 +61,7 @@ final class MosaicPlacementDecisionUnavailable
   final MosaicPlacementDecisionResult? decision;
 }
 
-final class MosaicPlacementUnavailable extends MosaicPlacementResolution {
+final class MosaicPlacementUnavailable {
   const MosaicPlacementUnavailable({
     required this.placementKey,
     required this.diagnosticCode,
@@ -109,40 +91,8 @@ final class MosaicPlacementDecisionInputs {
 }
 
 extension MosaicPlacementClient on Mosaic {
-  /// Resolves a Placement only from current in-memory configuration.
-  ///
-  /// This method never performs network or disk I/O.
-  MosaicPlacementResolution resolvePlacement(String placementKey) {
-    final key = placementKey.trim();
-    if (!RegExp(r'^[a-z][a-z0-9_]{0,63}$').hasMatch(key)) {
-      return MosaicPlacementUnavailable(
-        placementKey: key,
-        diagnosticCode: 'placement.invalidKey',
-      );
-    }
-    final configuration = acceptedConfiguration;
-    if (configuration == null) {
-      return MosaicPlacementUnavailable(
-        placementKey: key,
-        diagnosticCode: 'configuration.unavailable',
-      );
-    }
-    final version = configuration.envelope.release.paywallForPlacement(key);
-    if (version == null) {
-      return MosaicPlacementUnavailable(
-        placementKey: key,
-        diagnosticCode: 'placement.unavailable',
-      );
-    }
-    return MosaicPlacementResolved(
-      placementKey: key,
-      paywallVersion: version,
-      configuration: configuration,
-    );
-  }
-
-  /// Evaluates a Delivery v2 Placement entirely from the accepted snapshot and
-  /// provider observations. It never refreshes configuration.
+  /// Evaluates a Placement entirely from the accepted snapshot and provider
+  /// observations. It never refreshes configuration.
   Future<MosaicPlacementDecisionResolution> decidePlacement(
     String placementKey, {
     MosaicPlacementDecisionInputs inputs =
@@ -165,19 +115,10 @@ extension MosaicPlacementClient on Mosaic {
     final release = accepted.envelope.release;
     final ruleSet = release.decisionForPlacement(key);
     if (ruleSet == null) {
-      return switch (resolvePlacement(key)) {
-        MosaicPlacementResolved() => MosaicPlacementDecisionPaywall(
-            placementKey: key,
-            paywallVersion: release.paywallForPlacement(key)!,
-            configuration: accepted,
-            decision: null,
-          ),
-        MosaicPlacementUnavailable(:final diagnosticCode) =>
-          MosaicPlacementDecisionUnavailable(
-            placementKey: key,
-            diagnosticCode: diagnosticCode,
-          ),
-      };
+      return MosaicPlacementDecisionUnavailable(
+        placementKey: key,
+        diagnosticCode: 'placement.unavailable',
+      );
     }
     final MosaicIdentityState identity;
     try {
@@ -593,16 +534,6 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
           return widget.loadingBuilder?.call(context) ??
               const SizedBox.shrink();
         }
-        if (widget.mosaic.acceptedConfiguration?.envelope.release
-                .placementDecisions.isEmpty ??
-            true) {
-          final resolution =
-              widget.mosaic.resolvePlacement(widget.placementKey);
-          return switch (resolution) {
-            MosaicPlacementResolved() => _paywall(resolution),
-            MosaicPlacementUnavailable() => _unavailable(context, resolution),
-          };
-        }
         _decision ??= widget.mosaic.decidePlacement(
           widget.placementKey,
           inputs: MosaicPlacementDecisionInputs(
@@ -630,41 +561,6 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
           },
         );
       },
-    );
-  }
-
-  Widget _paywall(MosaicPlacementResolved resolution) {
-    final analytics = _analyticsContext(
-      resolution.configuration,
-      resolution.paywallVersion,
-      decision: resolution.decision,
-    );
-    _recordPlacement(
-      resolution.configuration,
-      MosaicAnalyticsEventName.placementPaywallSelected,
-      analytics.attribution,
-      const <String, Object?>{
-        'finalOutcome': 'paywall',
-        'decisionContractVersion': '1',
-      },
-    );
-    return MosaicPaywall(
-      key: ValueKey<String>(
-        '${resolution.configuration.envelope.release.id}:'
-        '${resolution.paywallVersion.id}',
-      ),
-      document: resolution.paywallVersion.document,
-      purchaseProvider: widget.mosaic.purchaseProvider,
-      requestedLocale: widget.requestedLocale,
-      imageResolver: widget.imageResolver,
-      videoResolver: widget.videoResolver,
-      onResult: widget.onResult,
-      onInteraction: widget.onInteraction,
-      onDiagnostic: widget.onDiagnostic,
-      analyticsRuntime: widget.mosaic.analytics,
-      transactionObservations: widget.mosaic.transactionObservations,
-      analyticsContext: analytics,
-      externalUrlOpener: widget.externalUrlOpener,
     );
   }
 

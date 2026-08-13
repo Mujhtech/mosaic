@@ -12,9 +12,9 @@ void main() {
         File('${root.path}/protocol/fixtures/$path').readAsStringSync(),
       );
 
-  test('decodes every canonical Local Preview 0.3 message exactly', () {
+  test('decodes every canonical Local Preview message exactly', () {
     final messages = jsonFixture(
-      'local-preview/v0.3/session-flow.messages.json',
+      'local-preview/v0.4/session-flow.messages.json',
     )! as List<Object?>;
     const codec = MosaicPreviewMessageCodec();
     for (final value in messages) {
@@ -24,20 +24,20 @@ void main() {
         expectedSessionId: 'session_phase2_demo',
         expectedProtocolVersion: mosaicLocalPreviewProtocolVersion,
       );
-      expect(decoded.protocolVersion, '0.3');
+      expect(decoded.protocolVersion, mosaicLocalPreviewProtocolVersion);
     }
   });
 
-  test('strictly loads the canonical Local Preview 0.3 project', () {
+  test('strictly loads the canonical Local Preview project', () {
     const codec = MosaicPreviewMessageCodec();
     final v03 = codec.decodeLocalProject(
-      File('${root.path}/protocol/fixtures/local-preview/v0.3/local-project.json')
+      File('${root.path}/protocol/fixtures/local-preview/v0.4/local-project.json')
           .readAsStringSync(),
       expectedFileFormatVersion: mosaicLocalPreviewProtocolVersion,
     );
 
-    expect(v03.fileFormatVersion, '0.3');
-    expect(v03.document.schemaVersion, '0.3');
+    expect(v03.fileFormatVersion, mosaicLocalPreviewProtocolVersion);
+    expect(v03.document.schemaVersion, mosaicProtocolVersion);
     expect(
       v03.commerceState.products.map((product) => product.productReferenceId),
       <String>['monthly-plan', 'yearly-plan', 'lifetime-plan'],
@@ -46,7 +46,7 @@ void main() {
 
   test('local project loading is atomic across wrapper and document versions',
       () {
-    final project = jsonFixture('local-preview/v0.3/local-project.json')!
+    final project = jsonFixture('local-preview/v0.4/local-project.json')!
         as Map<String, Object?>;
     final mismatched = <String, Object?>{
       ...project,
@@ -69,38 +69,42 @@ void main() {
     );
   });
 
-  test('negotiates the highest mutual exact WebSocket subprotocol', () {
-    final v03 = negotiateMosaicLocalPreviewVersion(
-      const <String>['0.3'],
-      const <String>['0.3'],
+  test('negotiates the single exact WebSocket subprotocol', () {
+    final negotiated = negotiateMosaicLocalPreviewVersion(
+      const <String>[mosaicLocalPreviewProtocolVersion],
+      const <String>[mosaicLocalPreviewProtocolVersion],
     );
-    expect(v03.selectedVersion, '0.3');
-    expect(v03.selectedWebSocketSubprotocol, 'mosaic.local-preview.v0.3');
+    expect(negotiated.selectedVersion, mosaicLocalPreviewProtocolVersion);
+    expect(
+      negotiated.selectedWebSocketSubprotocol,
+      mosaicLocalPreviewWebSocketProtocol,
+    );
 
-    // No mutually supported version: `0.3` replaced its predecessor outright, so a peer
-    // offering only a version this reader does not implement has no overlap.
+    // Exactly one subprotocol is offered. A peer speaking only a retired
+    // version has no overlap and is refused rather than served a version it
+    // did not offer; Studio keeps its last accepted draft.
     expect(
       negotiateMosaicLocalPreviewVersion(
+        const <String>[mosaicLocalPreviewProtocolVersion],
         const <String>['0.3'],
-        const <String>['0.4'],
       ).diagnosticCode,
       'preview.noMutualVersion',
     );
   });
 
-  test('gates a 0.3 draft by exact report and compact UTF-8 bytes', () {
+  test('gates a draft by exact report and compact UTF-8 bytes', () {
     final messages = jsonFixture(
-      'local-preview/v0.3/session-flow.messages.json',
+      'local-preview/v0.4/session-flow.messages.json',
     )! as List<Object?>;
     final capability = messages.cast<Map<String, Object?>>().firstWhere(
             (message) => message['type'] == 'capabilityReport')['payload']!
         as Map<String, Object?>;
-    final project = jsonFixture('local-preview/v0.3/local-project.json')!
+    final project = jsonFixture('local-preview/v0.4/local-project.json')!
         as Map<String, Object?>;
     final document = project['document']! as Map<String, Object?>;
     final negotiation = negotiateMosaicLocalPreviewVersion(
-      const <String>['0.3'],
-      const <String>['0.3'],
+      const <String>[mosaicLocalPreviewProtocolVersion],
+      const <String>[mosaicLocalPreviewProtocolVersion],
     );
 
     expect(
@@ -129,9 +133,9 @@ void main() {
     expect(withheld.fallback, 'keepLastAcceptedDraft');
   });
 
-  test('0.3 capability report is exact', () {
+  test('the capability report is exact', () {
     final messages = jsonFixture(
-      'local-preview/v0.3/session-flow.messages.json',
+      'local-preview/v0.4/session-flow.messages.json',
     )! as List<Object?>;
     final canonical = messages.cast<Map<String, Object?>>().firstWhere(
             (message) => message['type'] == 'capabilityReport')['payload']!
@@ -143,10 +147,10 @@ void main() {
     expect(payload, canonical);
   });
 
-  test('client uses negotiated 0.3 envelopes and retains last accepted draft',
+  test('client uses negotiated envelopes and retains last accepted draft',
       () async {
     final messages = jsonFixture(
-      'local-preview/v0.3/session-flow.messages.json',
+      'local-preview/v0.4/session-flow.messages.json',
     )! as List<Object?>;
     final drafts = messages
         .cast<Map<String, Object?>>()
@@ -170,36 +174,36 @@ void main() {
         return true;
       }
     });
-    final socket = _V03Socket();
+    final socket = _PreviewSocket();
     final client = MosaicPreviewClient(
       configuration: MosaicPreviewClientConfiguration(
         endpoint: Uri.parse('ws://127.0.0.1:7331/preview'),
         sessionId: 'session_phase2_demo',
         identity: _identity(),
       ),
-      connector: _V03Connector(socket),
+      connector: _PreviewConnector(socket),
     );
     addTearDown(client.dispose);
 
     await client.connect();
-    expect(client.negotiatedPreviewVersion, '0.3');
+    expect(client.negotiatedPreviewVersion, mosaicLocalPreviewProtocolVersion);
     final outbound = socket.sent
         .map((source) => jsonDecode(source) as Map<String, Object?>)
         .toList(growable: false);
     expect(
       outbound.map((message) => message['previewProtocolVersion']),
-      everyElement('0.3'),
+      everyElement(mosaicLocalPreviewProtocolVersion),
     );
     final report =
         outbound.firstWhere((message) => message['type'] == 'capabilityReport');
     expect(
       (report['payload']! as Map<String, Object?>)['supportedSchemaVersions'],
-      <String>['0.3'],
+      <String>[mosaicProtocolVersion],
     );
 
     socket.add(jsonEncode(valid));
     await Future<void>.delayed(Duration.zero);
-    expect(client.documentForRendering?.schemaVersion, '0.3');
+    expect(client.documentForRendering?.schemaVersion, mosaicProtocolVersion);
     final acceptedRevision = client.pendingRevision!;
     client.markRevisionRendered(acceptedRevision);
     final acceptedDocument = client.documentForRendering;
@@ -213,14 +217,14 @@ void main() {
   test('client withholds all messages when no subprotocol was negotiated',
       () async {
     final diagnostics = <MosaicDiagnostic>[];
-    final socket = _V03Socket(selectedProtocol: null);
+    final socket = _PreviewSocket(selectedProtocol: null);
     final client = MosaicPreviewClient(
       configuration: MosaicPreviewClientConfiguration(
         endpoint: Uri.parse('ws://127.0.0.1:7331/preview'),
         sessionId: 'session_phase2_demo',
         identity: _identity(),
       ),
-      connector: _V03Connector(socket),
+      connector: _PreviewConnector(socket),
       onDiagnostic: diagnostics.add,
     );
     addTearDown(client.dispose);
@@ -234,8 +238,8 @@ void main() {
 }
 
 MosaicPreviewClientIdentity _identity() => MosaicPreviewClientIdentity(
-      clientId: 'client_flutter_v03_test',
-      displayName: 'Flutter 0.3 test',
+      clientId: 'client_flutter_preview_test',
+      displayName: 'Flutter preview test',
       renderer: MosaicPreviewSoftwareIdentity(
         id: 'mosaic.flutter',
         version: '0.3.0',
@@ -252,10 +256,10 @@ MosaicPreviewClientIdentity _identity() => MosaicPreviewClientIdentity(
       ),
     );
 
-final class _V03Connector implements MosaicPreviewSocketConnector {
-  const _V03Connector(this.socket);
+final class _PreviewConnector implements MosaicPreviewSocketConnector {
+  const _PreviewConnector(this.socket);
 
-  final _V03Socket socket;
+  final _PreviewSocket socket;
 
   @override
   Future<MosaicPreviewSocket> connect(
@@ -267,8 +271,8 @@ final class _V03Connector implements MosaicPreviewSocketConnector {
   }
 }
 
-final class _V03Socket implements MosaicNegotiatedPreviewSocket {
-  _V03Socket({this.selectedProtocol = mosaicLocalPreviewWebSocketProtocol});
+final class _PreviewSocket implements MosaicNegotiatedPreviewSocket {
+  _PreviewSocket({this.selectedProtocol = mosaicLocalPreviewWebSocketProtocol});
 
   final StreamController<Object?> _controller =
       StreamController<Object?>.broadcast(sync: true);
