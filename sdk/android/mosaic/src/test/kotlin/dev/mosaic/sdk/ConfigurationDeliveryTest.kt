@@ -23,6 +23,8 @@ import okhttp3.Response
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 
+private const val PLACEMENT = "upgrade_prompt"
+
 class ConfigurationDeliveryTest {
     /**
      * The cache record is persisted by an explicit tree codec instead of reflective Gson binding,
@@ -94,12 +96,18 @@ class ConfigurationDeliveryTest {
     fun `decodes the canonical delivery fixture and resolves its placement`() {
         val release = MosaicConfigurationDeliveryDecoder.decode(validRelease())
 
-        assertEquals(1, release.number)
-        assertEquals("navigation-only", release.paywall("onboarding_complete")?.document?.id)
+        assertEquals(16, release.number)
+        assertEquals(MOSAIC_CONFIGURATION_DELIVERY_VERSION, release.deliveryVersion)
+        assertEquals(setOf(PLACEMENT), release.placementDecisions.keys)
+        // The delivered document is the canonical paywall at the one Paywall Protocol version,
+        // which is what Delivery `3` being re-pinned to `0.4` makes deliverable at all.
+        val delivered = release.paywallVersions.getValue("paywall_version_complete")
+        assertEquals(MOSAIC_PROTOCOL_VERSION, delivered.protocolVersion)
+        assertEquals("phase1-complete-paywall", delivered.document.id)
     }
 
     @Test
-    fun `HTTP transport sends the complete exact Protocol 0_2 capability catalog`() = runTest {
+    fun `HTTP transport sends the complete exact capability catalog`() = runTest {
         val observed = AtomicReference<Request>()
         val httpClient = OkHttpClient.Builder()
             .addInterceptor { chain ->
@@ -125,17 +133,21 @@ class ConfigurationDeliveryTest {
         val actual = observed.get().header("Mosaic-Paywall-Capabilities")
             ?.split(',')
             .orEmpty()
-        // Exact name@version pairs for every contract this SDK reads. `style.productCardStates`
-        // exists at 0.3 and not at 0.4, and the three motion.* capabilities the other way round, so
-        // a flattened set of names could not describe what the server may deliver.
-        val expected = (
-            MosaicCapabilityCatalog.v03.map { "${it.wireName}@$MOSAIC_PROTOCOL_VERSION" } +
-                MosaicCapabilityCatalog.v04.map { "${it.wireName}@$MOSAIC_PROTOCOL_V04_VERSION" }
-            ).toSet()
+        // Exact name@version pairs rather than bare names: capability negotiation is orthogonal to
+        // version negotiation, and the server decides what it may deliver from these pairs.
+        val expected = MosaicCapabilityCatalog.current
+            .mapTo(mutableSetOf()) { "${it.wireName}@$MOSAIC_PROTOCOL_VERSION" }
         assertEquals(expected, actual.toSet())
         assertEquals(expected.size, actual.size)
         assertEquals(actual.sorted(), actual)
-        assertEquals("3,2,1", observed.get().header("Mosaic-Configuration-Versions"))
+        assertEquals(
+            MOSAIC_CONFIGURATION_DELIVERY_VERSION,
+            observed.get().header("Mosaic-Configuration-Versions"),
+        )
+        assertEquals(
+            MOSAIC_PROTOCOL_VERSION,
+            observed.get().header("Mosaic-Paywall-Protocol-Versions"),
+        )
         assertEquals("1", observed.get().header("Mosaic-Placement-Decision-Versions"))
         assertEquals(
             MosaicPlacementDecisionCapabilities.features,
@@ -167,7 +179,7 @@ class ConfigurationDeliveryTest {
         val result = client.refresh()
 
         assertTrue(result is MosaicConfigurationRefreshResult.Retained)
-        assertEquals(1L, (result as MosaicConfigurationRefreshResult.Retained).configuration.release.number)
+        assertEquals(16L, (result as MosaicConfigurationRefreshResult.Retained).configuration.release.number)
         assertEquals("\"release-1\"", cached.value?.etag)
     }
 
@@ -177,10 +189,14 @@ class ConfigurationDeliveryTest {
         val client = MosaicHostedConfigurationClient(
             transport = MosaicConfigurationTransport { MosaicConfigurationResponse.NotModified },
             cache = cached,
+            // The release binds Products, so a decision is withheld as `commerceUnavailable`
+            // without a provider that can load them. That withholding is asserted elsewhere; here
+            // the subject is the cache, so commerce is made available.
+            purchaseProvider = MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
         )
 
         val refresh = client.refresh()
-        val result = client.paywall("onboarding_complete")
+        val result = client.paywall(PLACEMENT)
 
         assertTrue(refresh is MosaicConfigurationRefreshResult.NotModified)
         assertTrue(result is MosaicPlacementResult.Available)
@@ -203,7 +219,7 @@ class ConfigurationDeliveryTest {
         val result = client.refresh()
 
         assertTrue(result is MosaicConfigurationRefreshResult.Retained)
-        assertEquals(1L, (result as MosaicConfigurationRefreshResult.Retained).configuration.release.number)
+        assertEquals(16L, (result as MosaicConfigurationRefreshResult.Retained).configuration.release.number)
         assertEquals("\"release-1\"", cached.value?.etag)
     }
 
@@ -217,9 +233,10 @@ class ConfigurationDeliveryTest {
                 MosaicConfigurationResponse.Failed("offline")
             },
             cache = cache,
+            purchaseProvider = MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
         )
 
-        val result = reconstructed.paywall("onboarding_complete")
+        val result = reconstructed.paywall(PLACEMENT)
 
         assertTrue(result is MosaicPlacementResult.Available)
         assertEquals(MosaicConfigurationSource.CACHE, (result as MosaicPlacementResult.Available).source)
@@ -242,11 +259,11 @@ class ConfigurationDeliveryTest {
 
         assertTrue(
             releases.all {
-                it is MosaicConfigurationRefreshResult.Updated && it.configuration.release.number == 1L
+                it is MosaicConfigurationRefreshResult.Updated && it.configuration.release.number == 16L
             },
         )
         assertEquals(4, calls.get())
-        assertEquals(1L, MosaicConfigurationDeliveryDecoder.decode(cache.value!!.payload).number)
+        assertEquals(16L, MosaicConfigurationDeliveryDecoder.decode(cache.value!!.payload).number)
     }
 
     @Test
@@ -274,7 +291,7 @@ class ConfigurationDeliveryTest {
             val cache = MemoryCache(null)
             val client = MosaicHostedConfigurationClient(
                 transport = MosaicConfigurationTransport {
-                    MosaicConfigurationResponse.Modified(fixture("placement-binding.json"), etag)
+                    MosaicConfigurationResponse.Modified(validRelease(), etag)
                 },
                 cache = cache,
                 diagnostics = MosaicDiagnosticSink(diagnostics::add),
@@ -295,12 +312,12 @@ class ConfigurationDeliveryTest {
 
     @Test
     fun `cache write failure retains the prior release and reports a safe structured diagnostic`() = runTest {
-        val original = MosaicCachedConfiguration("\"release-1\"", validRelease())
+        val original = MosaicCachedConfiguration("\"release-1\"", fixture("advanced-release.json"))
         val cache = MemoryCache(original, failWrites = true)
         val diagnostics = mutableListOf<MosaicDiagnostic>()
         val client = MosaicHostedConfigurationClient(
             transport = MosaicConfigurationTransport {
-                MosaicConfigurationResponse.Modified(fixture("placement-binding.json"), "\"release-2\"")
+                MosaicConfigurationResponse.Modified(validRelease(), "\"release-2\"")
             },
             cache = cache,
             diagnostics = MosaicDiagnosticSink(diagnostics::add),
@@ -310,10 +327,10 @@ class ConfigurationDeliveryTest {
 
         assertTrue(result is MosaicConfigurationRefreshResult.Retained)
         result as MosaicConfigurationRefreshResult.Retained
-        assertEquals(1L, result.configuration.release.number)
+        assertEquals(12L, result.configuration.release.number)
         assertEquals(MosaicConfigurationSource.CACHE, result.configuration.source)
         assertEquals(MosaicDiagnosticCode.CONFIGURATION_CACHE_WRITE_FAILED.wireName, result.diagnosticCode)
-        assertEquals(1L, client.acceptedConfiguration?.release?.number)
+        assertEquals(12L, client.acceptedConfiguration?.release?.number)
         assertEquals(original, cache.value)
         assertEquals(MosaicDiagnosticCode.CONFIGURATION_CACHE_WRITE_FAILED, diagnostics.single().code)
         assertFalse(diagnostics.single().message.contains("sdk_public"))
@@ -321,12 +338,10 @@ class ConfigurationDeliveryTest {
 
     @Test
     fun `an older remote release cannot replace a newer cached release`() = runTest {
-        val cached = MemoryCache(
-            MosaicCachedConfiguration("\"release-3\"", fixture("multiple-paywalls.json")),
-        )
+        val cached = MemoryCache(MosaicCachedConfiguration("\"release-3\"", validRelease()))
         val client = MosaicHostedConfigurationClient(
             transport = MosaicConfigurationTransport {
-                MosaicConfigurationResponse.Modified(validRelease(), "\"release-1\"")
+                MosaicConfigurationResponse.Modified(fixture("advanced-release.json"), "\"release-1\"")
             },
             cache = cached,
         )
@@ -334,26 +349,24 @@ class ConfigurationDeliveryTest {
         val result = client.refresh()
 
         assertTrue(result is MosaicConfigurationRefreshResult.Retained)
-        assertEquals(3L, (result as MosaicConfigurationRefreshResult.Retained).configuration.release.number)
+        assertEquals(16L, (result as MosaicConfigurationRefreshResult.Retained).configuration.release.number)
         assertEquals("\"release-3\"", cached.value?.etag)
     }
 
     @Test
     fun `uses bundled fallback only when remote and cache are unavailable`() = runTest {
-        val release = MosaicConfigurationDeliveryDecoder.decode(validRelease())
-        val fallbackJson = release.paywall("onboarding_complete")!!.document.let {
-            JsonParser.parseString(validRelease()).asJsonObject
-                .getAsJsonObject("release")
-                .getAsJsonArray("paywallVersions")[0].asJsonObject
-                .get("document").toString()
-        }
+        val fallbackJson = JsonParser.parseString(validRelease()).asJsonObject
+            .getAsJsonObject("release")
+            .getAsJsonArray("paywallVersions")[0].asJsonObject
+            .get("document").toString()
         val client = MosaicHostedConfigurationClient(
             transport = MosaicConfigurationTransport { MosaicConfigurationResponse.Failed("offline") },
             cache = MemoryCache(null),
             bundledFallback = MosaicPaywallDocumentSource { fallbackJson },
+            purchaseProvider = MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
         )
 
-        val result = client.paywall("onboarding_complete")
+        val result = client.paywall(PLACEMENT)
 
         assertTrue(result is MosaicPlacementResult.Available)
         assertEquals(
@@ -384,7 +397,7 @@ class ConfigurationDeliveryTest {
         )
 
         assertTrue(client.refresh() is MosaicConfigurationRefreshResult.Unavailable)
-        val decision = client.decidePlacement("onboarding_complete")
+        val decision = client.decidePlacement(PLACEMENT)
 
         assertTrue("expected the bundled fallback, got $decision", decision is MosaicPlacementDecisionResult.Available)
         val available = decision as MosaicPlacementDecisionResult.Available
@@ -399,7 +412,7 @@ class ConfigurationDeliveryTest {
             .filterIsInstance<MosaicProductSelectorComponent>().first().id
         assertEquals(3, state.selectorStates[selectorId]?.options?.size)
         // The stable v1 Placement API resolves the same fallback.
-        assertTrue(client.paywall("onboarding_complete") is MosaicPlacementResult.Available)
+        assertTrue(client.paywall(PLACEMENT) is MosaicPlacementResult.Available)
         assertFalse(
             "the bundled fallback must not be reported as missing or rejected",
             diagnostics.any { it.startsWith("configuration.bundledFallback") },
@@ -428,13 +441,11 @@ class ConfigurationDeliveryTest {
         )
     }
 
-    private fun validRelease(): String {
-        return fixture("valid-release.json")
-    }
+    private fun validRelease(): String = fixture("rich-release.json")
 
     private fun fixture(name: String): String {
         val root = System.getProperty("mosaic.repositoryRoot")
-        return File(root, "protocol/fixtures/configuration-delivery/v1/$name").readText()
+        return File(root, "protocol/fixtures/configuration-delivery/v3/$name").readText()
     }
 
     private class MemoryCache(

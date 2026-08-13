@@ -1,6 +1,45 @@
 # Changelog
 
-## Unreleased (Paywall Protocol 0.4 "Motion", draft)
+## Unreleased (single-version contracts)
+
+Under [ADR-0028](../../docs/architecture/decisions/0028-single-version-contracts.md) every Mosaic
+contract carries exactly one version until GA. The Android SDK reads that version and no other.
+
+- **Paywall Protocol `0.4` only.** `MosaicProtocolDecoder` no longer dispatches on `schemaVersion`;
+  it checks it. A document declaring any other version is rejected atomically before any structure
+  is read, and resolves through last-accepted configuration, then the bundled fallback, then
+  configuration unavailable. `MOSAIC_PROTOCOL_VERSION` is `"0.4"`;
+  `MOSAIC_PROTOCOL_V04_VERSION` and `MOSAIC_LATEST_PROTOCOL_VERSION` are removed.
+- **One capability catalog.** `MosaicCapabilityCatalog.current` replaces `v03` and `v04`, and
+  `MosaicCapabilityName.PRODUCT_CARD_STATES` is removed with the capability itself. The capability
+  report still declares exact `name@version` pairs: capability negotiation is orthogonal to version
+  negotiation and carries more weight with one version, not less.
+- **The bundled fallback is the canonical `0.4` document.** The library build copies
+  `protocol/fixtures/v0.4/complete-paywall.json`.
+- **Reduced motion stops a decorative video background unconditionally.**
+  `MosaicVideoBackgroundPresentation.resolve` no longer takes a `schemaVersion`: the parameter could
+  only ever hold one value.
+- **Configuration Delivery `3` only, carrying Paywall Protocol `0.4`.**
+  `MosaicConfigurationDeliveryDecoder` reads the delivered envelope directly instead of projecting
+  it back through two deleted predecessors, and always fails with
+  `MosaicConfigurationDeliveryException`. `MOSAIC_CONFIGURATION_DELIVERY_VERSION` is `"3"`;
+  the `_V2`/`_V3` constants, the Placement-to-Paywall binding (`MosaicPlacementBinding`,
+  `MosaicConfigurationRelease.placements`, `paywall(forPlacement:)`) and the v1 and v2 readers are
+  removed. `MosaicConfigurationRelease.projectId` is non-null and
+  `MosaicDeliveryEnvironment.mode` is required.
+- **Local Preview `0.4` only.** Negotiation offers `mosaic.local-preview.v0.4` and nothing else; a
+  peer speaking another generation is refused rather than served a version it did not offer.
+- **Commerce Configuration `2` only.** `MosaicCommerceConfigurationDecoder` reads the `2` sidecar,
+  now enforcing the safe-diagnostic vocabulary and bounds the retired `1` reader enforced, and
+  always fails with `MosaicCommerceConfigurationException`. The transport advertises `version=2`
+  alone.
+- **Analytics Event `2` only.** Every event is emitted and read at `2`, so a batch is homogeneous by
+  construction and no longer has to be cut at a version boundary before it is sent.
+  `MOSAIC_ANALYTICS_EVENT_SCHEMA_VERSION` is removed; `MOSAIC_ANALYTICS_CONTRACT_VERSION` is `"2"`.
+- **Authoritative Entitlement `2` only.** Every sync record is authority-wrapped, so there is one
+  acceptance path and one cache-record shape. `MOSAIC_AUTHORITATIVE_ENTITLEMENT_VERSION` is `"2"`.
+
+## Superseded (Paywall Protocol 0.4 "Motion", draft)
 
 Protocol `0.4` is a **draft**: it carries no compatibility guarantee and nothing produces it in
 production. `0.3` remains the release candidate, remains the bundled fallback, and is byte-identical

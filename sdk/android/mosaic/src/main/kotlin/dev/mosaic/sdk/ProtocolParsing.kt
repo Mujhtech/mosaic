@@ -23,15 +23,9 @@ internal fun compatibility(
     val entries = objectValue.required("requiredCapabilities", path)
         .boundedArrayAt("$path.requiredCapabilities", 1, 64)
     val seen = mutableSetOf<MosaicCapabilityName>()
-    // The catalog is exact per version: `style.productCardStates` exists at `0.3` and not at `0.4`,
-    // and the three `motion.*` capabilities exist at `0.4` and not at `0.3`. A document declaring
-    // one from the other version is rejected as an unknown capability rather than tolerated.
-    val documentVersion = activeProtocolVersion.get() ?: MOSAIC_PROTOCOL_VERSION
-    val catalog = if (documentVersion == MOSAIC_PROTOCOL_V04_VERSION) {
-        MosaicCapabilityCatalog.v04
-    } else {
-        MosaicCapabilityCatalog.v03
-    }
+    // Capability versions are exact and are not inferred from numeric ordering: a capability
+    // declared at any version other than the one contract that exists is rejected as unsupported
+    // rather than tolerated as "close enough".
     val capabilities = entries.mapIndexed { index, element ->
         val capabilityPath = "$path.requiredCapabilities[$index]"
         val capability = element.objectAt(capabilityPath)
@@ -44,8 +38,8 @@ internal fun compatibility(
                 violation = MosaicProtocolViolation.UNSUPPORTED_CAPABILITY,
             )
         val required = MosaicRequiredCapability(name, version)
-        if (name !in catalog ||
-            version != documentVersion ||
+        if (name !in MosaicCapabilityCatalog.current ||
+            version != MOSAIC_PROTOCOL_VERSION ||
             !capabilityReport.supports(required)
         ) {
             throw MosaicProtocolException(
@@ -283,7 +277,7 @@ internal fun node(value: JsonElement, path: String): MosaicNode {
         "award" -> awardComponent(objectValue, path)
         "socialProof" -> socialProofComponent(objectValue, path)
         else -> throw MosaicProtocolException(
-            "Unsupported Protocol 0.3 component at $path.type.",
+            "Unsupported component at $path.type.",
             violation = MosaicProtocolViolation.UNSUPPORTED_COMPONENT,
         )
     }
@@ -425,17 +419,14 @@ internal fun buttonComponent(objectValue: JsonObject, path: String): MosaicButto
 }
 
 internal fun featureListComponent(objectValue: JsonObject, path: String): MosaicFeatureListComponent {
-    // `markerSize` is a `0.4` addition that mirrors Timeline's field of the same name. It is version
-    // gated rather than merely optional so that the `0.3` reader is unchanged by its existence: a
-    // `0.3` document declaring one is rejected as an unknown property, exactly as it was before.
-    val markerSizeKey = if (decodingProtocolV04()) setOf("markerSize") else emptySet()
+    // `markerSize` mirrors Timeline's field of the same name, and is optional in both.
     objectValue.expectNodeKeys(
         setOf(
-            "type", "id", "marker", "gap", "markerColor", "items", "typography",
+            "type", "id", "marker", "gap", "markerColor", "markerSize", "items", "typography",
             "appearance", "sizing", "outerInsets", "visibility", "accessibility",
-        ) + markerSizeKey,
+        ),
         path,
-        optional = setOf("appearance", "sizing", "outerInsets", "visibility") + markerSizeKey,
+        optional = setOf("appearance", "sizing", "outerInsets", "visibility", "markerSize"),
     )
     val items = objectValue.required("items", path).boundedArrayAt("$path.items", 1, 100)
     return MosaicFeatureListComponent(
@@ -465,37 +456,22 @@ internal fun featureListComponent(objectValue: JsonObject, path: String): Mosaic
 }
 
 /**
- * The list's default glyph.
+ * The list's default glyph, from the marker union Feature List shares with Timeline.
  *
- * `0.3` writes the single string constant `"checkmark"`, which cannot express a *negated* item;
- * `0.4` writes the marker union Timeline already used. Reading the `0.3` constant as the equivalent
- * icon marker is what lets one renderer path serve both versions, and each version still accepts
- * only its own form.
+ * One vocabulary rather than two is what lets a Feature List express a *negated* item on a
+ * comparison paywall, and what lets one renderer path serve both components.
  */
-internal fun featureListMarker(objectValue: JsonObject, path: String): MosaicMarker {
-    if (!decodingProtocolV04()) {
-        objectValue.requireConstant("marker", "checkmark", "$path.marker")
-        return MosaicMarker.Icon(MosaicIconName.CHECKMARK)
-    }
-    return marker(objectValue.required("marker", path), "$path.marker")
-}
+internal fun featureListMarker(objectValue: JsonObject, path: String): MosaicMarker =
+    marker(objectValue.required("marker", path), "$path.marker")
 
 internal fun featureListItem(value: JsonElement, path: String): MosaicFeatureListItem {
     val objectValue = value.objectAt(path)
-    val supportsOverride = decodingProtocolV04()
-    val expected = if (supportsOverride) setOf("id", "text", "marker") else setOf("id", "text")
-    objectValue.expectKeys(
-        expected,
-        path,
-        optional = if (supportsOverride) setOf("marker") else emptySet(),
-    )
+    objectValue.expectKeys(setOf("id", "text", "marker"), path, optional = setOf("marker"))
     return MosaicFeatureListItem(
         id = objectValue.requiredIdentifier("id", "$path.id"),
         text = localizedText(objectValue.required("text", path), "$path.text"),
         // Absent means the item carries the list's marker. It is never a request for no glyph.
-        marker = objectValue.optional("marker")
-            ?.takeIf { supportsOverride }
-            ?.let { marker(it, "$path.marker") },
+        marker = objectValue.optional("marker")?.let { marker(it, "$path.marker") },
     )
 }
 

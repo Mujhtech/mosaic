@@ -229,7 +229,7 @@ internal fun RenderImage(
             .mosaicPresentation(component.appearance, null, null)
         .then(semanticModifier)
         .testTag("mosaic-node-${component.id}")
-    // `appearance.clipContent` is an optional boolean in `schema/v0.3/paywall.schema.json` with no
+    // `appearance.clipContent` is an optional boolean in `schema/v0.4/paywall.schema.json` with no
     // schema default, so an absent value means "do not clip" — the same reading as SwiftUI
     // (`clipContent == true`) and Flutter (`clipContent ?? false`). Images additionally clip when a
     // corner radius is authored, mirroring the Flutter renderer's image-only `forceClip`, so a
@@ -775,7 +775,7 @@ internal fun RenderSwitch(
     }
 }
 
-// --- Protocol 0.3 components -------------------------------------------------------------------
+// --- Components -------------------------------------------------------------------
 
 /**
  * Tabs renders one tab control per entry and exactly one panel.
@@ -878,7 +878,7 @@ private fun MosaicTabControl(
     driver: MosaicMotionDriver,
     onSelect: () -> Unit,
 ) {
-    // Tabs `selection` animates the tab control's style, not the panel swap: `0.3` visibility
+    // Tabs `selection` animates the tab control's style, not the panel swap: visibility
     // semantics remove a hidden node from layout, the accessibility tree, and focus order, and
     // animating a removal would need a "present but not focusable" third state that does not exist.
     val style = mosaicSelectionStyle(
@@ -1066,7 +1066,7 @@ private fun MosaicTimelineGutter(
 /**
  * The one marker renderer, shared by Timeline entries and Feature List items.
  *
- * `0.4` consolidated the two marker vocabularies onto a single union so a Feature List can express
+ * The contract consolidates the two marker vocabularies onto a single union so a Feature List can express
  * a negated item; rendering them through one path is what keeps that a real consolidation rather
  * than two implementations of one union. Markers are always decorative: the announced content is
  * the entry's or item's text, and a glyph read aloud beside it would say the same thing twice.

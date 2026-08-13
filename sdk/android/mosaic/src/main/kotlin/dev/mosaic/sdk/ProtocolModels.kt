@@ -1,23 +1,14 @@
 package dev.mosaic.sdk
 
 /**
- * The release-candidate protocol contract. It remains the bundled fallback's version and the one a
- * `0.3` reader accepts; `0.4` is a draft and does not displace it.
- */
-const val MOSAIC_PROTOCOL_VERSION: String = "0.3"
-
-/**
- * Protocol `0.4` "Motion": a pure superset of `0.3` apart from the two cleanups `0.3` named for
- * this version — `style.productCardStates` is removed, and Feature List and Timeline share one
- * marker vocabulary.
+ * The Paywall Protocol contract this SDK reads: `0.4` "Motion", and nothing else.
  *
- * Versions are exact identifiers. A `0.3` document is read by the `0.3` path and a `0.4` document
- * by the `0.4` path; neither reads the other, and the decoder dispatches on `schemaVersion` rather
- * than accepting one shape for both.
+ * ADR-0028 gives every contract exactly one version until GA, so there is no version dispatch and
+ * no fallback to a predecessor. Version identifiers stay exact: a document declaring anything other
+ * than this string is rejected atomically and resolves through cached configuration, then the
+ * bundled fallback, then configuration unavailable.
  */
-const val MOSAIC_PROTOCOL_V04_VERSION: String = "0.4"
-
-const val MOSAIC_LATEST_PROTOCOL_VERSION: String = MOSAIC_PROTOCOL_V04_VERSION
+const val MOSAIC_PROTOCOL_VERSION: String = "0.4"
 
 /**
  * The exact published artifact version of `dev.mosaic.sdk:mosaic`. It is sent as
@@ -26,10 +17,11 @@ const val MOSAIC_LATEST_PROTOCOL_VERSION: String = MOSAIC_PROTOCOL_V04_VERSION
  */
 const val MOSAIC_ANDROID_SDK_VERSION: String = "0.1.0-dev.7"
 
-val MOSAIC_SUPPORTED_PROTOCOL_VERSIONS: Set<String> = setOf(
-    MOSAIC_PROTOCOL_VERSION,
-    MOSAIC_PROTOCOL_V04_VERSION,
-)
+/**
+ * Kept as a set rather than collapsed into the constant so that a parallel version at GA widens a
+ * value instead of changing the shape of a public one.
+ */
+val MOSAIC_SUPPORTED_PROTOCOL_VERSIONS: Set<String> = setOf(MOSAIC_PROTOCOL_VERSION)
 
 enum class MosaicCapabilityName(val wireName: String) {
     SCROLL_CONTAINER("layout.scrollContainer"),
@@ -81,7 +73,6 @@ enum class MosaicCapabilityName(val wireName: String) {
     BOX_STYLE("style.box"),
     CLIPPING("style.clipping"),
     TYPOGRAPHY("style.typography"),
-    PRODUCT_CARD_STATES("style.productCardStates"),
     STATIC_VISIBILITY("visibility.static"),
     SWITCH_VISIBILITY("condition.switchVisibility"),
     TAB_VISIBILITY("condition.tabVisibility"),
@@ -106,7 +97,13 @@ val MOSAIC_MOTION_CAPABILITIES: Set<MosaicCapabilityName> = setOf(
 )
 
 object MosaicCapabilityCatalog {
-    val v03: Set<MosaicCapabilityName> = setOf(
+    /**
+     * Every capability Paywall Protocol `0.4` defines, which is every capability there is.
+     *
+     * Named `current` rather than after the version, so that adding a parallel version at GA adds a
+     * second value beside this one instead of renaming a public symbol.
+     */
+    val current: Set<MosaicCapabilityName> = setOf(
         MosaicCapabilityName.SCROLL_CONTAINER,
         MosaicCapabilityName.SCREENS,
         MosaicCapabilityName.SHEETS,
@@ -156,23 +153,10 @@ object MosaicCapabilityCatalog {
         MosaicCapabilityName.BOX_STYLE,
         MosaicCapabilityName.CLIPPING,
         MosaicCapabilityName.TYPOGRAPHY,
-        MosaicCapabilityName.PRODUCT_CARD_STATES,
         MosaicCapabilityName.STATIC_VISIBILITY,
         MosaicCapabilityName.SWITCH_VISIBILITY,
         MosaicCapabilityName.TAB_VISIBILITY,
-    )
-
-    /**
-     * `0.4` expressed as a delta over `0.3` rather than as a second copy of it.
-     *
-     * "`0.4` is `0.3` plus motion minus one co-derived capability" is the whole compatibility claim,
-     * and a hand-maintained copy would let the two answers drift while each stayed internally
-     * consistent. `style.productCardStates` is gone because it could never vary independently of
-     * `component.productSelector`, `component.productCard`, or `component.productBadge`, and a
-     * capability that cannot vary independently of another carries no information.
-     */
-    val v04: Set<MosaicCapabilityName> =
-        v03 - MosaicCapabilityName.PRODUCT_CARD_STATES + MOSAIC_MOTION_CAPABILITIES
+    ) + MOSAIC_MOTION_CAPABILITIES
 }
 
 data class MosaicCapabilityReport(
@@ -190,29 +174,21 @@ data class MosaicCapabilityReport(
 
 object MosaicProtocolCapabilities {
     /**
-     * What this SDK can render, per contract version.
+     * What this SDK can render.
      *
-     * Reported as exact name/version pairs rather than as a set of names: `style.productCardStates`
-     * is supported at `0.3` and does not exist at `0.4`, and the three `motion.*` capabilities exist
-     * only at `0.4`. A single flattened name set could not say either, so a `0.4`-only capability
-     * would look supported on a `0.3` document.
+     * Still reported as exact name/version pairs rather than as a bare set of names. Selecting a
+     * version was never the same as satisfying it, and with one contract version the capability
+     * system carries more weight rather than less: a release requiring a capability this reader
+     * lacks is withheld rather than downgraded or stripped.
      */
     fun report(sdkVersion: String = MOSAIC_ANDROID_SDK_VERSION): MosaicCapabilityReport {
-        val exact = buildSet {
-            MosaicCapabilityCatalog.v03.forEach {
-                add(MosaicRequiredCapability(it, MOSAIC_PROTOCOL_VERSION))
-            }
-            MosaicCapabilityCatalog.v04.forEach {
-                add(MosaicRequiredCapability(it, MOSAIC_PROTOCOL_V04_VERSION))
-            }
+        val exact = MosaicCapabilityCatalog.current.mapTo(mutableSetOf()) {
+            MosaicRequiredCapability(it, MOSAIC_PROTOCOL_VERSION)
         }
-        // Retained for source compatibility; the exact pairs above are the contract.
-        val highest = exact.groupBy(MosaicRequiredCapability::name)
-            .mapValues { (_, entries) -> entries.maxOf(MosaicRequiredCapability::version) }
         return MosaicCapabilityReport(
             sdkVersion = sdkVersion,
             supportedSchemaVersions = MOSAIC_SUPPORTED_PROTOCOL_VERSIONS,
-            supportedCapabilities = highest,
+            supportedCapabilities = exact.associate { it.name to it.version },
             supportedCapabilityVersions = exact,
         )
     }
@@ -799,7 +775,7 @@ data class MosaicProductSelectorComponent(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
-    /** Protocol 0.3 authored cards. */
+    /** Authored cards. */
     val cards: List<MosaicProductCardComponent> = emptyList(),
     val initialProductCardId: String = initiallySelectedProductReferenceId,
     val crossAxisAlignment: MosaicHorizontalAlignment = MosaicHorizontalAlignment.STRETCH,
@@ -923,7 +899,7 @@ data class MosaicCountdownComponent(
 ) : MosaicNode { override val type: String = "countdown" }
 
 
-// --- Protocol 0.3 components -------------------------------------------------------------------
+// --- Components -------------------------------------------------------------------
 
 enum class MosaicTabBarDirection { VERTICAL, HORIZONTAL }
 

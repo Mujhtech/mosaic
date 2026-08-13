@@ -11,7 +11,7 @@ class MosaicLocalizationResolver(
      * Unicode extensions on a region-override device (`en-US-u-rg-gbzzzz`), `Locale.toString()` is
      * underscore-separated (`en_US`), and a host may hand us `PT_br`. Matched raw, those miss the
      * one catalog that exists and the user silently reads the document's default language —
-     * direction included, so an Egyptian Arabic device lays out left-to-right. Protocol 0.3
+     * direction included, so an Egyptian Arabic device lays out left-to-right. The protocol
      * canonicalizes the requested tag before an exact lookup; an unusable request contributes no
      * candidate rather than being substituted with a plausible tag such as `en` and selecting an
      * `en` catalog the document may happen to declare. Lookup — unlike targeting — recovers the
@@ -22,10 +22,10 @@ class MosaicLocalizationResolver(
         requestedLocale?.let(MosaicDeviceLocale::canonicalLookupOrNull)
 
     /**
-     * The Protocol 0.3 order: canonical requested tag, its base language, the declared fallback
+     * The protocol order: canonical requested tag, its base language, the declared fallback
      * locale, then the declared default locale. Undeclared candidates stay in the list and are
-     * skipped at lookup, matching `protocol/tools/locale-resolution-v0.3.mjs`. There is no
-     * language+region reduction step in `0.3`, so `zh-Hans-CN` reduces to `zh`, never to `zh-CN`.
+     * skipped at lookup, matching `protocol/tools/locale-resolution.mjs`. There is no
+     * language+region reduction step, so `zh-Hans-CN` reduces to `zh`, never to `zh-CN`.
      */
     val localeCandidates: List<String> = buildList {
         fun addOnce(tag: String?) {

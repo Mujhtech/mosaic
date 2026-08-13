@@ -32,9 +32,9 @@ class LocalizationTest {
     }
 
     /**
-     * The cross-SDK corpus for Protocol 0.3 locale resolution. Binding it here is what keeps
+     * The cross-SDK corpus for locale resolution. Binding it here is what keeps
      * Android's candidate order and canonicalization identical to
-     * `protocol/tools/locale-resolution-v0.3.mjs` rather than merely similar: the corpus pins the
+     * `protocol/tools/locale-resolution.mjs` rather than merely similar: the corpus pins the
      * numeric-region catalog, the non-canonical `PT_br` spelling, the script subtag reducing to its
      * base language and never to language plus region, and an unusable request contributing no
      * candidate at all.
@@ -42,7 +42,7 @@ class LocalizationTest {
     @Test
     fun canonicalLocaleResolutionCorpusResolvesExactly() {
         val corpus = JsonParser.parseString(
-            repositoryFile("protocol/fixtures/v0.3/locale-resolution.json").toFile().readText(),
+            repositoryFile("protocol/fixtures/v0.4/locale-resolution.json").toFile().readText(),
         ).asJsonObject
         val declared = corpus.getAsJsonObject("localization")
         // One catalog per declared key, each holding the same key with its own tag as the value, so

@@ -7,8 +7,15 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.security.MessageDigest
 
-/** Strict, atomic reader for Configuration Delivery v2 and Placement Decision v1. */
-object MosaicConfigurationDeliveryV2Decoder {
+/**
+ * Strict, atomic reader for Configuration Delivery `3`, Placement Decision `1`, and Experiment
+ * Assignment `1`.
+ *
+ * Reads the delivered envelope directly. It once validated `3` by projecting it back to `2` and `2`
+ * back to `1`, so the meaning of the current contract was defined in terms of two predecessors that
+ * ADR-0028 has since deleted; a projection with no target is unreachable code with a test suite.
+ */
+object MosaicConfigurationDeliveryDecoder {
     private val identifier = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
     private val key = Regex("^[a-z][a-z0-9_]{0,63}$")
     private val environmentKey = Regex("^[a-z][a-z0-9_-]{0,63}$")
@@ -31,6 +38,15 @@ object MosaicConfigurationDeliveryV2Decoder {
         listOf("paywall", "no_paywall", "fallback", "unavailable").forEach { add("outcome.$it") }
         add("override.qa")
     }
+    private val supportedExperimentFeatures = setOf(
+        "allocation.ranges", "assignment.installation", "assignment.identified_user",
+        "assignment.identified_user_or_installation", "fallback.normal_placement",
+        "group.mutual_exclusion", "override.qa", "schedule.trusted_server_time",
+    )
+    private val supportedExperimentAlgorithms = setOf(
+        MOSAIC_EXPERIMENT_BUCKETING_ALGORITHM,
+        MOSAIC_EXPERIMENT_GROUP_BUCKETING_ALGORITHM,
+    )
     private val attributeOperators = mapOf(
         "string" to setOf("equals", "not_equals", "in", "not_in", "exists", "does_not_exist"),
         "boolean" to setOf("equals", "not_equals", "exists", "does_not_exist"),
@@ -40,14 +56,34 @@ object MosaicConfigurationDeliveryV2Decoder {
         "string_list" to setOf("contains_any", "contains_all", "exists", "does_not_exist"),
     )
 
-    fun decode(source: String, capabilityReport: MosaicCapabilityReport = MosaicProtocolCapabilities.report()): MosaicConfigurationRelease {
-        require(source.toByteArray().size <= 4 * 1024 * 1024) { "Configuration Delivery v2 exceeds the SDK limit." }
+    /**
+     * Every rejection leaves the caller with [MosaicConfigurationDeliveryException] rather than
+     * whichever `require` or `error` fired first: a rejected release resolves through cached
+     * configuration and then the bundled fallback, and that recovery must not depend on the
+     * implementation exception type of a strict wire reader.
+     */
+    fun decode(
+        source: String,
+        capabilityReport: MosaicCapabilityReport = MosaicProtocolCapabilities.report(),
+    ): MosaicConfigurationRelease = try {
+        decodeRelease(source, capabilityReport)
+    } catch (error: MosaicConfigurationDeliveryException) {
+        throw error
+    } catch (error: RuntimeException) {
+        throw MosaicConfigurationDeliveryException(
+            "The Configuration Delivery release is invalid.",
+            error,
+        )
+    }
+
+    private fun decodeRelease(source: String, capabilityReport: MosaicCapabilityReport): MosaicConfigurationRelease {
+        require(source.toByteArray().size <= 4 * 1024 * 1024) { "Configuration Delivery exceeds the SDK limit." }
         val root = JsonParser.parseString(source).asObject("$")
         root.requireExact(setOf("configurationDeliveryVersion", "release"), emptySet(), "$")
-        require(root.string("configurationDeliveryVersion") == "2")
+        require(root.string("configurationDeliveryVersion") == MOSAIC_CONFIGURATION_DELIVERY_VERSION)
         val release = root.objectValue("release", "$.release")
         release.requireExact(
-            setOf("id", "number", "projectId", "environment", "publishedAt", "contentDigest", "compatibility", "placementDecisions", "paywallVersions", "productReferences", "entitlementReferences", "assetReferences"),
+            setOf("id", "number", "projectId", "environment", "publishedAt", "contentDigest", "compatibility", "placementDecisions", "paywallVersions", "productReferences", "entitlementReferences", "assetReferences", "experimentAssignments"),
             emptySet(), "$.release",
         )
         val projectId = release.identifier("projectId", "$.release")
@@ -85,7 +121,7 @@ object MosaicConfigurationDeliveryV2Decoder {
         val assets = release.array("assetReferences", 0, 1024).mapIndexed { index, element -> parseAsset(element, index) }.associateUnique({ it.id }, "Asset")
         val paywalls = release.array("paywallVersions", 0, 256).mapIndexed { index, element -> parsePaywall(element, index, capabilityReport) }.associateUnique({ it.id }, "Paywall Version")
         val decisionList = release.array("placementDecisions", 1, 256).mapIndexed { index, element ->
-            parseDecision(element, index, requireNotNull(environment.mode))
+            parseDecision(element, index, environment.mode)
         }
         require(decisionList.map { it.placementId }.toSet().size == decisionList.size) { "Duplicate Placement ID." }
         require(decisionList.map { it.id }.toSet().size == decisionList.size) { "Duplicate Rule Set ID." }
@@ -147,36 +183,79 @@ object MosaicConfigurationDeliveryV2Decoder {
         }
         val declaredDigest = release.string("contentDigest").also { require(digest.matches(it)) }
         val material = release.deepCopy().also { it.remove("contentDigest") }
-        require(declaredDigest == canonicalDigest(material)) { "Configuration Delivery v2 contentDigest mismatch." }
+        require(declaredDigest == canonicalDigest(material)) { "Configuration Delivery contentDigest mismatch." }
+
+        val assignments = release.array("experimentAssignments", 0, 64).map { element ->
+            MosaicExperimentAssignmentDecoder.decode(
+                JsonObject().apply {
+                    addProperty("experimentAssignmentVersion", "1")
+                    add("assignment", element)
+                },
+                environment.mode == MosaicDeliveryEnvironmentMode.PRODUCTION,
+            )
+        }
+        require(assignments.map { it.experimentId }.toSet().size == assignments.size)
+        require(assignments.map { it.experimentVersionId }.toSet().size == assignments.size)
+        require(assignments.flatMap { it.requiredFeatures }.toSet() == releaseCompatibility.experimentFeatures)
+        require(assignments.flatMap { it.requiredBucketingAlgorithms }.toSet() == releaseCompatibility.experimentAlgorithms)
+        require(assignments.flatMap { it.requiredSchedulePolicies }.toSet() == releaseCompatibility.experimentSchedules)
+        val decisionsById = decisions.values.associateBy { it.placementId }
+        val groupSnapshots = mutableMapOf<Pair<String, String>, MosaicExperimentGroup>()
+        assignments.forEach { assignment ->
+            require(assignment.projectId == projectId && assignment.environmentId == environment.id)
+            val decision = requireNotNull(decisionsById[assignment.placementId])
+            require(allDecisionPaywalls(decision).contains(assignment.controlPaywallVersionId))
+            assignment.mutualExclusionGroup?.let { group ->
+                require(group.members.any { it.experimentId == assignment.experimentId })
+                val key = group.id to group.versionId
+                require(groupSnapshots.putIfAbsent(key, group)?.let { it == group } != false)
+            }
+            assignment.variants.forEach { variant ->
+                val paywall = requireNotNull(paywalls[variant.paywallVersionId])
+                require(paywall.paywallId == variant.paywallId)
+                require(paywall.productReferenceIds.toSet() == variant.compatibility.requiredProductIds)
+                require(variant.compatibility.requiredProductIds.all(products::containsKey))
+            }
+        }
+
         return MosaicConfigurationRelease(
             id = release.identifier("id", "$.release"),
             number = release.get("number").asLong.also { require(it in 1..9_007_199_254_740_991L) },
+            projectId = projectId,
             environment = environment,
             publishedAt = release.string("publishedAt").also { require(parseDecisionUtcMillis(it) != null) },
             contentDigest = declaredDigest,
-            placements = emptyMap(),
             paywallVersions = paywalls,
             productReferences = products,
             assetReferences = assets,
             encoded = source,
-            projectId = projectId,
             placementDecisions = decisions,
             entitlementReferences = entitlements,
-            deliveryVersion = "2",
+            experimentAssignments = assignments,
         )
     }
+
+    private fun allDecisionPaywalls(ruleSet: MosaicPlacementRuleSet): Set<String> =
+        allOutcomes(ruleSet).filterIsInstance<MosaicDecisionOutcome.Paywall>()
+            .mapTo(mutableSetOf()) { it.paywallVersionId }
 
     private data class ReleaseCompatibility(
         val decisionFeatures: Set<String>,
         val bucketingAlgorithms: Set<String>,
         val paywallCapabilities: Set<MosaicRequiredCapability>,
+        val experimentFeatures: Set<String>,
+        val experimentAlgorithms: Set<String>,
+        val experimentSchedules: Set<String>,
     )
 
     private fun validateCompatibility(
         value: JsonObject,
         capabilityReport: MosaicCapabilityReport,
     ): ReleaseCompatibility {
-        value.requireExact(setOf("placementDecisionContracts", "paywallProtocols", "acceptance"), emptySet(), "compatibility")
+        value.requireExact(
+            setOf("placementDecisionContracts", "paywallProtocols", "acceptance", "experimentAssignmentContracts"),
+            emptySet(), "compatibility",
+        )
         require(value.string("acceptance") == "atomic")
         val decision = value.array("placementDecisionContracts", 1, 1).single().asObject("decision compatibility")
         decision.requireExact(setOf("version", "requiredFeatures", "bucketingAlgorithms"), emptySet(), "decision compatibility")
@@ -196,7 +275,27 @@ object MosaicConfigurationDeliveryV2Decoder {
                 .also { require(capabilityReport.supports(it)) }
         }
         require(paywallCapabilities.size == paywallCapabilities.toSet().size)
-        return ReleaseCompatibility(features.toSet(), algorithms.toSet(), paywallCapabilities.toSet())
+        val experiment = value.array("experimentAssignmentContracts", 1, 1).single()
+            .asObject("experiment compatibility")
+        experiment.requireExact(
+            setOf("version", "requiredFeatures", "bucketingAlgorithms", "schedulePolicies"),
+            emptySet(), "experiment compatibility",
+        )
+        require(experiment.string("version") == "1")
+        val experimentFeatures = experiment.uniqueStrings("requiredFeatures", 0, 8)
+            .also { require(it.all(supportedExperimentFeatures::contains)) }
+        val experimentAlgorithms = experiment.uniqueStrings("bucketingAlgorithms", 0, 2)
+            .also { require(it.all(supportedExperimentAlgorithms::contains)) }
+        val experimentSchedules = experiment.uniqueStrings("schedulePolicies", 0, 1)
+            .also { require(it.all { policy -> policy == MOSAIC_EXPERIMENT_TIME_POLICY }) }
+        return ReleaseCompatibility(
+            features.toSet(),
+            algorithms.toSet(),
+            paywallCapabilities.toSet(),
+            experimentFeatures,
+            experimentAlgorithms,
+            experimentSchedules,
+        )
     }
 
     private fun parseDecision(
@@ -495,6 +594,8 @@ object MosaicConfigurationDeliveryV2Decoder {
     private fun JsonObject.identifier(name: String, path: String) = string(name).also { require(identifier.matches(it)) { "Invalid identifier at $path." } }
     private fun JsonObject.array(name: String, min: Int, max: Int): JsonArray = get(name)?.takeIf(JsonElement::isJsonArray)?.asJsonArray?.also { require(it.size() in min..max) } ?: error("Expected array $name.")
     private fun JsonObject.stringArray(name: String, min: Int, max: Int) = array(name, min, max).map { require(it.isJsonPrimitive && it.asJsonPrimitive.isString); it.asString }
+    private fun JsonObject.uniqueStrings(name: String, min: Int, max: Int): Set<String> =
+        stringArray(name, min, max).also { require(it.size == it.toSet().size) }.toSet()
     private fun <T, K> List<T>.associateUnique(key: (T) -> K, label: String): Map<K, T> = associateBy(key).also { require(it.size == size) { "Duplicate $label." } }
 }
 

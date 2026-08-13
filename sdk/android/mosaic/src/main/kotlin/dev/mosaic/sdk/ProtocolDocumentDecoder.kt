@@ -12,7 +12,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
-/** Strict Protocol 0.3 reader. JSON Schema in `protocol/` remains canonical. */
+/** Strict Paywall Protocol reader. JSON Schema in `protocol/` remains canonical. */
 internal val identifierPattern = Regex("^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$")
 internal val localizationKeyPattern = Regex("^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$")
 internal val localeTagPattern = Regex("^[a-z]{2,3}(?:-(?:[A-Z]{2}|[0-9]{3}))?$")
@@ -31,23 +31,10 @@ internal val capabilitiesByWireName = MosaicCapabilityName.entries.associateBy {
 internal val activeDesignSystem = ThreadLocal<RawDesignSystem?>()
 
 /**
- * The contract version currently being decoded.
- *
- * `0.4` is a superset of `0.3` apart from two cleanups, so the two readers share one parser rather
- * than owning two copies that can drift while each stays internally consistent. Exactly three
- * things differ, and each reads this: the `motions` catalog, the per-node `motion` block, and the
- * marker vocabulary. Everything else is byte-identical for both versions by construction.
- */
-internal val activeProtocolVersion = ThreadLocal<String?>()
-
-internal fun decodingProtocolV04(): Boolean =
-    activeProtocolVersion.get() == MOSAIC_PROTOCOL_V04_VERSION
-
-/**
  * Motion token ids reached from a node while its screens are being parsed.
  *
  * Non-null only during the screen walk, so building the catalog's own model afterwards does not
- * mark every token as used. `0.4` rejects an unreferenced motion token — deliberately asymmetric
+ * mark every token as used. The contract rejects an unreferenced motion token — deliberately asymmetric
  * with the colour, background, and shadow catalogs, which carry no such rule — because the
  * flash-safety floor is checked at a motion's *reference* site. A token nothing references has
  * therefore never been checked against anything and sits in the catalog looking approved.
@@ -69,11 +56,10 @@ internal data class RawDesignSystem(
 )
 
 
-internal object MosaicProtocolV03Decoder {
+internal object MosaicPaywallDocumentDecoder {
     fun decode(
         source: String,
         capabilityReport: MosaicCapabilityReport,
-        schemaVersion: String = MOSAIC_PROTOCOL_VERSION,
     ): MosaicPaywallDocument {
         val root = try {
             JsonParser.parseString(source).objectAt("$")
@@ -91,8 +77,7 @@ internal object MosaicProtocolV03Decoder {
             ),
             "$",
         )
-        root.requireConstant("schemaVersion", schemaVersion, "$.schemaVersion")
-        activeProtocolVersion.set(schemaVersion)
+        root.requireConstant("schemaVersion", MOSAIC_PROTOCOL_VERSION, "$.schemaVersion")
         try {
             val rawDesignSystem = rawDesignSystem(root.required("designSystem", "$"))
             activeDesignSystem.set(rawDesignSystem)
@@ -111,7 +96,7 @@ internal object MosaicProtocolV03Decoder {
                 throw MosaicProtocolException("initialScreenId must reference a Screen presentation.")
             }
             val document = MosaicPaywallDocument(
-                schemaVersion = schemaVersion,
+                schemaVersion = MOSAIC_PROTOCOL_VERSION,
                 id = root.requiredIdentifier("id", "$.id"),
                 revision = root.requiredPositiveInteger("revision", "$.revision"),
                 compatibility = compatibility(root.required("compatibility", "$"), capabilityReport),
@@ -128,13 +113,10 @@ internal object MosaicProtocolV03Decoder {
                 designSystem = designSystem(rawDesignSystem),
             )
             validateDocumentSemantics(document, root, capabilityReport)
-            if (decodingProtocolV04()) {
-                validateMotionSemantics(document, rawDesignSystem, motionReferences)
-            }
+            validateMotionSemantics(document, rawDesignSystem, motionReferences)
             return document
         } finally {
             activeDesignSystem.remove()
-            activeProtocolVersion.remove()
             referencedMotionTokens.remove()
         }
     }

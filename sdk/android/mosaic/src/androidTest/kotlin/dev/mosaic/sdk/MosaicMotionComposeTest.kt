@@ -86,14 +86,14 @@ class MosaicMotionComposeTest {
      * of merely usually settled.
      */
     @Test
-    fun protocolV04StaticRenderingMatchesCommittedPixelBaseline() {
+    fun staticRenderingMatchesCommittedPixelBaseline() {
         val switch = setSwitchablePaywall()
         switch.useAnimatedDriver = false
         compose.mainClock.advanceTimeBy(64)
         val digest = digestOf("mosaic-paywall")
 
         val expected = InstrumentationRegistry.getInstrumentation().context
-            .assets.open("mosaic-paywall-v04-golden.sha256")
+            .assets.open("mosaic-paywall-golden.sha256")
             .bufferedReader().use { it.readText().trim() }
         assumeFalse(
             "No Protocol 0.4 pixel baseline is recorded. Review the render, then commit: $digest",
@@ -287,7 +287,7 @@ class MosaicMotionComposeTest {
             isEnabled = true,
             onTick = { kotlinx.coroutines.delay(1) },
         )
-        val document = protocolV04Bundle()
+        val document = canonicalMotionBundle()
         val countdown = document.walkNodesDepthFirst()
             .filterIsInstance<MosaicCountdownComponent>()
             .first()
@@ -325,7 +325,7 @@ class MosaicMotionComposeTest {
     fun theLoopRunsDuringTheEntranceRatherThanAfterIt() {
         compose.mainClock.autoAdvance = true
         val driver = pinnedCountdown(MosaicMotionDriver.Default)
-        val document = protocolV04Bundle()
+        val document = canonicalMotionBundle()
         val withLoop = motionState(driver, document)
         val withoutLoop = motionState(driver, document.withoutPurchaseLoop())
         val settled = motionState(pinnedCountdown(MosaicMotionDriver.Disabled), document)
@@ -396,7 +396,7 @@ class MosaicMotionComposeTest {
         compose.mainClock.autoAdvance = true
         val state = motionState(
             pinnedCountdown(MosaicMotionDriver.Default),
-            v04Fixture("screen-round-trip.json"),
+            protocolFixtureDocument("screen-round-trip.json"),
         )
         runBlocking { state.loadProducts() }
         compose.setContent {
@@ -458,7 +458,7 @@ class MosaicMotionComposeTest {
     @Test
     fun aSheetRoundTripIsNotAReEntryForTheScreenBeneathIt() {
         compose.mainClock.autoAdvance = true
-        val document = protocolV04Bundle().withInertDetailsBackground()
+        val document = canonicalMotionBundle().withInertDetailsBackground()
         val state = motionState(pinnedCountdown(MosaicMotionDriver.Default), document)
         runBlocking { state.loadProducts() }
         compose.setContent {
@@ -507,7 +507,7 @@ class MosaicMotionComposeTest {
     @Test
     fun aSheetsOwnContentIsAGenuineEntryOnEveryPresentation() {
         compose.mainClock.autoAdvance = true
-        val document = protocolV04Bundle().withInertDetailsBackground()
+        val document = canonicalMotionBundle().withInertDetailsBackground()
         val state = motionState(pinnedCountdown(MosaicMotionDriver.Default), document)
         runBlocking { state.loadProducts() }
         compose.setContent {
@@ -654,7 +654,7 @@ class MosaicMotionComposeTest {
 
     private fun motionState(
         driver: MosaicMotionDriver,
-        document: MosaicPaywallDocument = protocolV04Bundle(),
+        document: MosaicPaywallDocument = canonicalMotionBundle(),
     ) = MosaicPaywallState(
         document,
         MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
@@ -699,10 +699,10 @@ class MosaicMotionComposeTest {
         )
     }
 
-    private fun protocolV04Bundle(): MosaicPaywallDocument = v04Fixture("complete-paywall.json")
+    private fun canonicalMotionBundle(): MosaicPaywallDocument = protocolFixtureDocument("complete-paywall.json")
 
     /** Any canonical `0.4` fixture the build copies into this suite's assets. */
-    private fun v04Fixture(name: String): MosaicPaywallDocument {
+    private fun protocolFixtureDocument(name: String): MosaicPaywallDocument {
         val context = InstrumentationRegistry.getInstrumentation().context
         val source = context.assets.open("mosaic/v0.4/$name")
             .bufferedReader().use { it.readText() }

@@ -70,7 +70,7 @@ internal data class MosaicCustomerAuthorityRequestContext(
     val scope: MosaicCustomerAuthorityScope,
     val appVersion: String,
     val sdkVersion: String = MOSAIC_ANDROID_SDK_VERSION,
-    val supportedContractVersions: List<String> = listOf("1", "2"),
+    val supportedContractVersions: List<String> = listOf(MOSAIC_AUTHORITATIVE_ENTITLEMENT_VERSION),
     val capabilities: List<String> = MosaicCustomerAuthorityCodec.capabilities,
 )
 
@@ -106,7 +106,7 @@ internal sealed interface MosaicCustomerAuthorityDecoding {
 }
 
 internal object MosaicCustomerAuthorityCodec {
-    const val CONTRACT_VERSION = "2"
+    const val CONTRACT_VERSION = MOSAIC_AUTHORITATIVE_ENTITLEMENT_VERSION
     val capabilities = listOf(
         "authority_epoch",
         "authority_scope",
@@ -199,7 +199,10 @@ internal object MosaicCustomerAuthorityCodec {
         val authorityElement = payload.getAsJsonObject("authority")
         val snapshotElement = payload.getAsJsonObject("snapshot")
         val decoded = MosaicCustomerEntitlementCodec.decodeRecord(JsonObject().apply {
-            addProperty("authoritativeEntitlementContractVersion", "1")
+            addProperty(
+                "authoritativeEntitlementContractVersion",
+                MosaicCustomerEntitlementCodec.CONTRACT_VERSION,
+            )
             addProperty("recordType", "customerEntitlementSnapshot")
             add("payload", snapshotElement.deepCopy())
         }.toString()) as? MosaicCustomerRecordDecoding.Snapshot ?: error("Invalid embedded snapshot.")
@@ -225,7 +228,10 @@ internal object MosaicCustomerAuthorityCodec {
             "$.payload",
         )
         val inner = MosaicCustomerEntitlementCodec.decodeRecord(JsonObject().apply {
-            addProperty("authoritativeEntitlementContractVersion", "1")
+            addProperty(
+                "authoritativeEntitlementContractVersion",
+                MosaicCustomerEntitlementCodec.CONTRACT_VERSION,
+            )
             addProperty("recordType", "snapshotUnchanged")
             add("payload", payload.getAsJsonObject("unchanged").deepCopy())
         }.toString()) as? MosaicCustomerRecordDecoding.Unchanged ?: error("Invalid unchanged record.")

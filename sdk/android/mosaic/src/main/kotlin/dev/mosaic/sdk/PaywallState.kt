@@ -800,7 +800,7 @@ internal fun MosaicNode.visibilityOrAlways(): MosaicVisibility = when (this) {
     is MosaicTimelineComponent -> visibility
     is MosaicAwardComponent -> visibility
     is MosaicSocialProofComponent -> visibility
-    // Product Cards and Badges declare no `visibility` in `schema/v0.3/paywall.schema.json`: a card
+    // Product Cards and Badges declare no `visibility` in `schema/v0.4/paywall.schema.json`: a card
     // is shown when its Product Selector offers it, and a badge when its card is shown. Always is
     // therefore their declared visibility, not a substituted default.
     is MosaicProductCardComponent,

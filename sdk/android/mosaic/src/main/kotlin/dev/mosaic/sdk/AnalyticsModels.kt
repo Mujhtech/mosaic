@@ -7,8 +7,13 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
 
-const val MOSAIC_ANALYTICS_CONTRACT_VERSION = "1"
-const val MOSAIC_ANALYTICS_EVENT_SCHEMA_VERSION = "1"
+/**
+ * The Analytics Event contract this SDK emits and reads: `2`, and nothing else (ADR-0028).
+ *
+ * One constant rather than two, because the contract requires an event's `eventSchemaVersion` to
+ * equal its batch's `analyticsEventContractVersion`; two names could disagree.
+ */
+const val MOSAIC_ANALYTICS_CONTRACT_VERSION = "2"
 
 data class MosaicAnalyticsIdentity(
     val installationId: String,

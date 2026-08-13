@@ -32,7 +32,7 @@ class AnalyticsQueueTest {
         val directory = Files.createTempDirectory("mosaic-analytics-corrupt").toFile()
         val store = MosaicFileAnalyticsStore(directory, "corrupt")
         val now = Instant.parse("2026-07-26T12:05:00.000Z").toEpochMilli()
-        MosaicAnalyticsQueue(store) { now }.enqueue(event("purchase-started.json"))
+        MosaicAnalyticsQueue(store) { now }.enqueue(event("purchase_started"))
         directory.resolve("corrupt.json").writeText("{\"events\": [ truncated")
 
         val restored = MosaicAnalyticsQueue(MosaicFileAnalyticsStore(directory, "corrupt")) { now }
@@ -46,10 +46,13 @@ class AnalyticsQueueTest {
     fun queuedEventKeepsItsEventTimeIdentity() = runTest {
         val store = MemoryAnalyticsStore()
         val queue = MosaicAnalyticsQueue(store) { Instant.parse("2026-07-26T12:05:00.000Z").toEpochMilli() }
-        val original = event("purchase-started.json")
+        val original = event("purchase_started")
         queue.enqueue(original)
         val futureIdentity = original.copy(identity = original.identity?.copy(applicationUserId = "another_user", generation = 4))
-        assertEquals("customer_42", MosaicAnalyticsCodec.decodeEvent(queue.ready(1, 512 * 1024).single().encoded).identity?.applicationUserId)
+        assertEquals(
+            original.identity?.applicationUserId,
+            MosaicAnalyticsCodec.decodeEvent(queue.ready(1, 512 * 1024).single().encoded).identity?.applicationUserId,
+        )
         assertEquals("another_user", futureIdentity.identity?.applicationUserId)
     }
 
@@ -60,10 +63,10 @@ class AnalyticsQueueTest {
         var now = Instant.parse("2026-07-26T12:05:00.000Z").toEpochMilli()
         val first = MosaicAnalyticsQueue(store) { now }
         val events = listOf(
-            event("placement-request.json"),
-            event("purchase-started.json"),
-            event("purchase-started.json").copy(eventId = "event_invalid_authority_001"),
-            event("restore-completed.json"),
+            event("experiment_exposed"),
+            event("purchase_started"),
+            event("purchase_started").copy(eventId = "event_invalid_authority_001"),
+            event("experiment_assigned"),
         )
         events.forEach { assertTrue(first.enqueue(it)) }
         assertEquals(4, first.diagnostics().queuedEventCount)
@@ -72,7 +75,19 @@ class AnalyticsQueueTest {
         val restored = MosaicAnalyticsQueue(MosaicFileAnalyticsStore(directory, "stage4")) { now }
         val sent = restored.ready(50, 512 * 1024)
         assertEquals(4, sent.size)
-        val canonical = response("responses/mixed-result-batch.json")
+        // The partial acknowledgement is stated as typed results rather than read from a fixture:
+        // the canonical partial-response corpus went with Analytics Event `1` and has no successor.
+        val canonical = MosaicAnalyticsIngestionResponse(
+            batchId = "batch_partial_ack",
+            receivedAt = "2026-07-26T12:05:01.000Z",
+            results = listOf(
+                MosaicAnalyticsEventResult.Accepted(sent[0].eventId),
+                MosaicAnalyticsEventResult.Duplicate(sent[1].eventId),
+                MosaicAnalyticsEventResult.PermanentlyRejected(sent[2].eventId, "authority_not_allowed"),
+                MosaicAnalyticsEventResult.Retryable(sent[3].eventId, "rate_limited", 10),
+            ),
+            analyticsEventContractVersion = MOSAIC_ANALYTICS_CONTRACT_VERSION,
+        )
         restored.applyResults(sent, canonical, null) { 0 }
 
         val diagnostics = restored.diagnostics()
@@ -80,7 +95,7 @@ class AnalyticsQueueTest {
         assertEquals(1, diagnostics.permanentlyRejectedEventCount)
         assertEquals(1, diagnostics.retryableEventCount)
         now += 10_000
-        assertEquals("event_restore_completed_001", restored.ready(50, 512 * 1024).single().eventId)
+        assertEquals(sent[3].eventId, restored.ready(50, 512 * 1024).single().eventId)
     }
 
     @Test
@@ -88,7 +103,7 @@ class AnalyticsQueueTest {
         var now = Instant.parse("2026-07-26T12:05:00.000Z").toEpochMilli()
         val store = MemoryAnalyticsStore()
         val queue = MosaicAnalyticsQueue(store) { now }
-        queue.enqueue(event("placement-request.json"))
+        queue.enqueue(event("experiment_exposed"))
         repeat(MOSAIC_ANALYTICS_MAX_ATTEMPTS) {
             val sent = queue.ready(50, 512 * 1024)
             queue.applyResults(sent, null, null) { 0 }
@@ -101,8 +116,8 @@ class AnalyticsQueueTest {
     fun unknownAcknowledgementCodeRetriesEverySentEvent() = runTest {
         val now = Instant.parse("2026-07-26T12:05:00.000Z").toEpochMilli()
         val queue = MosaicAnalyticsQueue(MemoryAnalyticsStore()) { now }
-        queue.enqueue(event("placement-request.json"))
-        queue.enqueue(event("purchase-started.json"))
+        queue.enqueue(event("experiment_exposed"))
+        queue.enqueue(event("purchase_started"))
         val sent = queue.ready(50, 512 * 1024)
         val invalid = MosaicAnalyticsIngestionResponse(
             batchId = "batch_invalid_ack",
@@ -111,7 +126,7 @@ class AnalyticsQueueTest {
                 MosaicAnalyticsEventResult.Accepted(sent[0].eventId),
                 MosaicAnalyticsEventResult.PermanentlyRejected(sent[1].eventId, "future_unknown_code"),
             ),
-            analyticsEventContractVersion = "1",
+            analyticsEventContractVersion = MOSAIC_ANALYTICS_CONTRACT_VERSION,
         )
 
         queue.applyResults(sent, invalid, null) { 0 }
@@ -122,13 +137,13 @@ class AnalyticsQueueTest {
 
     @Test
     fun overflowDropsOldestLowPriorityBeforePurchaseOutcome() = runTest {
-        val high = queued(event("purchase-completed-client.json"), priority = 4)
-        val low = queued(event("placement-request.json"), priority = 1)
+        val high = queued(event("purchase_completed_client"), priority = 4)
+        val low = queued(event("experiment_exposed"), priority = 1)
         val store = MemoryAnalyticsStore(
             MosaicAnalyticsPersistedState(events = listOf(high) + List(999) { index -> low.copy(eventId = "event_low_$index") }),
         )
         val queue = MosaicAnalyticsQueue(store) { Instant.parse("2026-07-26T12:05:00.000Z").toEpochMilli() }
-        queue.enqueue(event("product-selection.json").copy(eventId = "event_new_selection"))
+        queue.enqueue(event("product_selected").copy(eventId = "event_new_selection"))
         val retained = queue.ready(1_000, 2 * 1024 * 1024).map { it.eventId }
         assertTrue(high.eventId in retained)
         assertTrue("event_low_0" !in retained)
@@ -138,7 +153,7 @@ class AnalyticsQueueTest {
     fun queueEnforcesPerEventAndTotalByteBounds() = runTest {
         val store = MemoryAnalyticsStore()
         val queue = MosaicAnalyticsQueue(store) { Instant.parse("2026-07-26T12:05:00.000Z").toEpochMilli() }
-        val source = event("purchase-completed-client.json")
+        val source = event("purchase_completed_client")
         val payload = source.payload as MosaicAnalyticsPayload.PurchaseCompleted
         val boundedPayload = payload.copy(
             observedEntitlementKeys = List(64) { index -> "entitlement_${index}_" + "x".repeat(220) },
@@ -162,12 +177,12 @@ class AnalyticsQueueTest {
      * `en-US-u-rg-gbzzzz` and a device with several preferences exceeds the context's 35-byte
      * locale bound — which makes the event unencodable and loses it, the Android shape of the iOS
      * defect. Truncating at the first singleton keeps every device inside the contract, and the
-     * canonical form is the one Protocol 0.3 and Placement Decision 1 both define, so the tag the
+     * canonical form is the one the Paywall Protocol and Placement Decision 1 both define, so the tag the
      * SDK reports is the tag targeting and catalog lookup compare.
      */
     @Test
     fun `device locale canonicalization follows the protocol rule and the event contract`() {
-        // The protocol's canonical form, per `protocol/tools/locale-resolution-v0.3.mjs`.
+        // The protocol's canonical form, per `protocol/tools/locale-resolution.mjs`.
         assertEquals("en-US", MosaicDeviceLocale.canonicalOrNull("en-US-u-rg-gbzzzz"))
         assertEquals("en-US", MosaicDeviceLocale.canonicalOrNull("en_US@rg=gbzzzz"))
         assertEquals("zh-Hans-CN", MosaicDeviceLocale.canonicalOrNull("zh-Hans-CN"))
@@ -205,7 +220,7 @@ class AnalyticsQueueTest {
         assertEquals(null, MosaicDeviceLocale.canonicalLookupOrNull("!!"))
 
         // Every canonical value must survive the codec that rejected the un-normalized one.
-        val canonical = event("placement-request.json")
+        val canonical = event("experiment_exposed")
         val canonicalContext = canonical.context ?: MosaicAnalyticsContext()
         listOfNotNull(
             MosaicDeviceLocale.canonicalOrNull("en-US-u-rg-gbzzzz"),
@@ -249,7 +264,7 @@ class AnalyticsQueueTest {
         assertTrue(configured.configuration.analyticsCollectionEnabled)
 
         val queue = MosaicAnalyticsQueue(MemoryAnalyticsStore()) { NOW }
-        assertTrue(queue.enqueue(event("placement-request.json")))
+        assertTrue(queue.enqueue(event("experiment_exposed")))
         val runtime = runtime(queue, environmentEnabled = configured.configuration.analyticsCollectionEnabled)
         runtime.reconcileEnvironmentEnabled(configured.configuration.analyticsCollectionEnabled)
         runtime.drainPendingRecords()
@@ -270,7 +285,7 @@ class AnalyticsQueueTest {
         val queue = MosaicAnalyticsQueue(MemoryAnalyticsStore()) {
             Instant.parse("2026-07-26T12:05:00.000Z").toEpochMilli()
         }
-        assertTrue(queue.enqueue(event("placement-request.json")))
+        assertTrue(queue.enqueue(event("experiment_exposed")))
         val runtime = runtime(queue, environmentEnabled = false)
         assertTrue(!runtime.isCollectionEnabled)
 
@@ -354,12 +369,20 @@ class AnalyticsQueueTest {
 
     private val NOW = Instant.parse("2026-07-26T12:05:00.000Z").toEpochMilli()
 
-    private fun event(name: String): MosaicAnalyticsEvent = MosaicAnalyticsCodec.decodeEvent(
-        Files.readAllBytes(repositoryFile("protocol/fixtures/analytics-event/v1/$name")).toString(Charsets.UTF_8),
-    )
-    private fun response(name: String) = MosaicAnalyticsCodec.decodeResponse(
-        Files.readAllBytes(repositoryFile("protocol/fixtures/analytics-event/v1/$name")).toString(Charsets.UTF_8),
-    )
+    /**
+     * The canonical journey, indexed by event name.
+     *
+     * These suites use canonical events as carriers for queue mechanics rather than as subjects, so
+     * one batch supplies every shape they need: a low-priority exposure, a conversion, and a
+     * purchase outcome.
+     */
+    private val canonicalJourney: Map<String, MosaicAnalyticsEvent> = MosaicAnalyticsCodec.decodeBatch(
+        Files.readAllBytes(
+            repositoryFile("protocol/fixtures/analytics-event/v2/batches/experiment-journey.json"),
+        ).toString(Charsets.UTF_8),
+    ).events.associateBy(MosaicAnalyticsEvent::eventName)
+
+    private fun event(name: String): MosaicAnalyticsEvent = canonicalJourney.getValue(name)
     private fun queued(event: MosaicAnalyticsEvent, priority: Int) = MosaicQueuedAnalyticsEvent(
         event.eventId, event.eventName, Instant.parse(event.occurredAt).toEpochMilli(),
         MosaicAnalyticsCodec.encodeEvent(event), priority,

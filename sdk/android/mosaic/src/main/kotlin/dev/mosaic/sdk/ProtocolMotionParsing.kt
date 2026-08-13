@@ -3,13 +3,7 @@ package dev.mosaic.sdk
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 
-/**
- * Protocol `0.4` decoding: the motion catalog, per-node motion blocks, and the shared marker union.
- *
- * Nothing here runs for a `0.3` document. The `0.3` reader rejects a `motions` catalog, a node
- * `motion` block, and an object-shaped `marker` as unknown properties, exactly as it did before
- * `0.4` existed.
- */
+/** Motion decoding: the motion catalog, per-node motion blocks, and the shared marker union. */
 
 /** Which motion triggers a node type may author. Structural, so an illegal pairing cannot decode. */
 internal enum class MosaicMotionSlot(val wireName: String) {
@@ -27,19 +21,12 @@ internal val selectableMotionSlots = setOf(MosaicMotionSlot.APPEAR, MosaicMotion
 /** Button: the only component that may loop. */
 internal val buttonMotionSlots = setOf(MosaicMotionSlot.APPEAR, MosaicMotionSlot.LOOP)
 
-/**
- * Reads a node's optional `motion` block against the slots its component type allows.
- *
- * Returns null for a `0.3` document without inspecting the object, so the `0.3` reader's unknown-
- * property rejection still runs and a `0.3` document carrying motion is refused rather than
- * silently gaining behaviour its declared version does not have.
- */
+/** Reads a node's optional `motion` block against the slots its component type allows. */
 internal fun optionalNodeMotion(
     objectValue: JsonObject,
     path: String,
     slots: Set<MosaicMotionSlot>,
 ): MosaicNodeMotion? {
-    if (!decodingProtocolV04()) return null
     val value = objectValue.optional("motion") ?: return null
     val motionPath = "$path.motion"
     val motion = value.objectAt(motionPath)
@@ -200,20 +187,13 @@ internal fun resolveMotionToken(
 /**
  * Whole milliseconds, `0…2000`.
  *
- * Integers throughout, per the `0.3` doctrine that Dart, Swift, Kotlin, and JavaScript must not
- * disagree about a rounded fraction.
+ * Integers throughout, per the doctrine that Dart, Swift, Kotlin, and JavaScript must not disagree
+ * about a rounded fraction.
  */
 internal fun JsonObject.requiredMotionDuration(name: String, path: String): Int =
     requiredIntegerInRange(name, path, 0..2000)
 
-/**
- * The marker vocabulary shared by Feature List and Timeline.
- *
- * `0.3` Feature List carries the single string constant `"checkmark"`, which is read here as the
- * equivalent icon marker so that one renderer path serves both versions. Nothing else in `0.3`
- * changes: the string remains the only accepted `0.3` form, and the union the only accepted `0.4`
- * form.
- */
+/** The marker vocabulary shared by Feature List and Timeline. */
 internal fun marker(value: JsonElement, path: String): MosaicMarker {
     val objectValue = value.objectAt(path)
     return when (objectValue.requiredString("kind", "$path.kind")) {

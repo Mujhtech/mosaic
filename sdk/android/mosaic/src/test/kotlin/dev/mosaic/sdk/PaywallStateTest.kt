@@ -8,7 +8,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.nio.file.Files
 
 class PaywallStateTest {
     /**
@@ -100,12 +99,18 @@ class PaywallStateTest {
 
     /** Without an Experiment the SDK stays on v1: v1 is approved and current for non-Experiment use. */
     @Test
-    fun conversionEventsRemainOnV1WithoutAnExperiment() = runTest {
+    fun conversionEventsCarryNoExperimentTupleWithoutAnExperiment() = runTest {
         val events = emitConversionJourney(experimentAssigned = false)
 
         assertTrue(events.isNotEmpty())
         events.forEach { event ->
-            assertEquals("${event.eventName} must be v1", "1", event.eventSchemaVersion)
+            assertEquals(
+                "${event.eventName} must be at the one contract version",
+                MOSAIC_ANALYTICS_CONTRACT_VERSION,
+                event.eventSchemaVersion,
+            )
+            // Absent, not empty: a partial or placeholder tuple would attribute the conversion to a
+            // Variant that does not exist.
             assertFalse(event.attribution.hasExperimentTuple())
         }
     }
@@ -149,7 +154,9 @@ class PaywallStateTest {
             analyticsContext = MosaicAnalyticsPresentationContext(
                 "placement_request_1",
                 "presentation_1",
-                MosaicAnalyticsContext(configurationDeliveryVersion = if (experimentAssigned) "3" else "2"),
+                MosaicAnalyticsContext(
+                    configurationDeliveryVersion = MOSAIC_CONFIGURATION_DELIVERY_VERSION,
+                ),
                 attribution,
                 if (!experimentAssigned) null else MosaicExperimentPresentationContext(
                     experiment, "identified_user", MOSAIC_EXPERIMENT_BUCKETING_ALGORITHM, qaOverride,
@@ -255,7 +262,7 @@ class PaywallStateTest {
         val products = MockMosaicPurchaseProvider.phase1Products().map { product ->
             if (product.id == "mosaic_pro_yearly") product.copy(localizedPrice = "  ") else product
         }
-        val state = MosaicPaywallState(v03Document(), MockMosaicPurchaseProvider(products))
+        val state = MosaicPaywallState(canonicalDocument(), MockMosaicPurchaseProvider(products))
 
         state.loadProducts()
 
@@ -286,7 +293,7 @@ class PaywallStateTest {
                     loadedProducts.filter { it.id in productIds },
                 )
         }
-        val state = MosaicPaywallState(v03Document(), provider)
+        val state = MosaicPaywallState(canonicalDocument(), provider)
         state.loadProducts()
         state.selectProduct("plans", "plans-lifetime-plan-card")
         loadedProducts = loadedProducts.filterNot { it.id == "mosaic_pro_lifetime" }
@@ -301,7 +308,7 @@ class PaywallStateTest {
 
     @Test
     fun noAuthoredCardsAvailableClearsCardSelectionAndDisablesPurchase() = runTest {
-        val state = MosaicPaywallState(v03Document(), MockMosaicPurchaseProvider())
+        val state = MosaicPaywallState(canonicalDocument(), MockMosaicPurchaseProvider())
 
         state.loadProducts()
 
@@ -314,7 +321,7 @@ class PaywallStateTest {
     @Test
     fun blankPriceRemainsAvailableWhenActiveLocaleCardIsNameOnly() = runTest {
         val localizationKey = "test.product_card.active_locale"
-        val source = v03Document()
+        val source = canonicalDocument()
         val monthly = source.productCard("plans-monthly-plan-card")
         val name = monthly.children.filterIsInstance<MosaicTextComponent>().first().copy(
             value = MosaicLocalizedText("{{ product.name }}", localizationKey),
@@ -352,7 +359,7 @@ class PaywallStateTest {
     @Test
     fun activeLocalizedPriceTemplateInNestedBadgeStackMakesBlankPriceUnavailable() = runTest {
         val localizationKey = "test.product_card.badge"
-        val source = v03Document()
+        val source = canonicalDocument()
         val monthly = source.productCard("plans-monthly-plan-card")
         val name = monthly.children.filterIsInstance<MosaicTextComponent>().first()
         val badge = source.productCard("plans-yearly-plan-card").children
@@ -392,7 +399,7 @@ class PaywallStateTest {
     @Test
     fun activeLocalizedPriceTemplateInCardAccessibilityMakesBlankPriceUnavailable() = runTest {
         val localizationKey = "test.product_card.accessibility"
-        val source = v03Document()
+        val source = canonicalDocument()
         val monthly = source.productCard("plans-monthly-plan-card")
         val card = monthly.copy(
             children = listOf(monthly.children.filterIsInstance<MosaicTextComponent>().first()),
@@ -468,8 +475,7 @@ class PaywallStateTest {
     fun navigationAndExternalUrlsStayRuntimeOnlyAndDiagnoseSafeNoOps() {
         val diagnostics = mutableListOf<MosaicDiagnostic>()
         val document = MosaicProtocolDecoder.decode(
-            Files.readAllBytes(repositoryFile("protocol/fixtures/v0.3/navigation-only.json"))
-                .toString(Charsets.UTF_8),
+            protocolFixtureSource("navigation-only.json"),
         )
         val state = MosaicPaywallState(
             document,
@@ -493,7 +499,7 @@ class PaywallStateTest {
 
     @Test
     fun sheetNavigationKeepsTheMostRecentScreenAsItsBackgroundAndBackDismissesIt() {
-        val state = MosaicPaywallState(v03Document(), MockMosaicPurchaseProvider())
+        val state = MosaicPaywallState(canonicalDocument(), MockMosaicPurchaseProvider())
 
         assertEquals(MosaicScreenPresentation.SCREEN, state.currentScreen.presentation)
         assertTrue(state.navigateTo("details"))
@@ -693,11 +699,6 @@ class PaywallStateTest {
         state.loadProducts()
         return state
     }
-
-    private fun v03Document(): MosaicPaywallDocument = MosaicProtocolDecoder.decode(
-        Files.readAllBytes(repositoryFile("protocol/fixtures/v0.3/complete-paywall.json"))
-            .toString(Charsets.UTF_8),
-    )
 
     private fun MosaicPaywallDocument.productCard(id: String): MosaicProductCardComponent =
         walkNodesDepthFirst().filterIsInstance<MosaicProductCardComponent>().single { it.id == id }

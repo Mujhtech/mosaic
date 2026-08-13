@@ -50,6 +50,18 @@ class LocalPreviewCodecTest {
         }
     }
 
+    /**
+     * Preview protocol versions are exact, and negotiation offers exactly one subprotocol. A frame
+     * read against any other version is refused rather than decoded, so a peer that speaks a
+     * different generation is never served a version it did not offer.
+     */
+    @Test
+    fun `a frame read against another preview protocol version is refused`() {
+        assertThrows(MosaicPreviewCodecException::class.java) {
+            MosaicLocalPreviewCodec.decode(canonicalPreviewFlow().first().toString(), "0.3")
+        }
+    }
+
     @Test
     fun `frames above two MiB fail before parsing`() {
         val oversized = "{" + " ".repeat(MOSAIC_LOCAL_PREVIEW_MAX_FRAME_BYTES) + "}"
@@ -63,7 +75,7 @@ class LocalPreviewCodecTest {
 
     private fun canonicalPreviewFlow(): JsonArray = JsonParser.parseString(
         Files.readAllBytes(
-            repositoryFile("protocol/fixtures/local-preview/v0.3/session-flow.messages.json"),
+            repositoryFile("protocol/fixtures/local-preview/v0.4/session-flow.messages.json"),
         ).toString(Charsets.UTF_8),
     ).asJsonArray
 }

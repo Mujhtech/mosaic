@@ -442,15 +442,13 @@ class MosaicLocalPreviewClient(
         val previewVersion = selectedPreviewProtocolVersion
             ?: configuration.supportedPreviewProtocolVersions.first()
         val report = MosaicProtocolCapabilities.report()
-        val capabilityCatalog = MosaicCapabilityCatalog.v03
-        val paywallVersion = MOSAIC_PROTOCOL_VERSION
         return MosaicPreviewCapabilityReportPayload(
             clientId = configuration.client.clientId,
             supportedSchemaVersions = report.supportedSchemaVersions.sorted(),
-            supportedCapabilities = capabilityCatalog.map { capability ->
+            supportedCapabilities = MosaicCapabilityCatalog.current.map { capability ->
                 MosaicPreviewSupportedCapability(
                     capability.wireName,
-                    paywallVersion,
+                    MOSAIC_LOCAL_PREVIEW_PAYWALL_VERSION,
                 )
             }.sortedBy(MosaicPreviewSupportedCapability::name),
             previewCapabilities = MosaicPreviewCapabilityName.entries.map {

@@ -1,6 +1,15 @@
 package dev.mosaic.sdk
 
 /**
+ * The Authoritative Entitlement contract this SDK reads and writes: `2`, and nothing else.
+ *
+ * ADR-0028 gives every contract exactly one version until GA. A record declaring any other version
+ * is unreadable rather than degraded: the previously accepted snapshot keeps serving and the
+ * rejection is reported as [MosaicCustomerSnapshotRejection.UNSUPPORTED_CONTRACT_VERSION].
+ */
+const val MOSAIC_AUTHORITATIVE_ENTITLEMENT_VERSION: String = "2"
+
+/**
  * Authoritative Entitlement Contract 1 reader models.
  *
  * These types describe what **Mosaic** says a Billing Customer may access, projected server-side

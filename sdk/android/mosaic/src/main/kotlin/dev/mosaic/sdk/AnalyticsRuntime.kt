@@ -57,10 +57,7 @@ class MosaicAnalyticsRuntime internal constructor(
                     val context = journey.context ?: baseContext
                     val event = MosaicAnalyticsEvent(
                         eventId = mosaicAnalyticsId("event"),
-                        eventSchemaVersion = if (
-                            payload.isExperimentV2() || journey.attribution.hasExperimentTuple() ||
-                            journey.context?.configurationDeliveryVersion == "3"
-                        ) "2" else "1",
+                        eventSchemaVersion = MOSAIC_ANALYTICS_CONTRACT_VERSION,
                         eventName = payload.eventName,
                         occurredAt = mosaicAnalyticsTimestamp(occurredAtMillis),
                         queuedAt = mosaicAnalyticsTimestamp(queuedAt),
@@ -115,14 +112,14 @@ class MosaicAnalyticsRuntime internal constructor(
         if (!isCollectionEnabled) return@withLock queue.diagnostics()
         val ready = queue.ready(limit = 50, maxBytes = 500 * 1024)
         if (ready.isEmpty()) return@withLock queue.diagnostics()
-        val firstVersion = MosaicAnalyticsCodec.decodeEvent(ready.first().encoded).eventSchemaVersion
-        val sent = ready.takeWhile { MosaicAnalyticsCodec.decodeEvent(it.encoded).eventSchemaVersion == firstVersion }
+        // Every queued event carries the one contract version, so a batch is homogeneous by
+        // construction and no longer has to be cut at a version boundary before it is sent.
+        val sent = ready
         val batch = MosaicAnalyticsBatch(
             batchId = mosaicAnalyticsId("batch"),
             sentAt = mosaicAnalyticsTimestamp(now()),
             events = sent.map { MosaicAnalyticsCodec.decodeEvent(it.encoded) },
         )
-        val batchContractVersion = firstVersion
         when (val result = runCatching { transport.send(batch) }.getOrNull()) {
             // A response is authoritative only when it echoes both the exact batch ID and the
             // exact contract version that was submitted. A version mismatch means the server did
@@ -131,7 +128,8 @@ class MosaicAnalyticsRuntime internal constructor(
             is MosaicAnalyticsTransportResult.Received -> queue.applyResults(
                 sent,
                 result.response.takeIf {
-                    it.batchId == batch.batchId && it.analyticsEventContractVersion == batchContractVersion
+                    it.batchId == batch.batchId &&
+                        it.analyticsEventContractVersion == MOSAIC_ANALYTICS_CONTRACT_VERSION
                 },
                 null,
                 jitter,

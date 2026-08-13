@@ -6,12 +6,18 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.nio.file.Files
 
-class ProtocolV03Test {
+/**
+ * Paywall Protocol document decoding, against the canonical corpus rather than hand-built documents.
+ *
+ * Motion's own rules are [ProtocolMotionTest]'s subject and the frame arithmetic is
+ * [MotionFrameConformanceTest]'s; what is protected here is everything a document carries besides
+ * motion, and every semantic rule the schema alone cannot express.
+ */
+class ProtocolDocumentTest {
     @Test
-    fun `decodes canonical Protocol 03 with every native component`() {
-        val document = v03Document("complete-paywall.json")
+    fun `decodes the canonical document with every native component`() {
+        val document = protocolFixtureDocument("complete-paywall.json")
         val nodes = document.screens.flatMap { screen ->
             screen.layout.content.walkDepthFirst().toList()
         }
@@ -53,7 +59,7 @@ class ProtocolV03Test {
         assertTrue(nodes.any { it is MosaicCountdownComponent })
         assertEquals(
             document.compatibility.requiredCapabilities.map { it.name }.toSet(),
-            MosaicCapabilityCatalog.v03,
+            MosaicCapabilityCatalog.current,
         )
 
         val selector = nodes.filterIsInstance<MosaicProductSelectorComponent>().single()
@@ -85,14 +91,15 @@ class ProtocolV03Test {
     }
 
     /**
-     * Protects the decoded shape of the four components `0.3` adds, from the canonical fixture that
-     * exercises every edge shape: an authored non-first `initialTabId`, all three marker arms plus a
-     * markerless Timeline, both emblem arms plus an emblem-less Award, and rated/unrated Social
-     * Proof. A silently dropped optional or a substituted default would show up here.
+     * Protects the decoded shape of Tabs, Timeline, Award, and Social Proof, from the canonical
+     * fixture that exercises every edge shape: an authored non-first `initialTabId`, all three
+     * marker arms plus a markerless Timeline, both emblem arms plus an emblem-less Award, and
+     * rated/unrated Social Proof. A silently dropped optional or a substituted default would show
+     * up here.
      */
     @Test
-    fun `decodes the Protocol 03 components with their authored absences intact`() {
-        val nodes = v03Document("complete-paywall.json").walkNodesDepthFirst().toList()
+    fun `decodes components with their authored absences intact`() {
+        val nodes = protocolFixtureDocument("complete-paywall.json").walkNodesDepthFirst().toList()
 
         val tabs = nodes.filterIsInstance<MosaicTabsComponent>().single()
         assertEquals(3, tabs.tabs.size)
@@ -158,22 +165,17 @@ class ProtocolV03Test {
     }
 
     /**
-     * The four semantic rules that have no `0.2` analogue. Each is asserted against the canonical
+     * The semantic rules the schema alone cannot express, each asserted against the canonical
      * document mutated in exactly one way, so a rule that stopped firing could not hide behind an
      * unrelated rejection.
+     *
+     * The committed invalid fixtures are swept wholesale by [ProtocolMotionTest], so only the
+     * mutations that have no fixture of their own are made here.
      */
     @Test
-    fun `rejects the Protocol 03 semantic violations the schema alone cannot express`() {
-        listOf(
-            "invalid/social-proof-overrated.json",
-            "invalid/timeline-unused-marker-style.json",
-            "invalid/unknown-tab-visibility.json",
-        ).forEach { fixture ->
-            assertThrows(fixture, MosaicProtocolException::class.java) { v03Document(fixture) }
-        }
-
+    fun `rejects the semantic violations the schema alone cannot express`() {
         // A rating value beyond maximum x stepsPerPoint.
-        v03Object("complete-paywall.json").also { root ->
+        protocolFixtureObject("complete-paywall.json").also { root ->
             findNode(root, "whole-review").getAsJsonObject("rating").addProperty("value", 6)
             assertThrows(MosaicProtocolException::class.java) {
                 MosaicProtocolDecoder.decode(root.toString())
@@ -181,7 +183,7 @@ class ProtocolV03Test {
         }
 
         // A marker style nothing consumes is as invalid as a missing one.
-        v03Object("complete-paywall.json").also { root ->
+        protocolFixtureObject("complete-paywall.json").also { root ->
             findNode(root, "support-timeline").addProperty("markerSize", 12)
             assertThrows(MosaicProtocolException::class.java) {
                 MosaicProtocolDecoder.decode(root.toString())
@@ -189,7 +191,7 @@ class ProtocolV03Test {
         }
 
         // A marked entry whose component declares no marker colour.
-        v03Object("complete-paywall.json").also { root ->
+        protocolFixtureObject("complete-paywall.json").also { root ->
             findNode(root, "trial-timeline").remove("markerColor")
             assertThrows(MosaicProtocolException::class.java) {
                 MosaicProtocolDecoder.decode(root.toString())
@@ -197,7 +199,7 @@ class ProtocolV03Test {
         }
 
         // `initialTabId` must name a declared tab; there is no positional recovery.
-        v03Object("complete-paywall.json").also { root ->
+        protocolFixtureObject("complete-paywall.json").also { root ->
             findNode(root, "billing-tabs").addProperty("initialTabId", "billing-tabs-quarterly")
             assertThrows(MosaicProtocolException::class.java) {
                 MosaicProtocolDecoder.decode(root.toString())
@@ -205,7 +207,7 @@ class ProtocolV03Test {
         }
 
         // A tab condition inside the panel it names is dead layout, not a hidden node.
-        v03Object("complete-paywall.json").also { root ->
+        protocolFixtureObject("complete-paywall.json").also { root ->
             findNode(root, "billing-tabs-annual-body").add(
                 "visibility",
                 JsonParser.parseString(
@@ -218,7 +220,7 @@ class ProtocolV03Test {
         }
 
         // An unknown marker arm rejects; there is no substitute glyph.
-        v03Object("complete-paywall.json").also { root ->
+        protocolFixtureObject("complete-paywall.json").also { root ->
             findNode(root, "trial-timeline").getAsJsonArray("entries")[0]
                 .asJsonObject.getAsJsonObject("marker").addProperty("kind", "square")
             assertThrows(MosaicProtocolException::class.java) {
@@ -237,7 +239,7 @@ class ProtocolV03Test {
      */
     @Test
     fun `reserved accessibility strings are required and forbidden in both directions`() {
-        val document = v03Document("complete-paywall.json")
+        val document = protocolFixtureDocument("complete-paywall.json")
         val defaultStrings = checkNotNull(
             document.localization.locales[document.localization.defaultLocale],
         ).strings
@@ -277,8 +279,7 @@ class ProtocolV03Test {
         }
         // Forbidden: a document with no in-progress content must not carry the key. `edge-cases`
         // declares neither key, and adding one is rejected rather than ignored as harmless copy.
-        val edgeCases = Files.readAllBytes(repositoryFile("protocol/fixtures/v0.3/edge-cases.json"))
-            .toString(Charsets.UTF_8)
+        val edgeCases = protocolFixtureSource("edge-cases.json")
         assertFalse(MosaicReservedAccessibilityKey.IN_PROGRESS in edgeCases)
         assertThrows(MosaicProtocolException::class.java) {
             MosaicProtocolDecoder.decode(
@@ -328,7 +329,7 @@ class ProtocolV03Test {
      */
     @Test
     fun `tab selection resets from initialTabId on a newly accepted document`() {
-        val document = v03Document("complete-paywall.json")
+        val document = protocolFixtureDocument("complete-paywall.json")
         val state = MosaicPaywallState(document, MockMosaicPurchaseProvider())
 
         assertEquals("billing-tabs-annual", state.selectedTabId("billing-tabs"))
@@ -346,21 +347,8 @@ class ProtocolV03Test {
     }
 
     @Test
-    fun `decodes all valid edge and migration fixtures as Protocol 03`() {
-        listOf(
-            "edge-cases.json",
-            "expired-countdown.json",
-            "hidden-purchase-target.json",
-            "navigation-only.json",
-        ).forEach { fixture ->
-            assertEquals(MOSAIC_PROTOCOL_VERSION, v03Document(fixture).schemaVersion)
-        }
-        assertEquals(MOSAIC_PROTOCOL_VERSION, canonicalDocument().schemaVersion)
-    }
-
-    @Test
     fun `navigation and external URL actions do not require normalized commerce outcomes`() {
-        val document = v03Document("navigation-only.json")
+        val document = protocolFixtureDocument("navigation-only.json")
         val capabilities = document.compatibility.requiredCapabilities.map { it.name }.toSet()
 
         assertTrue(MosaicCapabilityName.NAVIGATE_TO_ACTION in capabilities)
@@ -378,14 +366,14 @@ class ProtocolV03Test {
             "https://example.com\\@evil.example/privacy",
             "https://example.com:70000/privacy",
         ).forEach { url ->
-            val root = v03Object("complete-paywall.json")
+            val root = protocolFixtureObject("complete-paywall.json")
             findNode(root, "privacy-policy").getAsJsonObject("action").addProperty("url", url)
             assertThrows(url, MosaicProtocolException::class.java) {
                 MosaicProtocolDecoder.decode(root.toString())
             }
         }
 
-        val punycode = v03Object("complete-paywall.json")
+        val punycode = protocolFixtureObject("complete-paywall.json")
         findNode(punycode, "privacy-policy").getAsJsonObject("action").addProperty(
             "url",
             "https://xn--r8jz45g.xn--zckzah/privacy",
@@ -393,24 +381,10 @@ class ProtocolV03Test {
         assertEquals(MOSAIC_PROTOCOL_VERSION, MosaicProtocolDecoder.decode(punycode.toString()).schemaVersion)
     }
 
+    /** Countdown units read largest to smallest; there is no committed fixture for the inversion. */
     @Test
-    fun `rejects noncanonical colors and wrong countdown unit order`() {
-        listOf(
-            "invalid/noncanonical-color.json",
-            "invalid/insecure-external-url.json",
-            "invalid/interactive-button-child.json",
-            "invalid/navigation-cycle.json",
-            "invalid/duplicate-product-reference.json",
-            "invalid/incomplete-product-card-default.json",
-            "invalid/interactive-product-card-child.json",
-            "invalid/product-card-outside-selector.json",
-            "invalid/unsafe-product-template.json",
-        ).forEach { fixture ->
-            assertThrows(fixture, MosaicProtocolException::class.java) {
-                v03Document(fixture)
-            }
-        }
-        val root = v03Object("complete-paywall.json")
+    fun `rejects a countdown whose unit order is inverted`() {
+        val root = protocolFixtureObject("complete-paywall.json")
         findNode(root, "offer-countdown").apply {
             addProperty("largestUnit", "second")
             addProperty("smallestUnit", "day")
@@ -422,7 +396,7 @@ class ProtocolV03Test {
 
     @Test
     fun `design tokens are category scoped and reject missing or cyclic chains`() {
-        v03Object("complete-paywall.json").also { root ->
+        protocolFixtureObject("complete-paywall.json").also { root ->
             root.getAsJsonObject("designSystem").getAsJsonArray("colors")[1]
                 .asJsonObject.getAsJsonObject("value").addProperty("id", "missing-color")
             assertThrows(MosaicProtocolException::class.java) {
@@ -430,7 +404,7 @@ class ProtocolV03Test {
             }
         }
 
-        v03Object("complete-paywall.json").also { root ->
+        protocolFixtureObject("complete-paywall.json").also { root ->
             root.getAsJsonObject("designSystem").getAsJsonArray("colors")[0]
                 .asJsonObject.add(
                     "value",
@@ -441,7 +415,7 @@ class ProtocolV03Test {
             }
         }
 
-        v03Object("complete-paywall.json").also { root ->
+        protocolFixtureObject("complete-paywall.json").also { root ->
             findNode(root, "paywall-content").getAsJsonObject("appearance").add(
                 "background",
                 JsonParser.parseString("""{"type":"backgroundToken","id":"brand-primary"}"""),
@@ -454,7 +428,7 @@ class ProtocolV03Test {
 
     @Test
     fun `initial presentation must be a screen and remote media must use HTTPS`() {
-        v03Object("complete-paywall.json").also { root ->
+        protocolFixtureObject("complete-paywall.json").also { root ->
             root.getAsJsonArray("screens")[0].asJsonObject.getAsJsonObject("presentation")
                 .addProperty("type", "sheet")
             assertThrows(MosaicProtocolException::class.java) {
@@ -462,7 +436,7 @@ class ProtocolV03Test {
             }
         }
 
-        v03Object("complete-paywall.json").also { root ->
+        protocolFixtureObject("complete-paywall.json").also { root ->
             root.getAsJsonArray("assets")[3].asJsonObject.getAsJsonObject("source")
                 .addProperty("url", "http://assets.example.com/details.mp4")
             assertThrows(MosaicProtocolException::class.java) {
@@ -509,7 +483,7 @@ class ProtocolV03Test {
 
     @Test
     fun `vertical selector preserves authored cards and cross axis alignment`() {
-        val root = v03Object("complete-paywall.json")
+        val root = protocolFixtureObject("complete-paywall.json")
         findNode(root, "plans").apply {
             addProperty("direction", "vertical")
             addProperty("crossAxisAlignment", "start")
@@ -526,7 +500,7 @@ class ProtocolV03Test {
 
     @Test
     fun `switch visibility and carousel runtime reset with a new accepted document state`() {
-        val document = v03Document("complete-paywall.json")
+        val document = protocolFixtureDocument("complete-paywall.json")
         val state = MosaicPaywallState(document, MockMosaicPurchaseProvider())
 
         assertTrue(state.switchValue("show-offer-details"))
@@ -542,7 +516,7 @@ class ProtocolV03Test {
 
     @Test
     fun `countdown uses the controlled device wall clock and localized completion`() {
-        val component = v03Document("complete-paywall.json").layout.content.walkDepthFirst()
+        val component = protocolFixtureDocument("complete-paywall.json").layout.content.walkDepthFirst()
             .filterIsInstance<MosaicCountdownComponent>()
             .single()
         assertEquals(
@@ -559,32 +533,4 @@ class ProtocolV03Test {
         )
     }
 
-    @Test
-    fun `Local Preview 03 codec is exact and round trips canonical flow`() {
-        val flow = JsonParser.parseString(
-            Files.readAllBytes(
-                repositoryFile("protocol/fixtures/local-preview/v0.3/session-flow.messages.json"),
-            ).toString(Charsets.UTF_8),
-        ).asJsonArray
-        flow.forEach { source ->
-            val decoded = MosaicLocalPreviewCodec.decode(
-                source.toString(),
-                MOSAIC_LOCAL_PREVIEW_VERSION,
-            )
-            assertEquals(MOSAIC_LOCAL_PREVIEW_VERSION, decoded.previewProtocolVersion)
-            MosaicLocalPreviewCodec.encode(decoded, MOSAIC_LOCAL_PREVIEW_VERSION)
-        }
-        assertThrows(MosaicPreviewCodecException::class.java) {
-            MosaicLocalPreviewCodec.decode(flow.first().toString(), "0.1")
-        }
-    }
-
-    private fun v03Document(name: String): MosaicPaywallDocument =
-        MosaicProtocolDecoder.decode(
-            Files.readAllBytes(repositoryFile("protocol/fixtures/v0.3/$name")).toString(Charsets.UTF_8),
-        )
-
-    private fun v03Object(name: String) = JsonParser.parseString(
-        Files.readAllBytes(repositoryFile("protocol/fixtures/v0.3/$name")).toString(Charsets.UTF_8),
-    ).asJsonObject
 }

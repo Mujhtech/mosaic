@@ -208,8 +208,8 @@ class MosaicPaywallComposeTest {
     }
 
     @Test
-    fun protocolV03RendersNativeStatefulControlsAndHiddenSemantics() {
-        val document = protocolV03Bundle()
+    fun rendersNativeStatefulControlsAndHiddenSemantics() {
+        val document = canonicalTestBundle()
         val selector = document.layout.content.walkDepthFirst()
             .filterIsInstance<MosaicProductSelectorComponent>()
             .single()
@@ -265,9 +265,9 @@ class MosaicPaywallComposeTest {
     }
 
     @Test
-    fun protocolV03NavigateToPresentsANativeSheetOverTheCurrentScreenAndBackDismissesIt() {
+    fun navigateToPresentsANativeSheetOverTheCurrentScreenAndBackDismissesIt() {
         val state = MosaicPaywallState(
-            protocolV03Bundle(),
+            canonicalTestBundle(),
             MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
         )
         runBlocking { state.loadProducts() }
@@ -293,8 +293,8 @@ class MosaicPaywallComposeTest {
     }
 
     @Test
-    fun protocolV03VerticalSelectorUsesFullWidthSourceOrderedRadioTargets() {
-        val document = protocolV03Bundle().withSelectorDirection(MosaicStackDirection.VERTICAL)
+    fun verticalSelectorUsesFullWidthSourceOrderedRadioTargets() {
+        val document = canonicalTestBundle().withSelectorDirection(MosaicStackDirection.VERTICAL)
         val state = MosaicPaywallState(
             document,
             MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
@@ -320,9 +320,9 @@ class MosaicPaywallComposeTest {
     }
 
     @Test
-    fun protocolV03ArabicRtlAtLargeFontScaleRemainsReachable() {
+    fun arabicRtlAtLargeFontScaleRemainsReachable() {
         val state = MosaicPaywallState(
-            protocolV03Bundle(),
+            canonicalTestBundle(),
             MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
             clock = { 1_893_455_998_000L },
         )
@@ -350,7 +350,7 @@ class MosaicPaywallComposeTest {
     }
 
     /**
-     * The four components Protocol 0.3 adds, rendered from the canonical fixture.
+     * Tabs, Timeline, Award, and Social Proof, rendered from the canonical fixture.
      *
      * The risks this protects are the ones a decode test cannot see: a tab control that is not a
      * tab to TalkBack, a tab-conditioned node that is merely invisible instead of removed from the
@@ -358,9 +358,9 @@ class MosaicPaywallComposeTest {
      * repeats the step count instead of the points a listener can compare against the maximum.
      */
     @Test
-    fun protocolV03ComponentsExposeTabSemanticsOrderedEntriesAndRatingAnnouncement() {
+    fun componentsExposeTabSemanticsOrderedEntriesAndRatingAnnouncement() {
         val state = MosaicPaywallState(
-            protocolV03Bundle(),
+            canonicalTestBundle(),
             MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
             clock = { 1_893_455_998_000L },
         )
@@ -424,9 +424,9 @@ class MosaicPaywallComposeTest {
     }
 
     @Test
-    fun protocolV03ScreenshotMatchesCommittedPixelBaseline() {
+    fun canonicalDocumentScreenshotMatchesCommittedPixelBaseline() {
         val state = MosaicPaywallState(
-            protocolV03Bundle(),
+            canonicalTestBundle(),
             MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
             clock = { 1_893_455_998_000L },
         )
@@ -444,7 +444,7 @@ class MosaicPaywallComposeTest {
 
         val image = compose.onNodeWithTag("mosaic-paywall", useUnmergedTree = true).captureToImage()
         val bitmap = image.asAndroidBitmap()
-        recordRendererScreenshot(bitmap, "mosaic-paywall-v03.png")
+        recordRendererScreenshot(bitmap, "mosaic-paywall.png")
         val pixels = IntArray(bitmap.width * bitmap.height)
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         val digest = MessageDigest.getInstance("SHA-256")
@@ -461,7 +461,7 @@ class MosaicPaywallComposeTest {
     }
 
     @Test
-    fun bundledFallbackMatchesCurrentProtocolV03PixelBaseline() {
+    fun bundledFallbackMatchesCommittedPixelBaseline() {
         val document = canonicalBundle()
         assertEquals(MOSAIC_PROTOCOL_VERSION, document.schemaVersion)
         val state = MosaicPaywallState(
@@ -483,7 +483,7 @@ class MosaicPaywallComposeTest {
 
         val image = compose.onNodeWithTag("mosaic-paywall", useUnmergedTree = true).captureToImage()
         val bitmap = image.asAndroidBitmap()
-        recordRendererScreenshot(bitmap, "mosaic-bundled-fallback-v03.png")
+        recordRendererScreenshot(bitmap, "mosaic-bundled-fallback.png")
         val pixels = IntArray(bitmap.width * bitmap.height)
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         val digest = MessageDigest.getInstance("SHA-256")
@@ -543,9 +543,9 @@ class MosaicPaywallComposeTest {
         return MosaicProtocolDecoder.decode(source)
     }
 
-    private fun protocolV03Bundle(): MosaicPaywallDocument {
+    private fun canonicalTestBundle(): MosaicPaywallDocument {
         val context = InstrumentationRegistry.getInstrumentation().context
-        val source = context.assets.open("mosaic/v0.3/complete-paywall.json")
+        val source = context.assets.open("mosaic/v0.4/complete-paywall.json")
             .bufferedReader().use { it.readText() }
         return MosaicProtocolDecoder.decode(source)
     }
@@ -585,19 +585,19 @@ class MosaicPaywallComposeTest {
      * The committed digest, or [GOLDEN_UNRECORDED] when no baseline has been captured for the
      * current protocol yet.
      *
-     * A baseline recorded against a different document is not a baseline for this one, so the
-     * Protocol 0.3 digest is deliberately absent rather than carried over: the run is reported as
-     * skipped, with the digest to commit, instead of passing against a stale value or failing for a
-     * reason that is not a regression. Record it with
+     * A baseline recorded against a different document is not a baseline for this one, so a digest
+     * captured against a retired contract is deliberately absent rather than carried over: the run
+     * is reported as skipped, with the digest to commit, instead of passing against a stale value or
+     * failing for a reason that is not a regression. Record it with
      * `-Pandroid.testInstrumentationRunnerArguments.mosaic.recordRendererScreenshots=1` and commit
      * the printed digest.
      */
     private fun assertPixelBaseline(actual: String) {
         val expected = InstrumentationRegistry.getInstrumentation().context
-            .assets.open("mosaic-paywall-v03-golden.sha256")
+            .assets.open("mosaic-paywall-golden.sha256")
             .bufferedReader().use { it.readText().trim() }
         assumeFalse(
-            "No Protocol 0.3 pixel baseline is recorded. Review the render, then commit: $actual",
+            "No pixel baseline is recorded. Review the render, then commit: $actual",
             expected == GOLDEN_UNRECORDED,
         )
         assertEquals("Update only after intentional renderer review. Actual: $actual", expected, actual)

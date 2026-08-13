@@ -19,7 +19,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 const val MOSAIC_PLACEMENT_DECISION_VERSION: String = "1"
-const val MOSAIC_CONFIGURATION_DELIVERY_VERSION_V2: String = "2"
 const val MOSAIC_ROLLOUT_ALGORITHM: String = "sha256_length_prefixed_v1"
 
 enum class MosaicTruthValue { TRUE, FALSE, UNKNOWN }

@@ -9,21 +9,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Protocol conformance for the Authoritative Entitlement Contract 1 reader.
+ * Protocol conformance for the Authoritative Entitlement Contract reader.
+ *
+ * Every wire record is authority-wrapped, so the fixtures are driven through
+ * [MosaicCustomerAuthorityCodec] and the assertions are made about the snapshot body it unwraps —
+ * which is the document [MosaicCustomerEntitlementCodec] reads.
  *
  * The canonical fixtures and the digest vectors are read from the repository rather than copied, so
  * a contract change fails here instead of drifting one platform away from the other three.
  */
 class CustomerEntitlementCodecTest {
     private fun fixture(relative: String): String =
-        Files.readAllBytes(repositoryFile("protocol/fixtures/authoritative-entitlement/v1/$relative"))
+        Files.readAllBytes(repositoryFile("protocol/fixtures/authoritative-entitlement/v2/$relative"))
             .toString(Charsets.UTF_8)
 
     private fun fixtures(directory: String): List<Path> =
-        Files.list(repositoryFile("protocol/fixtures/authoritative-entitlement/v1/$directory"))
+        Files.list(repositoryFile("protocol/fixtures/authoritative-entitlement/v2/$directory"))
             .filter { it.fileName.toString().endsWith(".json") }
             .sorted()
             .toList()
+
+    private fun snapshotOf(source: String): MosaicCustomerAuthorityDecoding.Snapshot =
+        MosaicCustomerAuthorityCodec.decode(source) as MosaicCustomerAuthorityDecoding.Snapshot
 
     /**
      * The canonical serialization, byte for byte.
@@ -53,55 +60,52 @@ class CustomerEntitlementCodecTest {
         assertEquals(9, rows)
     }
 
-    /** Every canonical snapshot fixture decodes, and its own contentDigest verifies. */
+    /** Every canonical snapshot fixture decodes, and both of its digests verify. */
     @Test
     fun everyCanonicalSnapshotFixtureIsAccepted() {
         val decoded = fixtures("snapshots").map { path ->
-            path.fileName.toString() to
-                MosaicCustomerEntitlementCodec.decodeRecord(Files.readAllBytes(path).toString(Charsets.UTF_8))
+            path.fileName.toString() to snapshotOf(Files.readAllBytes(path).toString(Charsets.UTF_8))
         }
-        assertEquals(15, decoded.size)
+        assertEquals(12, decoded.size)
         decoded.forEach { (name, record) ->
-            when (name) {
-                "snapshot-unchanged.json" -> assertTrue(name, record is MosaicCustomerRecordDecoding.Unchanged)
-                else -> {
-                    assertTrue(name, record is MosaicCustomerRecordDecoding.Snapshot)
-                    assertTrue(name, (record as MosaicCustomerRecordDecoding.Snapshot).contentDigestValid)
-                }
-            }
+            assertTrue(name, record.snapshotContentDigestValid)
+            assertTrue(name, record.snapshotAuthorityDigestValid)
         }
+        assertTrue(
+            MosaicCustomerAuthorityCodec.decode(fixture("snapshot-unchanged.json")) is
+                MosaicCustomerAuthorityDecoding.Unchanged,
+        )
     }
 
-    /** Version zero is the constrained pending placeholder and can be stated on the next sync. */
+    /**
+     * Version zero is the constrained pending placeholder, and it is *stated* on the next sync
+     * rather than omitted.
+     *
+     * Omitting it would read as "this client has no snapshot at all", which is a different request:
+     * the server would answer with a full projection instead of confirming the placeholder.
+     */
     @Test
-    fun neverProjectedPlaceholderIsAcceptedAndSentAsKnownVersion() {
-        val decoded = MosaicCustomerEntitlementCodec.decodeRecord(
-            fixture("snapshots/never-projected-placeholder.json"),
-        ) as MosaicCustomerRecordDecoding.Snapshot
-
-        assertEquals(0L, decoded.snapshot.snapshotVersion)
-        assertTrue(decoded.snapshot.entries.isEmpty())
-        assertEquals(MosaicCustomerProjectionState.PENDING, decoded.snapshot.projectionStatus.state)
-
+    fun theNeverProjectedPlaceholderVersionIsSentRatherThanOmitted() {
         val request = JsonParser.parseString(
             MosaicCustomerEntitlementCodec.encodeSyncRequest(
                 correlationId = "fixture-correlation-placeholder-sync",
-                knownSnapshotVersion = decoded.snapshot.snapshotVersion,
-                entityTag = decoded.snapshot.entityTag,
+                knownSnapshotVersion = 0L,
+                entityTag = null,
                 requestedEntitlementKeys = emptyList(),
             ),
         ).asJsonObject.getAsJsonObject("payload")
+
         assertEquals(0L, request.get("knownSnapshotVersion").asLong)
     }
 
     @Test
     fun versionZeroCannotCarryProjectedEntitlementState() {
-        val record = JsonParser.parseString(fixture("snapshots/active-subscription.json")).asJsonObject
-        record.getAsJsonObject("payload").addProperty("snapshotVersion", 0)
+        val record = JsonParser.parseString(fixture("snapshots/active-trial.json")).asJsonObject
+        record.getAsJsonObject("payload").getAsJsonObject("snapshot").addProperty("snapshotVersion", 0)
 
         assertTrue(
-            MosaicCustomerEntitlementCodec.decodeRecord(record.toString()) is
-                MosaicCustomerRecordDecoding.Unreadable,
+            MosaicCustomerAuthorityCodec.decode(record.toString()) is
+                MosaicCustomerAuthorityDecoding.Unreadable,
         )
     }
 
@@ -114,10 +118,8 @@ class CustomerEntitlementCodecTest {
      */
     @Test
     fun permanentSourceCarriesNoFiniteExpiry() {
-        val record = MosaicCustomerEntitlementCodec.decodeRecord(
-            fixture("snapshots/permanent-source-no-finite-expiry.json"),
-        )
-        val entry = (record as MosaicCustomerRecordDecoding.Snapshot).snapshot.entries.single()
+        val entry = snapshotOf(fixture("snapshots/permanent-source-no-finite-expiry.json"))
+            .snapshot.entries.single()
         val state = entry.state as MosaicCustomerEntitlementState.Active
         assertTrue(state.endKnown)
         assertNull(state.effectiveEnd)
@@ -126,8 +128,7 @@ class CustomerEntitlementCodecTest {
     /** A test-derived grant is reported as such on every surface; on Google nothing else marks it. */
     @Test
     fun testSourceGrantIsCarriedThroughDecoding() {
-        val record = MosaicCustomerEntitlementCodec.decodeRecord(fixture("snapshots/test-source-sandbox-grant.json"))
-        val snapshot = (record as MosaicCustomerRecordDecoding.Snapshot).snapshot
+        val snapshot = snapshotOf(fixture("snapshots/test-source-sandbox-grant.json")).snapshot
         assertTrue(snapshot.sources.any { it.isTestSource })
     }
 
@@ -146,8 +147,14 @@ class CustomerEntitlementCodecTest {
         )
         // Classified producer-side: the semantic validator guards what Mosaic emits, and the reader
         // accepts it because the document is fully interpretable. See the fixture assertion below.
-        val producerSideOnly = setOf("snapshot-carries-signed-payload-value.json")
+        // `unchanged-scope-mismatch` joins them for a different reason: a scope is only wrong
+        // relative to the reader asking, so it is refused by the runtime rather than by the codec.
+        val producerSideOnly = setOf(
+            "snapshot-carries-signed-payload-value.json",
+            "unchanged-scope-mismatch.json",
+        )
         var documentRejections = 0
+        var considered = 0
         fixtures("invalid").forEach { path ->
             val name = path.fileName.toString()
             if (name == "rejection-layers.json") return@forEach
@@ -162,18 +169,19 @@ class CustomerEntitlementCodecTest {
             ) {
                 return@forEach
             }
-            val decoded = MosaicCustomerEntitlementCodec.decodeRecord(source)
+            considered += 1
+            val decoded = MosaicCustomerAuthorityCodec.decode(source)
             val expectedCacheRejection = cacheLayerRejections[name]
             if (expectedCacheRejection == null) {
-                assertTrue("$name should not decode", decoded is MosaicCustomerRecordDecoding.Unreadable)
+                assertTrue("$name should not decode", decoded is MosaicCustomerAuthorityDecoding.Unreadable)
                 documentRejections += 1
                 return@forEach
             }
             // A structurally valid document the cache gate must still refuse.
-            val snapshot = decoded as MosaicCustomerRecordDecoding.Snapshot
+            val snapshot = decoded as MosaicCustomerAuthorityDecoding.Snapshot
             val decision = MosaicCustomerEntitlementAcceptance.decide(
                 cached = MosaicCustomerSnapshotBinding(
-                    contractVersion = "1",
+                    contractVersion = MOSAIC_AUTHORITATIVE_ENTITLEMENT_VERSION,
                     billingCustomerId = "fixture-customer-0001",
                     projectId = "fixture-project-mosaic",
                     environmentId = "fixture-environment-production",
@@ -182,18 +190,21 @@ class CustomerEntitlementCodecTest {
                     contentDigestValid = true,
                 ),
                 incoming = MosaicCustomerSnapshotBinding(
-                    contractVersion = "1",
+                    contractVersion = MOSAIC_AUTHORITATIVE_ENTITLEMENT_VERSION,
                     billingCustomerId = snapshot.snapshot.billingCustomerId,
                     projectId = snapshot.snapshot.projectId,
                     environmentId = snapshot.snapshot.environmentId,
                     snapshotVersion = snapshot.snapshot.snapshotVersion,
                     asOfEpochMillis = snapshot.snapshot.asOfEpochMillis,
-                    contentDigestValid = snapshot.contentDigestValid,
+                    contentDigestValid = snapshot.snapshotContentDigestValid,
                 ),
             )
             assertEquals(name, expectedCacheRejection, decision.rejection)
         }
-        assertEquals(15, documentRejections)
+        // Derived rather than hard-coded, so a fixture the protocol agent adds is swept on the day
+        // it lands instead of on the day somebody remembers to edit a count.
+        assertTrue("the canonical invalid corpus is empty", considered > 0)
+        assertEquals(considered - cacheLayerRejections.size, documentRejections)
     }
 
     /**
@@ -207,10 +218,7 @@ class CustomerEntitlementCodecTest {
      */
     @Test
     fun aSignedPayloadValueInAnIdentifierIsAProducerConcernNotAReaderRejection() {
-        val decoded = MosaicCustomerEntitlementCodec.decodeRecord(
-            fixture("invalid/snapshot-carries-signed-payload-value.json"),
-        )
-        val snapshot = (decoded as MosaicCustomerRecordDecoding.Snapshot).snapshot
+        val snapshot = snapshotOf(fixture("invalid/snapshot-carries-signed-payload-value.json")).snapshot
         assertTrue(snapshot.correlationId.startsWith("eyJ"))
         // It is carried, never interpreted: the SDK does not parse it and never treats it as proof
         // of anything. This contract is not a bearer credential in any of its fields.
@@ -221,8 +229,7 @@ class CustomerEntitlementCodecTest {
     @Test
     fun cacheRecordDetectsTruncationAndTampering() {
         val source = fixture("snapshots/bounded-offline-cache.json")
-        val snapshot = (MosaicCustomerEntitlementCodec.decodeRecord(source) as MosaicCustomerRecordDecoding.Snapshot)
-            .snapshot
+        val snapshot = snapshotOf(source).snapshot
         val encoded = MosaicCustomerEntitlementCodec.encodeCacheRecord(source, snapshot.freshness)
 
         val restored = MosaicCustomerEntitlementCodec.decodeCacheRecord(encoded)
@@ -245,8 +252,8 @@ class CustomerEntitlementCodecTest {
      */
     @Test
     fun unchangedRecordCarriesFreshnessOnly() {
-        val record = MosaicCustomerEntitlementCodec.decodeRecord(fixture("snapshots/snapshot-unchanged.json"))
-        val unchanged = (record as MosaicCustomerRecordDecoding.Unchanged).unchanged
+        val record = MosaicCustomerAuthorityCodec.decode(fixture("snapshot-unchanged.json"))
+        val unchanged = (record as MosaicCustomerAuthorityDecoding.Unchanged).unchanged
         assertEquals("fixture-customer-0001", unchanged.billingCustomerId)
         assertTrue(unchanged.freshness.validUntilEpochMillis > unchanged.freshness.refreshAfterEpochMillis)
     }

@@ -7,14 +7,39 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.text.Charsets
 
-internal fun canonicalFixtureSource(): String =
-    Files.readAllBytes(canonicalFixture()).toString(Charsets.UTF_8)
+/**
+ * The one canonical paywall corpus, at the one contract version there is.
+ *
+ * Every suite reads fixtures through these helpers rather than composing its own path, so the
+ * corpus moves in one place. Before ADR-0028 there were two of each of these — one per version —
+ * and the pair is what let a rule be asserted against one corpus and silently unasserted against
+ * the other.
+ */
+private const val PROTOCOL_FIXTURE_DIRECTORY = "protocol/fixtures/v0.4"
 
-internal fun canonicalFixtureObject(): JsonObject =
-    JsonParser.parseString(canonicalFixtureSource()).asJsonObject
+internal fun protocolFixtureSource(relativeName: String): String =
+    Files.readAllBytes(repositoryFile("$PROTOCOL_FIXTURE_DIRECTORY/$relativeName"))
+        .toString(Charsets.UTF_8)
+
+internal fun protocolFixtureObject(relativeName: String): JsonObject =
+    JsonParser.parseString(protocolFixtureSource(relativeName)).asJsonObject
+
+internal fun protocolFixtureDocument(relativeName: String): MosaicPaywallDocument =
+    MosaicProtocolDecoder.decode(protocolFixtureSource(relativeName))
+
+internal fun protocolFixtureNames(relativeDirectory: String): List<String> =
+    Files.list(repositoryFile("$PROTOCOL_FIXTURE_DIRECTORY/$relativeDirectory")).use { paths ->
+        paths.map { it.fileName.toString() }.filter { it.endsWith(".json") }.sorted().toList()
+    }
+
+internal fun canonicalFixtureSource(): String = protocolFixtureSource(CANONICAL_FIXTURE_NAME)
+
+internal fun canonicalFixtureObject(): JsonObject = protocolFixtureObject(CANONICAL_FIXTURE_NAME)
 
 internal fun canonicalDocument(): MosaicPaywallDocument =
-    MosaicProtocolDecoder.decode(canonicalFixtureSource())
+    protocolFixtureDocument(CANONICAL_FIXTURE_NAME)
+
+private const val CANONICAL_FIXTURE_NAME = "complete-paywall.json"
 
 internal fun canonicalFixtureReplacing(original: String, replacement: String): String {
     val source = canonicalFixtureSource()
@@ -58,10 +83,6 @@ internal fun findNode(root: JsonObject, id: String): JsonObject {
     }
     root.getAsJsonObject("layout")?.let { layout -> find(layout)?.let { return it } }
     error("Missing node $id.")
-}
-
-private fun canonicalFixture(): Path {
-    return repositoryFile("protocol/fixtures/v0.3/complete-paywall.json")
 }
 
 internal fun repositoryFile(relativePath: String): Path {

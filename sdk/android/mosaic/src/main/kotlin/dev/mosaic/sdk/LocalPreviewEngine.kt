@@ -436,12 +436,11 @@ class MosaicLocalPreviewEngine(
             )
 
         val schemaVersion = root.stringProperty("schemaVersion")
-        // Local Preview 0.3 is version-locked to Paywall Protocol 0.3: its message schema `$ref`s
-        // `urn:mosaic:protocol:schema:v0.3:paywall` directly, so accepting a 0.4 draft over the 0.3
-        // subprotocol would render a document this session never negotiated. Local Preview 0.4 is
-        // the named next chunk of that contract and is deliberately not in this slice, so the gate
-        // is pinned to the preview protocol's own paywall version rather than to everything the
-        // decoder happens to read.
+        // Local Preview is version-locked to the paywall contract: its message schema `$ref`s
+        // `urn:mosaic:protocol:schema:v0.4:paywall` directly, so a draft at any other version would
+        // be a document this session never negotiated. The gate stays pinned to the preview
+        // protocol's own paywall version rather than to everything the decoder happens to read, so
+        // that the two can be re-pinned independently at GA.
         if (schemaVersion != MOSAIC_LOCAL_PREVIEW_PAYWALL_VERSION ||
             schemaVersion !in capabilityReport.supportedSchemaVersions
         ) {
@@ -501,7 +500,7 @@ class MosaicLocalPreviewEngine(
                     diagnostic,
                     MosaicPreviewSupportedCapability(
                         "component.${issue.type}",
-                        schemaVersion ?: MOSAIC_LATEST_PROTOCOL_VERSION,
+                        schemaVersion ?: MOSAIC_PROTOCOL_VERSION,
                     ),
                     MosaicPreviewRecoveryActionName.REMOVE_COMPONENT,
                 ),
@@ -603,7 +602,7 @@ class MosaicLocalPreviewEngine(
 
     private data class ComponentIssue(val type: String, val componentId: String?, val pointer: String)
     /**
-     * Exactly the Protocol 0.3 node vocabulary. Listing a type the strict decoder does not accept
+     * Exactly the protocol node vocabulary. Listing a type the strict decoder does not accept
      * would turn an honest `unsupportedComponent` diagnostic, which names the offending component,
      * into a generic `invalidDocument` one that does not.
      */

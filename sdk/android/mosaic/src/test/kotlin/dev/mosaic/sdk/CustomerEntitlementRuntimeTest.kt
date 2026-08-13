@@ -1,7 +1,6 @@
 package dev.mosaic.sdk
 
 import com.google.gson.JsonParser
-import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -31,17 +30,11 @@ class CustomerEntitlementRuntimeTest {
     private val issuedAt = mosaicContractInstantMillis("2026-07-28T12:00:00.000Z")
     private var deviceNow: Long? = issuedAt + 60_000
 
-    private fun fixture(name: String): String =
-        Files.readAllBytes(
-            repositoryFile("protocol/fixtures/authoritative-entitlement/v1/snapshots/$name.json"),
-        ).toString(Charsets.UTF_8)
-
-    private fun entityTag(record: String): String = JsonParser.parseString(record)
-        .asJsonObject.getAsJsonObject("payload").get("entityTag").asString
+    private fun fixture(name: String): String = androidSnapshotRecord(name)
 
     private fun record(name: String) = MosaicCustomerEntitlementTransportResult.Record(
         body = fixture(name),
-        entityTag = entityTag(fixture(name)),
+        entityTag = snapshotEntityTag(fixture(name)),
     )
 
     private fun runtime(
@@ -56,6 +49,7 @@ class CustomerEntitlementRuntimeTest {
         session = MosaicCustomerTokenSession(provider),
         trustedTime = { deviceNow },
         diagnostics = diagnostics,
+        authorityRequestContext = { mosaicTestAuthorityRequestContext() },
     )
 
     // ------------------------------------------------------------------------------------------
@@ -82,11 +76,11 @@ class CustomerEntitlementRuntimeTest {
         assertEquals(14L, state.snapshot.snapshotVersion)
     }
 
-    /** A snapshot whose HTTP validator does not identify it is refused rather than trusted. */
+    /** A snapshot whose HTTP validator identifies a different record is refused rather than trusted. */
     @Test
-    fun aSnapshotWithoutAStrongMatchingEntityTagIsRejected() = runTest {
+    fun aSnapshotWithAnEntityTagForAnotherRecordIsRejected() = runTest {
         val runtime = runtime({ _, _ ->
-            MosaicCustomerEntitlementTransportResult.Record(fixture("active-subscription"), null)
+            MosaicCustomerEntitlementTransportResult.Record(fixture("active-trial"), "cs-9999-v99")
         })
         val result = runtime.refreshCustomerEntitlements()
         assertEquals(
@@ -106,7 +100,15 @@ class CustomerEntitlementRuntimeTest {
     @Test
     fun aDifferentCustomerClearsTheCacheAndIsNeverObservable() = runTest {
         val observed = mutableListOf<MosaicCustomerEntitlementSnapshotState>()
-        val responses = ArrayDeque(listOf(record("bounded-offline-cache"), record("test-source-sandbox-grant")))
+        // Rebound to another customer inside the same scope: the scope checks run first, so a
+        // fixture that also differed in environment would be refused before its customer was read.
+        val foreign = androidSnapshotRecord("bounded-offline-cache", billingCustomerId = "fixture-customer-0002")
+        val responses = ArrayDeque(
+            listOf(
+                record("bounded-offline-cache"),
+                MosaicCustomerEntitlementTransportResult.Record(foreign, snapshotEntityTag(foreign)),
+            ),
+        )
         val diagnostics = mutableListOf<MosaicDiagnostic>()
         val runtime = runtime({ _, _ -> responses.removeFirst() }, diagnostics = { diagnostics += it })
 
@@ -260,15 +262,14 @@ class CustomerEntitlementRuntimeTest {
         validUntil: String,
         billingCustomerId: String = "fixture-customer-0001",
     ): MosaicCustomerEntitlementTransportResult.Record {
-        val root = JsonParser.parseString(fixture("snapshot-unchanged")).asJsonObject
-        val payload = root.getAsJsonObject("payload")
-        payload.addProperty("billingCustomerId", billingCustomerId)
-        payload.addProperty("entityTag", entityTag)
-        payload.addProperty("snapshotVersion", snapshotVersion)
-        payload.addProperty("refreshAfter", refreshAfter)
-        payload.addProperty("validUntil", validUntil)
-        payload.addProperty("staleGraceSeconds", 86_400)
-        return MosaicCustomerEntitlementTransportResult.Record(root.toString(), entityTag)
+        val record = androidUnchangedRecordFor(fixture("bounded-offline-cache")) { unchanged ->
+            unchanged.addProperty("billingCustomerId", billingCustomerId)
+            unchanged.addProperty("entityTag", entityTag)
+            unchanged.addProperty("snapshotVersion", snapshotVersion)
+            unchanged.addProperty("refreshAfter", refreshAfter)
+            unchanged.addProperty("validUntil", validUntil)
+        }
+        return MosaicCustomerEntitlementTransportResult.Record(record, entityTag)
     }
 
     /**
@@ -438,7 +439,9 @@ class CustomerEntitlementRuntimeTest {
         val results = refreshes.awaitAll()
 
         assertEquals(1, calls.get())
-        assertEquals(1, tokenCalls.get())
+        // One token for the collapsed request, plus the forced re-issue that binds the newly
+        // accepted authority epoch.
+        assertEquals(2, tokenCalls.get())
         assertTrue(results.all { it is MosaicCustomerEntitlementSyncResult.Updated })
     }
 
@@ -472,7 +475,9 @@ class CustomerEntitlementRuntimeTest {
 
         assertTrue(result is MosaicCustomerEntitlementSyncResult.Updated)
         assertEquals(2, transportCalls.get())
-        assertEquals(listOf(false, true), forced)
+        // The trailing forced refresh binds the next request to the epoch just accepted: an
+        // authority epoch change must not be carried by a token issued before it.
+        assertEquals(listOf(false, true, true), forced)
     }
 
     /** A second refusal is authoritative: unavailable, no retry storm, and no customer switch. */
@@ -535,7 +540,13 @@ class CustomerEntitlementRuntimeTest {
     fun identifyingPublishesLoadingBeforeAnythingIsRead() = runTest {
         val gate = CompletableDeferred<Unit>()
         val reached = CompletableDeferred<Unit>()
-        val responses = ArrayDeque(listOf(record("bounded-offline-cache"), record("test-source-sandbox-grant")))
+        val foreign = androidSnapshotRecord("bounded-offline-cache", billingCustomerId = "fixture-customer-0002")
+        val responses = ArrayDeque(
+            listOf(
+                record("bounded-offline-cache"),
+                MosaicCustomerEntitlementTransportResult.Record(foreign, snapshotEntityTag(foreign)),
+            ),
+        )
         val runtime = runtime({ _, _ ->
             val next = responses.removeFirst()
             if (responses.isEmpty()) {
@@ -601,15 +612,21 @@ class CustomerEntitlementRuntimeTest {
         assertEquals(MosaicCustomerEntitlementCacheState.INVALID, check.cacheState)
     }
 
-    /** A legacy v1 cache has no authority epoch and therefore cannot grant access after restart. */
+    /**
+     * A cold start serves the cached snapshot without going to the network.
+     *
+     * The cache is what makes an offline launch answerable at all; reading it lazily on the first
+     * check, rather than on a sync, is why an unreachable server does not turn a paying customer
+     * into `unknown`.
+     */
     @Test
-    fun aColdStartTreatsALegacySnapshotAsAuthorityUnknown() = runTest {
+    fun aColdStartServesTheCachedSnapshotWithoutSynchronizing() = runTest {
         runtime({ _, _ -> record("bounded-offline-cache") }).refreshCustomerEntitlements()
 
         val reopened = runtime({ _, _ -> error("A cold start must read the cache before syncing.") })
         val check = reopened.checkCustomerEntitlement("pro")
 
-        assertTrue(check.state is MosaicCustomerEntitlementState.Unknown)
+        assertTrue(check.state is MosaicCustomerEntitlementState.Active)
         assertEquals(13L, check.snapshotVersion)
     }
 }

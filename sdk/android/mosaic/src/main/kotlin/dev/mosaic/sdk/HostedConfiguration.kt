@@ -27,9 +27,7 @@ import okhttp3.Request
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
 private const val MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE =
-    "application/vnd.mosaic.commerce-configuration+json;version=2"
-private const val MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE_V1 =
-    "application/vnd.mosaic.commerce-configuration+json;version=1"
+    "application/vnd.mosaic.commerce-configuration+json;version=$MOSAIC_COMMERCE_CONFIGURATION_VERSION"
 
 private fun parseHttpDate(value: String?): Long? = value?.let {
     runCatching {
@@ -193,10 +191,10 @@ class MosaicHTTPConfigurationTransport(
         val request = Request.Builder()
             .url(configuration.configurationURL().toString())
             .header("Authorization", "Bearer ${configuration.apiKey}")
-            .header("Accept", "application/vnd.mosaic.configuration+json;version=3, application/vnd.mosaic.configuration+json;version=2;q=0.9, application/vnd.mosaic.configuration+json;version=1;q=0.8")
+            .header("Accept", "application/vnd.mosaic.configuration+json;version=$MOSAIC_CONFIGURATION_DELIVERY_VERSION")
             .header("Mosaic-SDK-Platform", "android")
             .header("Mosaic-SDK-Version", MOSAIC_ANDROID_SDK_VERSION)
-            .header("Mosaic-Configuration-Versions", "$MOSAIC_CONFIGURATION_DELIVERY_VERSION_V3,$MOSAIC_CONFIGURATION_DELIVERY_VERSION_V2,$MOSAIC_CONFIGURATION_DELIVERY_VERSION")
+            .header("Mosaic-Configuration-Versions", MOSAIC_CONFIGURATION_DELIVERY_VERSION)
             .header("Mosaic-Placement-Decision-Versions", MOSAIC_PLACEMENT_DECISION_VERSION)
             .header("Mosaic-Decision-Features", MosaicPlacementDecisionCapabilities.features.joinToString(","))
             .header("Mosaic-Bucketing-Algorithms", MOSAIC_ROLLOUT_ALGORITHM)
@@ -241,12 +239,15 @@ class MosaicHTTPCommerceConfigurationTransport(
             val request = Request.Builder()
                 .url(configuration.commerceConfigurationURL())
                 .header("Authorization", "Bearer ${configuration.apiKey}")
+                .header("Accept", MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE)
                 .header(
-                    "Accept",
-                    "$MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE, $MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE_V1;q=0.9",
+                    "Mosaic-Commerce-Configuration-Versions",
+                    MOSAIC_COMMERCE_CONFIGURATION_VERSION,
                 )
-                .header("Mosaic-Commerce-Configuration-Versions", "2,1")
-                .header("Mosaic-Commerce-Provider-Contract-Versions", "2,1")
+                .header(
+                    "Mosaic-Commerce-Provider-Contract-Versions",
+                    MOSAIC_COMMERCE_CONFIGURATION_VERSION,
+                )
                 .header("Mosaic-SDK-Platform", "android")
                 .header("Mosaic-SDK-Version", MOSAIC_ANDROID_SDK_VERSION)
                 .apply { etag?.let { header("If-None-Match", it) } }
@@ -261,10 +262,8 @@ class MosaicHTTPCommerceConfigurationTransport(
                         )
                         200 -> {
                             if (
-                                response.header("Content-Type") !in setOf(
-                                    MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE,
-                                    MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE_V1,
-                                )
+                                response.header("Content-Type") !=
+                                    MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE
                             ) {
                                 MosaicCommerceConfigurationResponse.Failed(
                                     "The Commerce Configuration response Content-Type was invalid.",
@@ -813,18 +812,10 @@ class MosaicHostedConfigurationClient(
                 analyticsRuntime?.record(MosaicAnalyticsPayload.PlacementRequested(), journey)
                 return evaluateAdvanced(configuration, ruleSet, country, placementRequestId, context, baseAttribution)
             }
-            val delivered = configuration.release.paywall(placement)
-                ?: return MosaicPlacementDecisionResult.PlacementUnavailable(placement)
-            return MosaicPlacementDecisionResult.Available(
-                delivered.document,
-                configuration.source,
-                configuration.release.id,
-                configuration.release.number,
-                null,
-                null,
-                emptyList(),
-                emptyList(),
-            )
+            // Every release carries a Rule Set per Placement, so a Placement with no Rule Set is
+            // unknown to the release rather than a candidate for a direct Placement-to-Paywall
+            // binding: that binding was Delivery `1` surface and no longer exists.
+            return MosaicPlacementDecisionResult.PlacementUnavailable(placement)
         }
         val fallbackSource = bundledFallback
         if (fallbackSource == null) {

@@ -17,9 +17,8 @@ object MosaicAnalyticsCodec {
     }
 
     fun encodeBatch(batch: MosaicAnalyticsBatch): String = JsonObject().apply {
-        val versions = batch.events.map { it.eventSchemaVersion }.toSet()
-        require(versions.size == 1 && versions.single() in setOf("1", "2"))
-        addProperty("analyticsEventContractVersion", versions.single())
+        require(batch.events.all { it.eventSchemaVersion == MOSAIC_ANALYTICS_CONTRACT_VERSION })
+        addProperty("analyticsEventContractVersion", MOSAIC_ANALYTICS_CONTRACT_VERSION)
         addProperty("batchId", batch.batchId)
         addProperty("sentAt", batch.sentAt)
         add("events", JsonArray().also { values -> batch.events.forEach { values.add(it.toJson()) } })
@@ -29,7 +28,8 @@ object MosaicAnalyticsCodec {
         require(source.toByteArray(Charsets.UTF_8).size <= 512 * 1024)
         val root = JsonParser.parseString(source).asJsonObject
         root.exact(setOf("analyticsEventContractVersion", "batchId", "sentAt", "events"))
-        val contractVersion = root.string("analyticsEventContractVersion").also { require(it in setOf("1", "2")) }
+        val contractVersion = root.string("analyticsEventContractVersion")
+            .also { require(it == MOSAIC_ANALYTICS_CONTRACT_VERSION) }
         val events = root.getAsJsonArray("events").map {
             require(it.toString().toByteArray(Charsets.UTF_8).size <= MOSAIC_ANALYTICS_MAX_EVENT_BYTES)
             parseEvent(it.asJsonObject).also { event -> require(event.eventSchemaVersion == contractVersion) }
@@ -41,7 +41,8 @@ object MosaicAnalyticsCodec {
     fun decodeResponse(source: String): MosaicAnalyticsIngestionResponse {
         val root = JsonParser.parseString(source).asJsonObject
         root.exact(setOf("analyticsEventContractVersion", "batchId", "receivedAt", "results"))
-        val contractVersion = root.string("analyticsEventContractVersion").also { require(it in setOf("1", "2")) }
+        val contractVersion = root.string("analyticsEventContractVersion")
+            .also { require(it == MOSAIC_ANALYTICS_CONTRACT_VERSION) }
         val results = root.getAsJsonArray("results").map { element ->
             val item = element.asJsonObject
             val id = item.identifier("eventId")
@@ -69,7 +70,8 @@ object MosaicAnalyticsCodec {
             setOf("eventId", "eventSchemaVersion", "eventName", "occurredAt", "queuedAt", "authority", "correlation", "attribution", "payload"),
             setOf("identity", "sessionId", "context"),
         )
-        val schemaVersion = root.string("eventSchemaVersion").also { require(it in setOf("1", "2")) }
+        val schemaVersion = root.string("eventSchemaVersion")
+            .also { require(it == MOSAIC_ANALYTICS_CONTRACT_VERSION) }
         val eventName = root.string("eventName")
         val authority = root.string("authority")
         require(authority in setOf("client_observed", "trusted_server", "provider_confirmed"))
@@ -100,8 +102,12 @@ object MosaicAnalyticsCodec {
         val operatingSystemVersion = value.optionalString("operatingSystemVersion")?.also { require(OS_VERSION_PATTERN.matches(it) && it.length <= 64) }
         val applicationVersion = value.optionalString("applicationVersion")?.also { require(VERSION_PATTERN.matches(it) && it.length <= 64) }
         val locale = value.optionalString("locale")?.also { require(LOCALE_PATTERN.matches(it) && it.length <= 35) }
-        val delivery = value.optionalString("configurationDeliveryVersion")?.also { require(it in setOf("1", "2", "3")) }
-        val commerce = value.optionalString("commerceProviderContractVersion")?.also { require(it in setOf("1", "2")) }
+        val delivery = value.optionalString("configurationDeliveryVersion")
+            ?.also { require(it == MOSAIC_CONFIGURATION_DELIVERY_VERSION) }
+        val commerce = value.optionalString("commerceProviderContractVersion")
+            // Populated from the paired Commerce sidecar's own version, which is the Commerce
+            // Provider Contract generation the sidecar was authored against.
+            ?.also { require(it == MOSAIC_COMMERCE_CONFIGURATION_VERSION) }
         return MosaicAnalyticsContext(platform, family, sdkVersion, operatingSystemVersion, applicationVersion, locale, delivery, commerce)
     }
 
@@ -158,14 +164,13 @@ object MosaicAnalyticsCodec {
         }
         val correlation = event.correlation
         val attribution = event.attribution
-        if (event.context?.configurationDeliveryVersion == "3") require(event.eventSchemaVersion == "2")
         val experimentEvent = event.payload.isExperimentV2()
         val experimentAllowed = experimentEvent || event.eventName == "product_selected" ||
             event.eventName.startsWith("purchase_")
-        require(!attribution.hasExperimentTuple() || (event.eventSchemaVersion == "2" && experimentAllowed))
-        require(!experimentEvent || (event.eventSchemaVersion == "2" && attribution.hasExperimentTuple()))
-        // Ownership allow-lists apply to every schema version. Restricting them to v2 previously
-        // let a v1 event carry unrelated attribution (the Phase 6 ingestion-boundary defect class).
+        // The Experiment tuple travels in both directions or not at all: an event carrying it must
+        // be one that may, and an Experiment event without it is unattributable.
+        require(!attribution.hasExperimentTuple() || experimentAllowed)
+        require(!experimentEvent || attribution.hasExperimentTuple())
         validateFieldOwnership(event)
         validateCorrelationOwnership(event)
         fun requireCorrelation(vararg values: String?) = require(values.all { it != null })

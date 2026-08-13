@@ -3,13 +3,13 @@ package dev.mosaic.sdk
 /** Strict entry point for the Mosaic protocol contracts this SDK reads. */
 object MosaicProtocolDecoder {
     /**
-     * Decodes a `0.3` or a `0.4` document, dispatching on `schemaVersion`.
+     * Decodes a Paywall Protocol [MOSAIC_PROTOCOL_VERSION] document.
      *
-     * Versions are exact identifiers: a document declaring neither is rejected before any structure
-     * is read, rather than being decoded hopefully against the nearest reader. Dispatching first is
-     * also what keeps the `0.3` path unchanged — a `0.3` document meets exactly the rules it met
-     * before `0.4` existed, including rejecting a `motions` catalog and a per-node `motion` block as
-     * unknown properties.
+     * Version identifiers are exact and there is exactly one of them, so this checks rather than
+     * dispatches: a document declaring any other version is rejected before any structure is read,
+     * rather than being decoded hopefully against the nearest reader. Checking first is what makes
+     * the rejection atomic — no partial acceptance and no best-effort interpretation of a contract
+     * this reader does not have.
      */
     fun decode(
         source: String,
@@ -24,7 +24,7 @@ object MosaicProtocolDecoder {
                 "Unsupported Mosaic protocol version $declared at $.schemaVersion.",
             )
         }
-        return MosaicProtocolV03Decoder.decode(source, capabilityReport, checkNotNull(declared))
+        return MosaicPaywallDocumentDecoder.decode(source, capabilityReport)
     }
 
     /**

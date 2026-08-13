@@ -24,15 +24,15 @@ active entitlement states.
 
 The app includes the SDK module from `sdk/android`. During every build that
 module generates `build/generated/mosaic/canonical-assets/mosaic/complete-paywall.json`
-from `protocol/fixtures/v0.3/complete-paywall.json`; there is no committed
+from `protocol/fixtures/v0.4/complete-paywall.json`; there is no committed
 Android fixture copy. Android's resource merger then packages that generated
 asset into the example APK.
 
-Until the first valid live revision arrives, the canonical Protocol 0.3
-fixture is the bundled fallback, including its three structurally authored
+Until the first valid live revision arrives, the canonical Paywall Protocol
+`0.4` fixture is the bundled fallback, including its three structurally authored
 Product Cards, nested and logical-overlay Product Badges, and horizontal
-Product Selector. It also exercises the four components Protocol 0.3 adds: a
-three-tab Tabs whose authored `initialTabId` is not its first entry, a Text
+Product Selector. It also exercises Tabs, Timeline, Award, Social Proof, and
+authored motion: a three-tab Tabs whose authored `initialTabId` is not its first entry, a Text
 conditioned on that tab selection, Timelines with all three marker arms and
 with none at all, Awards with an image emblem, an icon emblem, and no emblem,
 and Social Proof with half-step, whole-step, and absent ratings. It also demonstrates native design-system gradients and

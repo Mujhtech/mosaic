@@ -25,7 +25,7 @@ class LocalPreviewClientTest {
             assertTrue(handshake[0].payload is MosaicPreviewClientConnectedPayload)
             val report = handshake[1].payload as MosaicPreviewCapabilityReportPayload
             assertEquals(
-                MosaicCapabilityCatalog.v03.map { it.wireName }.toSet(),
+                MosaicCapabilityCatalog.current.map { it.wireName }.toSet(),
                 report.supportedCapabilities.map { it.name }.toSet(),
             )
             assertEquals(MosaicPreviewCapabilityName.entries.toSet(), report.previewCapabilities.map { it.name }.toSet())
@@ -183,7 +183,7 @@ class LocalPreviewClientTest {
 
     private fun canonicalPreviewFlow(): JsonArray = JsonParser.parseString(
         Files.readAllBytes(
-            repositoryFile("protocol/fixtures/local-preview/v0.3/session-flow.messages.json"),
+            repositoryFile("protocol/fixtures/local-preview/v0.4/session-flow.messages.json"),
         ).toString(Charsets.UTF_8),
     ).asJsonArray
 

@@ -17,14 +17,14 @@ import java.nio.file.Files
  * rendered paywall, because a joined announcement sounds correct in English.
  */
 class AccessibilityAnnouncementConformanceTest {
-    /** The count `docs/protocol/v0.3.md` declares; a corpus that empties must fail, not pass. */
+    /** The count `docs/protocol/v0.4.md` declares; a corpus that empties must fail, not pass. */
     private val declaredCaseFloor = 11
 
     @Test
     fun `announcements match the canonical vectors byte for byte`() {
         val corpus = JsonParser.parseString(
             Files.readAllBytes(
-                repositoryFile("protocol/fixtures/v0.3/accessibility-announcement.json"),
+                repositoryFile("protocol/fixtures/v0.4/accessibility-announcement.json"),
             ).toString(Charsets.UTF_8),
         ).asJsonObject
         val cases = corpus.getAsJsonArray("cases")

@@ -7,7 +7,7 @@ import com.google.gson.JsonParseException
 import com.google.gson.JsonParser
 import java.math.BigDecimal
 
-/** Strict JSON reader/writer for exact Local Preview 0.3 sessions. */
+/** Strict JSON reader/writer for exact Local Preview sessions. */
 internal val previewMessageIdPattern = Regex("^msg_[A-Za-z0-9][A-Za-z0-9_-]*$")
 internal val previewSessionIdPattern = Regex("^session_[A-Za-z0-9][A-Za-z0-9_-]*$")
 internal val previewClientIdPattern = Regex("^client_[A-Za-z0-9][A-Za-z0-9_-]*$")

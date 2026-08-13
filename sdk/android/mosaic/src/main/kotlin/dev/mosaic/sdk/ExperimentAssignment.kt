@@ -5,7 +5,6 @@ import com.google.gson.JsonObject
 import java.security.MessageDigest
 
 const val MOSAIC_EXPERIMENT_ASSIGNMENT_VERSION = "1"
-const val MOSAIC_CONFIGURATION_DELIVERY_VERSION_V3 = "3"
 const val MOSAIC_EXPERIMENT_BUCKETING_ALGORITHM = "experiment_sha256_length_prefixed_v1"
 const val MOSAIC_EXPERIMENT_GROUP_BUCKETING_ALGORITHM = "experiment_group_sha256_length_prefixed_v1"
 const val MOSAIC_EXPERIMENT_TIME_POLICY = "trusted_server_time_v1"

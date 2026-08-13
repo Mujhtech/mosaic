@@ -36,8 +36,8 @@ class PlacementDecisionTest {
     )
 
     @Test
-    fun `canonical Delivery v2 and evaluator corpus produce exact decisions`() {
-        val release = MosaicConfigurationDeliveryDecoder.decode(fixture("configuration-delivery/v2/advanced-release.json"))
+    fun `canonical release and evaluator corpus produce exact decisions`() {
+        val release = MosaicConfigurationDeliveryDecoder.decode(fixture("configuration-delivery/v3/advanced-release.json"))
         val ruleSet = release.placementDecisions.getValue("export_pdf")
         val corpus = JsonParser.parseString(fixture("placement-decision/v1/evaluator-conformance.json")).asJsonObject
         // The corpus has grown every round it was ruled on, and a `forEach` over an empty or
@@ -95,7 +95,7 @@ class PlacementDecisionTest {
      */
     @Test
     fun `every host locale shape for one device reaches the same canonical decision`() {
-        val release = MosaicConfigurationDeliveryDecoder.decode(fixture("configuration-delivery/v2/advanced-release.json"))
+        val release = MosaicConfigurationDeliveryDecoder.decode(fixture("configuration-delivery/v3/advanced-release.json"))
         val ruleSet = release.placementDecisions.getValue("export_pdf")
         val corpus = JsonParser.parseString(fixture("placement-decision/v1/evaluator-conformance.json")).asJsonObject
         // The canonical case whose expected decision is the locale-equality rule.
@@ -144,7 +144,7 @@ class PlacementDecisionTest {
     fun `an unreadable device locale is absent rather than substituted`() {
         assertNull(MosaicDeviceLocale.canonicalOrNull("@calendar=chinese"))
 
-        val release = MosaicConfigurationDeliveryDecoder.decode(fixture("configuration-delivery/v2/advanced-release.json"))
+        val release = MosaicConfigurationDeliveryDecoder.decode(fixture("configuration-delivery/v3/advanced-release.json"))
         val ruleSet = release.placementDecisions.getValue("export_pdf")
         val corpus = JsonParser.parseString(fixture("placement-decision/v1/evaluator-conformance.json")).asJsonObject
         val canonical = corpus.getAsJsonArray("cases").map { it.asJsonObject }
@@ -189,7 +189,7 @@ class PlacementDecisionTest {
     fun `malformed decision candidates reject atomically`() {
         invalidFixtureNames.forEach { name ->
             val invalidDecision = JsonParser.parseString(fixture("placement-decision/v1/invalid/$name")).asJsonObject
-            val release = JsonParser.parseString(fixture("configuration-delivery/v2/advanced-release.json")).asJsonObject
+            val release = JsonParser.parseString(fixture("configuration-delivery/v3/advanced-release.json")).asJsonObject
             release.getAsJsonObject("release").getAsJsonArray("placementDecisions").set(0, invalidDecision)
             assertTrue(name, runCatching { MosaicConfigurationDeliveryDecoder.decode(release.toString()) }.isFailure)
         }
@@ -205,7 +205,7 @@ class PlacementDecisionTest {
     }
 
     @Test
-    fun `all canonical Delivery v2 releases decode with authoritative Environment mode`() {
+    fun `all canonical releases decode with authoritative Environment mode`() {
         val expected = mapOf(
             "advanced-release.json" to MosaicDeliveryEnvironmentMode.PRODUCTION,
             "no-paywall-release.json" to MosaicDeliveryEnvironmentMode.PRODUCTION,
@@ -213,18 +213,18 @@ class PlacementDecisionTest {
         )
 
         expected.forEach { (name, mode) ->
-            val release = MosaicConfigurationDeliveryDecoder.decode(fixture("configuration-delivery/v2/$name"))
+            val release = MosaicConfigurationDeliveryDecoder.decode(fixture("configuration-delivery/v3/$name"))
             assertEquals(name, mode, release.environment.mode)
         }
     }
 
     @Test
-    fun `canonical capability request and legacy projection fixtures match Android support`() {
+    fun `the canonical capability request matches Android support`() {
         val request = JsonParser.parseString(
-            fixture("configuration-delivery/v2/capability-request.json"),
+            fixture("configuration-delivery/v3/capability-request.json"),
         ).asJsonObject
         assertEquals(
-            setOf(MOSAIC_CONFIGURATION_DELIVERY_VERSION, MOSAIC_CONFIGURATION_DELIVERY_VERSION_V2),
+            setOf(MOSAIC_CONFIGURATION_DELIVERY_VERSION),
             request.getAsJsonArray("supportedConfigurationDeliveryVersions").map { it.asString }.toSet(),
         )
         assertTrue(
@@ -244,29 +244,16 @@ class PlacementDecisionTest {
                 val name = MosaicCapabilityName.entries.single { it.wireName == capability.string("name") }
                 assertTrue(report.supports(MosaicRequiredCapability(name, capability.string("version"))))
             }
-
-        val projection = JsonParser.parseString(
-            fixture("configuration-delivery/v2/legacy-projection.json"),
-        ).asJsonObject
-        projection.getAsJsonArray("cases").forEach { element ->
-            val case = element.asJsonObject
-            val expected = if (case.getAsJsonObject("defaultOutcome").string("type") == "paywall") {
-                "project_default_paywall"
-            } else {
-                "withhold_v1_candidate"
-            }
-            assertEquals(case.string("name"), case.string("expected"), expected)
-        }
     }
 
     @Test
-    fun `every canonical invalid Delivery v2 candidate is rejected`() {
+    fun `every canonical invalid release candidate is rejected`() {
         invalidDeliveryFixtureNames.forEach { name ->
             assertTrue(
                 name,
                 runCatching {
                     MosaicConfigurationDeliveryDecoder.decode(
-                        fixture("configuration-delivery/v2/invalid/$name"),
+                        fixture("configuration-delivery/v3/invalid/$name"),
                     )
                 }.isFailure,
             )
@@ -274,14 +261,14 @@ class PlacementDecisionTest {
     }
 
     @Test
-    fun `invalid remote v2 retains last known valid v2 cache for offline decision`() = runTest {
-        val valid = fixture("configuration-delivery/v2/advanced-release.json")
+    fun `an invalid remote release retains the last known valid cache for offline decision`() = runTest {
+        val valid = fixture("configuration-delivery/v3/advanced-release.json")
         invalidDeliveryFixtureNames.forEach { name ->
             val cache = MemoryCache(MosaicCachedConfiguration("\"release-12\"", valid))
             val client = MosaicHostedConfigurationClient(
                 transport = MosaicConfigurationTransport {
                     MosaicConfigurationResponse.Modified(
-                        fixture("configuration-delivery/v2/invalid/$name"),
+                        fixture("configuration-delivery/v3/invalid/$name"),
                         "\"release-13\"",
                     )
                 },
@@ -320,7 +307,7 @@ class PlacementDecisionTest {
             cache = MemoryCache(
                 MosaicCachedConfiguration(
                     "\"release-advanced\"",
-                    fixture("configuration-delivery/v2/advanced-release.json"),
+                    fixture("configuration-delivery/v3/advanced-release.json"),
                 ),
             ),
             purchaseProvider = provider,

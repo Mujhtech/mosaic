@@ -19,7 +19,7 @@ import java.nio.file.Files
 class RatingAnnouncementConformanceTest {
     /**
      * A corpus that has silently emptied reconciles perfectly against zero cases and reports
-     * success over nothing. The floor is the count `docs/protocol/v0.3.md` declares.
+     * success over nothing. The floor is the count `docs/protocol/v0.4.md` declares.
      */
     private val declaredCaseFloor = 10
 
@@ -27,7 +27,7 @@ class RatingAnnouncementConformanceTest {
     fun `announcements match the canonical vectors byte for byte`() {
         val corpus = JsonParser.parseString(
             Files.readAllBytes(
-                repositoryFile("protocol/fixtures/v0.3/rating-announcement.json"),
+                repositoryFile("protocol/fixtures/v0.4/rating-announcement.json"),
             ).toString(Charsets.UTF_8),
         ).asJsonObject
         val cases = corpus.getAsJsonArray("cases")

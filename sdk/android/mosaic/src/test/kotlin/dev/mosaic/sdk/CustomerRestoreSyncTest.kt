@@ -1,7 +1,6 @@
 package dev.mosaic.sdk
 
 import com.google.gson.JsonParser
-import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -24,15 +23,11 @@ class CustomerRestoreSyncTest {
 
     private var deviceNow: Long? = mosaicContractInstantMillis("2026-07-28T12:01:00.000Z")
 
-    private fun fixture(name: String): String =
-        Files.readAllBytes(
-            repositoryFile("protocol/fixtures/authoritative-entitlement/v1/snapshots/$name.json"),
-        ).toString(Charsets.UTF_8)
+    private fun fixture(name: String): String = androidSnapshotRecord(name)
 
     private fun record(name: String) = MosaicCustomerEntitlementTransportResult.Record(
         body = fixture(name),
-        entityTag = JsonParser.parseString(fixture(name))
-            .asJsonObject.getAsJsonObject("payload").get("entityTag").asString,
+        entityTag = snapshotEntityTag(fixture(name)),
     )
 
     private fun runtime(transport: MosaicCustomerEntitlementTransport) = MosaicCustomerEntitlementRuntime(
@@ -42,6 +37,7 @@ class CustomerRestoreSyncTest {
             MosaicCustomerAccessTokenResult.Issued(MosaicCustomerAccessToken("mosaic-customer-token-0001"))
         }),
         trustedTime = { deviceNow },
+        authorityRequestContext = { mosaicTestAuthorityRequestContext() },
     )
 
     private fun restoringProvider(result: MosaicRestoreResult) = object : MosaicPurchaseProvider {

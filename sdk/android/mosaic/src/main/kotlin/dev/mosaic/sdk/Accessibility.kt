@@ -3,7 +3,7 @@ package dev.mosaic.sdk
 /**
  * How a component's accessibility content is composed.
  *
- * Protocol 0.3 does not join announced segments. Each segment is its own accessibility element
+ * The protocol does not join announced segments. Each segment is its own accessibility element
  * inside a labelled container, and the platform screen reader supplies the pause between them.
  * A renderer that concatenates segments has invented punctuation, and any choice is wrong outside
  * Latin script — `。`, `،`, `।`, or nothing at all, depending on the language. The contract

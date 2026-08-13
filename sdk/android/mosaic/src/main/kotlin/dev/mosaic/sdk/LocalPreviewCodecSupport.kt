@@ -7,7 +7,7 @@ import com.google.gson.JsonParseException
 import com.google.gson.JsonParser
 import java.math.BigDecimal
 
-/** Strict JSON reader/writer for exact Local Preview 0.3 sessions. */
+/** Strict JSON reader/writer for exact Local Preview sessions. */
 
 internal fun previewParseDocument(source: String): JsonElement = try {
     JsonParser.parseString(source).also {

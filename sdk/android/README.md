@@ -1,16 +1,17 @@
-# Mosaic Android SDK — Protocol 0.3 and 0.4 native rendering
+# Mosaic Android SDK — Paywall Protocol 0.4 native rendering
 
-The Android SDK strictly decodes Mosaic Protocol 0.3 and Protocol 0.4 "Motion"
-and renders both with Jetpack Compose primitives. The decoder dispatches on
-`schemaVersion`; versions are exact identifiers, so a 0.3 document is read by
-the 0.3 rules and a 0.4 document by the 0.4 rules, and neither reads the other.
-Protocol 0.4 is a **draft** and adds authored motion — an entrance, a selection
-cross-fade, and a bounded call-to-action pulse — plus the two cleanups 0.3 named
-for it: `style.productCardStates` is removed, and Feature List and Timeline share
-one marker vocabulary. Local Preview remains version-locked to the exact 0.3
-contract; Local Preview 0.4 is a separate, later chunk of that contract.
+The Android SDK strictly decodes Mosaic Paywall Protocol `0.4` "Motion" and
+renders it with Jetpack Compose primitives. Under
+[ADR-0028](../../docs/architecture/decisions/0028-single-version-contracts.md)
+every contract carries exactly one version until GA, so there is no version
+dispatch: version identifiers are exact, and a document declaring anything other
+than `0.4` is rejected atomically before any structure is read. `0.4` carries
+authored motion — an entrance, a selection cross-fade, and a bounded
+call-to-action pulse — and one marker vocabulary shared by Feature List and
+Timeline. Local Preview is version-locked to the same contract and negotiates
+`mosaic.local-preview.v0.4` only.
 It uses provider-neutral commerce, a generated bundled fallback, and Hosted
-Configuration Delivery v1, v2, and v3. RevenueCat support is isolated in the optional
+Configuration Delivery v3. RevenueCat support is isolated in the optional
 `:mosaic-revenuecat` module; the core `:mosaic` AAR has no RevenueCat or Play
 Billing dependency. Native Google Play support is isolated in the optional
 `:mosaic-google-play` module and consumes Commerce Configuration v2.
@@ -477,19 +478,17 @@ actionable in this release.
 
 ## Canonical protocol ownership
 
-The canonical fixtures live under `protocol/fixtures/v0.3/` and
-`protocol/fixtures/v0.4/`. The bundled fallback stays on Protocol 0.3, which is
-the release candidate; 0.4 is a draft and nothing produces it in production. The
-library build copies the current Protocol 0.3
-fixture as its bundled fallback into an ignored
+The canonical fixtures live under `protocol/fixtures/v0.4/`. The
+library build copies the canonical fixture
+as its bundled fallback into an ignored
 `mosaic/build/generated/mosaic/canonical-assets/` directory and packages that
 generated output into the AAR. Android source contains neither a fixture fork
 nor a JSON Schema copy. JVM conformance tests read the repository file
 directly.
 
-Local Preview 0.3 remains owned by `protocol/schema/local-preview/` and
-`docs/protocol/`. Android keeps no schema or fixture fork. Its codec reads both
-canonical message flows during JVM conformance tests, and every received draft
+Local Preview remains owned by `protocol/schema/local-preview/` and
+`docs/protocol/`. Android keeps no schema or fixture fork. Its codec reads the
+canonical message flow during JVM conformance tests, and every received draft
 still passes through the matching strict protocol decoder before rendering.
 
 The decoder rejects unknown versions, fields, components, capabilities,
@@ -574,20 +573,19 @@ release is durably committed to the app-private cache. Failed writes and
 rejected candidates preserve the prior in-memory and persistent release. Cache
 files are isolated by a SHA-256 namespace derived from the delivery endpoint
 and public SDK key; neither value is written into the cache path or record.
-Each request advertises the full sorted capability catalog of every contract
-this SDK reads, as exact `name@version` pairs, for backend compatibility
-validation. The pairs are exact rather than a flattened set of names because the
-catalogs differ: `style.productCardStates` exists at `0.3` and not at `0.4`, and
-`motion.appear`, `motion.selection`, and `motion.loop` the other way round.
+Each request advertises the full sorted capability catalog, as exact
+`name@version` pairs, for backend compatibility validation. Capability
+negotiation is orthogonal to version negotiation and survives the single-version
+policy unchanged: a release requiring a capability this reader lacks is withheld
+rather than downgraded or stripped.
 Diagnostics contain stable codes and safe messages, never SDK keys, response
 documents, or transport internals.
 
 ### Advanced Placement decisions
 
-Delivery v2 is accepted atomically and evaluated locally. A rejected refresh
-keeps the last accepted v1, v2, or v3 release, so `paywall()` and `MosaicPlacement`
-remain offline-capable and do not request configuration per presentation.
-Existing v1 calls remain source compatible:
+A release is accepted atomically and evaluated locally. A rejected refresh
+keeps the last accepted release, so `paywall()` and `MosaicPlacement`
+remain offline-capable and do not request configuration per presentation:
 
 ```kotlin
 when (val decision = hosted.decidePlacement("export_pdf", country = explicitCountry)) {
@@ -790,7 +788,7 @@ message for 15 seconds is safely re-established.
 
 - `Column`, native vertical scrolling, `Text`, `Image`, Material buttons, and
   radio-button selection semantics render the protocol tree in source order.
-- Protocol 0.3 design-system color, background, and shadow tokens are resolved
+- Design-system color, background, and shadow tokens are resolved
   strictly by category. Native Compose draws solid, linear-gradient, and
   radial-gradient backgrounds plus one authored shadow; invalid references or
   token cycles reject the whole candidate before it replaces a valid document.
@@ -857,7 +855,7 @@ message for 15 seconds is safely re-established.
   either requires `accessibility.reservedStrings`. A Button announces
   `mosaic.a11y.in_progress` as its accessible status while its in-progress
   content is shown.
-- Protocol 0.3 Product Cards and Product Badges render their authored passive
+- Product Cards and Product Badges render their authored passive
   child trees. Default and Selected box leaves resolve independently; logical
   badge overlay anchors mirror in RTL without absolute protocol coordinates.
 - `WindowInsets.safeDrawing`, font scaling, direction-relative padding and
@@ -912,7 +910,7 @@ From `sdk/android`:
 ```
 
 The renderer pixel baselines in
-`mosaic/src/androidTest/assets/mosaic-paywall-v03-golden.sha256` and
+`mosaic/src/androidTest/assets/mosaic-paywall-v04-golden.sha256` and
 `mosaic-paywall-v04-golden.sha256` read `unrecorded` until they are captured on
 a device. The screenshot tests skip with the digest to commit rather than passing
 against a baseline recorded for a different document. **Every static golden is

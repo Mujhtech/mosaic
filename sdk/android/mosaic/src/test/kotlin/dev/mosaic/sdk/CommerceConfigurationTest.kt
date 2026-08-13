@@ -33,7 +33,7 @@ class CommerceConfigurationTest {
                     .header("Mosaic-Configuration-Release-Id", "configuration_release_5")
                     .header(
                         "Content-Type",
-                        "application/vnd.mosaic.commerce-configuration+json;version=1",
+                        "application/vnd.mosaic.commerce-configuration+json;version=2",
                     )
                     .body("{}".toResponseBody())
                     .build()
@@ -57,12 +57,11 @@ class CommerceConfigurationTest {
             request.url.encodedPath + "?" + request.url.encodedQuery,
         )
         assertEquals(
-            "application/vnd.mosaic.commerce-configuration+json;version=2, " +
-                "application/vnd.mosaic.commerce-configuration+json;version=1;q=0.9",
+            "application/vnd.mosaic.commerce-configuration+json;version=2",
             request.header("Accept"),
         )
-        assertEquals("2,1", request.header("Mosaic-Commerce-Configuration-Versions"))
-        assertEquals("2,1", request.header("Mosaic-Commerce-Provider-Contract-Versions"))
+        assertEquals("2", request.header("Mosaic-Commerce-Configuration-Versions"))
+        assertEquals("2", request.header("Mosaic-Commerce-Provider-Contract-Versions"))
         assertEquals("android", request.header("Mosaic-SDK-Platform"))
         assertEquals(
             "\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"",
@@ -79,7 +78,9 @@ class CommerceConfigurationTest {
         val contentTypes = listOf(
             "application/json",
             "application/vnd.mosaic.commerce-configuration+json",
-            "application/vnd.mosaic.commerce-configuration+json;version=1;charset=utf-8",
+            "application/vnd.mosaic.commerce-configuration+json;version=2;charset=utf-8",
+            // A retired version is refused like any other non-exact type, not read hopefully.
+            "application/vnd.mosaic.commerce-configuration+json;version=1",
         )
         contentTypes.forEach { contentType ->
             val httpClient = OkHttpClient.Builder()
@@ -146,49 +147,11 @@ class CommerceConfigurationTest {
     }
 
     @Test
-    fun `decodes the canonical SDK-local snapshot against its exact release scope`() {
-        val release = localRelease()
+    fun `decodes the canonical Google mapping without exposing an offer token`() {
+        val release = canonicalRelease()
 
         val configuration = MosaicCommerceConfigurationDecoder.decode(
-            fixture("sdk-local-configuration.json"),
-            release,
-            "application_android",
-        )
-
-        assertEquals("acme-commerce", configuration.provider.id)
-        assertTrue(configuration.activation is MosaicCommerceProviderActivation.SdkLocal)
-        assertEquals(setOf("product_pro_monthly"), configuration.productMappings.keys)
-        assertEquals(setOf("pro"), configuration.entitlementMappings.keys)
-    }
-
-    @Test
-    fun `decodes canonical Google v2 mapping without exposing an offer token`() {
-        val release = MosaicConfigurationRelease(
-            id = "configuration_release_42",
-            number = 42,
-            environment = MosaicDeliveryEnvironment("environment_production", "production"),
-            publishedAt = "2026-07-24T12:00:00Z",
-            contentDigest =
-                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            placements = emptyMap(),
-            paywallVersions = emptyMap(),
-            productReferences = listOf(
-                MosaicDeliveryProduct("mosaic_pro_monthly", "subscription", "Monthly"),
-                MosaicDeliveryProduct("mosaic_pro_yearly", "subscription", "Yearly"),
-                MosaicDeliveryProduct(
-                    "mosaic_pro_lifetime",
-                    "one_time_non_consumable",
-                    "Lifetime",
-                ),
-            ).associateBy { it.id },
-            assetReferences = emptyMap(),
-            encoded = "{}",
-        )
-
-        val configuration = MosaicCommerceConfigurationDecoder.decode(
-            repositoryFile(
-                "protocol/fixtures/commerce-configuration/v2/google-play-configuration.json",
-            ).toFile().readText(),
+            fixture("google-play-configuration.json"),
             release,
             "application_android",
         )
@@ -207,17 +170,17 @@ class CommerceConfigurationTest {
 
     @Test
     fun `rejects scope mismatch incomplete mappings tampering and credential fields`() {
-        val release = localRelease()
+        val release = canonicalRelease()
         assertThrows(MosaicCommerceConfigurationException::class.java) {
             MosaicCommerceConfigurationDecoder.decode(
-                fixture("sdk-local-configuration.json"),
+                fixture("google-play-configuration.json"),
                 release,
                 "another_application",
             )
         }
         assertThrows(MosaicCommerceConfigurationException::class.java) {
             MosaicCommerceConfigurationDecoder.decode(
-                fixture("sdk-local-configuration.json"),
+                fixture("google-play-configuration.json"),
                 release.copy(
                     productReferences = release.productReferences +
                         ("product_extra" to MosaicDeliveryProduct(
@@ -231,7 +194,7 @@ class CommerceConfigurationTest {
         }
 
         val tampered = JsonParser.parseString(
-            fixture("sdk-local-configuration.json"),
+            fixture("google-play-configuration.json"),
         ).asJsonObject
         tampered.getAsJsonObject("configuration")
             .getAsJsonArray("productMappings")[0].asJsonObject
@@ -245,7 +208,7 @@ class CommerceConfigurationTest {
         }
 
         val credential = JsonParser.parseString(
-            fixture("sdk-local-configuration.json"),
+            fixture("google-play-configuration.json"),
         ).asJsonObject
         credential.getAsJsonObject("configuration")
             .getAsJsonObject("activeProvider")
@@ -261,7 +224,7 @@ class CommerceConfigurationTest {
 
     @Test
     fun `diagnostics enforce canonical required and optional value constraints`() {
-        val release = localRelease()
+        val release = canonicalRelease()
         val validDiagnostic = JsonObject().apply {
             addProperty("code", "provider.timeout")
             addProperty("safeMessage", "The provider timed out.")
@@ -270,7 +233,7 @@ class CommerceConfigurationTest {
             addProperty("retryAfterSeconds", 30)
             addProperty("correlationId", "commerce_lookup_01")
             addProperty("providerCode", "NETWORK_TIMEOUT")
-            addProperty("mosaicProductId", "product_pro_monthly")
+            addProperty("mosaicProductId", "mosaic_pro_monthly")
             addProperty("recoveryAction", "retry")
         }
         val decoded = MosaicCommerceConfigurationDecoder.decode(
@@ -281,7 +244,7 @@ class CommerceConfigurationTest {
         val diagnostic = decoded.diagnostics.single()
         assertEquals(30, diagnostic.retryAfterSeconds)
         assertEquals("NETWORK_TIMEOUT", diagnostic.providerCode)
-        assertEquals("product_pro_monthly", diagnostic.mosaicProductId)
+        assertEquals("mosaic_pro_monthly", diagnostic.mosaicProductId)
         assertEquals("retry", diagnostic.recoveryAction)
 
         val invalidDiagnostics = listOf(
@@ -293,9 +256,6 @@ class CommerceConfigurationTest {
             validDiagnostic.deepCopy().also { it.addProperty("retryAfterSeconds", 0) },
             validDiagnostic.deepCopy().also { it.addProperty("retryAfterSeconds", 1.5) },
             validDiagnostic.deepCopy().also { it.addProperty("retryAfterSeconds", 86_401) },
-            validDiagnostic.deepCopy().also {
-                it.addProperty("retryable", false)
-            },
             validDiagnostic.deepCopy().also {
                 it.addProperty("correlationId", "invalid correlation")
             },
@@ -322,7 +282,7 @@ class CommerceConfigurationTest {
 
     @Test
     fun `paired cache accepts a valid sidecar and preserves it on failed replacement`() = runTest {
-        val releasePayload = deliveryFixture("product-reference.json")
+        val releasePayload = deliveryFixture("rich-release.json")
         val release = MosaicConfigurationDeliveryDecoder.decode(releasePayload)
         val commercePayload = commerceForRelease(release)
         val cache = MemoryCache(
@@ -368,7 +328,7 @@ class CommerceConfigurationTest {
 
     @Test
     fun `hosted Commerce response requires exact digest ETag and release header`() = runTest {
-        val releasePayload = deliveryFixture("product-reference.json")
+        val releasePayload = deliveryFixture("rich-release.json")
         val release = MosaicConfigurationDeliveryDecoder.decode(releasePayload)
         val commercePayload = commerceForRelease(release)
         val commerce = MosaicCommerceConfigurationDecoder.decode(
@@ -426,7 +386,7 @@ class CommerceConfigurationTest {
 
     @Test
     fun `Commerce 304 requires a retained release-sidecar pair`() = runTest {
-        val releasePayload = deliveryFixture("product-reference.json")
+        val releasePayload = deliveryFixture("rich-release.json")
         val release = MosaicConfigurationDeliveryDecoder.decode(releasePayload)
         val commercePayload = commerceForRelease(release)
         val commerce = MosaicCommerceConfigurationDecoder.decode(
@@ -479,7 +439,7 @@ class CommerceConfigurationTest {
 
     @Test
     fun `Commerce 304 rejects missing malformed or mismatched retained headers`() = runTest {
-        val releasePayload = deliveryFixture("product-reference.json")
+        val releasePayload = deliveryFixture("rich-release.json")
         val release = MosaicConfigurationDeliveryDecoder.decode(releasePayload)
         val commercePayload = commerceForRelease(release)
         val commerce = MosaicCommerceConfigurationDecoder.decode(
@@ -536,7 +496,7 @@ class CommerceConfigurationTest {
     @Test
     fun `configured provider rejects mismatched adapter identity version and capabilities`() =
         runTest {
-            val release = localRelease()
+            val release = canonicalRelease()
             val configuration = MosaicCommerceConfigurationDecoder.decode(
                 commerceForRelease(release),
                 release,
@@ -596,7 +556,7 @@ class CommerceConfigurationTest {
 
     @Test
     fun `configuration swap invalidates native handles until exact mappings reload`() = runTest {
-        val release = localRelease()
+        val release = canonicalRelease()
         val first = MosaicCommerceConfigurationDecoder.decode(
             commerceForRelease(release, mappingVersion = "first"),
             release,
@@ -615,53 +575,56 @@ class CommerceConfigurationTest {
 
         provider.accept(first)
         assertTrue(
-            provider.loadProducts(listOf("product_pro_monthly")) is
+            provider.loadProducts(listOf("mosaic_pro_monthly")) is
                 MosaicProductLoadResult.Loaded,
         )
         assertTrue(
-            provider.purchase("product_pro_monthly") is MosaicPurchaseResult.Purchased,
+            provider.purchase("mosaic_pro_monthly") is MosaicPurchaseResult.Purchased,
         )
 
         provider.accept(second)
 
+        // Two installations: one per accepted configuration. Each supersedes the handles taken
+        // from the one before it, which is what a swap has to guarantee.
         assertEquals(2, adapter.invalidations)
+        assertTrue(adapter.installedMappingReferences.all { it.endsWith(".second") })
         assertTrue(
-            provider.purchase("product_pro_monthly") is
+            provider.purchase("mosaic_pro_monthly") is
                 MosaicPurchaseResult.ProductUnavailable,
         )
         assertTrue(
-            provider.loadProducts(listOf("product_pro_monthly")) is
+            provider.loadProducts(listOf("mosaic_pro_monthly")) is
                 MosaicProductLoadResult.Loaded,
         )
         assertEquals(
-            "mapping_product_pro_monthly",
+            "mapping_mosaic_pro_monthly",
             adapter.loadedMappingIds.single(),
         )
         assertTrue(
-            provider.purchase("product_pro_monthly") is MosaicPurchaseResult.Purchased,
+            provider.purchase("mosaic_pro_monthly") is MosaicPurchaseResult.Purchased,
         )
     }
 
-    private fun localRelease(): MosaicConfigurationRelease =
+    /** The exact release scope the canonical Google Play sidecar is authored against. */
+    private fun canonicalRelease(): MosaicConfigurationRelease =
         MosaicConfigurationRelease(
-            id = "configuration_release_local_7",
-            number = 7,
+            id = "configuration_release_42",
+            number = 42,
+            projectId = "project_mosaic",
             environment = MosaicDeliveryEnvironment(
-                "environment_development",
-                "development",
+                "environment_production",
+                "production",
+                MosaicDeliveryEnvironmentMode.PRODUCTION,
             ),
-            publishedAt = "2026-07-23T12:00:00Z",
+            publishedAt = "2026-07-24T12:00:00Z",
             contentDigest =
-                "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            placements = emptyMap(),
+                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             paywallVersions = emptyMap(),
-            productReferences = mapOf(
-                "product_pro_monthly" to MosaicDeliveryProduct(
-                    "product_pro_monthly",
-                    "subscription",
-                    "Pro Monthly",
-                ),
-            ),
+            productReferences = listOf(
+                MosaicDeliveryProduct("mosaic_pro_monthly", "subscription", "Monthly"),
+                MosaicDeliveryProduct("mosaic_pro_yearly", "subscription", "Yearly"),
+                MosaicDeliveryProduct("mosaic_pro_lifetime", "one_time_non_consumable", "Lifetime"),
+            ).associateBy { it.id },
             assetReferences = emptyMap(),
             encoded = "{}",
         )
@@ -671,7 +634,7 @@ class CommerceConfigurationTest {
         mappingVersion: String = "current",
     ): String {
         val root = JsonParser.parseString(
-            fixture("sdk-local-configuration.json"),
+            fixture("google-play-configuration.json"),
         ).asJsonObject
         val configuration = root.getAsJsonObject("configuration")
         configuration.addProperty("environmentId", release.environment.id)
@@ -684,10 +647,13 @@ class CommerceConfigurationTest {
             "productMappings",
             JsonArray().apply {
                 release.productReferences.keys.sorted().forEach { productId ->
+                    val product = release.productReferences.getValue(productId)
                     add(
                         JsonObject().apply {
                             addProperty("mosaicProductId", productId)
                             addProperty("mappingId", "mapping_$productId")
+                            addProperty("productType", product.type)
+                            add("entitlementKeys", JsonArray().apply { add("pro") })
                             addProperty(
                                 "providerProductReference",
                                 "provider.$productId.$mappingVersion",
@@ -695,7 +661,10 @@ class CommerceConfigurationTest {
                             add(
                                 "adapterMapping",
                                 JsonObject().apply {
-                                    addProperty("kind", "directProduct")
+                                    addProperty("kind", "googlePlayProduct")
+                                    if (product.type == "subscription") {
+                                        addProperty("basePlanId", productId)
+                                    }
                                 },
                             )
                         },
@@ -732,13 +701,13 @@ class CommerceConfigurationTest {
     private fun fixture(name: String): String =
         File(
             System.getProperty("mosaic.repositoryRoot"),
-            "protocol/fixtures/commerce-configuration/v1/$name",
+            "protocol/fixtures/commerce-configuration/v2/$name",
         ).readText()
 
     private fun deliveryFixture(name: String): String =
         File(
             System.getProperty("mosaic.repositoryRoot"),
-            "protocol/fixtures/configuration-delivery/v1/$name",
+            "protocol/fixtures/configuration-delivery/v3/$name",
         ).readText()
 
     private class MemoryCache(
@@ -778,14 +747,30 @@ class CommerceConfigurationTest {
     private class HandleRecordingAdapter(
         override val identity: MosaicCommerceProviderIdentity,
         override val capabilities: List<MosaicCommerceProviderCapability>,
-    ) : MosaicCommerceProviderAdapter {
+        override val recoveryMode: String = "activePurchaseRecovery",
+    ) : MosaicCommerceProviderAdapterV2 {
         override val diagnostics: List<MosaicCommerceSafeDiagnostic> = emptyList()
         var loadedMappingIds: Set<String> = emptySet()
         var invalidations: Int = 0
+        var installedMappingReferences: List<String> = emptyList()
 
         override fun invalidateProductHandles() {
             invalidations += 1
         }
+
+        /**
+         * An installation supersedes every handle taken from the previous snapshot, which is why it
+         * counts as an invalidation here: the contract is that older handles stop being usable, not
+         * that a particular method is called.
+         */
+        override fun installConfiguration(configuration: MosaicCommerceAdapterConfiguration) {
+            invalidations += 1
+            loadedMappingIds = emptySet()
+            installedMappingReferences =
+                configuration.mappings.map(MosaicCommerceProductMapping::providerProductReference)
+        }
+
+        override fun close() = Unit
 
         override suspend fun loadProducts(
             mappings: List<MosaicCommerceProductMapping>,

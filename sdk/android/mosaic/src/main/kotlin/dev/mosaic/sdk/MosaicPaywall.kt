@@ -494,12 +494,13 @@ internal fun MosaicDecorativeVideoBackground(
         }
     }
     /*
-     * Protocol 0.4: under reduced motion a video background does not play.
+     * Under reduced motion a video background does not play.
      *
-     * `0.3` specified video backgrounds as always muted, autoplaying, looping, and control-free, and
-     * no SDK read the platform signal — which means a Mosaic paywall could invalidate a customer's
-     * App Store Reduced Motion declaration, since Apple's criteria cover "any other ongoing motion".
-     * This is handled explicitly rather than left to the animator scale: Compose honours
+     * Video backgrounds were once specified as always muted, autoplaying, looping, and control-free,
+     * and no SDK read the platform signal — which means a Mosaic paywall could invalidate a
+     * customer's App Store Reduced Motion declaration, since Apple's criteria cover "any other
+     * ongoing motion". This is handled explicitly rather than left to the animator scale: Compose
+     * honours
      * `ANIMATOR_DURATION_SCALE` for its own animation APIs, and that does not reach ExoPlayer
      * playback at all.
      *
@@ -508,16 +509,15 @@ internal fun MosaicDecorativeVideoBackground(
      * reuses a path three renderers have implemented rather than introducing a fourth outcome. No
      * frame of the video is shown, playback is not started and paused, and no control is offered.
      *
-     * Which version that applies to is [MosaicVideoBackgroundPresentation.resolve]'s ruling to make,
-     * and it is made there rather than here so that CI can fail on it: this composable is only
-     * reachable from an instrumentation test.
+     * The decision itself is [MosaicVideoBackgroundPresentation.resolve]'s, and it is made there
+     * rather than here so that CI can fail on it: this composable is only reachable from an
+     * instrumentation test.
      */
     val reducedMotion = LocalMosaicReducedMotion.current
     var playbackFailed by remember(uri) { mutableStateOf(false) }
     val presentation = MosaicVideoBackgroundPresentation.resolve(
         hasSource = uri != null,
         playbackFailed = playbackFailed,
-        schemaVersion = document.schemaVersion,
         reducedMotion = reducedMotion,
     )
     val recordsUnavailable =
@@ -815,7 +815,7 @@ internal fun MosaicNode.appearanceOrNull(): MosaicBoxAppearance? = when (this) {
     is MosaicTimelineComponent -> appearance
     is MosaicAwardComponent -> appearance
     is MosaicSocialProofComponent -> appearance
-    // Product Cards and Badges declare no `appearance` in `schema/v0.3/paywall.schema.json`; they
+    // Product Cards and Badges declare no `appearance` in `schema/v0.4/paywall.schema.json`; they
     // carry `styles`, resolved per selection state by their Product Selector-owned renderer. Null
     // here is the contract, not a dropped value.
     is MosaicProductCardComponent,

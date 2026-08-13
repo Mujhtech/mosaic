@@ -80,7 +80,7 @@ internal data class MosaicCustomerCacheDecision(
  * it understood from a record it refused.
  */
 internal object MosaicCustomerEntitlementAcceptance {
-    const val SUPPORTED_CONTRACT_VERSION: String = "1"
+    const val SUPPORTED_CONTRACT_VERSION: String = MOSAIC_AUTHORITATIVE_ENTITLEMENT_VERSION
 
     fun decide(
         cached: MosaicCustomerSnapshotBinding?,
@@ -472,71 +472,15 @@ class MosaicCustomerEntitlementRuntime internal constructor(
         }
     }
 
+    /**
+     * Every sync record is authority-wrapped at the one contract version, so there is one
+     * acceptance path. A body that is not a readable record of that shape is rejected atomically
+     * and the previously accepted snapshot keeps serving.
+     */
     private suspend fun acceptRecord(
         generation: Int,
         response: MosaicCustomerEntitlementTransportResult.Record,
-    ): MosaicCustomerEntitlementSyncResult {
-        val version = runCatching {
-            JsonParser.parseString(response.body).asJsonObject
-                .get("authoritativeEntitlementContractVersion").asString
-        }.getOrNull()
-        if (version == MosaicCustomerAuthorityCodec.CONTRACT_VERSION) {
-            return acceptAuthorityRecord(generation, response)
-        }
-        when (val decoded = MosaicCustomerEntitlementCodec.decodeRecord(response.body)) {
-            is MosaicCustomerRecordDecoding.Unreadable -> return reject(generation, decoded.rejection)
-            // The unchanged answer is a contract record, not an HTTP status. It carries its own
-            // refreshed window, so the confirmation and the freshness it grants are one document
-            // that the content digest and the schema both cover.
-            is MosaicCustomerRecordDecoding.Unchanged -> return confirmCache(generation, decoded.unchanged)
-            is MosaicCustomerRecordDecoding.Snapshot -> {
-                val snapshot = decoded.snapshot
-                // The HTTP validator must identify the record it accompanies. A weak validator is
-                // discarded by the transport, so a missing tag here means the response could not be
-                // conditionally revalidated and its identity is unproven.
-                if (response.entityTag == null || response.entityTag != snapshot.entityTag) {
-                    return reject(generation, MosaicCustomerSnapshotRejection.WEAK_ENTITY_TAG)
-                }
-                val cached = stateMutex.withLock { accepted }
-                val decision = MosaicCustomerEntitlementAcceptance.decide(
-                    cached = cached?.let(::binding),
-                    incoming = MosaicCustomerSnapshotBinding(
-                        contractVersion = MosaicCustomerEntitlementCodec.CONTRACT_VERSION,
-                        billingCustomerId = snapshot.billingCustomerId,
-                        projectId = snapshot.projectId,
-                        environmentId = snapshot.environmentId,
-                        snapshotVersion = snapshot.snapshotVersion,
-                        asOfEpochMillis = snapshot.asOfEpochMillis,
-                        contentDigestValid = decoded.contentDigestValid,
-                    ),
-                )
-                if (!decision.accepted) {
-                    return reject(generation, decision.rejection ?: MosaicCustomerSnapshotRejection.MALFORMED_RECORD)
-                }
-
-                val entry = MosaicCachedCustomerEntitlements(snapshot, snapshot.freshness)
-                return stateMutex.withLock {
-                    // A snapshot that arrived for the identity we were signed in as when the request
-                    // started is discarded after a logout or an identity change: it is not this
-                    // customer's, and emitting it is precisely the leak the binding rules exist for.
-                    if (generation != identityGeneration) {
-                        return@withLock MosaicCustomerEntitlementSyncResult.Rejected(
-                            MosaicCustomerSnapshotRejection.CUSTOMER_MISMATCH,
-                            null,
-                        )
-                    }
-                    if (!persist(entry, response.body)) {
-                        return@withLock cacheWriteUnavailableLocked()
-                    }
-                    accepted = entry
-                    acceptedCount += 1
-                    val evaluation = evaluate(entry)
-                    publish(entry, evaluation)
-                    MosaicCustomerEntitlementSyncResult.Updated(entry.snapshot, evaluation.state)
-                }
-            }
-        }
-    }
+    ): MosaicCustomerEntitlementSyncResult = acceptAuthorityRecord(generation, response)
 
     private suspend fun acceptAuthorityRecord(
         generation: Int,

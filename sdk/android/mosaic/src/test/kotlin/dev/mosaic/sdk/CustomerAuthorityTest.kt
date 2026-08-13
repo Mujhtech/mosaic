@@ -704,13 +704,10 @@ class CustomerAuthorityTest {
     }
 
     @Test
-    fun `legacy v1 cache reopens as authority unknown`() = runTest {
-        val legacy = Files.readAllBytes(repositoryFile(
-            "protocol/fixtures/authoritative-entitlement/v1/snapshots/bounded-offline-cache.json",
-        )).toString(Charsets.UTF_8)
+    fun `a cache in a retired local format reopens as authority unknown`() = runTest {
+        val record = androidSnapshotRecord("bounded-offline-cache")
         val first = runtime { _, _ ->
-            val tag = JsonParser.parseString(legacy).asJsonObject.getAsJsonObject("payload").get("entityTag").asString
-            MosaicCustomerEntitlementTransportResult.Record(legacy, tag)
+            MosaicCustomerEntitlementTransportResult.Record(record, snapshotEntityTag(record))
         }
         first.refreshCustomerEntitlements()
         val snapshotFile = folder.root.walkTopDown().single { it.name == "snapshot.json" }
@@ -729,7 +726,7 @@ class CustomerAuthorityTest {
         root: File = folder.root,
         appVersion: String = "4.2.0",
         sdkVersion: String = "2.0.0",
-        supportedContracts: List<String> = listOf("1", "2"),
+        supportedContracts: List<String> = listOf(MOSAIC_AUTHORITATIVE_ENTITLEMENT_VERSION),
         capabilities: List<String> = MosaicCustomerAuthorityCodec.capabilities,
         diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
         cacheCommit: MosaicCustomerCacheCommit = { store, digest, payload, writePointer ->

@@ -3,7 +3,6 @@ package dev.mosaic.sdk
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -13,19 +12,20 @@ import org.junit.Test
 import kotlin.text.Charsets
 
 /**
- * Protocol `0.4` decoding, against the canonical fixtures rather than hand-built documents.
+ * Motion decoding and the document-level rules that govern it, against the canonical fixtures
+ * rather than hand-built documents.
  *
- * `0.4` is a pure superset of `0.3` apart from two cleanups it named for this version, so the risk
- * worth protecting is not "does motion parse" but "did adding `0.4` change what `0.3` accepts, and
- * does `0.4` still reject everything the reference validator rejects". Both directions are asserted
- * here; the frame arithmetic is [MotionFrameConformanceTest]'s subject, not this one's.
+ * The risk worth protecting is not "does motion parse" but "does the reader still reject everything
+ * the reference validator rejects" — every invalid motion document renders, so its failure is not a
+ * crash but a paywall that is unsafe or ambiguous. The frame arithmetic is
+ * [MotionFrameConformanceTest]'s subject, not this one's.
  */
-class ProtocolV04Test {
+class ProtocolMotionTest {
     @Test
     fun decodesTheCanonicalMotionDocumentIncludingTokensAliasesAndInlineCurves() {
-        val document = v04Document("complete-paywall.json")
+        val document = protocolFixtureDocument("complete-paywall.json")
 
-        assertEquals(MOSAIC_PROTOCOL_V04_VERSION, document.schemaVersion)
+        assertEquals(MOSAIC_PROTOCOL_VERSION, document.schemaVersion)
         assertEquals(
             listOf("motion-entrance", "motion-entrance-alias", "motion-selection", "motion-pulse"),
             document.designSystem.motions.map(MosaicMotionToken::id),
@@ -76,12 +76,12 @@ class ProtocolV04Test {
     }
 
     /**
-     * The consolidated marker vocabulary, which is the reason the bundled cleanup exists: `0.3`'s
-     * single `"checkmark"` constant could not express a *negated* item on a comparison paywall.
+     * The consolidated marker vocabulary, shared with Timeline: a single `"checkmark"` constant
+     * could not express a *negated* item on a comparison paywall.
      */
     @Test
     fun featureListCarriesTheSharedMarkerUnionWithPerItemOverrides() {
-        val features = v04Document("complete-paywall.json")
+        val features = protocolFixtureDocument("complete-paywall.json")
             .walkNodesDepthFirst()
             .filterIsInstance<MosaicFeatureListComponent>()
             .single { it.id == "features" }
@@ -99,51 +99,51 @@ class ProtocolV04Test {
     }
 
     /**
-     * `style.productCardStates` is gone and the three `motion.*` capabilities take the tier. A
-     * capability that can never vary independently of another carries no information, so the
-     * derivation must stop producing it — otherwise every `0.4` document is rejected for declaring
-     * a capability the schema no longer has.
+     * The three `motion.*` capabilities are derived from the nodes that author them, and every
+     * declared capability carries the one contract version at the exact identifier.
+     *
+     * The exactness is the half worth asserting: a reader that accepted a capability at a
+     * neighbouring version — inferring support from numeric ordering — would accept a release it
+     * cannot render, which is the failure the capability system exists to prevent and the rule that
+     * has to outlive the single-version policy.
      */
     @Test
-    fun capabilityDerivationDropsProductCardStatesAndDerivesMotion() {
-        val document = v04Document("complete-paywall.json")
+    fun capabilityDerivationDerivesMotionAtTheExactContractVersion() {
+        val document = protocolFixtureDocument("complete-paywall.json")
         val declared = document.compatibility.requiredCapabilities
 
         assertEquals(
-            setOf(MOSAIC_PROTOCOL_V04_VERSION),
+            setOf(MOSAIC_PROTOCOL_VERSION),
             declared.mapTo(mutableSetOf(), MosaicRequiredCapability::version),
         )
-        val names = declared.mapTo(mutableSetOf(), MosaicRequiredCapability::name)
-        assertTrue(names.containsAll(MOSAIC_MOTION_CAPABILITIES))
-        assertTrue(MosaicCapabilityName.PRODUCT_CARD_STATES !in names)
-        assertTrue(MosaicCapabilityName.PRODUCT_CARD_STATES !in MosaicCapabilityCatalog.v04)
-        // The SDK reports both contracts, and reports each capability at the versions it exists at.
-        val report = MosaicProtocolCapabilities.report()
-        assertEquals(setOf("0.3", "0.4"), report.supportedSchemaVersions)
+        assertTrue(
+            declared.mapTo(mutableSetOf(), MosaicRequiredCapability::name)
+                .containsAll(MOSAIC_MOTION_CAPABILITIES),
+        )
+        val report = MosaicProtocolCapabilities.report("test-sdk")
+        assertEquals("test-sdk", report.sdkVersion)
+        assertEquals(setOf(MOSAIC_PROTOCOL_VERSION), report.supportedSchemaVersions)
+        assertEquals(MosaicCapabilityCatalog.current, report.supportedCapabilities.keys)
+        assertEquals(
+            MosaicCapabilityCatalog.current.mapTo(mutableSetOf()) {
+                MosaicRequiredCapability(it, MOSAIC_PROTOCOL_VERSION)
+            },
+            report.supportedCapabilityVersions,
+        )
         MOSAIC_MOTION_CAPABILITIES.forEach { capability ->
-            assertTrue(report.supports(MosaicRequiredCapability(capability, "0.4")))
+            assertTrue(report.supports(MosaicRequiredCapability(capability, MOSAIC_PROTOCOL_VERSION)))
             assertTrue(!report.supports(MosaicRequiredCapability(capability, "0.3")))
         }
-        assertTrue(
-            report.supports(
-                MosaicRequiredCapability(MosaicCapabilityName.PRODUCT_CARD_STATES, "0.3"),
-            ),
-        )
-        assertTrue(
-            !report.supports(
-                MosaicRequiredCapability(MosaicCapabilityName.PRODUCT_CARD_STATES, "0.4"),
-            ),
-        )
     }
 
     /**
-     * Every remaining canonical `0.4` fixture decodes.
+     * Every remaining canonical fixture decodes.
      *
      * A reader that accepted only the one document its tests name is a reader that has been tuned to
      * a fixture rather than to a contract.
      */
     @Test
-    fun decodesEveryCanonicalV04Fixture() {
+    fun decodesEveryCanonicalFixture() {
         listOf(
             "edge-cases.json",
             "expired-countdown.json",
@@ -151,14 +151,14 @@ class ProtocolV04Test {
             "navigation-only.json",
             "screen-round-trip.json",
         ).forEach { name ->
-            val document = v04Document(name)
-            assertEquals(name, MOSAIC_PROTOCOL_V04_VERSION, document.schemaVersion)
+            val document = protocolFixtureDocument(name)
+            assertEquals(name, MOSAIC_PROTOCOL_VERSION, document.schemaVersion)
         }
 
         // The round trip is the one fixture whose *shape* an assertion depends on: the Compose
         // re-entry test is only meaningful if both screens really are Screen presentations that
         // navigate to each other, and each really does carry a bounded loop.
-        val roundTrip = v04Document("screen-round-trip.json")
+        val roundTrip = protocolFixtureDocument("screen-round-trip.json")
         assertEquals(
             listOf(MosaicScreenPresentation.SCREEN, MosaicScreenPresentation.SCREEN),
             roundTrip.screens.map(MosaicPaywallScreen::presentation),
@@ -183,18 +183,12 @@ class ProtocolV04Test {
      * only covers it once somebody remembers to edit the list too.
      */
     @Test
-    fun rejectsEveryInvalidCanonicalV04Fixture() {
-        val directory = repositoryFile("protocol/fixtures/v0.4/invalid")
-        val fixtures = Files.list(directory).use { paths ->
-            paths.map { it.fileName.toString() }
-                .filter { it.endsWith(".json") }
-                .sorted()
-                .toList()
-        }
+    fun rejectsEveryInvalidCanonicalFixture() {
+        val fixtures = protocolFixtureNames("invalid")
         assertTrue("The canonical invalid fixture directory is empty.", fixtures.isNotEmpty())
         fixtures.forEach { name ->
             assertThrows(name, MosaicProtocolException::class.java) {
-                MosaicProtocolDecoder.decode(v04Source("invalid/$name"))
+                MosaicProtocolDecoder.decode(protocolFixtureSource("invalid/$name"))
             }
         }
     }
@@ -212,7 +206,7 @@ class ProtocolV04Test {
     @Test
     fun namesEveryMotionTokenReachableOnlyFromAnUnusedToken() {
         val failure = assertThrows(MosaicProtocolException::class.java) {
-            MosaicProtocolDecoder.decode(v04Source("invalid/unused-token-transitive.json"))
+            MosaicProtocolDecoder.decode(protocolFixtureSource("invalid/unused-token-transitive.json"))
         }
         // As one sorted list rather than two substring checks, because "motion-orphan-a" and
         // "motion-orphan-b" would each match a message naming only the other's prefix.
@@ -232,7 +226,7 @@ class ProtocolV04Test {
      */
     @Test
     fun acceptsAMotionTokenReachedThroughAChainOfAliases() {
-        val document = JsonParser.parseString(v04Source("complete-paywall.json")).asJsonObject
+        val document = JsonParser.parseString(protocolFixtureSource("complete-paywall.json")).asJsonObject
         val motions = document.getAsJsonObject("designSystem").getAsJsonArray("motions")
         // `features` names `motion-entrance-alias`, so re-pointing the alias at a new hop leaves the
         // node's own reference untouched and puts one more indirection under it.
@@ -259,54 +253,41 @@ class ProtocolV04Test {
     }
 
     /**
-     * Reduced motion stops a video background on `0.4` and **not** on `0.3`.
+     * Reduced motion stops a decorative video background, and nothing else does.
      *
-     * ADR-0027 ruling 3 ships the fix as specified `0.4` behaviour rather than as a `0.3` defect
-     * patch, so a `0.3` document keeps playing and its exposure stays open and tracked. The
-     * discriminating pair is the whole test: a renderer that stopped playback on every version would
-     * satisfy any assertion made only about `0.4`, while silently changing what every already
-     * published `0.3` paywall does.
+     * The rule was version-gated while `0.3` and `0.4` were both readable; ADR-0028 deleted `0.3`,
+     * so it is unconditional. Both directions still matter: without the preference the video must
+     * still play, or "honour reduced motion" quietly becomes "never play video". And unavailability
+     * is recorded independently of the preference, so a customer who asked for less motion is not
+     * reported as having hit a broken paywall while an operator debugging a genuinely missing asset
+     * still is.
      *
      * Asserted here, at the layer CI runs, rather than only in the Compose suite — the instrumented
      * tests do not run in CI, so an assertion made only there could not fail a build.
      */
     @Test
-    fun reducedMotionStopsAVideoBackgroundOnlyOnAProtocolV04Document() {
-        fun resolve(schemaVersion: String, reducedMotion: Boolean) =
+    fun reducedMotionStopsAVideoBackgroundWithoutRecordingItAsUnavailable() {
+        assertEquals(
+            MosaicVideoBackgroundPresentation.Still(recordsUnavailable = false),
             MosaicVideoBackgroundPresentation.resolve(
                 hasSource = true,
                 playbackFailed = false,
-                schemaVersion = schemaVersion,
-                reducedMotion = reducedMotion,
-            )
-
-        assertEquals(
-            MosaicVideoBackgroundPresentation.Still(recordsUnavailable = false),
-            resolve(MOSAIC_PROTOCOL_V04_VERSION, reducedMotion = true),
+                reducedMotion = true,
+            ),
         )
         assertEquals(
             MosaicVideoBackgroundPresentation.Play,
-            resolve(MOSAIC_PROTOCOL_VERSION, reducedMotion = true),
+            MosaicVideoBackgroundPresentation.resolve(
+                hasSource = true,
+                playbackFailed = false,
+                reducedMotion = false,
+            ),
         )
-        // Neither version stops without the preference; the gate must not become an unconditional
-        // one in the other direction either.
-        assertEquals(
-            MosaicVideoBackgroundPresentation.Play,
-            resolve(MOSAIC_PROTOCOL_V04_VERSION, reducedMotion = false),
-        )
-        assertEquals(
-            MosaicVideoBackgroundPresentation.Play,
-            resolve(MOSAIC_PROTOCOL_VERSION, reducedMotion = false),
-        )
-
-        // Unavailability is a fact about the media, not about the preference: an operator debugging
-        // a 0.4 paywall on a reduced-motion device is still told the video could not be resolved.
         assertEquals(
             MosaicVideoBackgroundPresentation.Still(recordsUnavailable = true),
             MosaicVideoBackgroundPresentation.resolve(
                 hasSource = false,
                 playbackFailed = false,
-                schemaVersion = MOSAIC_PROTOCOL_V04_VERSION,
                 reducedMotion = true,
             ),
         )
@@ -315,7 +296,6 @@ class ProtocolV04Test {
             MosaicVideoBackgroundPresentation.resolve(
                 hasSource = true,
                 playbackFailed = true,
-                schemaVersion = MOSAIC_PROTOCOL_VERSION,
                 reducedMotion = false,
             ),
         )
@@ -333,7 +313,7 @@ class ProtocolV04Test {
      */
     @Test
     fun featureListMarkerSizeIsAuthoredWhenDeclaredAndDerivedWhenAbsent() {
-        val authored = v04Document("complete-paywall.json")
+        val authored = protocolFixtureDocument("complete-paywall.json")
             .walkNodesDepthFirst()
             .filterIsInstance<MosaicFeatureListComponent>()
             .single { it.id == "features" }
@@ -341,7 +321,7 @@ class ProtocolV04Test {
         assertEquals(18.0, authored.resolvedMarkerSize, 0.0)
         assertNotEquals(authored.typography.fontSize, authored.resolvedMarkerSize)
 
-        val undeclared = JsonParser.parseString(v04Source("complete-paywall.json")).asJsonObject
+        val undeclared = JsonParser.parseString(protocolFixtureSource("complete-paywall.json")).asJsonObject
         findNode(undeclared, "features").remove("markerSize")
         val derived = MosaicProtocolDecoder.decode(undeclared.toString())
             .walkNodesDepthFirst()
@@ -352,90 +332,37 @@ class ProtocolV04Test {
 
         // A non-positive extent is a glyph nothing draws, so it is rejected rather than clamped --
         // through the same `positiveLogicalSize` reader Timeline's `markerSize` goes through.
-        val zeroed = JsonParser.parseString(v04Source("complete-paywall.json")).asJsonObject
+        val zeroed = JsonParser.parseString(protocolFixtureSource("complete-paywall.json")).asJsonObject
         findNode(zeroed, "features").addProperty("markerSize", 0)
         assertThrows(MosaicProtocolException::class.java) {
             MosaicProtocolDecoder.decode(zeroed.toString())
         }
-
-        // ...and `0.3` is unchanged by the field's existence: it has no `markerSize` on a Feature
-        // List, so a `0.3` document declaring one is an unknown property exactly as before.
-        val v03 = canonicalFixtureObject()
-        findNode(v03, "features").addProperty("markerSize", 20)
-        assertEquals(
-            MosaicProtocolViolation.UNKNOWN_PROPERTY,
-            assertThrows(MosaicProtocolException::class.java) {
-                MosaicProtocolDecoder.decode(v03.toString())
-            }.violation,
-        )
     }
 
     /**
-     * Versions are exact identifiers.
+     * Version identifiers are exact, and support is never inferred from numeric ordering.
      *
-     * `0.4` does not read `0.3` documents and `0.3` does not read `0.4` documents. This is what
-     * stops the shared parser from becoming a single permissive reader that accepts a union of both
-     * shapes and therefore conforms to neither.
+     * Both neighbours are asserted because the failure modes are different: relabelling the
+     * canonical body `0.3` names a version that was deleted, and `0.5` names one that does not
+     * exist yet. Either would have to be rejected atomically before any structure is read —
+     * resolving through cached configuration and then the bundled fallback — rather than decoded
+     * hopefully against the nearest reader the SDK happens to have.
      */
     @Test
-    fun eachReaderAcceptsOnlyItsOwnContract() {
-        val v04 = v04Source("complete-paywall.json")
-        // A 0.4 body relabelled 0.3 must fail: the motions catalog and the marker union are not
-        // 0.3 shapes, and a 0.3 reader that tolerated them would silently render a document whose
-        // declared version does not describe it.
-        assertThrows(MosaicProtocolException::class.java) {
-            MosaicProtocolDecoder.decode(v04.replaceFirst("\"0.4\"", "\"0.3\""))
-        }
-        // ...and a 0.3 body relabelled 0.4 must fail for the mirrored reason: it declares
-        // style.productCardStates, omits the motions catalog, and writes the string-constant marker.
-        assertThrows(MosaicProtocolException::class.java) {
-            MosaicProtocolDecoder.decode(canonicalFixtureReplacing("\"0.3\"", "\"0.4\""))
-        }
-        assertThrows(MosaicProtocolException::class.java) {
-            MosaicProtocolDecoder.decode(v04.replaceFirst("\"0.4\"", "\"0.5\""))
-        }
-    }
+    fun theReaderAcceptsOnlyItsOwnContractVersion() {
+        val canonical = protocolFixtureSource("complete-paywall.json")
 
-    /**
-     * The `0.3` reader is unchanged by the existence of `0.4`.
-     *
-     * The two contracts share one parser rather than two copies that can drift, so the thing worth
-     * asserting is that sharing did not widen `0.3`: a `motion` block and a `motions` catalog are
-     * still unknown properties there.
-     */
-    @Test
-    fun protocolV03StillRejectsMotionItDoesNotDeclare() {
-        val withMotion = canonicalFixtureReplacing(
-            "\"id\": \"headline\",",
-            "\"id\": \"headline\", \"motion\": {\"appear\": {\"effect\": \"fade\", " +
-                "\"curve\": {\"type\": \"motion\", \"durationMilliseconds\": 200, " +
-                "\"easing\": \"linear\"}, \"delayMilliseconds\": 0}},",
-        )
-        val failure = assertThrows(MosaicProtocolException::class.java) {
-            MosaicProtocolDecoder.decode(withMotion)
+        listOf("0.3", "0.5").forEach { version ->
+            assertEquals(
+                version,
+                MosaicProtocolViolation.INVALID_DOCUMENT,
+                assertThrows(version, MosaicProtocolException::class.java) {
+                    MosaicProtocolDecoder.decode(
+                        canonical.replaceFirst("\"$MOSAIC_PROTOCOL_VERSION\"", "\"$version\""),
+                    )
+                }.violation,
+            )
         }
-        assertEquals(MosaicProtocolViolation.UNKNOWN_PROPERTY, failure.violation)
-
-        val withMotions = canonicalFixtureReplacing(
-            "\"shadows\": [",
-            "\"motions\": [], \"shadows\": [",
-        )
-        assertEquals(
-            MosaicProtocolViolation.UNKNOWN_PROPERTY,
-            assertThrows(MosaicProtocolException::class.java) {
-                MosaicProtocolDecoder.decode(withMotions)
-            }.violation,
-        )
-        // The 0.3 document itself still decodes, and its Feature List still carries the checkmark
-        // the string constant names -- read through the shared union so one renderer path serves
-        // both versions.
-        val features = canonicalDocument().walkNodesDepthFirst()
-            .filterIsInstance<MosaicFeatureListComponent>()
-            .first()
-        assertEquals(MosaicMarker.Icon(MosaicIconName.CHECKMARK), features.marker)
-        assertTrue(features.items.all { it.marker == null })
-        assertTrue(canonicalDocument().designSystem.motions.isEmpty())
-        assertTrue(canonicalDocument().walkNodesDepthFirst().all { it.motion == null })
     }
 }
 
@@ -450,10 +377,3 @@ private fun tokenReference(id: String): JsonObject = JsonObject().apply {
     addProperty("type", "motionToken")
     addProperty("id", id)
 }
-
-internal fun v04Source(relativeName: String): String =
-    Files.readAllBytes(repositoryFile("protocol/fixtures/v0.4/$relativeName"))
-        .toString(Charsets.UTF_8)
-
-internal fun v04Document(relativeName: String): MosaicPaywallDocument =
-    MosaicProtocolDecoder.decode(v04Source(relativeName))

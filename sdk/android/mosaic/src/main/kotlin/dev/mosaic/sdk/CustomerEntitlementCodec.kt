@@ -44,7 +44,15 @@ internal data class MosaicCachedCustomerEntitlements(
 )
 
 internal object MosaicCustomerEntitlementCodec {
-    const val CONTRACT_VERSION: String = "1"
+    /**
+     * The Authoritative Entitlement contract this SDK reads: `2`, and nothing else (ADR-0028).
+     *
+     * Every wire record at this version is authority-wrapped, so [decodeRecord] reads the *embedded*
+     * snapshot body rather than a wire record: [MosaicCustomerAuthorityCodec] unwraps the envelope
+     * and hands the inner document here. One body reader rather than two is what keeps the embedded
+     * and standalone rules from drifting.
+     */
+    const val CONTRACT_VERSION: String = MOSAIC_AUTHORITATIVE_ENTITLEMENT_VERSION
     const val CACHE_FORMAT_VERSION: String = "2"
 
     /** `limits.maxRecordBytes` from the compatibility manifest. */
@@ -193,31 +201,16 @@ internal object MosaicCustomerEntitlementCodec {
         requireBoundedHorizon(window)
 
         val record = gson.toJson(body.get("record"))
-        when (runCatching {
-            body.getAsJsonObject("record").get("authoritativeEntitlementContractVersion").asString
-        }.getOrNull()) {
-            CONTRACT_VERSION -> {
-                val decoded = decodeRecord(record)
-                require(decoded is MosaicCustomerRecordDecoding.Snapshot)
-                require(decoded.contentDigestValid)
-                // A v1 record is deliberately returned without authority. The runtime treats it as
-                // authority_unknown and never silently relabels it after an SDK upgrade.
-                MosaicCachedCustomerEntitlements(decoded.snapshot, window)
-            }
-            MosaicCustomerAuthorityCodec.CONTRACT_VERSION -> {
-                val decoded = MosaicCustomerAuthorityCodec.decode(record)
-                require(decoded is MosaicCustomerAuthorityDecoding.Snapshot)
-                require(decoded.snapshotContentDigestValid && decoded.snapshotAuthorityDigestValid)
-                MosaicCachedCustomerEntitlements(
-                    decoded.snapshot,
-                    window,
-                    decoded.authority,
-                    decoded.snapshotAuthorityDigest,
-                    decoded.minimumSupport,
-                )
-            }
-            else -> error("Unsupported cached entitlement contract.")
-        }
+        val decoded = MosaicCustomerAuthorityCodec.decode(record)
+        require(decoded is MosaicCustomerAuthorityDecoding.Snapshot)
+        require(decoded.snapshotContentDigestValid && decoded.snapshotAuthorityDigestValid)
+        MosaicCachedCustomerEntitlements(
+            decoded.snapshot,
+            window,
+            decoded.authority,
+            decoded.snapshotAuthorityDigest,
+            decoded.minimumSupport,
+        )
     }.getOrNull()
 
     fun isLegacyCacheRecord(source: String): Boolean = runCatching {

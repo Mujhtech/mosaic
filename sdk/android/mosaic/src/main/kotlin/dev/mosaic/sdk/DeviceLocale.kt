@@ -5,12 +5,12 @@ import java.util.Locale
 /**
  * The canonical comparison form of a locale tag, and the device locale in that form.
  *
- * Protocol 0.3 and Placement Decision 1 share one rule, deliberately: Placement targeting and
+ * The Paywall Protocol and Placement Decision 1 share one rule, deliberately: Placement targeting and
  * localization catalog lookup must not disagree about what "the same locale" is. Underscores become
  * hyphens, empty subtags are dropped, the tag is truncated at the first singleton subtag, the
  * language is lowercased, a script subtag is title case, and a two-letter or three-digit region is
- * uppercased. See `docs/protocol/v0.3.md` ("Localization and locale resolution") and the reference
- * implementations `protocol/tools/locale-resolution-v0.3.mjs` and
+ * uppercased. See `docs/protocol/v0.4.md` ("Localization and locale resolution") and the reference
+ * implementations `protocol/tools/locale-resolution.mjs` and
  * `protocol/tools/placement-decision-validation-v1.mjs`.
  *
  * Truncation is what this exists for. `Locale.getDefault().toLanguageTag()` is well-formed BCP-47,

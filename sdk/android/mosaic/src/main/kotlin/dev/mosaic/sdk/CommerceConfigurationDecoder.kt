@@ -7,15 +7,40 @@ import com.google.gson.JsonParser
 import java.security.MessageDigest
 
 /**
- * Strict reader for Commerce Configuration v2. It deliberately produces the same provider-neutral
- * core model as v1 so RevenueCat/custom adapters remain source and binary independent of Billing.
+ * Strict reader for Commerce Configuration [MOSAIC_COMMERCE_CONFIGURATION_VERSION].
+ *
+ * It produces a provider-neutral core model, so RevenueCat and custom adapters remain source and
+ * binary independent of Google Play Billing.
  */
-internal object MosaicCommerceConfigurationV2Decoder {
+object MosaicCommerceConfigurationDecoder {
+    /**
+     * Every rejection leaves the caller with [MosaicCommerceConfigurationException] rather than
+     * whichever `require` fired first: a rejected Commerce sidecar leaves the paired release
+     * without commerce, and that handling must not depend on the implementation exception type of
+     * a strict wire reader.
+     */
+    fun decode(
+        source: String,
+        release: MosaicConfigurationRelease,
+        applicationId: String,
+    ): MosaicCommerceConfiguration = try {
+        decodeConfiguration(source, release, applicationId)
+    } catch (error: MosaicCommerceConfigurationException) {
+        throw error
+    } catch (error: RuntimeException) {
+        throw MosaicCommerceConfigurationException("Invalid Commerce Configuration.", error)
+    }
+
     private val gson = GsonBuilder().disableHtmlEscaping().create()
     private val identifier = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
     private val entitlementKey = Regex("^[a-z][a-z0-9_.-]{0,63}$")
     private val digest = Regex("^sha256:[a-f0-9]{64}$")
     private val safe = Regex("^[^\\r\\n\\u0000-\\u001F\\u007F]+$")
+    private val diagnosticCode = Regex("^[a-z][a-zA-Z0-9]*(?:[._-][a-zA-Z0-9]+)+$")
+    private val recoveryActions = setOf(
+        "retry", "reconnectProvider", "fixProductMapping", "updateProviderConfiguration",
+        "contactProvider", "none",
+    )
     private val timestamp = Regex(
         "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
     )
@@ -43,7 +68,7 @@ internal object MosaicCommerceConfigurationV2Decoder {
         "localDeliveryAcceptance" to ("supported" to null),
     )
 
-    fun decode(
+    private fun decodeConfiguration(
         source: String,
         release: MosaicConfigurationRelease,
         applicationId: String,
@@ -176,18 +201,37 @@ internal object MosaicCommerceConfigurationV2Decoder {
                 require(timestampSortKey(expiresAt) >= timestampSortKey(observedAt))
             }
         }
-        val diagnostics = value.array("diagnostics").map { element ->
-            val diagnostic = element.asJsonObject
+        // A safe diagnostic is copy an operator reads and a host may log, so the closed vocabularies
+        // and bounds are enforced here rather than trusted: an out-of-range retry hint or an
+        // unrecognised recovery action would be acted on, and an unsafe provider code is exactly the
+        // channel through which raw store text reaches a log.
+        val diagnostics = value.array("diagnostics").also { require(it.size() <= 32) }.map { element ->
+            val diagnostic = objectValue(
+                element.asJsonObject,
+                setOf("code", "safeMessage", "severity", "retryable", "correlationId") +
+                    element.asJsonObject.keySet().filter {
+                        it in setOf("retryAfterSeconds", "providerCode", "mosaicProductId", "recoveryAction")
+                    },
+            )
             MosaicCommerceSafeDiagnostic(
-                code = diagnostic.string("code"),
-                safeMessage = diagnostic.string("safeMessage"),
-                severity = diagnostic.string("severity"),
+                code = diagnostic.string("code").also {
+                    require(it.length in 3..96 && diagnosticCode.matches(it))
+                },
+                safeMessage = diagnostic.string("safeMessage").checked(safe),
+                severity = diagnostic.string("severity")
+                    .also { require(it in setOf("info", "warning", "error")) },
                 retryable = diagnostic.get("retryable").asBoolean,
-                retryAfterSeconds = diagnostic.get("retryAfterSeconds")?.asInt,
-                correlationId = diagnostic.string("correlationId"),
-                providerCode = diagnostic.get("providerCode")?.asString,
-                mosaicProductId = diagnostic.get("mosaicProductId")?.asString,
-                recoveryAction = diagnostic.get("recoveryAction")?.asString,
+                retryAfterSeconds = diagnostic.get("retryAfterSeconds")?.let {
+                    val number = it.asBigDecimal
+                    require(number.stripTrailingZeros().scale() <= 0)
+                    number.intValueExact().also { seconds -> require(seconds in 1..86_400) }
+                },
+                correlationId = diagnostic.string("correlationId").checked(identifier),
+                providerCode = diagnostic.get("providerCode")?.asString?.checked(safe),
+                mosaicProductId = diagnostic.get("mosaicProductId")?.asString?.checked(identifier),
+                recoveryAction = diagnostic.get("recoveryAction")?.asString?.also {
+                    require(it in recoveryActions)
+                },
             )
         }
         return MosaicCommerceConfiguration(
@@ -242,6 +286,12 @@ internal object MosaicCommerceConfigurationV2Decoder {
         val fraction = if (separator == -1) "" else withoutZulu.substring(separator + 1)
         return seconds + fraction.padEnd(6, '0')
     }
+
+    /**
+     * The canonical digest over a sidecar's own material, exposed so a caller that rewrites a
+     * configuration can restate it rather than reimplement the canonicalization it depends on.
+     */
+    internal fun contentDigest(material: JsonObject): String = sha256(material)
 
     private fun sha256(value: JsonObject): String {
         val bytes = canonicalJson(value).toByteArray(Charsets.UTF_8)

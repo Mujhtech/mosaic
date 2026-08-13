@@ -258,7 +258,7 @@ object MosaicCountdownText {
 /**
  * The corner radius used when `appearance.cornerRadius` is absent.
  *
- * `cornerRadius` is an optional `logicalSize` in `schema/v0.3/paywall.schema.json` with no schema
+ * `cornerRadius` is an optional `logicalSize` in `schema/v0.4/paywall.schema.json` with no schema
  * default, so an absent value is square. Both other renderers read it that way — SwiftUI
  * `appearance?.cornerRadius ?? 0` and Flutter `appearance?.cornerRadius ?? 0` — and every Android
  * surface must agree, so an unstyled Button, TextButton, and purchase Button look identical across
@@ -707,7 +707,7 @@ internal fun MosaicProductCardComponent.accessibilityDescription(
 /**
  * The busy state announced by TalkBack while a Button's `inProgressChildren` are shown.
  *
- * It comes from the reserved `mosaic.a11y.in_progress` string, which Protocol 0.3 requires in the
+ * It comes from the reserved `mosaic.a11y.in_progress` string, which the protocol requires in the
  * default catalog of any document declaring `inProgressChildren`, and never from a literal: an
  * untranslated English "In progress" read aloud inside an Arabic or Japanese paywall was a live
  * defect in the 2026-08 fallback audit. Null means the document declares no usable translation,

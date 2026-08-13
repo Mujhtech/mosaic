@@ -2,21 +2,20 @@ package dev.mosaic.sdk
 
 import java.net.URI
 
-const val MOSAIC_LOCAL_PREVIEW_VERSION: String = "0.3"
+const val MOSAIC_LOCAL_PREVIEW_VERSION: String = "0.4"
 const val MOSAIC_LOCAL_PREVIEW_LATEST_VERSION: String = MOSAIC_LOCAL_PREVIEW_VERSION
 
 /**
  * The Paywall Protocol version Local Preview [MOSAIC_LOCAL_PREVIEW_VERSION] carries.
  *
  * Local Preview is version-locked to a paywall contract — its message schema `$ref`s
- * `urn:mosaic:protocol:schema:v0.3:paywall` directly — so a paywall version bump mandates a Local
- * Preview bump rather than being inherited by it. Local Preview `0.4` is the named next chunk of
- * the `0.4` contract and is not part of the renderer slice, so this stays pinned and a `0.4` draft
- * is refused over the `0.3` subprotocol instead of being rendered by a session that never
- * negotiated it.
+ * `urn:mosaic:protocol:schema:v0.4:paywall` directly — so a paywall replacement *is* a Local
+ * Preview replacement. Kept as its own name rather than used through
+ * [MOSAIC_PROTOCOL_VERSION] at the call sites, because the two are equal by pinning rather than by
+ * definition and a future Local Preview bump has to be able to disagree.
  */
 const val MOSAIC_LOCAL_PREVIEW_PAYWALL_VERSION: String = MOSAIC_PROTOCOL_VERSION
-const val MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL: String = "mosaic.local-preview.v0.3"
+const val MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL: String = "mosaic.local-preview.v0.4"
 const val MOSAIC_LOCAL_PREVIEW_MAX_FRAME_BYTES: Int = 2 * 1024 * 1024
 const val MOSAIC_LOCAL_PREVIEW_DEFAULT_MAX_DOCUMENT_BYTES: Int = 1024 * 1024
 const val MOSAIC_LOCAL_PREVIEW_HEARTBEAT_MILLIS: Long = 5_000
