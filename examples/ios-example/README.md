@@ -1,7 +1,7 @@
 # Mosaic iOS local preview and hosted delivery example
 
 This native SwiftUI application has separate Local Studio and Hosted modes.
-Local Studio renders Protocol 0.3 revisions immediately without an account.
+Local Studio renders Protocol 0.4 revisions immediately without an account.
 Hosted mode prefers Configuration Delivery v3 (with Delivery v2/v1 compatibility)
 using an Environment-scoped public SDK key, evaluates a Placement locally,
 caches the last valid release, and falls
@@ -15,7 +15,7 @@ Open `MosaicExample.xcodeproj`, select the `MosaicExample` scheme, and run on an
 iOS 15-or-newer simulator. With Studio running at the default local endpoint,
 the app:
 
-- connects using `mosaic.local-preview.v0.3`
+- connects using `mosaic.local-preview.v0.4`
 - reports its renderer, application, device, protocol, and preview capabilities
 - rerenders valid document revisions without rebuilding the app
 - shows connected, reconnecting, and disconnected states
@@ -23,11 +23,11 @@ the app:
   recovery instruction
 - applies Studio locale, RTL, long-copy, text-scale, mock-product, purchase,
   restore, and entitlement states
-- demonstrates Protocol 0.3 native Screen/Sheet navigation, unified
+- demonstrates Protocol 0.4 native Screen/Sheet navigation, unified
   content buttons, direction-relative icons, document design tokens,
   gradient/media backgrounds, shadows, two-axis sizing, a system-browser HTTPS
   action, and authored Product Cards with nested and overlay Product Badges
-- demonstrates the Protocol 0.3 components: a Tabs component whose authored
+- demonstrates the Protocol 0.4 components: a Tabs component whose authored
   `initialTabId` is deliberately not the first tab, a note conditioned on the
   selected tab, Timelines covering all three marker kinds and both connector
   styles, Awards with an icon and an image emblem, and Social Proof with
@@ -213,7 +213,7 @@ swift test --filter AnalyticsTests/testPersistentQueueReconstructionAndExactPart
 
 ## Canonical fixture ownership
 
-The canonical fixture at `protocol/fixtures/v0.3/complete-paywall.json` remains
+The canonical fixture at `protocol/fixtures/v0.4/complete-paywall.json` remains
 the repository contract example. Local Preview does not render it when Studio
 is unavailable; the example shows a clear loading or connection state instead.
 
@@ -263,7 +263,7 @@ xcodebuild -project examples/ios-example/MosaicExample.xcodeproj \
   test
 ```
 
-One reviewed 390-by-844 golden covers the canonical Protocol 0.3 paywall.
+One reviewed 390-by-844 golden covers the canonical Protocol 0.4 paywall.
 The Simulator suite also verifies native Sheet presentation, deterministic
 video fallback diagnostics, horizontal Product Card placement, RTL at
 accessibility text sizes, and preview status.
@@ -282,7 +282,7 @@ TEST_RUNNER_MOSAIC_RECORD_SNAPSHOTS=1 xcodebuild \
   -destination 'platform=iOS Simulator,id=<SIMULATOR_ID>' \
   -derivedDataPath examples/ios-example/.build/DerivedData \
   -clonedSourcePackagesDirPath sdk/ios/RevenueCat/.build/checkouts \
-  -only-testing:MosaicExampleTests/SwiftUISnapshotTests/testProtocolV03CompleteFixtureMatchesDeterministicSwiftUIGolden \
+  -only-testing:MosaicExampleTests/SwiftUISnapshotTests/testCanonicalFixtureMatchesDeterministicSwiftUIGolden \
   test
 ```
 

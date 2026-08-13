@@ -60,7 +60,7 @@ export". Hosted publishing runs the same validation server-side.
 Local Studio streams the document to the example apps over the Local Preview
 0.3 relay (`ws://127.0.0.1:4317/preview`, subprotocol
 `mosaic.local-preview.v0.3`). Each example app's README documents how to
-connect. See [docs/protocol/local-preview-v0.3.md](../protocol/local-preview-v0.3.md).
+connect. See [docs/protocol/local-preview-v0.4.md](../protocol/local-preview-v0.4.md).
 
 ## Export and import
 

@@ -270,7 +270,7 @@ final class _HostedPaywallPlaygroundState
           Expanded(
             child: MosaicPlacementHost(
               mosaic: _mosaic,
-              placementKey: _phase5Demo ? 'export_pdf' : 'onboarding_complete',
+              placementKey: _phase5Demo ? 'export_pdf' : 'upgrade_prompt',
               onResult: (result) =>
                   _recordEvent('Presentation: ${result.outcome.wireValue}'),
               onInteraction: (interaction) =>

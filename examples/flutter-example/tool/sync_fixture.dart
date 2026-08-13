@@ -4,10 +4,10 @@ void main() {
   final exampleDirectory = File.fromUri(Platform.script).parent.parent;
   final repository = _findRepository(exampleDirectory);
   final fixtures = <String, String>{
-    'protocol/fixtures/v0.3/complete-paywall.json': 'complete-paywall.json',
-    'protocol/fixtures/configuration-delivery/v1/valid-release.json':
+    'protocol/fixtures/v0.4/complete-paywall.json': 'complete-paywall.json',
+    'protocol/fixtures/configuration-delivery/v3/rich-release.json':
         'configuration-release.json',
-    'protocol/fixtures/configuration-delivery/v2/advanced-release.json':
+    'protocol/fixtures/configuration-delivery/v3/advanced-release.json':
         'advanced-configuration-release.json',
   };
   for (final entry in fixtures.entries) {
@@ -46,10 +46,11 @@ Directory _findRepository(Directory start) {
   var directory = start.absolute;
   while (true) {
     final paywall = File(
-      '${directory.path}/protocol/fixtures/v0.3/complete-paywall.json',
+      '${directory.path}/protocol/fixtures/v0.4/complete-paywall.json',
     );
     final release = File(
-      '${directory.path}/protocol/fixtures/configuration-delivery/v1/valid-release.json',
+      '${directory.path}/protocol/fixtures/configuration-delivery/v3/'
+      'rich-release.json',
     );
     if (paywall.existsSync() && release.existsSync()) {
       return directory;
