@@ -1,0 +1,11 @@
+{
+  "analyticsEventContractVersion": "2",
+  "batchId": "batch_accepted_001",
+  "receivedAt": "2026-07-26T12:05:00.000Z",
+  "results": [
+    {
+      "eventId": "event_placement_requested_001",
+      "status": "accepted"
+    }
+  ]
+}

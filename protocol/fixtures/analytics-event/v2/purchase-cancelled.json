@@ -1,0 +1,40 @@
+{
+  "eventId": "event_purchase_cancelled_001",
+  "eventSchemaVersion": "2",
+  "eventName": "purchase_cancelled",
+  "occurredAt": "2026-07-26T12:01:05.000Z",
+  "queuedAt": "2026-07-26T12:01:05.004Z",
+  "authority": "client_observed",
+  "identity": {
+    "installationId": "installation_12bc90",
+    "generation": 1
+  },
+  "sessionId": "session_public_beta_002",
+  "context": {
+    "platform": "android",
+    "sdkFamily": "android",
+    "sdkVersion": "0.6.0",
+    "applicationVersion": "2.4.1",
+    "locale": "de-DE",
+    "configurationDeliveryVersion": "3",
+    "commerceProviderContractVersion": "2"
+  },
+  "correlation": {
+    "placementRequestId": "placement_request_002",
+    "paywallPresentationId": "presentation_002",
+    "purchaseAttemptId": "purchase_attempt_002"
+  },
+  "attribution": {
+    "configurationReleaseId": "configuration_release_42",
+    "placementId": "placement_export_pdf",
+    "paywallId": "paywall_pro",
+    "paywallVersionId": "paywall_version_19",
+    "mosaicProductId": "product_monthly",
+    "providerId": "google_play",
+    "providerProductMappingId": "mapping_monthly_android"
+  },
+  "payload": {
+    "durationMs": 1800,
+    "providerResultCode": "purchase.cancelled"
+  }
+}

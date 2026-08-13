@@ -1,0 +1,239 @@
+{
+  "analyticsEventContractVersion": "2",
+  "batchId": "batch_journey_001",
+  "sentAt": "2026-07-26T12:00:08.000Z",
+  "events": [
+    {
+      "eventId": "event_journey_placement_requested",
+      "eventSchemaVersion": "2",
+      "eventName": "placement_requested",
+      "occurredAt": "2026-07-26T12:00:00.000Z",
+      "queuedAt": "2026-07-26T12:00:00.010Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_7f39d5a2",
+        "applicationUserId": "customer_42",
+        "generation": 3
+      },
+      "sessionId": "session_public_beta_001",
+      "context": {
+        "platform": "ios",
+        "sdkFamily": "flutter",
+        "sdkVersion": "0.6.0",
+        "applicationVersion": "2.4.1",
+        "locale": "en-NG",
+        "configurationDeliveryVersion": "3",
+        "commerceProviderContractVersion": "2"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_journey"
+      },
+      "attribution": {
+        "configurationReleaseId": "configuration_release_42",
+        "placementId": "placement_export_pdf",
+        "placementRuleSetId": "rule_set_export_pdf",
+        "placementRuleSetVersion": 7
+      },
+      "payload": {
+        "decisionContractVersion": "1"
+      }
+    },
+    {
+      "eventId": "event_journey_paywall_selected",
+      "eventSchemaVersion": "2",
+      "eventName": "placement_paywall_selected",
+      "occurredAt": "2026-07-26T12:00:00.090Z",
+      "queuedAt": "2026-07-26T12:00:00.095Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_7f39d5a2",
+        "applicationUserId": "customer_42",
+        "generation": 3
+      },
+      "sessionId": "session_public_beta_001",
+      "context": {
+        "platform": "ios",
+        "sdkFamily": "flutter",
+        "sdkVersion": "0.6.0",
+        "applicationVersion": "2.4.1",
+        "locale": "en-NG",
+        "configurationDeliveryVersion": "3",
+        "commerceProviderContractVersion": "2"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_journey"
+      },
+      "attribution": {
+        "configurationReleaseId": "configuration_release_42",
+        "placementId": "placement_export_pdf",
+        "placementRuleSetId": "rule_set_export_pdf",
+        "placementRuleSetVersion": 7,
+        "winningRuleId": "rule_ios",
+        "paywallId": "paywall_pro",
+        "paywallVersionId": "paywall_version_19"
+      },
+      "payload": {
+        "finalOutcome": "paywall",
+        "decisionContractVersion": "1",
+        "assignmentKeyType": "installation",
+        "bucketingAlgorithm": "sha256_length_prefixed_v1",
+        "rolloutBucket": 1742
+      }
+    },
+    {
+      "eventId": "event_journey_paywall_presented",
+      "eventSchemaVersion": "2",
+      "eventName": "paywall_presented",
+      "occurredAt": "2026-07-26T12:00:00.120Z",
+      "queuedAt": "2026-07-26T12:00:00.125Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_7f39d5a2",
+        "applicationUserId": "customer_42",
+        "generation": 3
+      },
+      "sessionId": "session_public_beta_001",
+      "context": {
+        "platform": "ios",
+        "sdkFamily": "flutter",
+        "sdkVersion": "0.6.0",
+        "applicationVersion": "2.4.1",
+        "locale": "en-NG",
+        "configurationDeliveryVersion": "3",
+        "commerceProviderContractVersion": "2"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_journey",
+        "paywallPresentationId": "presentation_journey"
+      },
+      "attribution": {
+        "configurationReleaseId": "configuration_release_42",
+        "placementId": "placement_export_pdf",
+        "paywallId": "paywall_pro",
+        "paywallVersionId": "paywall_version_19"
+      },
+      "payload": {}
+    },
+    {
+      "eventId": "event_journey_product_selected",
+      "eventSchemaVersion": "2",
+      "eventName": "product_selected",
+      "occurredAt": "2026-07-26T12:00:03.000Z",
+      "queuedAt": "2026-07-26T12:00:03.004Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_7f39d5a2",
+        "applicationUserId": "customer_42",
+        "generation": 3
+      },
+      "sessionId": "session_public_beta_001",
+      "context": {
+        "platform": "ios",
+        "sdkFamily": "flutter",
+        "sdkVersion": "0.6.0",
+        "applicationVersion": "2.4.1",
+        "locale": "en-NG",
+        "configurationDeliveryVersion": "3",
+        "commerceProviderContractVersion": "2"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_journey",
+        "paywallPresentationId": "presentation_journey"
+      },
+      "attribution": {
+        "configurationReleaseId": "configuration_release_42",
+        "placementId": "placement_export_pdf",
+        "paywallId": "paywall_pro",
+        "paywallVersionId": "paywall_version_19",
+        "mosaicProductId": "product_yearly"
+      },
+      "payload": {
+        "source": "user"
+      }
+    },
+    {
+      "eventId": "event_journey_purchase_started",
+      "eventSchemaVersion": "2",
+      "eventName": "purchase_started",
+      "occurredAt": "2026-07-26T12:00:04.000Z",
+      "queuedAt": "2026-07-26T12:00:04.005Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_7f39d5a2",
+        "applicationUserId": "customer_42",
+        "generation": 3
+      },
+      "sessionId": "session_public_beta_001",
+      "context": {
+        "platform": "ios",
+        "sdkFamily": "flutter",
+        "sdkVersion": "0.6.0",
+        "applicationVersion": "2.4.1",
+        "locale": "en-NG",
+        "configurationDeliveryVersion": "3",
+        "commerceProviderContractVersion": "2"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_journey",
+        "paywallPresentationId": "presentation_journey",
+        "purchaseAttemptId": "purchase_attempt_journey",
+        "providerOperationId": "commerce_operation_journey"
+      },
+      "attribution": {
+        "configurationReleaseId": "configuration_release_42",
+        "placementId": "placement_export_pdf",
+        "paywallId": "paywall_pro",
+        "paywallVersionId": "paywall_version_19",
+        "mosaicProductId": "product_yearly",
+        "providerId": "app_store",
+        "providerProductMappingId": "mapping_yearly_ios"
+      },
+      "payload": {}
+    },
+    {
+      "eventId": "event_journey_purchase_completed",
+      "eventSchemaVersion": "2",
+      "eventName": "purchase_completed_client",
+      "occurredAt": "2026-07-26T12:00:06.400Z",
+      "queuedAt": "2026-07-26T12:00:06.405Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_7f39d5a2",
+        "applicationUserId": "customer_42",
+        "generation": 3
+      },
+      "sessionId": "session_public_beta_001",
+      "context": {
+        "platform": "ios",
+        "sdkFamily": "flutter",
+        "sdkVersion": "0.6.0",
+        "applicationVersion": "2.4.1",
+        "locale": "en-NG",
+        "configurationDeliveryVersion": "3",
+        "commerceProviderContractVersion": "2"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_journey",
+        "paywallPresentationId": "presentation_journey",
+        "purchaseAttemptId": "purchase_attempt_journey",
+        "providerOperationId": "commerce_operation_journey"
+      },
+      "attribution": {
+        "configurationReleaseId": "configuration_release_42",
+        "placementId": "placement_export_pdf",
+        "paywallId": "paywall_pro",
+        "paywallVersionId": "paywall_version_19",
+        "mosaicProductId": "product_yearly",
+        "providerId": "app_store",
+        "providerProductMappingId": "mapping_yearly_ios"
+      },
+      "payload": {
+        "outcome": "purchased",
+        "durationMs": 2400,
+        "observedEntitlementKeys": [
+          "pro_access"
+        ]
+      }
+    }
+  ]
+}

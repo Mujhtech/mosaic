@@ -1,0 +1,36 @@
+{
+  "eventId": "event_placement_requested_001",
+  "eventSchemaVersion": "2",
+  "eventName": "placement_requested",
+  "occurredAt": "2026-07-26T12:00:00.000Z",
+  "queuedAt": "2026-07-26T12:00:00.010Z",
+  "authority": "client_observed",
+  "identity": {
+    "installationId": "installation_7f39d5a2",
+    "applicationUserId": "customer_42",
+    "generation": 3
+  },
+  "sessionId": "session_public_beta_001",
+  "context": {
+    "platform": "ios",
+    "sdkFamily": "flutter",
+    "sdkVersion": "0.6.0",
+    "operatingSystemVersion": "18.5",
+    "applicationVersion": "2.4.1",
+    "locale": "en-NG",
+    "configurationDeliveryVersion": "3",
+    "commerceProviderContractVersion": "2"
+  },
+  "correlation": {
+    "placementRequestId": "placement_request_001"
+  },
+  "attribution": {
+    "configurationReleaseId": "configuration_release_42",
+    "placementId": "placement_export_pdf",
+    "placementRuleSetId": "rule_set_export_pdf",
+    "placementRuleSetVersion": 7
+  },
+  "payload": {
+    "decisionContractVersion": "1"
+  }
+}

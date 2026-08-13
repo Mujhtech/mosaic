@@ -1,0 +1,40 @@
+{
+  "eventId": "event_restore_completed_001",
+  "eventSchemaVersion": "2",
+  "eventName": "restore_completed",
+  "occurredAt": "2026-07-26T12:03:05.000Z",
+  "queuedAt": "2026-07-26T12:03:05.005Z",
+  "authority": "client_observed",
+  "identity": {
+    "installationId": "installation_12bc90",
+    "applicationUserId": "customer_77",
+    "generation": 2
+  },
+  "sessionId": "session_public_beta_003",
+  "context": {
+    "platform": "android",
+    "sdkFamily": "android",
+    "sdkVersion": "0.6.0",
+    "applicationVersion": "2.4.1",
+    "locale": "de-DE",
+    "configurationDeliveryVersion": "3",
+    "commerceProviderContractVersion": "2"
+  },
+  "correlation": {
+    "restoreAttemptId": "restore_attempt_001",
+    "providerOperationId": "commerce_restore_001"
+  },
+  "attribution": {
+    "configurationReleaseId": "configuration_release_42"
+  },
+  "payload": {
+    "providerId": "google_play",
+    "durationMs": 4200,
+    "restoredProductIds": [
+      "product_monthly"
+    ],
+    "observedEntitlementKeys": [
+      "pro_access"
+    ]
+  }
+}

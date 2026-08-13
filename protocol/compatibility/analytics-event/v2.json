@@ -7,13 +7,26 @@
     "ingestionResponse": "../../schema/analytics-event/v2/ingestion-response.schema.json"
   },
   "canonicalFixtures": [
+    "../../fixtures/analytics-event/v2/placement-request.json",
+    "../../fixtures/analytics-event/v2/paywall-presentation.json",
+    "../../fixtures/analytics-event/v2/product-selection-attributed.json",
+    "../../fixtures/analytics-event/v2/purchase-started-attributed.json",
+    "../../fixtures/analytics-event/v2/purchase-cancelled.json",
+    "../../fixtures/analytics-event/v2/purchase-failed.json",
+    "../../fixtures/analytics-event/v2/purchase-completed-provider.json",
+    "../../fixtures/analytics-event/v2/restore-completed.json",
     "../../fixtures/analytics-event/v2/experiment-assigned.json",
     "../../fixtures/analytics-event/v2/experiment-exposed.json",
     "../../fixtures/analytics-event/v2/experiment-fallback-presented.json",
     "../../fixtures/analytics-event/v2/experiment-assignment-failed.json",
-    "../../fixtures/analytics-event/v2/product-selection-attributed.json",
-    "../../fixtures/analytics-event/v2/purchase-started-attributed.json",
+    "../../fixtures/analytics-event/v2/batches/monetization-journey.json",
+    "../../fixtures/analytics-event/v2/batches/edge-case-conformance.json",
     "../../fixtures/analytics-event/v2/batches/experiment-journey.json",
+    "../../fixtures/analytics-event/v2/responses/accepted-event.json",
+    "../../fixtures/analytics-event/v2/responses/duplicate-event.json",
+    "../../fixtures/analytics-event/v2/responses/permanent-rejection.json",
+    "../../fixtures/analytics-event/v2/responses/retryable-event.json",
+    "../../fixtures/analytics-event/v2/responses/mixed-result-batch.json",
     "../../fixtures/analytics-event/v2/responses/accepted-exposure.json"
   ],
   "eventSchemas": [

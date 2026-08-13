@@ -119,6 +119,62 @@ export function validateAnalyticsEventV2Artifacts(artifacts = loadAnalyticsEvent
   for (const response of artifacts.responses) if (!compiled.response(response)) errors.push(...schemaErrors(`response ${response.batchId}`, compiled.response.errors));
   const directory = dirname(analyticsEventV2Paths.manifest);
   for (const path of [...Object.values(artifacts.manifest.schemas), ...artifacts.manifest.canonicalFixtures]) if (!existsSync(resolve(directory, path))) errors.push(`manifest path does not exist: ${path}`);
+  errors.push(...corpusCoverage(artifacts));
+  return errors;
+}
+
+/**
+ * The number of distinct event names the canonical corpus exercises.
+ *
+ * A floor rather than the full taxonomy: 11 of the 31 declared names have never
+ * had a canonical fixture, and inventing one apiece would assert conformance
+ * over documents nobody derived from a real emission. The floor is what stops
+ * the corpus shrinking silently -- which is exactly what happened when the
+ * Contract 1 base fixtures were deleted and only the Experiment delta remained,
+ * leaving every non-Experiment event name uncovered while this validator still
+ * reported success. Raise it when the corpus grows; never lower it to make a
+ * check pass.
+ */
+export const ANALYTICS_EVENT_NAME_COVERAGE_FLOOR = 20;
+
+function corpusCoverage(artifacts) {
+  const errors = [];
+  const names = new Set();
+  for (const event of artifacts.events) names.add(event.eventName);
+  for (const batch of artifacts.batches) for (const event of batch.events) names.add(event.eventName);
+  if (names.size < ANALYTICS_EVENT_NAME_COVERAGE_FLOOR) {
+    errors.push(`canonical corpus exercises ${names.size} event names but the contract declares a floor of ${ANALYTICS_EVENT_NAME_COVERAGE_FLOOR}`);
+  }
+  for (const name of names) {
+    if (artifacts.eventSchema.$defs.eventName.enum.includes(name)) continue;
+    errors.push(`canonical corpus exercises unknown event name ${name}`);
+  }
+
+  // One representative per family. A corpus that lost every purchase event
+  // while keeping enough Experiment events to clear the floor would still be
+  // missing the half the SDKs emit most.
+  const families = { placement: /^placement_/u, paywall: /^paywall_/u, product: /^product_/u, purchase: /^purchase_/u, restore: /^restore_/u, experiment: /^experiment_/u };
+  for (const [family, pattern] of Object.entries(families)) {
+    if ([...names].some((name) => pattern.test(name))) continue;
+    errors.push(`canonical corpus exercises no ${family} event`);
+  }
+
+  // Both authorities: `provider_confirmed` is the one authority a public SDK
+  // may never claim, and the rule that enforces it is unreachable without a
+  // fixture that legitimately carries it.
+  const authorities = new Set(artifacts.events.map((event) => event.authority));
+  for (const authority of ["client_observed", "provider_confirmed"]) {
+    if (authorities.has(authority)) continue;
+    errors.push(`canonical corpus exercises no ${authority} event`);
+  }
+
+  // Partial-batch ingestion is per-event, so every result status must appear or
+  // the classification a client branches on is pinned by nothing.
+  const statuses = new Set(artifacts.responses.flatMap((response) => response.results.map((result) => result.status)));
+  for (const status of ["accepted", "duplicate", "retryable", "permanently_rejected"]) {
+    if (statuses.has(status)) continue;
+    errors.push(`canonical corpus exercises no ${status} ingestion result`);
+  }
   return errors;
 }
 
