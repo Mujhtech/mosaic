@@ -31,13 +31,8 @@ import type {
 import { getEditableCanvasText } from "@/features/paywall-editor/utils/canvas-preview-interactions";
 import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
 import {
-  resolveBadgeStyle,
-  resolveCardStyle,
-} from "@/features/paywall-editor/utils/document-version";
-import {
   resolvedFeatureListMarkerSize,
   resolvedItemMarker,
-  resolvedMarker,
 } from "@/features/paywall-editor/utils/marker";
 import {
   announcementFor,
@@ -50,6 +45,10 @@ import {
   resolvedBackground,
   resolvedProtocolColor,
 } from "@/features/paywall-editor/utils/protocol-styles";
+import {
+  resolveProductBadgeStyle,
+  resolveProductCardStyle,
+} from "@/lib/mosaic-protocol";
 
 export interface PreviewNodeProps {
   readonly carouselPages: Readonly<Record<string, number>>;
@@ -443,7 +442,7 @@ function renderProductCard(
   if (!product) {
     return null;
   }
-  const style = resolveCardStyle(node, product.visualSelected);
+  const style = resolveProductCardStyle(node, product.visualSelected);
   const cardBackground = resolvedBackground(document, style.background);
   const accessibleLabel = node.accessibility
     ? resolveProductTemplate(
@@ -523,7 +522,7 @@ function renderProductBadge(
     productLayerPreview?.nodeId === node.id
       ? productLayerPreview.state === "selected"
       : product.visualSelected;
-  const style = resolveBadgeStyle(node, visualSelected);
+  const style = resolveProductBadgeStyle(node, visualSelected);
   const badgeBackground = resolvedBackground(document, style.background);
   return (
     <span
@@ -901,10 +900,8 @@ interface TimelineMarkerStyle {
 /**
  * One marker glyph, for either component that draws one.
  *
- * 0.4 consolidated Feature List and Timeline onto a single marker union, so
- * they draw through a single renderer here too. A 0.3 Feature List reaches this
- * with its `"checkmark"` constant already resolved to the union form, which is
- * how one path serves both contract versions without rewriting the document.
+ * Feature List and Timeline share a single marker union, so they draw through
+ * a single renderer here too.
  */
 function markerGlyph(
   marker: Marker,
@@ -939,7 +936,7 @@ function timelineMarkerContent(
   if (!entry.marker) {
     return null;
   }
-  return markerGlyph(resolvedMarker(entry.marker), index, marker);
+  return markerGlyph(entry.marker, index, marker);
 }
 
 function renderTimeline(

@@ -34,7 +34,7 @@ import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-t
 import { eligibleTabControllers } from "@/features/paywall-editor/utils/protocol-component-rules";
 import { sizingMode } from "@/features/paywall-editor/utils/protocol-styles";
 import { fillAxisIsBounded } from "@/features/paywall-editor/utils/sizing";
-import type { MosaicPaywallV03Typography } from "@/lib/mosaic-protocol";
+import type { MosaicPaywallV04Typography } from "@/lib/mosaic-protocol";
 
 const AXIS_MODE_OPTIONS = [
   { label: "Fit", value: "fit" },
@@ -396,7 +396,7 @@ export function TypographyFields({
   typography: TypographyValue;
 }) {
   const editor = useEditorActions();
-  const extended = typography as MosaicPaywallV03Typography;
+  const extended = typography as MosaicPaywallV04Typography;
 
   function update(next: TypographyValue) {
     editor.updateComponent(node.id, (current) => onChange(current, next));
@@ -518,7 +518,7 @@ export function TypographyFields({
                   update({
                     ...extended,
                     overflow,
-                  } as MosaicPaywallV03Typography)
+                  } as MosaicPaywallV04Typography)
                 }
                 value={extended.overflow ?? "ellipsis"}
               >

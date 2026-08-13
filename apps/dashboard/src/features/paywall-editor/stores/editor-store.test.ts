@@ -19,7 +19,7 @@ import {
   withDocumentParts,
   withScreenParts,
 } from "@/features/paywall-editor/utils/document-version";
-import type { MosaicPaywallV03Document } from "@/lib/mosaic-protocol";
+import type { MosaicPaywallV04Document } from "@/lib/mosaic-protocol";
 import { required } from "@/test/required";
 
 function template(id: "focused" | "benefits" = "focused") {
@@ -87,7 +87,7 @@ describe("editor store", () => {
     );
     expect(
       findNode(
-        store.getSnapshot().document as MosaicPaywallV03Document,
+        store.getSnapshot().document as MosaicPaywallV04Document,
         "headline"
       )
     ).toMatchObject({
@@ -97,7 +97,7 @@ describe("editor store", () => {
     store.undo();
     expect(
       findNode(
-        store.getSnapshot().document as MosaicPaywallV03Document,
+        store.getSnapshot().document as MosaicPaywallV04Document,
         "headline"
       )
     ).toMatchObject({
@@ -108,7 +108,7 @@ describe("editor store", () => {
     store.redo();
     const final = store.getSnapshot();
     expect(
-      findNode(final.document as MosaicPaywallV03Document, "headline")
+      findNode(final.document as MosaicPaywallV04Document, "headline")
     ).toMatchObject({
       value: { default: "A safer headline" },
     });
@@ -121,7 +121,7 @@ describe("editor store", () => {
     store.loadTemplate(template());
     const before = store.getSnapshot();
     const beforeHeadline = findNode(
-      before.document as MosaicPaywallV03Document,
+      before.document as MosaicPaywallV04Document,
       "headline"
     );
 
@@ -150,7 +150,7 @@ describe("editor store", () => {
 
     const transient = store.getSnapshot();
     expect(
-      findNode(transient.document as MosaicPaywallV03Document, "headline")
+      findNode(transient.document as MosaicPaywallV04Document, "headline")
     ).toMatchObject({
       value: { default: "Final transient value" },
     });
@@ -178,7 +178,7 @@ describe("editor store", () => {
     store.undo();
     expect(
       findNode(
-        store.getSnapshot().document as MosaicPaywallV03Document,
+        store.getSnapshot().document as MosaicPaywallV04Document,
         "headline"
       )
     ).toEqual(beforeHeadline);
@@ -250,7 +250,7 @@ describe("editor store", () => {
     store.undo();
     const before = store.getSnapshot();
     const headline = findNode(
-      before.document as MosaicPaywallV03Document,
+      before.document as MosaicPaywallV04Document,
       "headline"
     );
     if (headline?.type !== "text") {
@@ -357,18 +357,18 @@ describe("editor store", () => {
     store.undo();
     const afterUndo = store.getSnapshot();
     expect(
-      findNode(afterUndo.document as MosaicPaywallV03Document, insertedId)
+      findNode(afterUndo.document as MosaicPaywallV04Document, insertedId)
     ).toBeNull();
     expect(afterUndo.selectedComponentId).toBe("close");
 
     store.redo();
     const afterRedo = store.getSnapshot();
     expect(
-      findNode(afterRedo.document as MosaicPaywallV03Document, insertedId)
+      findNode(afterRedo.document as MosaicPaywallV04Document, insertedId)
     ).not.toBeNull();
     expect(
       findNode(
-        afterRedo.document as MosaicPaywallV03Document,
+        afterRedo.document as MosaicPaywallV04Document,
         afterRedo.selectedComponentId
       )
     ).not.toBeNull();
@@ -380,7 +380,7 @@ describe("editor store", () => {
     store.selectComponent("features");
 
     store.removeSelectedComponent();
-    const removed = store.getSnapshot().document as MosaicPaywallV03Document;
+    const removed = store.getSnapshot().document as MosaicPaywallV04Document;
     expect(findNode(removed, "features")).toBeNull();
     for (const catalog of Object.values(removed.localization.locales)) {
       expect(catalog.strings["paywall.feature.native"]).toBeUndefined();
@@ -393,7 +393,7 @@ describe("editor store", () => {
     ).toEqual([]);
 
     store.undo();
-    const restored = store.getSnapshot().document as MosaicPaywallV03Document;
+    const restored = store.getSnapshot().document as MosaicPaywallV04Document;
     expect(findNode(restored, "features")).not.toBeNull();
     expect(
       restored.localization.locales.en?.strings["paywall.feature.native"]
@@ -401,7 +401,7 @@ describe("editor store", () => {
 
     store.redo();
     expect(
-      (store.getSnapshot().document as MosaicPaywallV03Document).localization
+      (store.getSnapshot().document as MosaicPaywallV04Document).localization
         .locales.en?.strings["paywall.feature.native"]
     ).toBeUndefined();
   });
@@ -414,7 +414,7 @@ describe("editor store", () => {
     expect(store.getSnapshot().document?.assets).toHaveLength(1);
     expect(
       findNode(
-        store.getSnapshot().document as MosaicPaywallV03Document,
+        store.getSnapshot().document as MosaicPaywallV04Document,
         imageId
       )
     ).toMatchObject({
@@ -432,7 +432,7 @@ describe("editor store", () => {
     const reinsertedId = store.insertComponent("image");
     expect(
       findNode(
-        store.getSnapshot().document as MosaicPaywallV03Document,
+        store.getSnapshot().document as MosaicPaywallV04Document,
         reinsertedId
       )
     ).toMatchObject({
@@ -442,7 +442,7 @@ describe("editor store", () => {
     expect(store.getSnapshot().document?.assets).toHaveLength(1);
     expect(
       validateEditorDocument(
-        store.getSnapshot().document as MosaicPaywallV03Document
+        store.getSnapshot().document as MosaicPaywallV04Document
       ).filter((issue) => issue.severity === "error")
     ).toEqual([]);
 
@@ -457,7 +457,7 @@ describe("editor store", () => {
     store.removeSelectedComponent();
 
     expect(store.getSnapshot().document?.products).toEqual([]);
-    const current = store.getSnapshot().document as MosaicPaywallV03Document;
+    const current = store.getSnapshot().document as MosaicPaywallV04Document;
     const replacement = store.insertComponentAt("productSelector", {
       parentId: required(current.screens[0], "current.screens[0]").layout
         .content.id,
@@ -468,7 +468,7 @@ describe("editor store", () => {
       throw new Error(replacement.message);
     }
     const replacementId = replacement.nodeId;
-    const document = store.getSnapshot().document as MosaicPaywallV03Document;
+    const document = store.getSnapshot().document as MosaicPaywallV04Document;
     expect(document.products.map((product) => product.id)).toEqual([
       "monthly-plan",
       "yearly-plan",
@@ -512,7 +512,7 @@ describe("editor store", () => {
 
     store.importDocument(imported);
     store.undo();
-    const restored = store.getSnapshot().document as MosaicPaywallV03Document;
+    const restored = store.getSnapshot().document as MosaicPaywallV04Document;
     const mocks = reconcileMockProductsForDocument(restored, [
       {
         productReferenceId: "starter-plan",
@@ -595,13 +595,13 @@ describe("editor store", () => {
 
     expect(
       findNode(
-        store.getSnapshot().document as MosaicPaywallV03Document,
+        store.getSnapshot().document as MosaicPaywallV04Document,
         "headline"
       )
     ).toBeNull();
     expect(
       findNode(
-        store.getSnapshot().document as MosaicPaywallV03Document,
+        store.getSnapshot().document as MosaicPaywallV04Document,
         "nested-stack"
       )
     ).toMatchObject({

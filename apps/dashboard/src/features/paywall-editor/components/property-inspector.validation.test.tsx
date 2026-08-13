@@ -35,6 +35,7 @@ describe("property inspector safety", () => {
         "Appearance",
         "Visibility",
         "Advanced",
+        "Motion",
       ],
     ],
     [
@@ -52,6 +53,7 @@ describe("property inspector safety", () => {
         "Visibility",
         "Accessibility",
         "Advanced",
+        "Motion",
       ],
     ],
     [
@@ -69,6 +71,7 @@ describe("property inspector safety", () => {
         "Visibility",
         "Accessibility",
         "Advanced",
+        "Motion",
       ],
     ],
     [
@@ -86,6 +89,7 @@ describe("property inspector safety", () => {
         "Visibility",
         "Accessibility",
         "Advanced",
+        "Motion",
       ],
     ],
     [
@@ -102,6 +106,7 @@ describe("property inspector safety", () => {
         "Visibility",
         "Accessibility",
         "Advanced",
+        "Motion",
       ],
     ],
     [
@@ -119,6 +124,7 @@ describe("property inspector safety", () => {
         "Visibility",
         "Accessibility",
         "Advanced",
+        "Motion",
       ],
     ],
     [
@@ -136,6 +142,7 @@ describe("property inspector safety", () => {
         "Visibility",
         "Accessibility",
         "Advanced",
+        "Motion",
       ],
     ],
     [
@@ -153,6 +160,7 @@ describe("property inspector safety", () => {
         "Visibility",
         "Accessibility",
         "Advanced",
+        "Motion",
       ],
     ],
   ] as const)(
@@ -181,6 +189,7 @@ describe("property inspector safety", () => {
         "Visibility",
         "Accessibility",
         "Advanced",
+        "Motion",
       ],
     ],
     [
@@ -196,6 +205,7 @@ describe("property inspector safety", () => {
         "Visibility",
         "Accessibility",
         "Advanced",
+        "Motion",
       ],
     ],
     [
@@ -211,6 +221,7 @@ describe("property inspector safety", () => {
         "Visibility",
         "Accessibility",
         "Advanced",
+        "Motion",
       ],
     ],
     [
@@ -227,6 +238,7 @@ describe("property inspector safety", () => {
         "Visibility",
         "Accessibility",
         "Advanced",
+        "Motion",
       ],
     ],
   ] as const)(
@@ -500,7 +512,7 @@ describe("property inspector safety", () => {
     },
     {
       advancedAddress: "marker",
-      advancedValue: "checkmark",
+      advancedValue: "Icon: checkmark",
       primarySection: "Content",
       selection: "features",
       templateIndex: 1,

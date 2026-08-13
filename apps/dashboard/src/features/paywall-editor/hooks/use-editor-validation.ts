@@ -7,7 +7,6 @@ import type {
   ValidationIssue,
 } from "@/features/paywall-editor/types/editor";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
-import { isMotionCapableDocument } from "@/features/paywall-editor/utils/document-version";
 import { resolveInspectorValidationIssue } from "@/features/paywall-editor/utils/property-inspector-navigation";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
 
@@ -48,18 +47,15 @@ function isSupportedAddress(document: MosaicDocument, issue: ValidationIssue) {
   if (!root) {
     return false;
   }
-  // Every 0.4 node except the scroll container carries a `motion` block:
+  // Every node except the scroll container carries a `motion` block:
   // `appear` on any node, plus `selection` on Product Selector and Tabs and
   // `loop` on Button. Which subkeys a node accepts is the schema's business;
   // here the root only has to be recognised so its diagnostics are not
   // discarded as branch noise.
-  const motionRoot: readonly string[] = isMotionCapableDocument(document)
-    ? ["motion"]
-    : [];
   const shared = new Set(["id", "type"]);
   const nodeShared = new Set([
     ...shared,
-    ...motionRoot,
+    "motion",
     "appearance",
     "outerInsets",
     "visibility",
@@ -123,7 +119,7 @@ function isSupportedAddress(document: MosaicDocument, issue: ValidationIssue) {
     ]),
     productCard: new Set([
       ...shared,
-      ...motionRoot,
+      "motion",
       "productReferenceId",
       "direction",
       "gap",
@@ -136,7 +132,7 @@ function isSupportedAddress(document: MosaicDocument, issue: ValidationIssue) {
     ]),
     productBadge: new Set([
       ...shared,
-      ...motionRoot,
+      "motion",
       "placement",
       "direction",
       "gap",
@@ -403,8 +399,8 @@ function motionSchemaBranchDecision(
   }
 
   // Everything else under `motion` is a real, actionable diagnostic -- a
-  // missing selection curve, a loop on a node that cannot carry one, a motion
-  // block on a 0.3 document. Never let the generic rules swallow it.
+  // missing selection curve, a loop on a node that cannot carry one. Never let
+  // the generic rules swallow it.
   return false;
 }
 

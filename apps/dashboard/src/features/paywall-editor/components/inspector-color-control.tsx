@@ -19,12 +19,13 @@ import type {
   MosaicDocument,
   ProtocolColor,
 } from "@/features/paywall-editor/types/editor";
-import { resolveDocumentColorToken } from "@/features/paywall-editor/utils/document-version";
+
 import {
   isColorTokenReference,
   protocolColorLabel,
   resolvedProtocolColor,
 } from "@/features/paywall-editor/utils/protocol-styles";
+import { resolveColorToken } from "@/lib/mosaic-protocol";
 import { cn } from "@/lib/utils";
 
 const HEX_CHANNELS = /^[\dA-Fa-f]{6}$/;
@@ -159,9 +160,7 @@ function resolvedChannels(
   value: ProtocolColor,
   document?: MosaicDocument
 ): ColorChannels {
-  const resolved = document
-    ? resolveDocumentColorToken(document, value)
-    : value;
+  const resolved = document ? resolveColorToken(document, value) : value;
   const literal = (() => {
     if (typeof resolved === "string" && resolved.startsWith("#")) {
       return resolved;

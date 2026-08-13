@@ -35,7 +35,7 @@ import type {
 } from "@/features/paywall-editor/types/editor";
 import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
 import { updateLocalizedTextByKey } from "@/features/paywall-editor/utils/editor-transforms";
-import type { MosaicPaywallV03EdgeInsets } from "@/lib/mosaic-protocol";
+import type { MosaicPaywallV04EdgeInsets } from "@/lib/mosaic-protocol";
 
 export function LocalizedField({
   address,
@@ -550,12 +550,12 @@ export function EdgeInsetsFields({
   value,
 }: {
   address: string;
-  onChange?: (value: MosaicPaywallV03EdgeInsets) => void;
+  onChange?: (value: MosaicPaywallV04EdgeInsets) => void;
   onEdgeChange?: (
-    edge: keyof MosaicPaywallV03EdgeInsets,
+    edge: keyof MosaicPaywallV04EdgeInsets,
     value: number
   ) => void;
-  value: MosaicPaywallV03EdgeInsets;
+  value: MosaicPaywallV04EdgeInsets;
 }) {
   return (
     <TwoColumn>

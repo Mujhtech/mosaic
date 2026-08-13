@@ -27,8 +27,6 @@ import {
   withMovedToken,
   withoutToken,
 } from "@/features/paywall-editor/components/design-system-controls";
-import { UpgradeToV04Dialog } from "@/features/paywall-editor/components/upgrade-to-v04-dialog";
-import { upgradeDocumentToV04 } from "@/features/paywall-editor/mutations/upgrade-to-v04";
 import {
   useEditorActions,
   useEditorStore,
@@ -41,7 +39,6 @@ import type {
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import {
   documentMotionTokens,
-  isMotionCapableDocument,
   withDocumentParts,
 } from "@/features/paywall-editor/utils/document-version";
 import type { DesignCategory } from "@/features/paywall-editor/utils/style-authoring";
@@ -52,9 +49,9 @@ import {
   tokenReferenceType,
 } from "@/features/paywall-editor/utils/style-authoring";
 import type {
-  MosaicPaywallV03BackgroundToken,
-  MosaicPaywallV03ColorToken,
-  MosaicPaywallV03ShadowToken,
+  MosaicPaywallV04BackgroundToken,
+  MosaicPaywallV04ColorToken,
+  MosaicPaywallV04ShadowToken,
 } from "@/lib/mosaic-protocol";
 
 /**
@@ -92,19 +89,13 @@ export function DesignSystemPanel() {
     null
   );
   const [replacementId, setReplacementId] = useState("detach");
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [openEditor, setOpenEditor] = useState<PendingDelete | null>(null);
 
   if (!document) {
     return null;
   }
   const { designSystem } = document;
-  // The motions catalog exists only on 0.4. A 0.3 document shows the three
-  // catalogs it has always shown, and the Motion section is absent rather than
-  // present-and-empty: an empty section would read as "no motions authored"
-  // when the truth is "this contract version cannot carry them".
   const motions = documentMotionTokens(document);
-  const supportsMotion = isMotionCapableDocument(document);
 
   function updateSystem(
     updater: (current: PaywallDesignSystem) => PaywallDesignSystem
@@ -118,7 +109,7 @@ export function DesignSystemPanel() {
 
   function updateColor(
     id: string,
-    updater: (token: MosaicPaywallV03ColorToken) => MosaicPaywallV03ColorToken
+    updater: (token: MosaicPaywallV04ColorToken) => MosaicPaywallV04ColorToken
   ) {
     updateSystem((current) => ({
       ...current,
@@ -130,8 +121,8 @@ export function DesignSystemPanel() {
   function updateBackground(
     id: string,
     updater: (
-      token: MosaicPaywallV03BackgroundToken
-    ) => MosaicPaywallV03BackgroundToken
+      token: MosaicPaywallV04BackgroundToken
+    ) => MosaicPaywallV04BackgroundToken
   ) {
     updateSystem((current) => ({
       ...current,
@@ -142,7 +133,7 @@ export function DesignSystemPanel() {
   }
   function updateShadow(
     id: string,
-    updater: (token: MosaicPaywallV03ShadowToken) => MosaicPaywallV03ShadowToken
+    updater: (token: MosaicPaywallV04ShadowToken) => MosaicPaywallV04ShadowToken
   ) {
     updateSystem((current) => ({
       ...current,
@@ -636,108 +627,80 @@ export function DesignSystemPanel() {
         )}
       </section>
 
-      {supportsMotion ? null : (
-        <section className="space-y-2 border-border border-t pt-4">
-          <h3 className="font-semibold text-xs">Motion</h3>
-          <p className="text-muted-foreground text-xs leading-5">
-            Motion needs Protocol 0.4. Upgrading adds a Motion catalog and lets
-            you author entrances, selection changes, and a call-to-action pulse.
-          </p>
-          <Button
-            onClick={() => setUpgradeOpen(true)}
-            size="xs"
-            type="button"
-            variant="outline"
-          >
-            Upgrade to Protocol 0.4
-          </Button>
-        </section>
-      )}
-      {upgradeOpen ? (
-        <UpgradeToV04Dialog
-          onConfirm={() => {
-            editor.updateDocument((current) => upgradeDocumentToV04(current));
-            setUpgradeOpen(false);
-          }}
-          onOpenChange={setUpgradeOpen}
+      <section className="space-y-3 border-border border-t pt-4">
+        <SectionHeading
+          count={motions.length}
+          label="Motion"
+          onAdd={addMotion}
         />
-      ) : null}
-      {supportsMotion ? (
-        <section className="space-y-3 border-border border-t pt-4">
-          <SectionHeading
-            count={motions.length}
-            label="Motion"
-            onAdd={addMotion}
-          />
-          {motions.length === 0 ? (
-            <p className="rounded border border-dashed p-3 text-muted-foreground text-xs">
-              Add a reusable duration and easing curve. A motion token that
-              nothing references is rejected, so add one when a node needs it.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {motions.map((token, index) => (
-                <li className="rounded border border-border p-1" key={token.id}>
-                  <div className="flex items-center gap-1">
-                    <TokenSummary
-                      editorId={`design-motion-editor-${token.id}`}
-                      name={token.name}
-                      onToggle={() => toggleEditor("motions", token.id)}
-                      open={
-                        openEditor?.category === "motions" &&
-                        openEditor.id === token.id
+        {motions.length === 0 ? (
+          <p className="rounded border border-dashed p-3 text-muted-foreground text-xs">
+            Add a reusable duration and easing curve. A motion token that
+            nothing references is rejected, so add one when a node needs it.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {motions.map((token, index) => (
+              <li className="rounded border border-border p-1" key={token.id}>
+                <div className="flex items-center gap-1">
+                  <TokenSummary
+                    editorId={`design-motion-editor-${token.id}`}
+                    name={token.name}
+                    onToggle={() => toggleEditor("motions", token.id)}
+                    open={
+                      openEditor?.category === "motions" &&
+                      openEditor.id === token.id
+                    }
+                    summary={
+                      token.value.type === "motion"
+                        ? `${token.value.durationMilliseconds}ms ${token.value.easing}`
+                        : "Linked"
+                    }
+                  />
+                  <TokenActions
+                    canMoveDown={index < motions.length - 1}
+                    canMoveUp={index > 0}
+                    name={token.name}
+                    onDelete={() => requestDelete("motions", token.id)}
+                    onDuplicate={() => duplicate("motions", token.id)}
+                    onMove={(offset) => move("motions", token.id, offset)}
+                  />
+                </div>
+                {openEditor?.category === "motions" &&
+                openEditor.id === token.id ? (
+                  <div
+                    className="space-y-2 border-border border-t p-2"
+                    id={`design-motion-editor-${token.id}`}
+                  >
+                    <input
+                      aria-label={`Name for ${token.name}`}
+                      className={`${FIELD_CLASS} w-full`}
+                      maxLength={80}
+                      onChange={(event) =>
+                        updateMotion(token.id, (current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }))
                       }
-                      summary={
-                        token.value.type === "motion"
-                          ? `${token.value.durationMilliseconds}ms ${token.value.easing}`
-                          : "Linked"
-                      }
+                      value={token.name}
                     />
-                    <TokenActions
-                      canMoveDown={index < motions.length - 1}
-                      canMoveUp={index > 0}
-                      name={token.name}
-                      onDelete={() => requestDelete("motions", token.id)}
-                      onDuplicate={() => duplicate("motions", token.id)}
-                      onMove={(offset) => move("motions", token.id, offset)}
+                    <MotionEditor
+                      id={`design-motion-${token.id}`}
+                      onChange={(value) =>
+                        updateMotion(token.id, (current) => ({
+                          ...current,
+                          value,
+                        }))
+                      }
+                      value={token.value}
                     />
                   </div>
-                  {openEditor?.category === "motions" &&
-                  openEditor.id === token.id ? (
-                    <div
-                      className="space-y-2 border-border border-t p-2"
-                      id={`design-motion-editor-${token.id}`}
-                    >
-                      <input
-                        aria-label={`Name for ${token.name}`}
-                        className={`${FIELD_CLASS} w-full`}
-                        maxLength={80}
-                        onChange={(event) =>
-                          updateMotion(token.id, (current) => ({
-                            ...current,
-                            name: event.target.value,
-                          }))
-                        }
-                        value={token.name}
-                      />
-                      <MotionEditor
-                        id={`design-motion-${token.id}`}
-                        onChange={(value) =>
-                          updateMotion(token.id, (current) => ({
-                            ...current,
-                            value,
-                          }))
-                        }
-                        value={token.value}
-                      />
-                    </div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : null}
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </section>
   );
 }

@@ -214,7 +214,7 @@ export const REJECTION_COPY: Record<
       "Enter the deadline in Add content before inserting or dragging Countdown.",
   },
   "invalid-node": {
-    message: "The component subtree is not a valid Protocol 0.3 tree.",
+    message: "The component subtree is not a valid Protocol 0.4 tree.",
     recovery:
       "Use supported components, keep every Carousel between two and twenty pages, and every Tabs between two and eight tabs.",
   },

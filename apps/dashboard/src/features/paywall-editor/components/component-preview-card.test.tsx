@@ -111,7 +111,7 @@ describe("component library preview card", () => {
     const card = await screen.findByLabelText("Tabs preview");
     await waitFor(() =>
       expect(card).toHaveTextContent(
-        "The component subtree is not a valid Protocol 0.3 tree."
+        "The component subtree is not a valid Protocol 0.4 tree."
       )
     );
     expect(card.querySelector('[data-preview-node-type="tabs"]')).toBeNull();

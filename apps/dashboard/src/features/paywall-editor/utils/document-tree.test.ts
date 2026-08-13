@@ -37,10 +37,10 @@ import {
 import { withDocumentParts } from "@/features/paywall-editor/utils/document-version";
 import { synchronizeProtocolMetadata } from "@/features/paywall-editor/utils/protocol-document";
 import type {
-  MosaicPaywallV03Document,
-  MosaicPaywallV03Node,
-  MosaicPaywallV03ProductCardComponent,
-  MosaicPaywallV03Stack,
+  MosaicPaywallV04Document,
+  MosaicPaywallV04Node,
+  MosaicPaywallV04ProductCardComponent,
+  MosaicPaywallV04Stack,
 } from "@/lib/mosaic-protocol";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
 import { required } from "@/test/required";
@@ -53,7 +53,7 @@ function template(id: "focused" | "benefits" = "focused") {
   return cloneValue(match.document);
 }
 
-function takeNode(document: MosaicPaywallV03Document, id: string) {
+function takeNode(document: MosaicPaywallV04Document, id: string) {
   const node = required(
     document.screens[0],
     "document.screens[0]"
@@ -71,8 +71,8 @@ function takeNode(document: MosaicPaywallV03Document, id: string) {
 
 function stack(
   id: string,
-  children: MosaicPaywallV03Node[]
-): MosaicPaywallV03Stack {
+  children: MosaicPaywallV04Node[]
+): MosaicPaywallV04Stack {
   return {
     type: "stack",
     id,
@@ -86,7 +86,7 @@ function stack(
 }
 
 type ProductCardStack = Extract<
-  MosaicPaywallV03ProductCardComponent["children"][number],
+  MosaicPaywallV04ProductCardComponent["children"][number],
   { type: "stack" }
 >;
 
@@ -433,7 +433,7 @@ describe("document tree transforms", () => {
         {
           type: "featureList",
           id: "incoming-features",
-          marker: "checkmark",
+          marker: { kind: "icon", name: "checkmark" },
           gap: 8,
           markerColor: "action.primary",
           items: [
@@ -824,7 +824,7 @@ describe("document tree transforms", () => {
     )
       .map((entry) => entry.node)
       .filter(
-        (node): node is Extract<MosaicPaywallV03Node, { type: "text" }> =>
+        (node): node is Extract<MosaicPaywallV04Node, { type: "text" }> =>
           node.type === "text" &&
           node.value.localizationKey.startsWith("paywall.shared.copy")
       );

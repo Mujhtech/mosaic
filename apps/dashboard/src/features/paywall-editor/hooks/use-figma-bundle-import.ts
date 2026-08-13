@@ -122,7 +122,7 @@ export function useFigmaBundleImport({
             } else {
               failed.push({
                 imageId: image.id,
-                message: `"${image.name}" was uploaded, but Mosaic returned an Asset URL that is not HTTPS. Protocol 0.3 accepts only HTTPS Asset sources.`,
+                message: `"${image.name}" was uploaded, but Mosaic returned an Asset URL that is not HTTPS. Protocol 0.4 accepts only HTTPS Asset sources.`,
               });
             }
           } catch (error) {

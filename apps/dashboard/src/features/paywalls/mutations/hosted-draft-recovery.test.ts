@@ -20,7 +20,7 @@ describe("hosted Draft browser recovery", () => {
     const unfinishedDocument = {
       id: "unfinished-paywall",
       revision: 9,
-      schemaVersion: "0.3",
+      schemaVersion: "0.4",
     } as MosaicDocument;
 
     expect(

@@ -1,71 +1,34 @@
 import type {
   MosaicAnyLocalProject,
-  MosaicPaywallV03Asset,
-  MosaicPaywallV03AwardComponent,
-  MosaicPaywallV03AwardEmblem,
-  MosaicPaywallV03AxisSizingValue,
-  MosaicPaywallV03Background,
-  MosaicPaywallV03BaseTypography,
-  MosaicPaywallV03BoxSizing,
-  MosaicPaywallV03ButtonAction,
-  MosaicPaywallV03ButtonComponent,
-  MosaicPaywallV03CarouselComponent,
-  MosaicPaywallV03Color,
-  MosaicPaywallV03ControlAccessibility,
-  MosaicPaywallV03CountdownComponent,
-  MosaicPaywallV03DesignSystem,
-  MosaicPaywallV03Document,
-  MosaicPaywallV03DocumentCompatibility,
-  MosaicPaywallV03EdgeInsets,
-  MosaicPaywallV03FeatureListComponent,
-  MosaicPaywallV03FeatureListItem,
-  MosaicPaywallV03IconComponent,
-  MosaicPaywallV03IconName,
-  MosaicPaywallV03ImageAsset,
-  MosaicPaywallV03ImageComponent,
-  MosaicPaywallV03LocaleCatalog,
-  MosaicPaywallV03Localization,
-  MosaicPaywallV03LocalizedText,
-  MosaicPaywallV03Node,
-  MosaicPaywallV03ProductBadgeComponent,
-  MosaicPaywallV03ProductCardComponent,
-  MosaicPaywallV03ProductReference,
-  MosaicPaywallV03ProductSelectorComponent,
-  MosaicPaywallV03RequiredCapability,
-  MosaicPaywallV03Screen,
-  MosaicPaywallV03SelectionStateStyle,
-  MosaicPaywallV03SelectionStateStyleOverride,
-  MosaicPaywallV03SelectionStyles,
-  MosaicPaywallV03Shadow,
-  MosaicPaywallV03SocialProofAvatar,
-  MosaicPaywallV03SocialProofComponent,
-  MosaicPaywallV03SocialProofRating,
-  MosaicPaywallV03Stack,
-  MosaicPaywallV03SwitchComponent,
-  MosaicPaywallV03TabsComponent,
-  MosaicPaywallV03TabsEntry,
-  MosaicPaywallV03TextAccessibility,
-  MosaicPaywallV03TextAlignment,
-  MosaicPaywallV03TextComponent,
-  MosaicPaywallV03TimelineComponent,
-  MosaicPaywallV03TimelineConnector,
-  MosaicPaywallV03TimelineEntry,
-  MosaicPaywallV03TimelineMarker,
-  MosaicPaywallV03Visibility,
   MosaicPaywallV04AppearMotion,
+  MosaicPaywallV04Asset,
   MosaicPaywallV04AwardComponent,
+  MosaicPaywallV04AwardEmblem,
+  MosaicPaywallV04AxisSizingValue,
+  MosaicPaywallV04Background,
+  MosaicPaywallV04BaseTypography,
+  MosaicPaywallV04BoxSizing,
+  MosaicPaywallV04ButtonAction,
   MosaicPaywallV04ButtonComponent,
   MosaicPaywallV04ButtonMotion,
   MosaicPaywallV04CarouselComponent,
+  MosaicPaywallV04Color,
+  MosaicPaywallV04ControlAccessibility,
   MosaicPaywallV04CountdownComponent,
   MosaicPaywallV04DesignSystem,
   MosaicPaywallV04Document,
   MosaicPaywallV04DocumentCompatibility,
+  MosaicPaywallV04EdgeInsets,
   MosaicPaywallV04FeatureListComponent,
   MosaicPaywallV04FeatureListItem,
   MosaicPaywallV04IconComponent,
+  MosaicPaywallV04IconName,
+  MosaicPaywallV04ImageAsset,
   MosaicPaywallV04ImageComponent,
   MosaicPaywallV04InlineMotion,
+  MosaicPaywallV04LocaleCatalog,
+  MosaicPaywallV04Localization,
+  MosaicPaywallV04LocalizedText,
   MosaicPaywallV04LoopMotion,
   MosaicPaywallV04Marker,
   MosaicPaywallV04Motion,
@@ -75,136 +38,101 @@ import type {
   MosaicPaywallV04NodeMotion,
   MosaicPaywallV04ProductBadgeComponent,
   MosaicPaywallV04ProductCardComponent,
+  MosaicPaywallV04ProductReference,
   MosaicPaywallV04ProductSelectorComponent,
   MosaicPaywallV04RequiredCapability,
   MosaicPaywallV04Screen,
   MosaicPaywallV04SelectableMotion,
   MosaicPaywallV04SelectionMotion,
+  MosaicPaywallV04SelectionStateStyle,
+  MosaicPaywallV04SelectionStateStyleOverride,
+  MosaicPaywallV04SelectionStyles,
+  MosaicPaywallV04Shadow,
+  MosaicPaywallV04SocialProofAvatar,
   MosaicPaywallV04SocialProofComponent,
+  MosaicPaywallV04SocialProofRating,
   MosaicPaywallV04Stack,
   MosaicPaywallV04SwitchComponent,
   MosaicPaywallV04TabsComponent,
   MosaicPaywallV04TabsEntry,
+  MosaicPaywallV04TextAccessibility,
+  MosaicPaywallV04TextAlignment,
   MosaicPaywallV04TextComponent,
   MosaicPaywallV04TimelineComponent,
+  MosaicPaywallV04TimelineConnector,
+  MosaicPaywallV04TimelineEntry,
   MosaicPaywallV04TimelineMarker,
-  MosaicPreviewV03LocalRevision,
-  MosaicPreviewV03MockCommerceState,
-  MosaicPreviewV03MockProduct,
+  MosaicPaywallV04Visibility,
+  MosaicPreviewV04LocalRevision,
+  MosaicPreviewV04MockCommerceState,
+  MosaicPreviewV04MockProduct,
 } from "@/lib/mosaic-protocol";
 
-export type TextDirection = MosaicPaywallV03LocaleCatalog["direction"];
-export type TextAlignment = MosaicPaywallV03TextAlignment;
-export type HorizontalAlignment = MosaicPaywallV03Stack["crossAxisAlignment"];
-export type TextStyle = MosaicPaywallV03TextComponent["typography"]["style"];
-export type LocalizedText = MosaicPaywallV03LocalizedText;
-export type LocaleCatalog = MosaicPaywallV03LocaleCatalog;
-export type DocumentLocalization = MosaicPaywallV03Localization;
-export type RequiredCapability =
-  | MosaicPaywallV03RequiredCapability
-  | MosaicPaywallV04RequiredCapability;
-export type DocumentCompatibility =
-  | MosaicPaywallV03DocumentCompatibility
-  | MosaicPaywallV04DocumentCompatibility;
-export type EdgeInsets = MosaicPaywallV03EdgeInsets;
-export type TextAccessibility = MosaicPaywallV03TextAccessibility;
-export type ControlAccessibility = MosaicPaywallV03ControlAccessibility;
-export type TextComponent =
-  | MosaicPaywallV03TextComponent
-  | MosaicPaywallV04TextComponent;
-export type ImageComponent =
-  | MosaicPaywallV03ImageComponent
-  | MosaicPaywallV04ImageComponent;
-export type IconComponent =
-  | MosaicPaywallV03IconComponent
-  | MosaicPaywallV04IconComponent;
-export type IconName = MosaicPaywallV03IconName;
-export type FeatureListItem =
-  | MosaicPaywallV03FeatureListItem
-  | MosaicPaywallV04FeatureListItem;
-export type FeatureListComponent =
-  | MosaicPaywallV03FeatureListComponent
-  | MosaicPaywallV04FeatureListComponent;
-export type ProductCardComponent =
-  | MosaicPaywallV03ProductCardComponent
-  | MosaicPaywallV04ProductCardComponent;
-export type ProductBadgeComponent =
-  | MosaicPaywallV03ProductBadgeComponent
-  | MosaicPaywallV04ProductBadgeComponent;
-export type ProductSelectorComponent =
-  | MosaicPaywallV03ProductSelectorComponent
-  | MosaicPaywallV04ProductSelectorComponent;
-export type ButtonComponent =
-  | MosaicPaywallV03ButtonComponent
-  | MosaicPaywallV04ButtonComponent;
-export type ButtonAction = MosaicPaywallV03ButtonAction;
-export type Screen = MosaicPaywallV03Screen | MosaicPaywallV04Screen;
-export type StackComponent = MosaicPaywallV03Stack | MosaicPaywallV04Stack;
-export type VerticalStackComponent =
-  | MosaicPaywallV03Stack
-  | MosaicPaywallV04Stack;
-export type CarouselComponent =
-  | MosaicPaywallV03CarouselComponent
-  | MosaicPaywallV04CarouselComponent;
-export type SwitchComponent =
-  | MosaicPaywallV03SwitchComponent
-  | MosaicPaywallV04SwitchComponent;
-export type CountdownComponent =
-  | MosaicPaywallV03CountdownComponent
-  | MosaicPaywallV04CountdownComponent;
-export type TabsComponent =
-  | MosaicPaywallV03TabsComponent
-  | MosaicPaywallV04TabsComponent;
-export type TabsEntry = MosaicPaywallV03TabsEntry | MosaicPaywallV04TabsEntry;
-export type TimelineComponent =
-  | MosaicPaywallV03TimelineComponent
-  | MosaicPaywallV04TimelineComponent;
-export type TimelineEntry = MosaicPaywallV03TimelineEntry;
-export type TimelineMarker =
-  | MosaicPaywallV03TimelineMarker
-  | MosaicPaywallV04TimelineMarker;
-export type TimelineConnector = MosaicPaywallV03TimelineConnector;
-export type AwardComponent =
-  | MosaicPaywallV03AwardComponent
-  | MosaicPaywallV04AwardComponent;
-export type AwardEmblem = MosaicPaywallV03AwardEmblem;
-export type SocialProofComponent =
-  | MosaicPaywallV03SocialProofComponent
-  | MosaicPaywallV04SocialProofComponent;
-export type SocialProofRating = MosaicPaywallV03SocialProofRating;
-export type SocialProofAvatar = MosaicPaywallV03SocialProofAvatar;
-export type BaseTypography = MosaicPaywallV03BaseTypography;
-export type SelectionStyles = MosaicPaywallV03SelectionStyles;
-export type SelectionStateStyle = MosaicPaywallV03SelectionStateStyle;
+export type TextDirection = MosaicPaywallV04LocaleCatalog["direction"];
+export type TextAlignment = MosaicPaywallV04TextAlignment;
+export type HorizontalAlignment = MosaicPaywallV04Stack["crossAxisAlignment"];
+export type TextStyle = MosaicPaywallV04TextComponent["typography"]["style"];
+export type LocalizedText = MosaicPaywallV04LocalizedText;
+export type LocaleCatalog = MosaicPaywallV04LocaleCatalog;
+export type DocumentLocalization = MosaicPaywallV04Localization;
+export type RequiredCapability = MosaicPaywallV04RequiredCapability;
+export type DocumentCompatibility = MosaicPaywallV04DocumentCompatibility;
+export type EdgeInsets = MosaicPaywallV04EdgeInsets;
+export type TextAccessibility = MosaicPaywallV04TextAccessibility;
+export type ControlAccessibility = MosaicPaywallV04ControlAccessibility;
+export type TextComponent = MosaicPaywallV04TextComponent;
+export type ImageComponent = MosaicPaywallV04ImageComponent;
+export type IconComponent = MosaicPaywallV04IconComponent;
+export type IconName = MosaicPaywallV04IconName;
+export type FeatureListItem = MosaicPaywallV04FeatureListItem;
+export type FeatureListComponent = MosaicPaywallV04FeatureListComponent;
+export type ProductCardComponent = MosaicPaywallV04ProductCardComponent;
+export type ProductBadgeComponent = MosaicPaywallV04ProductBadgeComponent;
+export type ProductSelectorComponent = MosaicPaywallV04ProductSelectorComponent;
+export type ButtonComponent = MosaicPaywallV04ButtonComponent;
+export type ButtonAction = MosaicPaywallV04ButtonAction;
+export type Screen = MosaicPaywallV04Screen;
+export type StackComponent = MosaicPaywallV04Stack;
+export type VerticalStackComponent = MosaicPaywallV04Stack;
+export type CarouselComponent = MosaicPaywallV04CarouselComponent;
+export type SwitchComponent = MosaicPaywallV04SwitchComponent;
+export type CountdownComponent = MosaicPaywallV04CountdownComponent;
+export type TabsComponent = MosaicPaywallV04TabsComponent;
+export type TabsEntry = MosaicPaywallV04TabsEntry;
+export type TimelineComponent = MosaicPaywallV04TimelineComponent;
+export type TimelineEntry = MosaicPaywallV04TimelineEntry;
+export type TimelineMarker = MosaicPaywallV04TimelineMarker;
+export type TimelineConnector = MosaicPaywallV04TimelineConnector;
+export type AwardComponent = MosaicPaywallV04AwardComponent;
+export type AwardEmblem = MosaicPaywallV04AwardEmblem;
+export type SocialProofComponent = MosaicPaywallV04SocialProofComponent;
+export type SocialProofRating = MosaicPaywallV04SocialProofRating;
+export type SocialProofAvatar = MosaicPaywallV04SocialProofAvatar;
+export type BaseTypography = MosaicPaywallV04BaseTypography;
+export type SelectionStyles = MosaicPaywallV04SelectionStyles;
+export type SelectionStateStyle = MosaicPaywallV04SelectionStateStyle;
 export type SelectionStateStyleOverride =
-  MosaicPaywallV03SelectionStateStyleOverride;
-export type Visibility = MosaicPaywallV03Visibility;
-export type ProtocolColor = MosaicPaywallV03Color;
-export type ProtocolBackground = MosaicPaywallV03Background;
-export type ProtocolShadow = MosaicPaywallV03Shadow;
-export type BoxSizing = MosaicPaywallV03BoxSizing;
-export type AxisSizing = MosaicPaywallV03AxisSizingValue;
-export type PaywallDesignSystem =
-  | MosaicPaywallV03DesignSystem
-  | MosaicPaywallV04DesignSystem;
+  MosaicPaywallV04SelectionStateStyleOverride;
+export type Visibility = MosaicPaywallV04Visibility;
+export type ProtocolColor = MosaicPaywallV04Color;
+export type ProtocolBackground = MosaicPaywallV04Background;
+export type ProtocolShadow = MosaicPaywallV04Shadow;
+export type BoxSizing = MosaicPaywallV04BoxSizing;
+export type AxisSizing = MosaicPaywallV04AxisSizingValue;
+export type PaywallDesignSystem = MosaicPaywallV04DesignSystem;
 export type ProtocolNode =
-  | MosaicPaywallV03Node
-  | MosaicPaywallV03ProductCardComponent
-  | MosaicPaywallV03ProductBadgeComponent
   | MosaicPaywallV04Node
   | MosaicPaywallV04ProductCardComponent
   | MosaicPaywallV04ProductBadgeComponent;
-export type DocumentNode = MosaicPaywallV03Node | MosaicPaywallV04Node;
-export type ProductReference = MosaicPaywallV03ProductReference;
-export type ImageAsset = MosaicPaywallV03ImageAsset;
-export type Asset = MosaicPaywallV03Asset;
-export type MosaicDocument =
-  | MosaicPaywallV03Document
-  | MosaicPaywallV04Document;
+export type DocumentNode = MosaicPaywallV04Node;
+export type ProductReference = MosaicPaywallV04ProductReference;
+export type ImageAsset = MosaicPaywallV04ImageAsset;
+export type Asset = MosaicPaywallV04Asset;
+export type MosaicDocument = MosaicPaywallV04Document;
 
 // Product Card and Product Badge are structural layers created only inside a
 // Product Selector/Card. They intentionally stay out of the global catalogue.
-export type InsertableBlockType = MosaicPaywallV03Node["type"];
+export type InsertableBlockType = MosaicPaywallV04Node["type"];
 
 export interface BlockInsertionConfiguration {
   readonly countdownEndsAt?: string;
@@ -285,9 +213,9 @@ export type MockPurchaseState =
   | "restoreFailure"
   | "alreadyEntitled";
 
-export type LocalRevision = MosaicPreviewV03LocalRevision;
-export type MockProductDefinition = MosaicPreviewV03MockProduct;
-export type MockCommerceState = MosaicPreviewV03MockCommerceState;
+export type LocalRevision = MosaicPreviewV04LocalRevision;
+export type MockProductDefinition = MosaicPreviewV04MockProduct;
+export type MockCommerceState = MosaicPreviewV04MockCommerceState;
 
 export interface ValidationIssue {
   code: string;

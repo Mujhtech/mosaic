@@ -9,7 +9,7 @@ import type { MosaicDocument } from "@/features/paywall-editor/types/editor";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
 import { required } from "@/test/required";
-import canonicalFixture from "../../../../../../protocol/fixtures/v0.3/complete-paywall.json";
+import canonicalFixture from "../../../../../../protocol/fixtures/v0.4/complete-paywall.json";
 
 const canonicalDocument = canonicalFixture as MosaicDocument;
 const ASSET_URL = "https://assets.example.com/mosaic/hero-shot.png";

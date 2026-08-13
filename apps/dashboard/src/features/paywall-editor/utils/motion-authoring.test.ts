@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { collectEditorValidation } from "@/features/paywall-editor/hooks/use-editor-validation";
-import { upgradeDocumentToV04 } from "@/features/paywall-editor/mutations/upgrade-to-v04";
 import type {
   AppearMotion,
   LoopMotion,
@@ -16,15 +15,14 @@ import {
   documentRequiredCapabilities,
   findAppearAncestorId,
   withDocumentParts,
-  withNodeParts,
 } from "@/features/paywall-editor/utils/document-version";
 import { synchronizeProtocolMetadata } from "@/features/paywall-editor/utils/protocol-document";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
 import { required } from "@/test/required";
 
 function v04Template() {
-  return upgradeDocumentToV04(
-    cloneValue(required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document)
+  return cloneValue(
+    required(EDITOR_TEMPLATES[0], "EDITOR_TEMPLATES[0]").document
   );
 }
 
@@ -47,8 +45,12 @@ function withMotion(
   nodeId: string,
   motion: Record<string, unknown>
 ) {
-  return updateNode(document, nodeId, (node) =>
-    withNodeParts(node, { motion })
+  // Several cases below author deliberately invalid motion blocks to check the
+  // diagnostics they produce, so this helper bypasses the typed part helpers.
+  return updateNode(
+    document,
+    nodeId,
+    (node) => ({ ...node, motion }) as typeof node
   );
 }
 
@@ -138,9 +140,8 @@ describe("motion authoring constraints", () => {
 
   /**
    * Capability derivation must track authored motion, because an under-declared
-   * capability is refused at delivery and an over-declared one is refused by the
-   * validator. The dashboard composes this itself -- the protocol package's
-   * `requiredCapabilitiesFor` is not version-aware -- so it is worth pinning.
+   * capability is refused at delivery and an over-declared one is refused by
+   * the validator.
    */
   it("derives the motion capabilities an authored document requires", () => {
     const base = v04Template();
@@ -302,10 +303,10 @@ describe("motion authoring constraints", () => {
   });
 
   /**
-   * The metadata pass runs on every document change, so if it derived 0.3
-   * capabilities for a 0.4 document it would rewrite a valid document into an
-   * invalid one on the author's next keystroke. This drives the whole path:
-   * upgrade, author motion, synchronise, validate against the real contract.
+   * The metadata pass runs on every document change, so if it derived stale
+   * capabilities it would rewrite a valid document into an invalid one on the
+   * author's next keystroke. This drives the whole path: author motion,
+   * synchronise, validate against the real contract.
    */
   it("keeps a motion-bearing document valid through the metadata pass", () => {
     const authored = withMotion(

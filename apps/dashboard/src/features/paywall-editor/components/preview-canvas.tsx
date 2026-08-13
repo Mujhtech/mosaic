@@ -85,13 +85,16 @@ import {
   initialScreen,
   screenContainingNode,
 } from "@/features/paywall-editor/utils/document-tree-traversal";
-import { documentRuntimeState } from "@/features/paywall-editor/utils/document-version";
+
 import { updateLocalizedProperty } from "@/features/paywall-editor/utils/editor-transforms";
 import {
   type PaywallSelectionState,
   resolveNodeVisibility,
 } from "@/features/paywall-editor/utils/protocol-component-rules";
-import { paywallRuntimeDiagnostics } from "@/lib/mosaic-protocol";
+import {
+  paywallRuntimeDiagnostics,
+  runtimeStateForAcceptedRevision,
+} from "@/lib/mosaic-protocol";
 
 const DEVICE_NODE_ID = "studio-device-preview";
 const selectCanvasPreferences = (snapshot: StudioWorkspaceSnapshot) =>
@@ -131,7 +134,7 @@ function previewRuntimeState(
       tabSelections: {},
     };
   }
-  const runtime = documentRuntimeState(document);
+  const runtime = runtimeStateForAcceptedRevision(document);
   return {
     document,
     switchValues: runtime.switches,
@@ -315,12 +318,7 @@ export function PreviewCanvas({
   const purchaseDisabledIds = useMemo(
     () =>
       new Set(
-        // The browser's runtime-diagnostics surface is deliberately 0.3-only
-        // until the Studio preview wave (it throws on a 0.4 document, by
-        // design). The rules it enforces -- hidden purchase targets behind
-        // switch/tab state -- are version-independent, so skipping it on 0.4
-        // under-reports a niche diagnostic rather than rendering wrongly.
-        document && document.schemaVersion === "0.3"
+        document
           ? paywallRuntimeDiagnostics(document, {
               switches: switchValues,
               tabs: tabSelections,
@@ -416,7 +414,7 @@ export function PreviewCanvas({
       setDropNotice({
         tone: "danger",
         message:
-          "That component is not supported. Drag a Protocol 0.3 component from Add content.",
+          "That component is not supported. Drag a Protocol 0.4 component from Add content.",
       });
       return;
     }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MosaicDocument } from "@/features/paywall-editor/types/editor";
 import { synchronizeProtocolMetadata } from "@/features/paywall-editor/utils/protocol-document";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
-import navigationOnlyFixture from "../../../../../../protocol/fixtures/v0.3/navigation-only.json";
+import navigationOnlyFixture from "../../../../../../protocol/fixtures/v0.4/navigation-only.json";
 
 describe("Protocol metadata synchronization", () => {
   it("does not add normalized commerce outcomes to navigation-only actions", () => {

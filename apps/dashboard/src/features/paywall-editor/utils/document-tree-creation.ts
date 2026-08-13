@@ -9,13 +9,12 @@ import type {
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { isValidCountdownInstant } from "@/features/paywall-editor/utils/countdown";
 import {
-  isMotionCapableDocument,
   withDocumentParts,
   withNodeParts,
 } from "@/features/paywall-editor/utils/document-version";
 import type {
-  MosaicPaywallV03ProductCardComponent,
-  MosaicPaywallV03Stack,
+  MosaicPaywallV04ProductCardComponent,
+  MosaicPaywallV04Stack,
 } from "@/lib/mosaic-protocol";
 import {
   allocateIdentifier,
@@ -125,7 +124,7 @@ export function createProductCard(
   keys: Set<string>,
   selectorId: string,
   productReferenceId: string
-): MosaicPaywallV03ProductCardComponent {
+): MosaicPaywallV04ProductCardComponent {
   const id = allocateIdentifier(
     identifiers,
     `${selectorId}-${productReferenceId}-card`
@@ -275,7 +274,7 @@ export function appendProductBadge(
   return { document: next, selectionId: badge.id };
 }
 
-export function emptyStack(id: string): MosaicPaywallV03Stack {
+export function emptyStack(id: string): MosaicPaywallV04Stack {
   return {
     type: "stack",
     id,
@@ -342,11 +341,7 @@ export function createBlock(
       return {
         type,
         id,
-        // 0.4 consolidated Feature List and Timeline onto one marker union; a
-        // 0.3 list still pins the single "checkmark" constant.
-        marker: isMotionCapableDocument(document)
-          ? { kind: "icon" as const, name: "checkmark" as const }
-          : ("checkmark" as const),
+        marker: { kind: "icon" as const, name: "checkmark" as const },
         gap: 12,
         markerColor: "action.primary",
         items: [

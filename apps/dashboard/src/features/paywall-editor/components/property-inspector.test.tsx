@@ -126,6 +126,7 @@ describe("property inspector safety", () => {
       "Layout",
       "Appearance",
       "Advanced",
+      "Motion",
     ]);
     const content = within(openInspectorSection("Content"));
     expect(

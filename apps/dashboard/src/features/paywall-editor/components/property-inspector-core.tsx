@@ -32,18 +32,18 @@ import {
   validationPropertyAddress,
 } from "@/features/paywall-editor/utils/property-inspector-navigation";
 import type {
-  MosaicPaywallV03BaseTypography,
-  MosaicPaywallV03BoxAppearance,
-  MosaicPaywallV03ContainerAppearance,
-  MosaicPaywallV03EdgeInsets,
-  MosaicPaywallV03Typography,
+  MosaicPaywallV04BaseTypography,
+  MosaicPaywallV04BoxAppearance,
+  MosaicPaywallV04ContainerAppearance,
+  MosaicPaywallV04EdgeInsets,
+  MosaicPaywallV04Typography,
 } from "@/lib/mosaic-protocol";
 
 export const CONTROL_CLASS =
   "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/30 h-8 w-full rounded border px-2 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60";
 export const TEXTAREA_CLASS =
   "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/30 min-h-24 w-full resize-y rounded border px-2 py-2 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60";
-export const ZERO_INSETS: MosaicPaywallV03EdgeInsets = {
+export const ZERO_INSETS: MosaicPaywallV04EdgeInsets = {
   top: 0,
   start: 0,
   bottom: 0,
@@ -74,11 +74,11 @@ export type ControlNode = Extract<
   }
 >;
 export type TypographyValue =
-  | MosaicPaywallV03BaseTypography
-  | MosaicPaywallV03Typography;
+  | MosaicPaywallV04BaseTypography
+  | MosaicPaywallV04Typography;
 export type AppearanceValue =
-  | MosaicPaywallV03BoxAppearance
-  | MosaicPaywallV03ContainerAppearance;
+  | MosaicPaywallV04BoxAppearance
+  | MosaicPaywallV04ContainerAppearance;
 
 export function isControlNode(node: ProtocolNode): node is ControlNode {
   return (

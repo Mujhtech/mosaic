@@ -19,7 +19,7 @@ import type {
   StudioWorkspacePreferencesV1,
 } from "@/features/paywall-editor/types/studio-workspace";
 import { required } from "@/test/required";
-import canonicalFixture from "../../../../../../protocol/fixtures/v0.3/complete-paywall.json";
+import canonicalFixture from "../../../../../../protocol/fixtures/v0.4/complete-paywall.json";
 
 function createMemoryStorage(initial: string | null = null) {
   let value = initial;

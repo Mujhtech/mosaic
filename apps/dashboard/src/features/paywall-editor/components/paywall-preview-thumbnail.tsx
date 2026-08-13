@@ -10,11 +10,11 @@ import type {
   Screen,
 } from "@/features/paywall-editor/types/editor";
 import { initialScreen } from "@/features/paywall-editor/utils/document-tree-traversal";
-import { documentRuntimeState } from "@/features/paywall-editor/utils/document-version";
 import {
   previewScreenSurface,
   resolvedScreenSafeArea,
 } from "@/features/paywall-editor/utils/preview-screen-surface";
+import { runtimeStateForAcceptedRevision } from "@/lib/mosaic-protocol";
 
 const NO_IDS: ReadonlySet<string> = new Set<string>();
 
@@ -97,7 +97,7 @@ function PaywallPreviewThumbnailContent({
     const { defaultLocale, fallbackLocale, locales } = document.localization;
     const locale = locales[defaultLocale] ? defaultLocale : fallbackLocale;
     const direction = locales[locale]?.direction ?? "ltr";
-    const runtime = documentRuntimeState(document);
+    const runtime = runtimeStateForAcceptedRevision(document);
 
     return {
       children: surface.root.children.map((node) => (

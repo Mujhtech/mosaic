@@ -11,12 +11,7 @@ import {
   flattenDocument,
   screenContainingNode,
 } from "@/features/paywall-editor/utils/document-tree-traversal";
-import {
-  resolveBadgeStyle,
-  resolveCardStyle,
-  resolveDocumentBackgroundToken,
-  resolveDocumentColorToken,
-} from "@/features/paywall-editor/utils/document-version";
+
 import {
   eligibleTabControllers,
   ratingMaximumSteps,
@@ -27,7 +22,13 @@ import {
   timelineStyleFieldIsDeclared,
 } from "@/features/paywall-editor/utils/protocol-component-rules";
 import { fillAxisIsBounded } from "@/features/paywall-editor/utils/sizing";
-import { paywallContractVersions } from "@/lib/mosaic-protocol";
+import {
+  paywallContractVersions,
+  resolveBackgroundToken,
+  resolveColorToken,
+  resolveProductBadgeStyle,
+  resolveProductCardStyle,
+} from "@/lib/mosaic-protocol";
 
 const PRODUCT_TOKEN = /\{\{\s*product\.(?:name|price)\s*\}\}/;
 
@@ -105,7 +106,7 @@ function literalColor(
   document: MosaicDocument,
   color: ProtocolColor
 ): Rgba | null {
-  const resolved = resolveDocumentColorToken(document, color);
+  const resolved = resolveColorToken(document, color);
   if (!resolved) {
     return null;
   }
@@ -127,7 +128,7 @@ function literalBackground(
   document: MosaicDocument,
   background: ProtocolBackground
 ): Rgba | null {
-  const resolved = resolveDocumentBackgroundToken(document, background);
+  const resolved = resolveBackgroundToken(document, background);
   return resolved?.type === "color"
     ? literalColor(document, resolved.value)
     : null;
@@ -175,20 +176,22 @@ function contrastRatio(first: Rgba, second: Rgba) {
 
 function appearanceOptions(node: ProtocolNode): AppearanceOption[] {
   if (node.type === "productCard") {
-    return [resolveCardStyle(node, false), resolveCardStyle(node, true)].map(
-      (style) => ({
-        background: style.background,
-        opacity: style.opacity,
-      })
-    );
+    return [
+      resolveProductCardStyle(node, false),
+      resolveProductCardStyle(node, true),
+    ].map((style) => ({
+      background: style.background,
+      opacity: style.opacity,
+    }));
   }
   if (node.type === "productBadge") {
-    return [resolveBadgeStyle(node, false), resolveBadgeStyle(node, true)].map(
-      (style) => ({
-        background: style.background,
-        opacity: style.opacity,
-      })
-    );
+    return [
+      resolveProductBadgeStyle(node, false),
+      resolveProductBadgeStyle(node, true),
+    ].map((style) => ({
+      background: style.background,
+      opacity: style.opacity,
+    }));
   }
   const appearance = "appearance" in node ? node.appearance : undefined;
   return [
@@ -346,11 +349,11 @@ function boundaryFields(node: ProtocolNode): ContrastField[] {
     return [
       {
         property: "styles.default.border.color",
-        style: resolveCardStyle(node, false),
+        style: resolveProductCardStyle(node, false),
       },
       {
         property: "styles.selected.border.color",
-        style: resolveCardStyle(node, true),
+        style: resolveProductCardStyle(node, true),
       },
     ]
       .filter(({ style }) => style.border.width > 0)
@@ -365,11 +368,11 @@ function boundaryFields(node: ProtocolNode): ContrastField[] {
     return [
       {
         property: "styles.default.border.color",
-        style: resolveBadgeStyle(node, false),
+        style: resolveProductBadgeStyle(node, false),
       },
       {
         property: "styles.selected.border.color",
-        style: resolveBadgeStyle(node, true),
+        style: resolveProductBadgeStyle(node, true),
       },
     ]
       .filter(({ style }) => style.border.width > 0)
@@ -669,7 +672,7 @@ function validateNodeIdentity(
     issues.push(
       issue(
         "component.invalidId",
-        `Component ID ${node.id} is not a valid Protocol 0.3 identifier.`,
+        `Component ID ${node.id} is not a valid Protocol 0.4 identifier.`,
         `${path}/id`,
         "Use a lowercase identifier containing letters, numbers, dashes, or underscores.",
         node.id,
@@ -720,8 +723,8 @@ function validateNodeLocalization(
   }
   if (
     node.type === "productCard" &&
-    JSON.stringify(resolveCardStyle(node, false)) ===
-      JSON.stringify(resolveCardStyle(node, true))
+    JSON.stringify(resolveProductCardStyle(node, false)) ===
+      JSON.stringify(resolveProductCardStyle(node, true))
   ) {
     issues.push(
       warning(
@@ -973,7 +976,7 @@ function validateNodeReferences(
   return issues;
 }
 
-/** Rules that only exist for the components Protocol 0.3 added. */
+/** Rules that only exist for the richer marketing components. */
 function validateNodeComponentRules(
   node: ProtocolNode,
   path: string,
@@ -1120,7 +1123,7 @@ export function validateEditorDocument(
         "document.invalidId",
         "The document ID must start with a lowercase letter and use letters, numbers, dashes, or underscores.",
         "/id",
-        "Rename the document using a Protocol 0.3 identifier.",
+        "Rename the document using a Protocol 0.4 identifier.",
         undefined,
         "id"
       )

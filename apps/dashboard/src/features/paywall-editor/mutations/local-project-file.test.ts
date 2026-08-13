@@ -17,7 +17,6 @@ import {
   unavailableMockProductsForDocument,
   writeLocalProject,
 } from "@/features/paywall-editor/mutations/local-project-file";
-import { upgradeDocumentToV04 } from "@/features/paywall-editor/mutations/upgrade-to-v04";
 import type {
   LocalProjectFile,
   MockProductDefinition,
@@ -27,7 +26,7 @@ import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { validateLocalProject } from "@/lib/mosaic-protocol";
 import { required } from "@/test/required";
-import canonicalFixture from "../../../../../../protocol/fixtures/v0.3/complete-paywall.json";
+import canonicalFixture from "../../../../../../protocol/fixtures/v0.4/complete-paywall.json";
 
 const canonicalDocument = canonicalFixture as MosaicDocument;
 
@@ -165,7 +164,7 @@ describe("local project import and export", () => {
 
     window.localStorage.setItem(
       LOCAL_PROJECT_STORAGE_KEY,
-      JSON.stringify({ fileFormatVersion: "0.3", document: {} })
+      JSON.stringify({ fileFormatVersion: "0.4", document: {} })
     );
     expect(readLocalProjectResult()).toMatchObject({ status: "corrupt" });
   });
@@ -218,21 +217,21 @@ describe("local project import and export", () => {
     });
   });
 
-  // Protocol 0.3 replaced 0.2 outright, so a 0.2 autosave is unreadable rather
+  // Protocol 0.4 replaced 0.3 outright, so a 0.3 autosave is unreadable rather
   // than recoverable. Reporting it as empty would look like the author's work
   // was never saved, and reporting it as recoverable would promise a resume
   // that cannot happen; both hide a hard cutover behind a shrug.
-  it("rejects a retired Protocol 0.2 autosave by naming the version", () => {
+  it("rejects a retired Protocol 0.3 autosave by naming the version", () => {
     window.localStorage.setItem(
       RETIRED_LOCAL_PROJECT_STORAGE_KEY,
       JSON.stringify({
-        fileFormatVersion: "0.2",
-        document: { schemaVersion: "0.2" },
+        fileFormatVersion: "0.3",
+        document: { schemaVersion: "0.3" },
       })
     );
     const retired = readLocalProjectResult();
     expect(retired.status).toBe("corrupt");
-    expect(retired.status === "corrupt" && retired.message).toContain("0.2");
+    expect(retired.status === "corrupt" && retired.message).toContain("0.3");
     expect(retired.status === "corrupt" && retired.message).toContain(
       "no migration path"
     );
@@ -240,43 +239,35 @@ describe("local project import and export", () => {
     window.localStorage.setItem(
       LOCAL_PROJECT_STORAGE_KEY,
       JSON.stringify({
-        fileFormatVersion: "0.2",
-        document: { schemaVersion: "0.2" },
+        fileFormatVersion: "0.3",
+        document: { schemaVersion: "0.3" },
       })
     );
     const underCurrentKey = readLocalProjectResult();
     expect(underCurrentKey.status).toBe("corrupt");
     expect(
       underCurrentKey.status === "corrupt" && underCurrentKey.message
-    ).toContain("Protocol 0.3 replaced 0.2");
+    ).toContain("Protocol 0.4 replaced 0.3");
   });
 
-  it("rejects an imported Protocol 0.2 document by naming the version", () => {
-    const retired = { ...cloneValue(canonicalDocument), schemaVersion: "0.2" };
+  it("rejects an imported Protocol 0.3 document by naming the version", () => {
+    const retired = { ...cloneValue(canonicalDocument), schemaVersion: "0.3" };
     expect(() => parseImportedJson(JSON.stringify(retired))).toThrow(
-      /Protocol 0\.2/
+      /Protocol 0\.3/
     );
   });
   /**
-   * A .mosaic file's `fileFormatVersion` is what `validateLocalProject`
-   * dispatches on, so a 0.4 document saved under the 0.3 file version is
-   * validated against the wrong schema and refused on reopen. The realistic
-   * failure is a designer upgrading a paywall, saving, and being unable to open
-   * their own file.
+   * A .mosaic file's `fileFormatVersion` is the version `validateLocalProject`
+   * checks, so a document saved under any other file version is refused on
+   * reopen. The realistic failure is a designer saving and being unable to
+   * open their own file.
    */
-  it("saves a 0.4 document as a 0.4 local project and reopens it", () => {
-    const upgraded = upgradeDocumentToV04(cloneValue(canonicalDocument));
-
-    const saved = project(upgraded);
+  it("saves a document as a 0.4 local project and reopens it", () => {
+    const saved = project();
 
     expect(saved.fileFormatVersion).toBe("0.4");
     expect(validateLocalProject(saved).diagnostics).toEqual([]);
     expect(validateLocalProject(saved).ok).toBe(true);
     expect(isLocalProjectFile(saved)).toBe(true);
-  });
-
-  /** A 0.3 document keeps producing a 0.3 file, unchanged by 0.4 existing. */
-  it("still saves a 0.3 document as a 0.3 local project", () => {
-    expect(project().fileFormatVersion).toBe("0.3");
   });
 });

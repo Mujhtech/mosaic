@@ -14,8 +14,7 @@ import {
  * field moves in the schema, the copy Studio shows stops matching and this
  * fails, instead of the dashboard quietly telling authors an old number.
  */
-const SCHEMA_RELATIVE_PATH = "protocol/schema/v0.3/paywall.schema.json";
-const SCHEMA_V04_RELATIVE_PATH = "protocol/schema/v0.4/paywall.schema.json";
+const SCHEMA_RELATIVE_PATH = "protocol/schema/v0.4/paywall.schema.json";
 
 function locateSchema(relativePath: string) {
   let directory = process.cwd();
@@ -46,28 +45,7 @@ function loadDefinitions(relativePath: string): SchemaDefinitions {
     .$defs as SchemaDefinitions;
 }
 
-// Studio authors both contract versions, so a constraint field is legitimate
-// when either schema declares it: `markerSize` on a Feature List exists only in
-// 0.4, while everything 0.3 declares carries into the 0.4 superset. Required
-// status is read from 0.3 (the baseline both versions share); a field only 0.4
-// declares is optional by construction, because 0.4 is a pure superset whose
-// additions are all optional.
-const definitionsV03 = loadDefinitions(SCHEMA_RELATIVE_PATH);
-const definitionsV04 = loadDefinitions(SCHEMA_V04_RELATIVE_PATH);
-const definitions: SchemaDefinitions =
-  definitionsV03 &&
-  Object.fromEntries(
-    Object.entries(definitionsV03).map(([name, definition]) => [
-      name,
-      {
-        ...definition,
-        properties: {
-          ...definitionsV04?.[name]?.properties,
-          ...definition.properties,
-        },
-      },
-    ])
-  );
+const definitions: SchemaDefinitions = loadDefinitions(SCHEMA_RELATIVE_PATH);
 
 function fieldProblems(fields: SchemaFields): string[] {
   const definition = definitions?.[fields.definition];

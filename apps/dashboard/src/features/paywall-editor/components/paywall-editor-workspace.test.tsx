@@ -18,7 +18,7 @@ import {
   useStudioWorkspaceActions,
   useStudioWorkspaceSelector,
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
-import canonicalFixture from "../../../../../../protocol/fixtures/v0.3/complete-paywall.json";
+import canonicalFixture from "../../../../../../protocol/fixtures/v0.4/complete-paywall.json";
 
 const selectSelectedTool = (snapshot: StudioWorkspaceSnapshot) =>
   snapshot.preferences.selectedTool;

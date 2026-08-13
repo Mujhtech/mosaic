@@ -60,7 +60,7 @@ import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-
 import type { ProtocolNode } from "@/features/paywall-editor/types/editor";
 import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree-mutations";
 import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
-import type { MosaicPaywallV03BaseTypography } from "@/lib/mosaic-protocol";
+import type { MosaicPaywallV04BaseTypography } from "@/lib/mosaic-protocol";
 
 const SCREEN_INDEX = /^\/screens\/(\d+)/;
 
@@ -430,7 +430,7 @@ export function SwitchInspector({
             current.type === "switch"
               ? {
                   ...current,
-                  typography: typography as MosaicPaywallV03BaseTypography,
+                  typography: typography as MosaicPaywallV04BaseTypography,
                 }
               : current
           }
@@ -516,7 +516,7 @@ export function CountdownInspector({
           current.type === "countdown"
             ? {
                 ...current,
-                typography: typography as MosaicPaywallV03BaseTypography,
+                typography: typography as MosaicPaywallV04BaseTypography,
               }
             : current
         }

@@ -14,14 +14,14 @@ export const MAX_LOCAL_PROJECT_BYTES = 1_048_576;
  */
 export const MAX_FIGMA_BUNDLE_BYTES = 20_971_520;
 export const PREVIEW_ENDPOINT_DEFAULT = "ws://127.0.0.1:4317/preview";
-export const LOCAL_PROJECT_STORAGE_KEY = "mosaic:local-project:v0.3";
-export const LOCAL_EDITOR_UI_STORAGE_KEY = "mosaic:local-project-ui:v0.3";
+export const LOCAL_PROJECT_STORAGE_KEY = "mosaic:local-project:v0.4";
+export const LOCAL_EDITOR_UI_STORAGE_KEY = "mosaic:local-project-ui:v0.4";
 /**
- * Protocol 0.3 replaced 0.2 outright, so autosaves written under the 0.2 key
+ * Protocol 0.4 replaced 0.3 outright, so autosaves written under the 0.3 key
  * are unreadable. The key is still named here so the read path can report the
  * retired document instead of silently starting from an empty editor.
  */
-export const RETIRED_LOCAL_PROJECT_STORAGE_KEY = "mosaic:local-project:v0.2";
+export const RETIRED_LOCAL_PROJECT_STORAGE_KEY = "mosaic:local-project:v0.3";
 
 export const MOCK_PURCHASE_STATES = [
   { value: "productAvailable", label: "Product available" },

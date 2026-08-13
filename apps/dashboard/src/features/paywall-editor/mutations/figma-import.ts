@@ -294,8 +294,8 @@ function bundleDocumentFailure(
 ): string {
   const [first] = diagnostics;
   return first
-    ? `The paywall inside this Figma export bundle is not a valid Mosaic Protocol 0.3 document. ${first.message} ${first.recovery.message}`
-    : "The paywall inside this Figma export bundle is not a valid Mosaic Protocol 0.3 document.";
+    ? `The paywall inside this Figma export bundle is not a valid Mosaic Protocol 0.4 document. ${first.message} ${first.recovery.message}`
+    : "The paywall inside this Figma export bundle is not a valid Mosaic Protocol 0.4 document.";
 }
 
 /**

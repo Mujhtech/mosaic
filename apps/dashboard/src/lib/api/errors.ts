@@ -293,14 +293,6 @@ const CODE_DESCRIPTORS: Record<string, CodeDescriptor> = {
     description:
       "The reconciliation window was rejected. A run must cover a bounded past range, and it may not exceed 180 days — the retention Apple applies to its own notification history.",
   },
-  release_protocol_mixed: {
-    description:
-      "This Release mixes Paywalls on different protocol versions, and a Release must be version-homogeneous — the delivery contract carries exactly one protocol version. Republish after moving the listed Paywalls onto one version. Reloading will not change the outcome.",
-  },
-  release_protocol_undeliverable: {
-    description:
-      "Paywalls on Protocol 0.4 cannot be published yet: no Configuration Delivery contract can carry a 0.4 document, so Mosaic refuses the Release rather than emitting one no SDK could decode. Keep authoring in 0.4 — publishing opens when the Delivery contract ships. Reloading will not change the outcome.",
-  },
   store_credentials_still_active: {
     description:
       "Mosaic Billing cannot be turned off while a Store Server Credential is active. Turning it off alone would not stop the store: Apple keeps posting to an endpoint whose intake token still resolves, and every refusal spends one of its five non-renewable delivery attempts. Revoke the credentials first.",

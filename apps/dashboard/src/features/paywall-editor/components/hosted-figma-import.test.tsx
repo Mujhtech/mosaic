@@ -11,7 +11,7 @@ import type { HostedDraft } from "@/features/publishing/api/hosted-publishing-ad
 import { HostedPublishingAdapterContext } from "@/features/publishing/api/use-hosted-publishing-adapter";
 import { createTestHostedPublishingAdapter } from "@/test/hosted-publishing-adapter";
 import { required } from "@/test/required";
-import canonicalFixture from "../../../../../../protocol/fixtures/v0.3/complete-paywall.json";
+import canonicalFixture from "../../../../../../protocol/fixtures/v0.4/complete-paywall.json";
 
 const originalInnerWidth = window.innerWidth;
 

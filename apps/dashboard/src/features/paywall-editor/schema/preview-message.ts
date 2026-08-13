@@ -7,7 +7,7 @@ import {
   localPreviewContractVersion,
   localPreviewVersionPreference,
   localPreviewWebSocketProtocols,
-  type previewMessageTypesByVersion,
+  type previewMessageTypes,
   validatePreviewMessage,
 } from "@/lib/mosaic-protocol";
 
@@ -21,8 +21,7 @@ export const PREVIEW_WEBSOCKET_SUBPROTOCOLS = PREVIEW_PROTOCOL_VERSIONS.map(
 
 export type PreviewProtocolVersion = (typeof PREVIEW_PROTOCOL_VERSIONS)[number];
 
-export type PreviewMessageType =
-  (typeof previewMessageTypesByVersion)["0.3"][number];
+export type PreviewMessageType = (typeof previewMessageTypes)[number];
 
 export interface PreviewMessageEnvelope<TPayload = Record<string, unknown>> {
   messageId: string;

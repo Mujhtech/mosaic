@@ -36,9 +36,9 @@ function collectLocalizedText(value: unknown, entries: LocalizedText[]) {
   }
 }
 
-export function synchronizeProtocolMetadata<TDocument extends MosaicDocument>(
-  document: TDocument
-): TDocument {
+export function synchronizeProtocolMetadata(
+  document: MosaicDocument
+): MosaicDocument {
   const next = cloneValue(reconcileReservedAccessibilityStrings(document));
   const entries = flattenDocument(next);
 

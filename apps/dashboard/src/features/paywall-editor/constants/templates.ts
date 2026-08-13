@@ -1,8 +1,8 @@
 import type { ProtocolNode } from "@/features/paywall-editor/types/editor";
 import { synchronizeProtocolMetadata } from "@/features/paywall-editor/utils/protocol-document";
 import type {
-  MosaicPaywallV03Document,
-  MosaicPaywallV03Node,
+  MosaicPaywallV04Document,
+  MosaicPaywallV04Node,
 } from "@/lib/mosaic-protocol";
 
 const STRINGS = {
@@ -137,10 +137,10 @@ function fitText(
 
 function baseDocument(
   id: string,
-  children: MosaicPaywallV03Node[]
-): MosaicPaywallV03Document {
+  children: MosaicPaywallV04Node[]
+): MosaicPaywallV04Document {
   return synchronizeProtocolMetadata({
-    schemaVersion: "0.3",
+    schemaVersion: "0.4",
     id,
     revision: 1,
     compatibility: {
@@ -159,6 +159,7 @@ function baseDocument(
       colors: [],
       backgrounds: [],
       shadows: [],
+      motions: [],
     },
     assets: [],
     products: [
@@ -206,7 +207,7 @@ function baseDocument(
   });
 }
 
-const CLOSE_BUTTON: MosaicPaywallV03Node = {
+const CLOSE_BUTTON: MosaicPaywallV04Node = {
   type: "button",
   id: "close",
   direction: "horizontal",
@@ -221,7 +222,7 @@ const CLOSE_BUTTON: MosaicPaywallV03Node = {
   },
 };
 
-const PRODUCT_SELECTOR: MosaicPaywallV03Node = {
+const PRODUCT_SELECTOR: MosaicPaywallV04Node = {
   type: "productSelector",
   id: "plans",
   direction: "horizontal",
@@ -390,7 +391,7 @@ const PRODUCT_SELECTOR: MosaicPaywallV03Node = {
   },
 };
 
-const PURCHASE_BUTTON: MosaicPaywallV03Node = {
+const PURCHASE_BUTTON: MosaicPaywallV04Node = {
   type: "button",
   id: "purchase",
   direction: "horizontal",
@@ -438,7 +439,7 @@ const PURCHASE_BUTTON: MosaicPaywallV03Node = {
   },
 };
 
-const RESTORE_BUTTON: MosaicPaywallV03Node = {
+const RESTORE_BUTTON: MosaicPaywallV04Node = {
   type: "button",
   id: "restore",
   direction: "horizontal",
@@ -463,7 +464,7 @@ const RESTORE_BUTTON: MosaicPaywallV03Node = {
   },
 };
 
-const LEGAL_TEXT: MosaicPaywallV03Node = {
+const LEGAL_TEXT: MosaicPaywallV04Node = {
   type: "text",
   id: "legal",
   value: {
@@ -483,10 +484,10 @@ const LEGAL_TEXT: MosaicPaywallV03Node = {
   accessibility: { role: "text" },
 };
 
-const FEATURE_LIST: MosaicPaywallV03Node = {
+const FEATURE_LIST: MosaicPaywallV04Node = {
   type: "featureList",
   id: "features",
-  marker: "checkmark",
+  marker: { kind: "icon", name: "checkmark" },
   gap: 12,
   markerColor: "action.primary",
   items: [
@@ -523,7 +524,7 @@ const FEATURE_LIST: MosaicPaywallV03Node = {
 
 export interface EditorTemplate {
   description: string;
-  document: MosaicPaywallV03Document;
+  document: MosaicPaywallV04Document;
   id: string;
   name: string;
 }

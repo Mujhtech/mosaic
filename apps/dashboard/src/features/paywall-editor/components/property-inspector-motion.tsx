@@ -31,7 +31,6 @@ import {
 import {
   documentMotionTokens,
   findAppearAncestorId,
-  isMotionCapableDocument,
   nodeMotionOf,
   withNodeParts,
 } from "@/features/paywall-editor/utils/document-version";
@@ -166,13 +165,6 @@ function MotionConstraintNote({ children }: { children: string }) {
 export function MotionSection({ node }: { node: ProtocolNode }) {
   const { document } = useInspectorContext();
   const editor = useEditorActions();
-
-  // Motion is 0.4-only. On a 0.3 document the section is absent entirely rather
-  // than disabled: there is nothing to author and nothing to explain at the
-  // node, because the answer is a document-level upgrade.
-  if (!isMotionCapableDocument(document)) {
-    return null;
-  }
 
   const motion = nodeMotionOf(node);
   const appear = motion?.appear;

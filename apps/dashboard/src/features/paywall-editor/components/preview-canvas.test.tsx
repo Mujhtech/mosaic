@@ -11,7 +11,6 @@ import { PreviewCanvas } from "@/features/paywall-editor/components/preview-canv
 import { DEFAULT_MOCK_PRODUCTS } from "@/features/paywall-editor/constants/editor-constants";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { useWorkspacePreviewContext } from "@/features/paywall-editor/hooks/use-workspace-preview-context";
-import { upgradeDocumentToV04 } from "@/features/paywall-editor/mutations/upgrade-to-v04";
 import {
   EditorStoreProvider,
   useEditorActions,
@@ -55,11 +54,7 @@ function InitializePreview({ mode }: { mode: MetadataMode }) {
       ],
       'EDITOR_TEMPLATES[mode === "semantic-elements" ? 1 : 0]'
     );
-    editor.loadTemplate(
-      mode === "authored-marker-size"
-        ? upgradeDocumentToV04(document)
-        : document
-    );
+    editor.loadTemplate(document);
     if (mode === "authored-marker-size") {
       editor.updateComponent("features", (node) =>
         node.type === "featureList"
@@ -826,12 +821,12 @@ describe("Canvas geometry", () => {
 });
 
 describe("Feature list marker size", () => {
-  // The 0.4 contract makes the marker size normative: authored `markerSize`
+  // The contract makes the marker size normative: authored `markerSize`
   // draws at that size, and absent it draws at the list's own
   // `typography.fontSize` -- never at a canvas constant. The canvas is the
   // author's WYSIWYG surface, so a divergence here ships a size the author
   // never previewed.
-  it("draws the authored marker size on a 0.4 document", async () => {
+  it("draws the authored marker size", async () => {
     renderPreview("authored-marker-size");
     const featureList = await screen.findByRole("list", {
       name: "What is included",

@@ -5,6 +5,7 @@ import { validateEditorDocument } from "@/features/paywall-editor/schema/editor-
 import { createEditorStore } from "@/features/paywall-editor/stores/editor-store";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { validatePaywallDocument } from "@/lib/mosaic-protocol";
 import { required } from "@/test/required";
 
 describe("editor validation", () => {
@@ -15,6 +16,19 @@ describe("editor validation", () => {
       );
       expect(contractValid).toBe(true);
       expect(issues.filter((issue) => issue.severity !== "info")).toEqual([]);
+    }
+  });
+
+  // Templates are the documents every author starts from, so they are pinned
+  // against the protocol reference validator directly -- not only Studio's own
+  // validation layer -- as native 0.4 documents. A template the contract
+  // rejects would put every new paywall into an unpublishable state at birth.
+  it("ships every template as a native 0.4 document the contract accepts", () => {
+    for (const template of EDITOR_TEMPLATES) {
+      expect(template.document.schemaVersion).toBe("0.4");
+      const result = validatePaywallDocument(template.document);
+      expect(result.diagnostics).toEqual([]);
+      expect(result.ok).toBe(true);
     }
   });
 

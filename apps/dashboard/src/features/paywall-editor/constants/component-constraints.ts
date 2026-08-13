@@ -4,7 +4,7 @@ import type { InsertableBlockType } from "@/features/paywall-editor/types/editor
  * What an author needs to know before inserting a component, expressed as
  * references into the Mosaic protocol schema rather than as prose.
  *
- * Every `definition` names a `$defs` key in `protocol/schema/v0.3/paywall.schema.json`,
+ * Every `definition` names a `$defs` key in `protocol/schema/v0.4/paywall.schema.json`,
  * every `property` names a property of that definition, and every bound below
  * restates a `minItems`/`maxItems`/`required` fact from that schema. The schema
  * is 76 KB and lives outside this package, so it is not bundled into the

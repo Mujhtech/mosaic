@@ -29,9 +29,9 @@ import type {
 import { updateNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import { resolveSelectionStyle } from "@/features/paywall-editor/utils/protocol-component-rules";
 import type {
-  MosaicPaywallV03EdgeInsets,
-  MosaicPaywallV03ProductCardSelectedStyle,
-  MosaicPaywallV03ProductCardStyles,
+  MosaicPaywallV04EdgeInsets,
+  MosaicPaywallV04ProductCardSelectedStyle,
+  MosaicPaywallV04ProductCardStyles,
 } from "@/lib/mosaic-protocol";
 
 export type CardState = "default" | "selected";
@@ -74,7 +74,7 @@ export const PRODUCT_STYLE_OVERRIDE_FIELDS = [
 ] as const;
 
 export function productStyleOverrideExists(
-  style: MosaicPaywallV03ProductCardSelectedStyle,
+  style: MosaicPaywallV04ProductCardSelectedStyle,
   path: readonly string[]
 ) {
   let current: unknown = style;
@@ -88,7 +88,7 @@ export function productStyleOverrideExists(
 }
 
 export function removeProductStyleOverride(
-  style: MosaicPaywallV03ProductCardSelectedStyle,
+  style: MosaicPaywallV04ProductCardSelectedStyle,
   path: readonly string[]
 ) {
   function remove(
@@ -120,7 +120,7 @@ export function removeProductStyleOverride(
   return remove(
     style as Record<string, unknown>,
     path
-  ) as MosaicPaywallV03ProductCardSelectedStyle;
+  ) as MosaicPaywallV04ProductCardSelectedStyle;
 }
 
 // Selected/unselected product-layer styles are edited as one atomic inspector section; extracting
@@ -167,8 +167,8 @@ export function SelectionStyleSection({
   const updateStyles = useCallback(
     (
       updater: (
-        styles: MosaicPaywallV03ProductCardStyles
-      ) => MosaicPaywallV03ProductCardStyles
+        styles: MosaicPaywallV04ProductCardStyles
+      ) => MosaicPaywallV04ProductCardStyles
     ) => {
       editor.updateComponent(node.id, (current) => {
         if (!isSelectionStyledNode(current)) {
@@ -216,7 +216,7 @@ export function SelectionStyleSection({
   }
 
   function setPaddingEdge(
-    edge: keyof MosaicPaywallV03EdgeInsets,
+    edge: keyof MosaicPaywallV04EdgeInsets,
     value: number
   ) {
     updateStyles((styles) =>

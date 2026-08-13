@@ -12,7 +12,7 @@ import { serializeDocument } from "@/features/paywall-editor/mutations/local-pro
 import type { MosaicDocument } from "@/features/paywall-editor/types/editor";
 import { LOCAL_STUDIO_SOURCE } from "@/features/paywall-editor/types/studio-source";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import canonicalFixture from "../../../../../../protocol/fixtures/v0.3/complete-paywall.json";
+import canonicalFixture from "../../../../../../protocol/fixtures/v0.4/complete-paywall.json";
 
 const canonicalDocument = canonicalFixture as MosaicDocument;
 
@@ -120,7 +120,7 @@ describe("Figma export bundle detection", () => {
   it("rejects a bundle carrying a document the protocol refuses", () => {
     const invalid = { ...cloneValue(canonicalDocument), unsupported: true };
     expect(() => readImportedFileSource(bundle({ document: invalid }))).toThrow(
-      /not a valid Mosaic Protocol 0\.3 document/
+      /not a valid Mosaic Protocol 0\.4 document/
     );
   });
 

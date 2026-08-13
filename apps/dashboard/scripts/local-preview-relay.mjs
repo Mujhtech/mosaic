@@ -14,7 +14,7 @@ export const PREVIEW_SUBPROTOCOLS = Object.freeze(
     (version) => localPreviewWebSocketProtocols[version]
   )
 );
-export const PREVIEW_SUBPROTOCOL = localPreviewWebSocketProtocols["0.3"];
+export const PREVIEW_SUBPROTOCOL = localPreviewWebSocketProtocols["0.4"];
 const HEARTBEAT_TIMEOUT_MS = 15_000;
 const STUDIO_MESSAGE_TYPES = new Set([
   "draftUpdated",
@@ -53,73 +53,26 @@ function isLoopbackOrigin(origin) {
   }
 }
 
-function messageForVersion(message, targetVersion) {
-  if (message.previewProtocolVersion === targetVersion) {
-    return message;
-  }
-  if (
-    message.type === "draftUpdated" ||
-    message.type === "mockCommerceStateChanged"
-  ) {
-    return null;
-  }
-  const translated = {
-    ...message,
-    previewProtocolVersion: targetVersion,
-    payload:
-      message.type === "capabilityReport"
-        ? {
-            ...message.payload,
-            previewCapabilities: message.payload.previewCapabilities.map(
-              (capability) => ({
-                ...capability,
-                version: targetVersion,
-              })
-            ),
-          }
-        : message.payload,
-  };
-  return validatePreviewMessage(translated).ok ? translated : null;
-}
-
 function sendCanonical(socket, meta, message) {
-  const translated = messageForVersion(message, meta.protocolVersion);
-  if (!translated) {
+  // One negotiated version pre-GA: every peer in a session speaks the same
+  // subprotocol, so a mismatched frame is dropped rather than translated.
+  if (message.previewProtocolVersion !== meta.protocolVersion) {
     return false;
   }
-  socket.send(JSON.stringify(translated));
+  socket.send(JSON.stringify(message));
   return true;
 }
 
 function incompatibleDraftDecision(message, peerMeta) {
-  const { document } = message.payload;
-  if (document.schemaVersion === "0.3") {
-    return decideLocalPreviewDraftDelivery({
-      capabilityReport: peerMeta.capabilityReport,
-      document,
-      negotiation: {
-        ok: true,
-        selectedVersion: peerMeta.protocolVersion,
-        selectedWebSocketSubprotocol: peerMeta.protocol,
-      },
-    });
-  }
-  if (document.schemaVersion === peerMeta.protocolVersion) {
-    return { delivery: "send" };
-  }
-  return {
-    delivery: "withhold",
-    diagnostic: {
-      code: "preview.incompatibleSchemaVersion",
-      message: `This Local Preview ${peerMeta.protocolVersion} client cannot receive a Protocol ${document.schemaVersion} draft.`,
-      fallback: "keepLastAcceptedDraft",
-      recovery: {
-        action: "updatePreviewClient",
-        message:
-          "Update the preview client to a version that supports this paywall format.",
-      },
+  return decideLocalPreviewDraftDelivery({
+    capabilityReport: peerMeta.capabilityReport,
+    document: message.payload.document,
+    negotiation: {
+      ok: true,
+      selectedVersion: peerMeta.protocolVersion,
+      selectedWebSocketSubprotocol: peerMeta.protocol,
     },
-  };
+  });
 }
 
 function rejectionReason(code) {

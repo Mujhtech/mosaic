@@ -52,14 +52,12 @@ class FakeWebSocket {
   }
 
   open(protocol?: string) {
-    // Defaults to the 0.3 subprotocol because every fixture in this file is a
-    // 0.3 client. Studio offers 0.4 first, and echoing back the first offer
-    // would make a 0.3 client claim to speak 0.4.
+    // Defaults to the single 0.4 subprotocol Studio offers.
     this.protocol =
       protocol ??
       (Array.isArray(this.requestedProtocol)
         ? (this.requestedProtocol.find(
-            (candidate) => candidate === "mosaic.local-preview.v0.3"
+            (candidate) => candidate === "mosaic.local-preview.v0.4"
           ) ??
           this.requestedProtocol[0] ??
           "")
@@ -99,7 +97,7 @@ function envelope(
   type: string,
   payload: object,
   sequence: number,
-  previewProtocolVersion: "0.1" | "0.3" = "0.3"
+  previewProtocolVersion: "0.1" | "0.4" = "0.4"
 ) {
   return {
     previewProtocolVersion,
@@ -114,7 +112,7 @@ function envelope(
 function connected(
   clientId: string,
   sequence: number,
-  previewProtocolVersion: "0.1" | "0.3" = "0.3"
+  previewProtocolVersion: "0.1" | "0.4" = "0.4"
 ) {
   return envelope(
     "previewClientConnected",
@@ -155,14 +153,14 @@ function capability(
     "capabilityReport",
     {
       clientId,
-      supportedSchemaVersions: ["0.3"],
+      supportedSchemaVersions: ["0.4"],
       supportedCapabilities: document.compatibility.requiredCapabilities,
       previewCapabilities: [
-        { name: "preview.liveUpdate", version: "0.3" },
-        { name: "preview.mockCommerce", version: "0.3" },
-        { name: "preview.localeOverride", version: "0.3" },
-        { name: "preview.textScale", version: "0.3" },
-        { name: "preview.diagnostics", version: "0.3" },
+        { name: "preview.liveUpdate", version: "0.4" },
+        { name: "preview.mockCommerce", version: "0.4" },
+        { name: "preview.localeOverride", version: "0.4" },
+        { name: "preview.textScale", version: "0.4" },
+        { name: "preview.diagnostics", version: "0.4" },
       ],
       limits: { maxDocumentBytes },
     },
@@ -222,7 +220,7 @@ function warning(
 function heartbeat(
   clientId: string,
   sequence: number,
-  previewProtocolVersion: "0.1" | "0.3" = "0.3"
+  previewProtocolVersion: "0.1" | "0.4" = "0.4"
 ) {
   return envelope(
     "previewHeartbeat",
@@ -245,7 +243,7 @@ function client(clientId: string): PreviewClient {
       version: "0.1.0",
     },
     device: { displayName: "Device", systemName: "OS", systemVersion: "1" },
-    supportedSchemaVersions: ["0.3"],
+    supportedSchemaVersions: ["0.4"],
     supportedCapabilities: [],
     previewCapabilities: [],
     lastSeenAt: "2026-07-17T08:00:00Z",
@@ -372,11 +370,9 @@ describe("preview connection", () => {
     const [firstSocket] = FakeWebSocket.instances;
     expect(firstSocket).toBeDefined();
     expect(firstSocket?.url).toContain(`sessionId=${SESSION_ID}`);
-    // Studio offers both, newest first: a 0.4 client renders motion, a 0.3
-    // client still connects.
+    // One contract version pre-GA: Studio offers exactly one subprotocol.
     expect(firstSocket?.requestedProtocol).toEqual([
       "mosaic.local-preview.v0.4",
-      "mosaic.local-preview.v0.3",
     ]);
 
     await act(async () => firstSocket?.open());
@@ -538,10 +534,7 @@ describe("preview connection", () => {
 
     render(<Harness />);
     const [socket] = FakeWebSocket.instances;
-    expect(socket?.requestedProtocol).toEqual([
-      "mosaic.local-preview.v0.4",
-      "mosaic.local-preview.v0.3",
-    ]);
+    expect(socket?.requestedProtocol).toEqual(["mosaic.local-preview.v0.4"]);
     await act(async () => socket?.open("mosaic.local-preview.v0.1"));
 
     expect(socket?.readyState).toBe(FakeWebSocket.CLOSED);

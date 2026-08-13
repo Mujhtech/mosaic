@@ -67,6 +67,7 @@ describe("style authoring safeguards", () => {
       ],
       backgrounds: [],
       shadows: [],
+      motions: [],
     };
 
     expect(isSafeTokenReplacement(system, "colors", "source", "direct")).toBe(
