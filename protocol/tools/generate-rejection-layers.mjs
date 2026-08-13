@@ -56,18 +56,9 @@ function pureSchemaValidator(target, supporting = []) {
   return ajv.compile(schemaAt(target));
 }
 
-const PAYWALL = "schema/v0.3/paywall.schema.json";
-const PAYWALL_V04 = "schema/v0.4/paywall.schema.json";
+const PAYWALL = "schema/v0.4/paywall.schema.json";
 const DECISION = "schema/placement-decision/v1/decision.schema.json";
 const EXPERIMENT = "schema/experiment-assignment/v1/assignment.schema.json";
-const DELIVERY_V1 = [
-  "schema/configuration-delivery/v1/release.schema.json",
-  "schema/configuration-delivery/v1/capability-request.schema.json",
-];
-const DELIVERY_V2 = [
-  "schema/configuration-delivery/v2/release.schema.json",
-  "schema/configuration-delivery/v2/capability-request.schema.json",
-];
 
 const BILLING_INGESTION = [
   "schema/billing-ingestion/v1/observation.schema.json",
@@ -99,42 +90,6 @@ function billingIngestionV1UnionValidator() {
   });
 }
 
-const AUTHORITATIVE_ENTITLEMENT = [
-  "schema/authoritative-entitlement/v1/snapshot.schema.json",
-  "schema/authoritative-entitlement/v1/sync-request.schema.json",
-  "schema/authoritative-entitlement/v1/check.schema.json",
-  "schema/authoritative-entitlement/v1/subscription.schema.json",
-  "schema/authoritative-entitlement/v1/restore.schema.json",
-];
-
-const BILLING_STATE_WEBHOOK = [
-  "schema/billing-state-webhook/v1/event.schema.json",
-  "schema/billing-state-webhook/v1/delivery.schema.json",
-];
-
-/**
- * Compiles a union probe for a contract whose invalid fixtures are documents of
- * several sibling envelope schemas. Each schema pins its own `recordType`
- * subset, so a well-formed record matches exactly one branch and a rejected
- * record matches none.
- */
-function unionValidator(schemas) {
-  return () => {
-    const ajv = new Ajv2020({
-      allErrors: true,
-      strict: true,
-      strictRequired: false,
-      strictTypes: false,
-    });
-    for (const schema of schemas) ajv.addSchema(schemaAt(schema));
-    return ajv.compile({
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: `urn:mosaic:protocol:schema:rejection-probe:${schemas[0]}`,
-      anyOf: schemas.map((schema) => ({ $ref: schemaAt(schema).$id })),
-    });
-  };
-}
-
 /**
  * Every `invalid/` fixture directory, with the pure schema its fixtures are
  * documents of. Kept explicit: a new contract must be registered deliberately,
@@ -143,19 +98,9 @@ function unionValidator(schemas) {
  */
 export const rejectionLayerTargets = Object.freeze([
   {
-    contract: "Paywall Protocol 0.3",
-    directory: "fixtures/v0.3/invalid",
-    validator: () => pureSchemaValidator(PAYWALL),
-    // 9 carried forward from 0.2 plus one per rejection 0.3 introduces:
-    // tab-visibility that names no such tab, a timeline that styles a marker
-    // no entry uses, and a rating above what its own scale can express. Raise
-    // this when a corpus grows; never lower it to make a check pass.
-    minimumCases: 12,
-  },
-  {
     contract: "Paywall Protocol 0.4",
     directory: "fixtures/v0.4/invalid",
-    validator: () => pureSchemaValidator(PAYWALL_V04),
+    validator: () => pureSchemaValidator(PAYWALL),
     // The 12 carried forward from 0.3 plus one per rejection motion introduces:
     // an entrance inside an entrance, two pulsing buttons on one screen, a loop
     // on something that is not a Button, a pulse under the flash-safety floor,
@@ -166,23 +111,12 @@ export const rejectionLayerTargets = Object.freeze([
     minimumCases: 20,
   },
   {
-    contract: "Configuration Delivery v1",
-    directory: "fixtures/configuration-delivery/v1/invalid",
-    validator: () => pureSchemaValidator(DELIVERY_V1[0], [PAYWALL]),
-  },
-  {
-    contract: "Configuration Delivery v2",
-    directory: "fixtures/configuration-delivery/v2/invalid",
-    validator: () =>
-      pureSchemaValidator(DELIVERY_V2[0], [PAYWALL, DECISION, ...DELIVERY_V1]),
-  },
-  {
     contract: "Configuration Delivery v3",
     directory: "fixtures/configuration-delivery/v3/invalid",
     validator: () =>
       pureSchemaValidator(
         "schema/configuration-delivery/v3/release.schema.json",
-        [PAYWALL, DECISION, EXPERIMENT, ...DELIVERY_V1, ...DELIVERY_V2],
+        [PAYWALL, DECISION, EXPERIMENT],
       ),
   },
   {
@@ -196,12 +130,6 @@ export const rejectionLayerTargets = Object.freeze([
     validator: () => pureSchemaValidator(EXPERIMENT),
   },
   {
-    contract: "Analytics Event v1",
-    directory: "fixtures/analytics-event/v1/invalid",
-    validator: () =>
-      pureSchemaValidator("schema/analytics-event/v1/event.schema.json"),
-  },
-  {
     contract: "Analytics Event v2",
     directory: "fixtures/analytics-event/v2/invalid",
     validator: () =>
@@ -211,16 +139,6 @@ export const rejectionLayerTargets = Object.freeze([
     contract: "Billing Ingestion v1",
     directory: "fixtures/billing-ingestion/v1/invalid",
     validator: billingIngestionV1UnionValidator,
-  },
-  {
-    contract: "Authoritative Entitlement v1",
-    directory: "fixtures/authoritative-entitlement/v1/invalid",
-    validator: unionValidator(AUTHORITATIVE_ENTITLEMENT),
-  },
-  {
-    contract: "Billing State Webhook v1",
-    directory: "fixtures/billing-state-webhook/v1/invalid",
-    validator: unionValidator(BILLING_STATE_WEBHOOK),
   },
   {
     contract: "Customer Access Token v1",
@@ -234,8 +152,17 @@ export const rejectionLayerTargets = Object.freeze([
     validator: () =>
       pureSchemaValidator(
         "schema/authoritative-entitlement/v2/contract.schema.json",
-        ["schema/authoritative-entitlement/v1/snapshot.schema.json"],
+        [
+          "schema/authoritative-entitlement/v2/snapshot.schema.json",
+          "schema/authoritative-entitlement/v2/check.schema.json",
+          "schema/authoritative-entitlement/v2/subscription.schema.json",
+          "schema/authoritative-entitlement/v2/restore.schema.json",
+        ],
       ),
+    // The 11 authority-binding rejections plus the 27 carried forward from the
+    // Contract 1 corpus. Raise this when the corpus grows; never lower it to
+    // make a check pass.
+    minimumCases: 38,
   },
   {
     contract: "Billing Migration Operations v1",
@@ -249,13 +176,11 @@ export const rejectionLayerTargets = Object.freeze([
     contract: "Billing State Webhook v2",
     directory: "fixtures/billing-state-webhook/v2/invalid",
     validator: () =>
-      pureSchemaValidator(
-        "schema/billing-state-webhook/v2/contract.schema.json",
-        [
-          "schema/billing-state-webhook/v1/event.schema.json",
-          "schema/billing-state-webhook/v1/delivery.schema.json",
-        ],
-      ),
+      pureSchemaValidator("schema/billing-state-webhook/v2/contract.schema.json"),
+    // The 6 authority-binding rejections plus the 8 carried forward from the
+    // Contract 1 corpus. Raise this when the corpus grows; never lower it to
+    // make a check pass.
+    minimumCases: 14,
   },
 ]);
 

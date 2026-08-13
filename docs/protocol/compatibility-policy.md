@@ -6,33 +6,38 @@ validators in `protocol/tools/`, not only by prose.
 
 ## Contract set
 
-| Contract | Versions | Status | Manifest |
+**Every contract carries exactly one version.** Mosaic is pre-GA, so a contract
+change replaces its version rather than adding one beside it, and the replaced
+version is deleted outright along with every reference, dispatch arm,
+projection, and version fallback that named it. See
+[ADR-0028](../architecture/decisions/0028-single-version-contracts.md) and
+[versioning.md](versioning.md#one-version-per-contract). Parallel versions begin
+at GA, and the deprecation policy governs from that point.
+
+| Contract | Version | Status | Manifest |
 | --- | --- | --- | --- |
-| Paywall Protocol | `0.3` | release candidate | `protocol/compatibility/v0.3.json` |
-| Local Preview (development-only) | `0.3` | release candidate | `protocol/compatibility/local-preview/v0.3.json` |
-| Configuration Delivery | `1`, `2`, `3` | approved | `protocol/compatibility/configuration-delivery/` |
+| Configuration Delivery | `3` | approved | `protocol/compatibility/configuration-delivery/v3.json` |
 | Placement Decision | `1` | approved | `protocol/compatibility/placement-decision/v1.json` |
 | Experiment Assignment | `1` | approved | `protocol/compatibility/experiment-assignment/v1.json` |
-| Analytics Event | `1`, `2` | approved | `protocol/compatibility/analytics-event/` |
-| Commerce Provider Contract | `1`, `2` | approved | `protocol/compatibility/commerce-provider/` |
-| Commerce Configuration | `1`, `2` | approved | `protocol/compatibility/commerce-configuration/` |
+| Analytics Event | `2` | approved | `protocol/compatibility/analytics-event/v2.json` |
+| Commerce Provider Contract | `2` | approved | `protocol/compatibility/commerce-provider/v2.json` |
+| Commerce Configuration | `2` | approved | `protocol/compatibility/commerce-configuration/v2.json` |
 
-11 manifests are `status: "approved"`; the two Paywall Protocol `0.3` manifests
-are `status: "releaseCandidate"` and are not yet immutable (ADR-0026). Every version identifier is
-independent: Delivery `3` does not imply Paywall `3`, and a contract's number
-carries no compatibility meaning relative to any other contract.
+Every version identifier is independent: Delivery `3` does not imply Paywall
+`3`, and a contract's number carries no compatibility meaning relative to any
+other contract.
 
 ### Draft contracts
 
 | Contract | Version | Status | Manifest |
 | --- | --- | --- | --- |
+| Paywall Protocol | `0.4` | `draft` | `protocol/compatibility/v0.4.json` |
+| Local Preview (development-only) | `0.4` | `draft` | `protocol/compatibility/local-preview/v0.4.json` |
 | Billing Ingestion | `1` | `draft` | `protocol/compatibility/billing-ingestion/v1.json` |
-| Authoritative Entitlement | `1` | `draft` | `protocol/compatibility/authoritative-entitlement/v1.json` |
 | Customer Access Token | `1` | `draft` | `protocol/compatibility/customer-access-token/v1.json` |
-| Billing State Webhook | `1` | `draft` | `protocol/compatibility/billing-state-webhook/v1.json` |
-| Billing Migration Operations | `1` | `draft` | `protocol/compatibility/billing-migration-operations/v1.json` |
 | Authoritative Entitlement | `2` | `draft` | `protocol/compatibility/authoritative-entitlement/v2.json` |
 | Billing State Webhook | `2` | `draft` | `protocol/compatibility/billing-state-webhook/v2.json` |
+| Billing Migration Operations | `1` | `draft` | `protocol/compatibility/billing-migration-operations/v1.json` |
 
 A draft contract carries **no compatibility guarantee**: it may change or
 disappear without a version bump, and nothing in the approved set depends on it.
@@ -41,14 +46,14 @@ decision recorded in the Phase 9A review. It is optional, adds no required
 reference to any approved contract, and is not generated into the browser
 contract. See [Billing Ingestion Contract v1](billing-ingestion-v1.md).
 
-The three Phase 9B contracts are born `draft` for the same reason and are
-promoted alongside Billing Ingestion `1` once live-sandbox evidence exists. None
-of them `$ref`s another draft: a draft that referenced another draft would
-inherit its lifecycle, so shared shapes such as the safe-diagnostic object are
-**copied** into each contract rather than referenced. See
-[Authoritative Entitlement Contract v1](authoritative-entitlement-v1.md),
+The entitlement, token, and webhook contracts are born `draft` for the same
+reason and are promoted alongside Billing Ingestion `1` once live-sandbox
+evidence exists. None of them `$ref`s another draft: a draft that referenced
+another draft would inherit its lifecycle, so shared shapes such as the
+safe-diagnostic object are **copied** into each contract rather than referenced.
+See [Authoritative Entitlement Contract v2](authoritative-entitlement-v2.md),
 [Customer Access Token Contract v1](customer-access-token-v1.md), and
-[Billing State Webhook Contract v1](billing-state-webhook-v1.md).
+[Billing State Webhook Contract v2](billing-state-webhook-v2.md).
 
 ### Unknown access is never inactive
 
@@ -107,10 +112,14 @@ imitation.
 
 ## Exact-match reading
 
-Readers match versions **exactly**. A reader declaring Paywall `0.3` accepts
-only `0.3`. Numeric ordering never implies support: a `0.3` document is as
-unreadable to a `0.3` reader as a `9.9` document, and a `1` reader must not
+Readers match versions **exactly**. A reader declaring Paywall `0.4` accepts
+only `0.4`. Numeric ordering never implies support: a `0.3` document is as
+unreadable to a `0.4` reader as a `9.9` document, and a `1` reader must not
 accept a `2` document because 2 is "newer".
+
+This rule is independent of the single-version policy and outlives it. Today it
+is what makes a document at a deleted version fail closed rather than be read
+leniently; after GA it is what keeps parallel versions apart.
 
 Unknown versions, unknown fields, unknown enumeration members, and unknown
 capabilities all fail closed. A reader never partially applies a document it
@@ -278,15 +287,14 @@ Consequences for SDKs:
 `purchase_completed_provider`, `purchase_pending`, `purchase_deferred`,
 `purchase_cancelled`, and `purchase_failed` on Analytics Event `2` with the
 complete Experiment tuple, for any presentation attributed to an Experiment
-Variant. Emitting these events on v1 during an active Experiment is not a
-degraded mode; it silently zeroes Experiment results.
+Variant. Omitting the tuple is not a degraded mode; it silently zeroes
+Experiment results.
 
-An SDK that does not participate in Experiments at all may emit the entire
-taxonomy on v1. `product_selection_purchase_start` uses `product_selected` as its
-*denominator*, so omitting the tuple there empties that metric as well.
+`product_selection_purchase_start` uses `product_selected` as its *denominator*,
+so omitting the tuple there empties that metric as well.
 
-See [Analytics Event v1 → v2 migration](migration/analytics-event-v1-to-v2.md)
-for the per-event requirement table.
+Analytics Event `2` is the only event contract, so there is no older
+representation on which these events could be emitted without the tuple.
 
 ### Conversions on a fallback presentation MUST omit the tuple
 
@@ -399,4 +407,3 @@ Approved contracts are immutable. See:
 - [Fixture lifecycle](fixture-lifecycle.md) — fixture obligations for any
   change.
 - [Versioning](versioning.md) — per-contract reader rules.
-- [Migration guides](migration/) — per-version upgrade guides.

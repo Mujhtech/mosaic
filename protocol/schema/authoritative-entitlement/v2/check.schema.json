@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:check",
+  "title": "Mosaic Authoritative Entitlement Contract v2 entitlement check",
+  "description": "The focused multi-key access question an application backend asks, and its answer. The answer is never a bare boolean: every key carries a state, an explanation, and the snapshot version and as-of instant the answer was derived from. Carried forward unchanged from Contract 1; dispatch lives in the contract schema.",
+  "$defs": {
+    "entitlementCheckRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "billingCustomerId",
+        "entitlementKeys",
+        "supportedAuthoritativeEntitlementContracts",
+        "correlationId"
+      ],
+      "properties": {
+        "billingCustomerId": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+        },
+        "entitlementKeys": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/entitlementKey"
+          }
+        },
+        "expectedSnapshotVersion": {
+          "description": "The version the caller believes is current, used to detect that it is reading behind its own writes. A newer server version is answered normally; it is never an error.",
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/snapshotVersion"
+        },
+        "supportedAuthoritativeEntitlementContracts": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/supportedContractVersions"
+        },
+        "correlationId": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+        }
+      }
+    },
+    "entitlementCheckResultEntry": {
+      "description": "One answered key. This is the only place unavailable is admissible for an Entitlement: it says Mosaic could not answer, not that the customer lacks access.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entitlementKey",
+        "state",
+        "sourceCount",
+        "endKnown",
+        "primaryExplanation"
+      ],
+      "properties": {
+        "entitlementKey": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/entitlementKey"
+        },
+        "state": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/accessState"
+        },
+        "effectiveStart": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/utcTimestamp"
+        },
+        "effectiveEnd": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/utcTimestamp"
+        },
+        "endKnown": {
+          "type": "boolean"
+        },
+        "sourceCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "sourceIds": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+          }
+        },
+        "primaryExplanation": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/primaryExplanation"
+        },
+        "uncertainty": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/uncertainty"
+        },
+        "isTestSource": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "unknown",
+                  "unavailable"
+                ]
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "required": [
+              "uncertainty"
+            ],
+            "properties": {
+              "uncertainty": {
+                "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/definiteUncertainty"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "endKnown": {
+                "const": false
+              }
+            },
+            "required": [
+              "endKnown"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "effectiveEnd"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "entitlementCheckResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "billingCustomerId",
+        "projectId",
+        "environmentId",
+        "issuedAt",
+        "results",
+        "correlationId"
+      ],
+      "properties": {
+        "billingCustomerId": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+        },
+        "projectId": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+        },
+        "environmentId": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+        },
+        "snapshotVersion": {
+          "description": "The snapshot the answer was derived from. Absent only when no snapshot could be read at all, in which case every result is unavailable.",
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/snapshotVersion"
+        },
+        "projectionRuleVersion": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/projectionRuleVersion"
+        },
+        "issuedAt": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/utcTimestamp"
+        },
+        "asOf": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/utcTimestamp"
+        },
+        "results": {
+          "description": "Ascending by entitlementKey, unique by entitlementKey, one entry for every requested key.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/entitlementCheckResultEntry"
+          }
+        },
+        "projectionStatus": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/projectionStatus"
+        },
+        "correlationId": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+        },
+        "diagnostics": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/diagnostics"
+        }
+      },
+      "if": {
+        "required": [
+          "snapshotVersion"
+        ]
+      },
+      "then": {
+        "required": [
+          "asOf",
+          "projectionRuleVersion",
+          "projectionStatus"
+        ]
+      }
+    }
+  }
+}

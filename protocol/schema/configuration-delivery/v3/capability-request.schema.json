@@ -44,7 +44,7 @@
       "type": "array",
       "maxItems": 8,
       "items": {
-        "$ref": "urn:mosaic:protocol:schema:configuration-delivery:v1:capability-request#/$defs/supportedPaywallProtocol"
+        "$ref": "#/$defs/supportedPaywallProtocol"
       }
     },
     "supportedPlacementDecisionContracts": {
@@ -150,6 +150,46 @@
       "uniqueItems": true,
       "items": {
         "const": "trusted_server_time_v1"
+      }
+    }
+  },
+  "$defs": {
+    "supportedCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "urn:mosaic:protocol:schema:v0.4:paywall#/$defs/capabilityName"
+        },
+        "version": {
+          "const": "0.4"
+        }
+      }
+    },
+    "supportedPaywallProtocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "capabilities"
+      ],
+      "properties": {
+        "version": {
+          "const": "0.4"
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/supportedCapability"
+          }
+        }
       }
     }
   }

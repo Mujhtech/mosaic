@@ -1,5 +1,21 @@
 # Billing State Webhook Contract changelog
 
+## Version 1 deleted; v2 is the sole contract - 2026-08-13
+
+Status: draft
+
+Owner ruling, single-version contracts
+([ADR-0028](../../docs/architecture/decisions/0028-single-version-contracts.md)).
+Version `1` is deleted outright. The `webhookDeliveryAttempt` shape `2` had been
+borrowing from it is inlined, so `2` is self-contained, and the sentence "v1
+destinations receive only v1 events" no longer describes anything: there are no
+v1 destinations.
+
+HMAC signing is unchanged. The `v1=` header parameter is the signature *scheme*
+version and does not move with the contract version. The signature reference
+vectors in `packages/test-fixtures` were rebuilt so they sign a `2` event body
+rather than a body shape that no longer exists.
+
 ## Version 2 - 2026-07-29
 
 Status: draft

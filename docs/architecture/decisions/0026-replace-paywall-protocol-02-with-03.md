@@ -1,6 +1,9 @@
 # ADR 0026: Replace Paywall Protocol 0.2 with 0.3 and delete 0.2
 
-- Status: Accepted
+- Status: Accepted. Generalized by
+  [ADR-0028](0028-single-version-contracts.md), which applied this decision's
+  reasoning to every pre-GA contract; Paywall Protocol `0.3` has itself since
+  been deleted the same way.
 - Date: 2026-08-06
 
 ## Context

@@ -1,17 +1,29 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
 import {
-  loadAuthoritativeEntitlementV1Artifacts,
-  validateAuthoritativeEntitlementV1Record,
-} from "./authoritative-entitlement-validation-v1.mjs";
+  canonicalSerialization,
+  checkSemantics,
+  entitlementEnvelopeSemantics,
+  freshnessWindowSemantics,
+  restoreSemantics,
+  snapshotSemantics,
+  subscriptionSemantics,
+  validateEntitlementFailClosedVocabulary,
+  validateEntitlementStateAxes,
+} from "./authoritative-entitlement-validation.mjs";
+import {
+  validateWebhookEventTypeVocabulary,
+  validateWebhookSummaryAccessVocabulary,
+  webhookDeliverySemantics,
+  webhookEnvelopeSemantics,
+  webhookEventSemantics,
+} from "./billing-state-webhook-validation.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const authoritativeEntitlementV1Artifacts =
-  loadAuthoritativeEntitlementV1Artifacts();
 const read = (path) => JSON.parse(readFileSync(path, "utf8"));
 const jsonFiles = (directory) =>
   readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -27,7 +39,12 @@ const specs = Object.freeze({
     manifestSchema: "schema/authoritative-entitlement/v2/compatibility-manifest.schema.json",
     manifest: "compatibility/authoritative-entitlement/v2.json",
     fixtures: "fixtures/authoritative-entitlement/v2",
-    dependencies: ["schema/authoritative-entitlement/v1/snapshot.schema.json"],
+    dependencies: [
+      "schema/authoritative-entitlement/v2/snapshot.schema.json",
+      "schema/authoritative-entitlement/v2/check.schema.json",
+      "schema/authoritative-entitlement/v2/subscription.schema.json",
+      "schema/authoritative-entitlement/v2/restore.schema.json",
+    ],
   },
   billingMigrationOperationsV1: {
     schema: "schema/billing-migration-operations/v1/contract.schema.json",
@@ -41,17 +58,11 @@ const specs = Object.freeze({
     manifestSchema: "schema/billing-state-webhook/v2/compatibility-manifest.schema.json",
     manifest: "compatibility/billing-state-webhook/v2.json",
     fixtures: "fixtures/billing-state-webhook/v2",
-    dependencies: ["schema/billing-state-webhook/v1/event.schema.json", "schema/billing-state-webhook/v1/delivery.schema.json"],
+    dependencies: [],
   },
 });
 
-export function canonicalSerialization(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalSerialization).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalSerialization(value[key])}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
+export { canonicalSerialization };
 
 export function authorityDigest(authority, snapshot) {
   return `sha256:${createHash("sha256").update(canonicalSerialization({ authority, snapshot }), "utf8").digest("hex")}`;
@@ -146,28 +157,31 @@ function validators(artifacts) {
 function semanticErrors(name, document) {
   const p = document.payload;
   const errors = [];
+  if (name === "authoritativeEntitlementV2") {
+    errors.push(...entitlementEnvelopeSemantics("record", document));
+  }
   if (name === "authoritativeEntitlementV2" && document.recordType === "customerEntitlementSnapshot") {
     errors.push(
-      ...validateAuthoritativeEntitlementV1Record(
-        {
-          authoritativeEntitlementContractVersion: "1",
-          recordType: "customerEntitlementSnapshot",
-          payload: p.snapshot,
-        },
-        authoritativeEntitlementV1Artifacts,
-      ).map((error) => `embedded v1 snapshot: ${error}`),
+      ...snapshotSemantics("embedded snapshot", p.snapshot),
     );
     if (p.snapshotAuthorityDigest !== authorityDigest(p.authority, p.snapshot)) errors.push("snapshotAuthorityDigest does not bind authority and snapshot");
     if (p.authority.scope.projectId !== p.snapshot.projectId || p.authority.scope.environmentId !== p.snapshot.environmentId) errors.push("authority scope does not match snapshot Project and Environment");
   }
   if (name === "authoritativeEntitlementV2" && document.recordType === "snapshotUnchanged") {
-    errors.push(
-      ...validateAuthoritativeEntitlementV1Record(
-        { authoritativeEntitlementContractVersion: "1", recordType: "snapshotUnchanged", payload: p.unchanged },
-        authoritativeEntitlementV1Artifacts,
-      ).map((error) => `embedded v1 unchanged response: ${error}`),
-    );
+    // An unchanged response slides the freshness window, so it is bound by the
+    // same horizon a snapshot is. Otherwise the bound could be evaded by
+    // confirming a snapshot rather than reissuing it.
+    errors.push(...freshnessWindowSemantics("embedded unchanged response", p.unchanged));
     if (p.authority.scope.projectId !== p.unchanged.projectId || p.authority.scope.environmentId !== p.unchanged.environmentId) errors.push("authority scope does not match unchanged Project and Environment");
+  }
+  if (name === "authoritativeEntitlementV2" && document.recordType === "entitlementCheckResult") {
+    errors.push(...checkSemantics("check result", p));
+  }
+  if (name === "authoritativeEntitlementV2" && document.recordType === "subscriptionSnapshot") {
+    errors.push(...subscriptionSemantics("subscription snapshot", p));
+  }
+  if (name === "authoritativeEntitlementV2" && document.recordType === "restoreResult") {
+    errors.push(...restoreSemantics("restore result", p));
   }
   if (name === "billingMigrationOperationsV1") {
     if (document.recordType === "reconciliationCase" && p.sourceAccessException) {
@@ -186,24 +200,32 @@ function semanticErrors(name, document) {
       if (decision !== "accept") errors.push(`completion timing rejected: ${decision}`);
     }
   }
+  if (name === "billingStateWebhookV2") {
+    errors.push(...webhookEnvelopeSemantics("record", document));
+  }
   if (name === "billingStateWebhookV2" && document.recordType === "billingStateEvent") {
-    if (Date.parse(p.createdAt) < Date.parse(p.occurredAt)) errors.push("event was created before it occurred");
-    if (p.eventType.startsWith("authority.") && p.changedEntitlements.length !== 0) errors.push("authority transition event must not imply an entitlement-state delta");
-    if (p.eventType === "customer.entitlements.changed" && !p.changedEntitlements.some((entry) => entry.previousState !== entry.currentState)) errors.push("entitlement event reports no state change");
+    errors.push(...webhookEventSemantics("event", p));
+  }
+  if (name === "billingStateWebhookV2" && document.recordType === "webhookDeliveryAttempt") {
+    errors.push(...webhookDeliverySemantics("delivery attempt", p));
   }
   return errors;
 }
 
 /**
- * v2 keeps v1's tolerant `ignore` arms for unknown fields, event types, and
- * enumeration members. They are only safe because the consumer re-reads the
- * authoritative snapshot instead of projecting state from the payload, and that
- * rule lives nowhere but the manifest. Pin it exactly, or the tolerance stands
- * alone. Documented in docs/protocol/billing-state-webhook-v2.md.
+ * The webhook keeps its tolerant `ignore` arms for unknown fields, event types,
+ * and enumeration members. They are only safe because the consumer re-reads the
+ * authoritative snapshot instead of projecting state from the payload, verifies
+ * the signature before parsing, deduplicates by event ID, and never applies an
+ * older snapshot version -- and those rules live nowhere but the manifest. Pin
+ * them exactly, or the tolerance stands alone. Documented in
+ * docs/protocol/billing-state-webhook-v2.md.
  */
 const BILLING_STATE_WEBHOOK_V2_CONSUMER_POLICY = Object.freeze({
   authoritativeState: "reReadAuthoritativeEntitlementV2",
-  v1Destination: "receivesV1EventsOnly",
+  signatureVerification: "requiredBeforeParsing",
+  duplicateEvent: "deduplicateByEventId",
+  ordering: "ignoreOlderSnapshotVersion",
 });
 
 function consumerPolicyErrors(artifacts) {
@@ -222,11 +244,68 @@ function consumerPolicyErrors(artifacts) {
     );
 }
 
+function vocabularyErrors(artifacts) {
+  if (artifacts.name === "authoritativeEntitlementV2") {
+    const snapshotSchema = artifacts.dependencies.find((schema) =>
+      schema.$id.endsWith(":snapshot"),
+    );
+    return [
+      ...validateEntitlementFailClosedVocabulary(snapshotSchema, artifacts.manifest),
+      ...validateEntitlementStateAxes(snapshotSchema, artifacts.manifest),
+      ...recordTypeCoverageErrors(artifacts, artifacts.schema.properties.recordType.enum),
+    ];
+  }
+  if (artifacts.name === "billingStateWebhookV2") {
+    const errors = [
+      ...validateWebhookEventTypeVocabulary(artifacts.schema, artifacts.manifest),
+      ...validateWebhookSummaryAccessVocabulary(artifacts.schema),
+      ...recordTypeCoverageErrors(artifacts, artifacts.schema.properties.recordType.enum),
+    ];
+    const emitted = new Set(
+      artifacts.validFixturePaths
+        .map((path) => read(path))
+        .filter((document) => document.recordType === "billingStateEvent")
+        .map((document) => document.payload.eventType),
+    );
+    for (const eventType of artifacts.manifest.emittedEventTypes) {
+      if (!emitted.has(eventType)) {
+        errors.push(`Webhook event type ${eventType} is emitted but has no fixture`);
+      }
+    }
+    return errors;
+  }
+  return [];
+}
+
+/** Every declared record type must keep at least one canonical fixture. */
+function recordTypeCoverageErrors(artifacts, declared) {
+  const errors = [];
+  const manifestTypes = artifacts.manifest.recordTypes;
+  if (
+    manifestTypes.length !== declared.length ||
+    declared.some((recordType) => !manifestTypes.includes(recordType))
+  ) {
+    errors.push(`${artifacts.name} manifest record-type set differs from the contract schema`);
+  }
+  const covered = new Set(
+    artifacts.validFixturePaths.map((path) => read(path).recordType),
+  );
+  for (const recordType of declared) {
+    if (!covered.has(recordType)) {
+      errors.push(`${artifacts.name} record type ${recordType} has no canonical fixture`);
+    }
+  }
+  return errors;
+}
+
 export function validatePhase9CArtifacts(artifacts) {
-  const errors = [...consumerPolicyErrors(artifacts)];
+  const errors = [...consumerPolicyErrors(artifacts), ...vocabularyErrors(artifacts)];
   const validate = validators(artifacts);
   if (!validate.manifest(artifacts.manifest)) errors.push(...validate.manifest.errors.map((e) => `manifest${e.instancePath} ${e.message}`));
   const manifestPaths = new Set(artifacts.manifest.canonicalFixtures.map((path) => resolve(root, path.replace(/^\.\.\/\.\.\//, ""))));
+  for (const path of manifestPaths) {
+    if (!existsSync(path)) errors.push(`${artifacts.name} canonical fixture does not exist: ${path}`);
+  }
   for (const path of artifacts.validFixturePaths) {
     const document = read(path);
     if (!validate.record(document)) errors.push(...validate.record.errors.map((e) => `${path}${e.instancePath} ${e.message}`));

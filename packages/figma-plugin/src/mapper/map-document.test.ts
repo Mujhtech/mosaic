@@ -4,12 +4,12 @@ import {
   validatePaywallDocument,
 } from "../../../../protocol/browser/index.js";
 import type {
-  MosaicPaywallV03Stack,
-  MosaicPaywallV03TextComponent,
+  MosaicPaywallV04Stack,
+  MosaicPaywallV04TextComponent,
 } from "../../../../protocol/browser/index.js";
 import type {
-  MosaicPaywallV03ButtonComponent,
-  MosaicPaywallV03Document,
+  MosaicPaywallV04ButtonComponent,
+  MosaicPaywallV04Document,
 } from "../../../../protocol/browser/index.js";
 import { mapDocument, orderAbsoluteChildren } from "./map-document.js";
 import {
@@ -37,11 +37,11 @@ function expectValid(document: unknown): void {
 }
 
 type DocumentLike = {
-  screens: readonly { layout: { content: MosaicPaywallV03Stack } }[];
+  screens: readonly { layout: { content: MosaicPaywallV04Stack } }[];
 };
 
 /** The screen's root content exactly as emitted, wrapper included. */
-function screenContent(document: DocumentLike): MosaicPaywallV03Stack {
+function screenContent(document: DocumentLike): MosaicPaywallV04Stack {
   const screen = document.screens[0];
   if (!screen) throw new Error("The document has no screen.");
   return screen.layout.content;
@@ -51,7 +51,7 @@ function screenContent(document: DocumentLike): MosaicPaywallV03Stack {
  * The stack the selected frame itself became, seeing past the synthetic root
  * wrapper the protocol requires for a horizontal or empty top-level frame.
  */
-function rootStack(document: DocumentLike): MosaicPaywallV03Stack {
+function rootStack(document: DocumentLike): MosaicPaywallV04Stack {
   const content = screenContent(document);
   if (content.id !== "imported-root") return content;
   const inner = content.children[0];
@@ -61,7 +61,7 @@ function rootStack(document: DocumentLike): MosaicPaywallV03Stack {
   return inner;
 }
 
-function childAt(stack: MosaicPaywallV03Stack, index: number) {
+function childAt(stack: MosaicPaywallV04Stack, index: number) {
   const child = stack.children[index];
   if (!child) throw new Error(`No child at index ${index}.`);
   return child;
@@ -71,7 +71,7 @@ describe("document shell", () => {
   it("produces a valid single-screen document from a representative frame", () => {
     const { document } = mapDocument(representativePaywall());
     expectValid(document);
-    expect(document.schemaVersion).toBe("0.3");
+    expect(document.schemaVersion).toBe("0.4");
     expect(document.revision).toBe(1);
     expect(document.id).toBe("paywall-annual");
     expect(document.initialScreenId).toBe("imported");
@@ -81,10 +81,13 @@ describe("document shell", () => {
     expect(document.screens[0]?.layout.safeArea).toBe("respect");
     expect(document.assets).toEqual([]);
     expect(document.products).toEqual([]);
+    // No motion is authored: a Figma frame is a static composition, and an
+    // absent entrance is "no entrance" rather than a default one.
     expect(document.designSystem).toEqual({
       colors: [],
       backgrounds: [],
       shadows: [],
+      motions: [],
     });
   });
 
@@ -307,7 +310,7 @@ describe("absolute layout flattening", () => {
     expect(stack.crossAxisAlignment).toBe("stretch");
     expect(
       stack.children.map(
-        (child) => (child as MosaicPaywallV03TextComponent).value.default,
+        (child) => (child as MosaicPaywallV04TextComponent).value.default,
       ),
     ).toEqual(["First", "Second"]);
     const warning = report.warnings.find(
@@ -338,7 +341,7 @@ describe("text mapping", () => {
         ],
       }),
     );
-    const node = childAt(rootStack(document), 0) as MosaicPaywallV03TextComponent;
+    const node = childAt(rootStack(document), 0) as MosaicPaywallV04TextComponent;
     expect(node).toMatchObject({
       type: "text",
       id: "hero-title",
@@ -363,7 +366,7 @@ describe("text mapping", () => {
         children: [text({ name: "Label", characters: "Hello", fills: [] })],
       }),
     );
-    const node = childAt(rootStack(document), 0) as MosaicPaywallV03TextComponent;
+    const node = childAt(rootStack(document), 0) as MosaicPaywallV04TextComponent;
     expect(node.typography.color).toBe("text.primary");
     expectValid(document);
   });
@@ -390,7 +393,7 @@ describe("text mapping", () => {
         children: [text({ name: "Mixed", characters: "Hi", fontSize: null })],
       }),
     );
-    const node = childAt(rootStack(document), 0) as MosaicPaywallV03TextComponent;
+    const node = childAt(rootStack(document), 0) as MosaicPaywallV04TextComponent;
     expect(node.typography.fontSize).toBe(16);
     expect(report.warnings.map((warning) => warning.code)).toContain(
       "text.mixedFontSize",
@@ -461,7 +464,7 @@ describe("identifiers and the localization catalog", () => {
     ]);
     expect(
       stack.children.map(
-        (child) => (child as MosaicPaywallV03TextComponent).value.localizationKey,
+        (child) => (child as MosaicPaywallV04TextComponent).value.localizationKey,
       ),
     ).toEqual(["figma.feature", "figma.feature_2", "figma.feature_3"]);
     expectValid(document);
@@ -506,7 +509,7 @@ describe("identifiers and the localization catalog", () => {
     expect(document.screens[0]?.accessibilityLabel?.localizationKey).toBe(
       "figma.screen",
     );
-    const node = childAt(rootStack(document), 0) as MosaicPaywallV03TextComponent;
+    const node = childAt(rootStack(document), 0) as MosaicPaywallV04TextComponent;
     expect(node.value.localizationKey).toBe("figma.screen_2");
     expectValid(document);
   });
@@ -560,7 +563,7 @@ describe("inferred layout for a frame without auto-layout", () => {
 
   it("gathers overlapping siblings into a horizontal row with its own gap", () => {
     const { document } = mapDocument(positionedPaywall());
-    const row = childAt(rootStack(document), 2) as MosaicPaywallV03Stack;
+    const row = childAt(rootStack(document), 2) as MosaicPaywallV04Stack;
     expect(row.type).toBe("stack");
     expect(row.direction).toBe("horizontal");
     // 142 - 134 and 260 - 252: an eight-pixel gutter, twice.
@@ -605,7 +608,7 @@ describe("inferred layout for a frame without auto-layout", () => {
         ],
       }),
     );
-    const row = childAt(rootStack(document), 1) as MosaicPaywallV03Stack;
+    const row = childAt(rootStack(document), 1) as MosaicPaywallV04Stack;
     expect(row.direction).toBe("horizontal");
     expect(row.mainAxisDistribution).toBe("center");
     expect(row.gap).toBe(20);
@@ -649,7 +652,7 @@ describe("inferred layout for a frame without auto-layout", () => {
     expect(stack.padding).toEqual({ top: 0, start: 0, bottom: 0, end: 0 });
     expect(
       stack.children.map(
-        (child) => (child as MosaicPaywallV03TextComponent).value.default,
+        (child) => (child as MosaicPaywallV04TextComponent).value.default,
       ),
     ).toEqual(["First", "Second"]);
     const warning = report.warnings.find(
@@ -702,7 +705,7 @@ describe("button detection", () => {
     const { document } = mapDocument(
       frame({ name: "Root", children: [buttonFrame()] }),
     );
-    const button = childAt(rootStack(document), 0) as MosaicPaywallV03ButtonComponent;
+    const button = childAt(rootStack(document), 0) as MosaicPaywallV04ButtonComponent;
     expect(button.type).toBe("button");
     // `close` is the only member of `#/$defs/buttonAction` with no field the
     // plugin would have to invent.
@@ -716,8 +719,8 @@ describe("button detection", () => {
     const { document } = mapDocument(
       frame({ name: "Root", children: [buttonFrame()] }),
     );
-    const button = childAt(rootStack(document), 0) as MosaicPaywallV03ButtonComponent;
-    const label = button.children[0] as MosaicPaywallV03TextComponent;
+    const button = childAt(rootStack(document), 0) as MosaicPaywallV04ButtonComponent;
+    const label = button.children[0] as MosaicPaywallV04TextComponent;
     expect(button.accessibility.label).toEqual(label.value);
     expect(Object.keys(document.localization.locales.en?.strings ?? {})).toEqual([
       "figma.screen",
@@ -730,7 +733,7 @@ describe("button detection", () => {
     const { document } = mapDocument(
       frame({ name: "Root", children: [buttonFrame()] }),
     );
-    const button = childAt(rootStack(document), 0) as MosaicPaywallV03ButtonComponent;
+    const button = childAt(rootStack(document), 0) as MosaicPaywallV04ButtonComponent;
     // `#/$defs/buttonComponent` has no `padding` property at all.
     expect("padding" in button).toBe(false);
     expect(button.appearance).toEqual({
@@ -805,7 +808,7 @@ describe("solid-fill shapes", () => {
         ],
       }),
     );
-    const block = childAt(rootStack(document), 1) as MosaicPaywallV03Stack;
+    const block = childAt(rootStack(document), 1) as MosaicPaywallV04Stack;
     // `#/$defs/stack` allows `children: []`, and only a *screen root* has to be
     // non-empty, so a colour block needs no filler child.
     expect(block.children).toEqual([]);
@@ -831,7 +834,7 @@ describe("solid-fill shapes", () => {
         ],
       }),
     );
-    const block = childAt(rootStack(document), 1) as MosaicPaywallV03Stack;
+    const block = childAt(rootStack(document), 1) as MosaicPaywallV04Stack;
     expect(block.sizing).toEqual({
       width: "fill",
       height: { mode: "fixed", value: 1 },
@@ -895,7 +898,7 @@ describe("solid-fill shapes", () => {
         ],
       }),
     );
-    const dot = childAt(rootStack(document), 1) as MosaicPaywallV03Stack;
+    const dot = childAt(rootStack(document), 1) as MosaicPaywallV04Stack;
     expect(dot.appearance?.cornerRadius).toBe(12);
     expect(report.warnings.map((warning) => warning.code)).toContain(
       "style.shapeApproximated",
@@ -1004,14 +1007,14 @@ describe("multi-frame export", () => {
       screen("Plans", 500, "Choose"),
     ]);
     const welcome = document.screens[0];
-    const cta = welcome?.layout.content.children[1] as MosaicPaywallV03ButtonComponent;
+    const cta = welcome?.layout.content.children[1] as MosaicPaywallV04ButtonComponent;
     expect(cta.type).toBe("button");
     // The protocol rejects a screen the first one cannot reach, and a button's
     // `navigateTo` is the only edge that exists.
     expect(cta.action).toEqual({ type: "navigateTo", screenId: "plans" });
     // The last screen keeps its placeholder: it navigates nowhere.
     const last = document.screens[1];
-    const lastCta = last?.layout.content.children[1] as MosaicPaywallV03ButtonComponent;
+    const lastCta = last?.layout.content.children[1] as MosaicPaywallV04ButtonComponent;
     expect(lastCta.action).toEqual({ type: "close" });
     expect(
       report.warnings.some((warning) =>
@@ -1177,7 +1180,7 @@ describe("mixed text styling", () => {
         ],
       }),
     );
-    const node = childAt(rootStack(document), 0) as MosaicPaywallV03TextComponent;
+    const node = childAt(rootStack(document), 0) as MosaicPaywallV04TextComponent;
     // The first character's styling was carried, not thrown away for a default.
     expect(node.typography.fontSize).toBe(24);
     expect(node.typography.weight).toBe("bold");
@@ -1201,7 +1204,7 @@ describe("the whole export survives the path Studio imports through", () => {
       }),
     ]);
     const parsed = parsePortablePaywallJson(
-      `${JSON.stringify(document as MosaicPaywallV03Document, null, 2)}\n`,
+      `${JSON.stringify(document as MosaicPaywallV04Document, null, 2)}\n`,
     );
     expect(parsed.ok).toBe(true);
     expectValid(document);

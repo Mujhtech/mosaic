@@ -1,6 +1,0 @@
-{
-  "sourceReleaseId": "release_phase5_advanced",
-  "projectionPolicy": "remove_experiment_assignment_atomically",
-  "expectedPlacementBehavior": "unchanged_normal_placement",
-  "projectedConfigurationDeliveryVersion": "2"
-}

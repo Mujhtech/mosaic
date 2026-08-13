@@ -3,9 +3,8 @@
 ## Status and boundary
 
 Commerce Provider Contract `2` is the release-candidate, platform-neutral
-contract for native-store adapters. It is parallel to, and does not replace,
-Commerce Provider Contract `1`. RevenueCat and existing custom providers may
-continue using v1.
+contract for native-store adapters. It is the only Commerce Provider contract;
+RevenueCat and custom providers speak it too.
 
 The exact discriminator is:
 
@@ -16,7 +15,7 @@ commerceProviderContractVersion = "2"
 Readers reject unknown versions, record types, outcomes, and fields. The
 contract contains no provider-native objects, offer tokens, receipts, purchase
 tokens, signatures, customer identifiers, credentials, or executable code.
-Paywall Protocol `0.3` and Configuration Delivery `1` remain unchanged.
+Paywall Protocol `0.4` and Configuration Delivery `3` remain unchanged.
 
 Canonical artifacts are under:
 
@@ -26,7 +25,7 @@ Canonical artifacts are under:
 
 ## Provider profile and recovery
 
-V2 retains the v1 provider identity and capability model and adds:
+The contract models provider identity and capability, and adds:
 
 - `basePlans`;
 - `explicitOffers`;
@@ -145,8 +144,7 @@ stable update identity and may receive `alreadyAccepted`.
 
 ## Restore and active Entitlements
 
-Restore results preserve the v1 normalized outcomes. Every v2 result
-normatively contains `operationId`, `providerId`, `outcome`, `recoveryMode`,
+Restore results are normalized outcomes. Every result normatively contains `operationId`, `providerId`, `outcome`, `recoveryMode`,
 `completedAt`, and `diagnostics`. `restored` contains at least one active
 Mosaic Entitlement key. Partial or failed provider queries never become
 `nothingToRestore`.
@@ -158,12 +156,11 @@ required by the adapter succeeds.
 
 ## Version negotiation and fallback
 
-Gate 4B clients declare exact support for v1 and/or v2. V2 is served only to a
-client that declares v2. An unsupported or invalid candidate is rejected
-atomically; the client retains its last accepted associated sidecar, then uses
-its bundled fallback, then returns configuration unavailable. It never
-downgrades the candidate, mixes v1/v2 records, or falls back to another
-provider.
+Clients declare exact support for `2`, and only a client that declares it is
+served. An unsupported or invalid candidate is rejected atomically; the client
+retains its last accepted associated sidecar, then uses its bundled fallback,
+then returns configuration unavailable. It never downgrades the candidate,
+mixes record versions, or falls back to another provider.
 
 ## Validation
 

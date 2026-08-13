@@ -1,5 +1,29 @@
 # Configuration Delivery Changelog
 
+## Versions 1 and 2 deleted; v3 re-pinned to Paywall 0.4 - 2026-08-13
+
+Status: approved
+
+Owner ruling, single-version contracts
+([ADR-0028](../../docs/architecture/decisions/0028-single-version-contracts.md)).
+Versions `1` and `2` are deleted outright, and with them the v2 -> v1 and
+v3 -> v2 projection machinery, the carry-forward rule that kept a v1
+representation alive across Experiment publishes, and the `legacyProjection`
+reader policy. A release is now accepted whole or rejected whole; nothing is
+compiled down to a narrower representation.
+
+`3` inlined the `$defs` it had been borrowing from v1's release and
+capability-request schemas, and was re-pinned to carry **Paywall Protocol 0.4**:
+`paywallVersion.protocolVersion` and `protocolCompatibility.version` are
+`const "0.4"`, the embedded document `$ref`s
+`urn:mosaic:protocol:schema:v0.4:paywall`, and both sides of the capability
+request negotiate `0.4`. That re-pin is what makes a `0.4` document deliverable.
+
+The fixture corpus is generated directly from the `0.4` paywall corpus by
+`tools/generate-delivery-fixtures-v3.mjs`; the v1 and v2 fixture generators are
+deleted. The v2 valid and invalid corpora were migrated to `v3` rather than
+dropped, so no Placement Decision rejection scenario was lost.
+
 ## Version 3 - 2026-07-26
 
 Status: approved at v1 GA (2026-07-27); released as a candidate on 2026-07-26

@@ -315,7 +315,6 @@
     "publicSdkAuthority": "clientObservedOnly",
     "partialBatch": "oneResultPerEvent",
     "tenantScope": "deriveFromAuthentication",
-    "customMetadata": "forbidden",
-    "olderContractVersion": "acceptAlongsideV2"
+    "customMetadata": "forbidden"
   }
 }

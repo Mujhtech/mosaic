@@ -94,7 +94,9 @@ A new contract version additionally requires:
 - a new compatibility manifest and manifest schema;
 - capability-negotiation support so the version is only delivered to readers that
   declared it;
-- a migration guide under [`migration/`](migration/);
+- a migration guide under `docs/protocol/migration/` (GA only — pre-GA a
+  contract change replaces its version and there is nothing to migrate between,
+  see [ADR-0028](../architecture/decisions/0028-single-version-contracts.md));
 - confirmation that the change is implementable across Flutter, SwiftUI, and
   Jetpack Compose without platform-specific names entering the protocol; and
 - `npm --prefix protocol run generate && npm --prefix protocol run validate &&

@@ -173,8 +173,7 @@
         "publicSdkAuthority",
         "partialBatch",
         "tenantScope",
-        "customMetadata",
-        "olderContractVersion"
+        "customMetadata"
       ],
       "properties": {
         "unknownContractVersion": {
@@ -200,9 +199,6 @@
         },
         "customMetadata": {
           "const": "forbidden"
-        },
-        "olderContractVersion": {
-          "const": "acceptAlongsideV2"
         }
       }
     }

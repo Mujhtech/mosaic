@@ -1,8 +1,8 @@
 {
   "$comment": "Generated cross-implementation reference vectors. Regenerate with packages/test-fixtures/src/build-entitlement-reference-vectors.mjs; never hand-edit a digest.",
-  "contract": "Authoritative Entitlement Contract v1",
-  "contractVersion": "1",
-  "compatibilityManifest": "protocol/compatibility/authoritative-entitlement/v1.json",
+  "contract": "Authoritative Entitlement Contract v2",
+  "contractVersion": "2",
+  "compatibilityManifest": "protocol/compatibility/authoritative-entitlement/v2.json",
   "policy": {
     "name": "boundedGrace",
     "clockSkewToleranceSeconds": 60,

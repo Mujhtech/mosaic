@@ -57,7 +57,7 @@ an implementation parses instead of carrying.
 
 ## Authoritative Entitlement vectors
 
-Three files for [Authoritative Entitlement Contract v1](../../docs/protocol/authoritative-entitlement-v1.md),
+Three files for [Authoritative Entitlement Contract v2](../../docs/protocol/authoritative-entitlement-v2.md),
 built by `src/build-entitlement-reference-vectors.mjs`. These are the derivations
 Go, Dart, Swift, Kotlin, and the protocol validator must agree on exactly, and
 that a schema can constrain the *shape* of but not the *value* of. Two SDKs can
@@ -85,9 +85,11 @@ forbidden rather than merely discouraged. The `array-order-is-preserved` vector
 carries a deliberately unsorted array: a serializer that sorted it would silently
 repair a document the semantic validator exists to reject.
 
-`canonical-fixture-snapshot` is the payload of
-`protocol/fixtures/authoritative-entitlement/v1/snapshots/active-subscription.json`,
-and a test asserts its digest equals that fixture's `contentDigest`.
+`canonical-fixture-snapshot` is the `payload.snapshot` of
+`protocol/fixtures/authoritative-entitlement/v2/ios-full-snapshot.json`, and a
+test asserts its digest equals that snapshot's `contentDigest`. The contract
+wraps the customer entitlement snapshot in an authority envelope rather than
+restating it, so the digest covers the nested body.
 
 ### `src/entitlement-cache-decision-vectors.json`
 
@@ -114,12 +116,16 @@ error: ordinary 30-second phone-to-server skew must not trip that path.
 
 ## `src/webhook-signature-vectors.json`
 
-For [Billing State Webhook Contract v1](../../docs/protocol/billing-state-webhook-v1.md),
+For [Billing State Webhook Contract v2](../../docs/protocol/billing-state-webhook-v2.md),
 built by `src/build-webhook-signature-vectors.mjs`.
 
 ```text
 signature = HMAC-SHA256(secret, "v1" + "." + t + "." + eventId + "." + rawBody)
 ```
+
+The literal `v1` is the signature **scheme** version carried in the `v1=` header
+parameter. It is not the contract version and does not move when the contract
+version does.
 
 Each vector carries `secret`, `timestamp`, `eventId`, `rawBody`, the assembled
 `signedPayload`, the expected `signature`, and the full `Mosaic-Signature` header
@@ -128,7 +134,7 @@ vectors must **not** verify against the canonical signature; that is what proves
 each component is genuinely covered rather than merely carried alongside.
 
 `canonical-event-primary-key` signs the bytes of
-`protocol/fixtures/billing-state-webhook/v1/events/entitlement-activated.json`
+`protocol/fixtures/billing-state-webhook/v2/events/entitlement-activated.json`
 **with the file's trailing newline removed** — the builder applies `trimEnd()` —
 and a test asserts the two cannot drift. The trailing newline belongs to the file
 on disk, not to a delivery. The raw body must be hashed **as received**: a
@@ -180,10 +186,10 @@ the canonical fixtures therefore cannot drift apart.
 | Vectors | Verified by |
 | --- | --- |
 | `billing-reference-vectors.json` | `protocol/tools/billing-ingestion-validation-v1.test.mjs` |
-| `entitlement-snapshot-digest-vectors.json` | `protocol/tools/authoritative-entitlement-validation-v1.test.mjs` |
-| `entitlement-cache-decision-vectors.json` | `protocol/tools/authoritative-entitlement-validation-v1.test.mjs` |
-| `entitlement-freshness-vectors.json` | `protocol/tools/authoritative-entitlement-validation-v1.test.mjs` |
-| `webhook-signature-vectors.json` | `protocol/tools/billing-state-webhook-validation-v1.test.mjs` |
+| `entitlement-snapshot-digest-vectors.json` | `protocol/tools/authoritative-entitlement-validation.test.mjs` |
+| `entitlement-cache-decision-vectors.json` | `protocol/tools/authoritative-entitlement-validation.test.mjs` |
+| `entitlement-freshness-vectors.json` | `protocol/tools/authoritative-entitlement-validation.test.mjs` |
+| `webhook-signature-vectors.json` | `protocol/tools/billing-state-webhook-validation.test.mjs` |
 
 The freshness vectors are additionally re-derived from the declared window in the
 test rather than compared to a stored answer, so a vector whose expected state

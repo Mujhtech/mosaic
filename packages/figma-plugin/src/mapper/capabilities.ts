@@ -1,7 +1,7 @@
 import type {
-  MosaicPaywallV03CapabilityName,
-  MosaicPaywallV03Document,
-  MosaicPaywallV03RequiredCapability,
+  MosaicPaywallV04CapabilityName,
+  MosaicPaywallV04Document,
+  MosaicPaywallV04RequiredCapability,
 } from "../../../../protocol/browser/index.js";
 
 /**
@@ -25,7 +25,7 @@ import type {
  * order; keeping the same relative order makes the two arrays comparable
  * element-for-element.
  */
-const CAPABILITY_ORDER: readonly MosaicPaywallV03CapabilityName[] = [
+const CAPABILITY_ORDER: readonly MosaicPaywallV04CapabilityName[] = [
   "layout.scrollContainer",
   "layout.stack",
   "layout.sizing",
@@ -102,7 +102,7 @@ function usesColor(value: unknown): boolean {
   return found;
 }
 
-function walkNodes(document: MosaicPaywallV03Document): UnknownRecord[] {
+function walkNodes(document: MosaicPaywallV04Document): UnknownRecord[] {
   const entries: UnknownRecord[] = [];
   const visit = (node: unknown): void => {
     if (!node || typeof node !== "object") return;
@@ -125,9 +125,9 @@ function walkNodes(document: MosaicPaywallV03Document): UnknownRecord[] {
  * a node type outside that subset would need a rule added here.
  */
 export function deriveCapabilityNames(
-  document: MosaicPaywallV03Document,
-): readonly MosaicPaywallV03CapabilityName[] {
-  const capabilities = new Set<MosaicPaywallV03CapabilityName>([
+  document: MosaicPaywallV04Document,
+): readonly MosaicPaywallV04CapabilityName[] {
+  const capabilities = new Set<MosaicPaywallV04CapabilityName>([
     "localization.catalogs",
     "navigation.screens",
   ]);
@@ -196,7 +196,7 @@ export function deriveCapabilityNames(
           `Capability derivation covers no ${action.type} action on ${String(node.id)}.`,
         );
       }
-      capabilities.add(`action.${action.type}` as MosaicPaywallV03CapabilityName);
+      capabilities.add(`action.${action.type}` as MosaicPaywallV04CapabilityName);
       if (OUTCOME_ACTION_TYPES.has(action.type)) {
         capabilities.add("outcome.normalized");
       }
@@ -209,10 +209,10 @@ export function deriveCapabilityNames(
 
 /** The same set, shaped for `compatibility.requiredCapabilities`. */
 export function deriveRequiredCapabilities(
-  document: MosaicPaywallV03Document,
-): MosaicPaywallV03RequiredCapability[] {
+  document: MosaicPaywallV04Document,
+): MosaicPaywallV04RequiredCapability[] {
   return deriveCapabilityNames(document).map((name) => ({
     name,
-    version: "0.3",
+    version: "0.4",
   }));
 }

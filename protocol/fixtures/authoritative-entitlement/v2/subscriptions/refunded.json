@@ -1,0 +1,33 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "subscriptionSnapshot",
+  "payload": {
+    "subscriptionSnapshotId": "fixture-subscription-snapshot-0018",
+    "subscriptionInstanceId": "fixture-subscription-instance-0001",
+    "purchaseLineageId": "fixture-lineage-0001",
+    "billingCustomerId": "fixture-customer-0001",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "projectionVersion": 11,
+    "projectionRuleVersion": 1,
+    "computedAt": "2026-07-28T11:59:58.000Z",
+    "asOf": "2026-07-28T11:59:58.000Z",
+    "storePlatform": "apple_app_store",
+    "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+    "accessState": "inactive",
+    "lifecycleState": "refunded",
+    "renewalIntent": "auto_renew_disabled",
+    "billingState": "refunded",
+    "uncertainty": {
+      "reason": "none"
+    },
+    "periodStart": "2026-07-01T09:00:00.000Z",
+    "periodEnd": "2026-08-01T09:00:00.000Z",
+    "isTestSource": false,
+    "checksum": "sha256:4e05febd967f233d2f4ba847e5cf093557e77ab2be6427bcc839a80e2953ccb6",
+    "changeReason": "refund_applied",
+    "explanationCode": "subscription_refunded",
+    "correlationId": "fixture-correlation-0010",
+    "refundEffectiveAt": "2026-07-26T08:30:00.000Z"
+  }
+}

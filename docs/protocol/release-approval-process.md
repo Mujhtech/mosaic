@@ -109,7 +109,7 @@ All of the following before `status` becomes `approved`.
       entry heading itself.
 - [ ] [Versioning](versioning.md) and the [compatibility
       policy](compatibility-policy.md) updated.
-- [ ] A migration guide under [`migration/`](migration/) if the version has an
+- [ ] A migration guide under `docs/protocol/migration/` if the version has an
       approved predecessor.
 
 ### Review gates

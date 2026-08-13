@@ -1,14 +1,14 @@
 import type {
-  MosaicPaywallV03BoxAppearance,
-  MosaicPaywallV03BoxSizing,
-  MosaicPaywallV03ButtonComponent,
-  MosaicPaywallV03ContainerAppearance,
-  MosaicPaywallV03Document,
-  MosaicPaywallV03EdgeInsets,
-  MosaicPaywallV03Node,
-  MosaicPaywallV03Screen,
-  MosaicPaywallV03Stack,
-  MosaicPaywallV03TextComponent,
+  MosaicPaywallV04BoxAppearance,
+  MosaicPaywallV04BoxSizing,
+  MosaicPaywallV04ButtonComponent,
+  MosaicPaywallV04ContainerAppearance,
+  MosaicPaywallV04Document,
+  MosaicPaywallV04EdgeInsets,
+  MosaicPaywallV04Node,
+  MosaicPaywallV04Screen,
+  MosaicPaywallV04Stack,
+  MosaicPaywallV04TextComponent,
 } from "../../../../protocol/browser/index.js";
 import { deriveRequiredCapabilities } from "./capabilities.js";
 import { hasVisibleUnsupportedPaint, solidFillColor } from "./color.js";
@@ -89,7 +89,7 @@ export type ImagePlacement = {
 };
 
 export type MapResult = {
-  readonly document: MosaicPaywallV03Document;
+  readonly document: MosaicPaywallV04Document;
   readonly report: ExportReport;
   readonly imagePlacements: readonly ImagePlacement[];
 };
@@ -120,7 +120,7 @@ function clampPositiveLogicalSize(value: number): number {
  * the reading axis. For the LTR documents this plugin emits they coincide, and
  * a mirrored RTL layout is a Studio-side decision, not something to bake in.
  */
-function toEdgeInsets(frame: IntermediateFrame): MosaicPaywallV03EdgeInsets {
+function toEdgeInsets(frame: IntermediateFrame): MosaicPaywallV04EdgeInsets {
   return {
     top: clampLogicalSize(frame.paddingTop),
     start: clampLogicalSize(frame.paddingLeft),
@@ -129,7 +129,7 @@ function toEdgeInsets(frame: IntermediateFrame): MosaicPaywallV03EdgeInsets {
   };
 }
 
-const ZERO_INSETS: MosaicPaywallV03EdgeInsets = {
+const ZERO_INSETS: MosaicPaywallV04EdgeInsets = {
   top: 0,
   start: 0,
   bottom: 0,
@@ -138,7 +138,7 @@ const ZERO_INSETS: MosaicPaywallV03EdgeInsets = {
 
 function mainAxisDistribution(
   frame: IntermediateFrame,
-): MosaicPaywallV03Stack["mainAxisDistribution"] {
+): MosaicPaywallV04Stack["mainAxisDistribution"] {
   switch (frame.primaryAxisAlignItems) {
     case "center":
       return "center";
@@ -155,7 +155,7 @@ function crossAxisAlignment(
   frame: IntermediateFrame,
   report: ReportBuilder,
   layerPath: string,
-): MosaicPaywallV03Stack["crossAxisAlignment"] {
+): MosaicPaywallV04Stack["crossAxisAlignment"] {
   switch (frame.counterAxisAlignItems) {
     case "center":
       return "center";
@@ -253,17 +253,17 @@ function isPixelPaint(paintType: string): boolean {
  */
 function sealContainerAppearance(
   draft: AppearanceDraft,
-): MosaicPaywallV03ContainerAppearance | null {
+): MosaicPaywallV04ContainerAppearance | null {
   return Object.keys(draft).length > 0
-    ? (draft as MosaicPaywallV03ContainerAppearance)
+    ? (draft as MosaicPaywallV04ContainerAppearance)
     : null;
 }
 
 function sealBoxAppearance(
-  draft: AppearanceDraft & { padding?: MosaicPaywallV03EdgeInsets },
-): MosaicPaywallV03BoxAppearance | null {
+  draft: AppearanceDraft & { padding?: MosaicPaywallV04EdgeInsets },
+): MosaicPaywallV04BoxAppearance | null {
   return Object.keys(draft).length > 0
-    ? (draft as MosaicPaywallV03BoxAppearance)
+    ? (draft as MosaicPaywallV04BoxAppearance)
     : null;
 }
 
@@ -282,7 +282,7 @@ type PendingPlacement = {
  * row does not know its own id until its children reveal whether it needs one.
  */
 class ContainerBuilder {
-  readonly nodes: MosaicPaywallV03Node[] = [];
+  readonly nodes: MosaicPaywallV04Node[] = [];
   readonly pending: PendingPlacement[] = [];
 
   /** Records the slot a layer would have filled, before it is skipped. */
@@ -295,7 +295,7 @@ class ContainerBuilder {
     });
   }
 
-  add(node: MosaicPaywallV03Node): void {
+  add(node: MosaicPaywallV04Node): void {
     this.nodes.push(node);
   }
 }
@@ -379,7 +379,7 @@ function mapText(
   node: IntermediateText,
   context: MapContext,
   layerPath: string,
-): MosaicPaywallV03TextComponent | null {
+): MosaicPaywallV04TextComponent | null {
   const characters = node.characters;
   if (characters.trim().length === 0) {
     // `localizedText.default` has minLength 1, and an empty label is not
@@ -506,7 +506,7 @@ function mapShape(
   context: MapContext,
   layerPath: string,
   parent: ParentSlot,
-): MosaicPaywallV03Stack | null {
+): MosaicPaywallV04Stack | null {
   const colour = solidFillColor(shape.fills, shape.opacity);
   if (!colour) {
     context.report.skip(
@@ -568,7 +568,7 @@ function mapShape(
     parentBounds !== null &&
     parentBounds.width > 0 &&
     shape.bounds.width >= parentBounds.width * FILL_SPAN_RATIO;
-  const sizing: MosaicPaywallV03BoxSizing = {
+  const sizing: MosaicPaywallV04BoxSizing = {
     width: spansWidth
       ? "fill"
       : { mode: "fixed", value: clampPositiveLogicalSize(shape.bounds.width) },
@@ -580,7 +580,7 @@ function mapShape(
 
   context.stackCount += 1;
   const appearance = sealContainerAppearance(draft);
-  const stack: MosaicPaywallV03Stack = {
+  const stack: MosaicPaywallV04Stack = {
     type: "stack",
     id,
     direction: "vertical",
@@ -688,7 +688,7 @@ function mapButton(
   context: MapContext,
   layerPath: string,
   id: string,
-): MosaicPaywallV03Node {
+): MosaicPaywallV04Node {
   // A button's fill can hold no dropped image: `semantic.layout` forbids
   // anything interactive inside button content, and Studio has no valid slot
   // to insert an image node into, so no placement is recorded.
@@ -699,7 +699,7 @@ function mapButton(
     // skips. A button with no children is invalid, so this degrades to the
     // empty stack rather than re-mapping the child and reporting it twice.
     context.stackCount += 1;
-    const bare: MosaicPaywallV03Stack = {
+    const bare: MosaicPaywallV04Stack = {
       type: "stack",
       id,
       direction: "vertical",
@@ -727,7 +727,7 @@ function mapButton(
     "Detected as button with placeholder action -- set the real action in Studio.",
   );
 
-  const button: MosaicPaywallV03ButtonComponent = {
+  const button: MosaicPaywallV04ButtonComponent = {
     type: "button",
     id,
     direction: frame.layoutMode === "horizontal" ? "horizontal" : "vertical",
@@ -746,7 +746,7 @@ function mapButton(
 }
 
 type RowResult = {
-  readonly nodes: readonly MosaicPaywallV03Node[];
+  readonly nodes: readonly MosaicPaywallV04Node[];
   readonly pending: readonly PendingPlacement[];
   /** Bounds of the children that actually produced a node, in row order. */
   readonly bounds: readonly IntermediateBounds[];
@@ -767,7 +767,7 @@ function mapInferredStack(
   id: string,
   draft: AppearanceDraft,
   frameBounds: IntermediateBounds,
-): MosaicPaywallV03Stack {
+): MosaicPaywallV04Stack {
   context.report.warn(
     "layout.absoluteFlattened",
     layerPath,
@@ -828,7 +828,7 @@ function mapInferredStack(
           childIndex: pending.childIndex > 0 ? index + 1 : index,
         });
       }
-      builder.add(row.nodes[0] as MosaicPaywallV03Node);
+      builder.add(row.nodes[0] as MosaicPaywallV04Node);
       continue;
     }
     builder.add(buildRowStack(row, context, frame, content));
@@ -836,7 +836,7 @@ function mapInferredStack(
 
   sealPlacements(context, builder, id);
   const appearance = sealContainerAppearance(draft);
-  const stack: MosaicPaywallV03Stack = {
+  const stack: MosaicPaywallV04Stack = {
     type: "stack",
     id,
     direction: "vertical",
@@ -860,7 +860,7 @@ function buildRowStack(
   context: MapContext,
   frame: IntermediateFrame,
   content: Extent,
-): MosaicPaywallV03Stack {
+): MosaicPaywallV04Stack {
   const id = context.ids.allocate(
     slugifyIdentifier(`${frame.name} row`, "row"),
   );
@@ -893,7 +893,7 @@ function mapFlattenedStack(
   layerPath: string,
   id: string,
   draft: AppearanceDraft,
-): MosaicPaywallV03Stack {
+): MosaicPaywallV04Stack {
   context.report.warn(
     "layout.absoluteFlattened",
     layerPath,
@@ -907,7 +907,7 @@ function mapFlattenedStack(
   }
   sealPlacements(context, builder, id);
   const appearance = sealContainerAppearance(draft);
-  const stack: MosaicPaywallV03Stack = {
+  const stack: MosaicPaywallV04Stack = {
     type: "stack",
     id,
     direction: "vertical",
@@ -926,7 +926,7 @@ function mapAutoLayoutStack(
   layerPath: string,
   id: string,
   draft: AppearanceDraft,
-): MosaicPaywallV03Stack {
+): MosaicPaywallV04Stack {
   const builder = new ContainerBuilder();
   const parent: ParentSlot = { frame, appearance: draft };
   for (const child of frame.children) {
@@ -936,7 +936,7 @@ function mapAutoLayoutStack(
 
   const spaceBetween = frame.primaryAxisAlignItems === "spaceBetween";
   const appearance = sealContainerAppearance(draft);
-  const stack: MosaicPaywallV03Stack = {
+  const stack: MosaicPaywallV04Stack = {
     type: "stack",
     id,
     direction: frame.layoutMode === "horizontal" ? "horizontal" : "vertical",
@@ -955,7 +955,7 @@ function mapFrame(
   frame: IntermediateFrame,
   context: MapContext,
   layerPath: string,
-): MosaicPaywallV03Node {
+): MosaicPaywallV04Node {
   // The id is allocated before the children so a parent keeps the name it
   // shares with a child, rather than being pushed to "-2".
   const id = allocateId(context, frame.name, "group");
@@ -996,12 +996,12 @@ function mapFrame(
  * direction and padding survive one level down.
  */
 function rootContent(
-  mapped: MosaicPaywallV03Node,
+  mapped: MosaicPaywallV04Node,
   context: MapContext,
   layerPath: string,
   figmaId: string,
   wrapperId: string,
-): MosaicPaywallV03Stack {
+): MosaicPaywallV04Stack {
   if (
     mapped.type === "stack" &&
     mapped.direction === "vertical" &&
@@ -1040,10 +1040,10 @@ function rootContent(
  * mutated so the emitted tree stays a value.
  */
 function withNavigation(
-  node: MosaicPaywallV03Node,
+  node: MosaicPaywallV04Node,
   buttonId: string,
   screenId: string,
-): MosaicPaywallV03Node {
+): MosaicPaywallV04Node {
   if (node.type === "button") {
     return node.id === buttonId
       ? { ...node, action: { type: "navigateTo", screenId } }
@@ -1063,7 +1063,7 @@ function mapScreen(
   context: MapContext,
   screenId: string,
   keyPrefix: string,
-): MosaicPaywallV03Screen {
+): MosaicPaywallV04Screen {
   context.screenId = screenId;
   context.keyPrefix = keyPrefix;
   context.buttonIds = [];
@@ -1119,7 +1119,7 @@ function orderRoots(
 }
 
 /**
- * Maps one or more serialised Figma frames into a Mosaic Paywall Protocol 0.3
+ * Maps one or more serialised Figma frames into a Mosaic Paywall Protocol 0.4
  * document.
  *
  * One frame in, one screen out, and the frames' canvas order becomes the
@@ -1199,7 +1199,7 @@ export function mapDocument(
 
   // The primary call to action is the last one down the screen, so that is the
   // button the flow is threaded through.
-  const screens = mapped.map(({ screen, buttonIds }, index): MosaicPaywallV03Screen => {
+  const screens = mapped.map(({ screen, buttonIds }, index): MosaicPaywallV04Screen => {
     const next = mapped[index + 1]?.screen;
     const buttonId = buttonIds.at(-1);
     if (!next || !buttonId) return screen;
@@ -1217,7 +1217,7 @@ export function mapDocument(
           screen.layout.content,
           buttonId,
           next.id,
-        ) as MosaicPaywallV03Stack,
+        ) as MosaicPaywallV04Stack,
       },
     };
   });
@@ -1227,8 +1227,8 @@ export function mapDocument(
     "imported-paywall",
   );
 
-  const document: MosaicPaywallV03Document = {
-    schemaVersion: "0.3",
+  const document: MosaicPaywallV04Document = {
+    schemaVersion: "0.4",
     id: documentId,
     revision: 1,
     // Filled in below, once the tree that determines it exists.
@@ -1240,13 +1240,16 @@ export function mapDocument(
         en: { direction: "ltr", strings: context.strings },
       },
     },
-    designSystem: { colors: [], backgrounds: [], shadows: [] },
+    // The mapper authors no motion: a Figma frame is a static composition, and
+    // 0.4 treats an absent entrance as "no entrance" rather than as a default.
+    // The catalog is still emitted because it is a required member.
+    designSystem: { colors: [], backgrounds: [], shadows: [], motions: [] },
     assets: [],
     products: [],
-    initialScreenId: (screens[0] as MosaicPaywallV03Screen).id,
+    initialScreenId: (screens[0] as MosaicPaywallV04Screen).id,
     screens,
   };
-  const withCapabilities: MosaicPaywallV03Document = {
+  const withCapabilities: MosaicPaywallV04Document = {
     ...document,
     compatibility: { requiredCapabilities: deriveRequiredCapabilities(document) },
   };

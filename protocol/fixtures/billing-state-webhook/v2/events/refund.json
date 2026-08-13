@@ -1,0 +1,47 @@
+{
+  "billingStateWebhookContractVersion": "2",
+  "recordType": "billingStateEvent",
+  "payload": {
+    "eventId": "fixture-event-0005",
+    "eventType": "customer.entitlements.changed",
+    "billingCustomerId": "fixture-customer-0001",
+    "authority": {
+      "authorityEpoch": 5,
+      "authorityKind": "mosaic",
+      "scope": {
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "applicationId": "fixture-application-ios",
+        "platform": "ios"
+      },
+      "transitionState": "stabilizing",
+      "cutoverAt": "2026-07-01T08:00:00.000Z",
+      "snapshotAuthorityDigest": "sha256:b659fc1560544193b6599e1e4a82861a55cae857fcad73fa340b611abe877c34"
+    },
+    "projectionRuleVersion": 1,
+    "sourceReason": "refund_applied",
+    "isTestSource": false,
+    "subscriptionInstanceId": "fixture-subscription-instance-0001",
+    "snapshotVersion": 11,
+    "previousSnapshotVersion": 10,
+    "occurredAt": "2026-07-26T08:30:00.000Z",
+    "createdAt": "2026-07-26T08:31:12.000Z",
+    "changedEntitlements": [
+      {
+        "entitlementKey": "pro",
+        "previousState": "active",
+        "currentState": "inactive"
+      }
+    ],
+    "stateSummary": {
+      "accessState": "inactive",
+      "lifecycleState": "refunded",
+      "renewalIntent": "auto_renew_disabled",
+      "billingState": "refunded",
+      "uncertainty": {
+        "reason": "none"
+      }
+    },
+    "correlationId": "fixture-correlation-0104"
+  }
+}

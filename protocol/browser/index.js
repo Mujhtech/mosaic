@@ -1,70 +1,42 @@
 import Ajv2020 from "ajv/dist/2020.js";
 
-import compatibilityManifest from "../compatibility/v0.3.json" with { type: "json" };
-import compatibilityManifestV04 from "../compatibility/v0.4.json" with { type: "json" };
-import localProjectSchema from "../schema/local-preview/v0.3/local-project.schema.json" with { type: "json" };
-import localProjectV04Schema from "../schema/local-preview/v0.4/local-project.schema.json" with { type: "json" };
-import previewMessageSchema from "../schema/local-preview/v0.3/preview-message.schema.json" with { type: "json" };
-import previewMessageV04Schema from "../schema/local-preview/v0.4/preview-message.schema.json" with { type: "json" };
-import paywallSchema from "../schema/v0.3/paywall.schema.json" with { type: "json" };
-import paywallV04Schema from "../schema/v0.4/paywall.schema.json" with { type: "json" };
+import compatibilityManifest from "../compatibility/v0.4.json" with { type: "json" };
+import localProjectSchema from "../schema/local-preview/v0.4/local-project.schema.json" with { type: "json" };
+import previewMessageSchema from "../schema/local-preview/v0.4/preview-message.schema.json" with { type: "json" };
+import paywallSchema from "../schema/v0.4/paywall.schema.json" with { type: "json" };
 
 export const localPreviewContractVersion =
   previewMessageSchema.properties.previewProtocolVersion.const;
-export const localPreviewV04ContractVersion =
-  previewMessageV04Schema.properties.previewProtocolVersion.const;
 export const localPreviewWebSocketProtocol =
   `mosaic.local-preview.v${localPreviewContractVersion}`;
-export const localPreviewContractVersions = Object.freeze(["0.3", "0.4"]);
 /**
- * Negotiation order, most preferred first.
+ * Local Preview carries exactly one version, so negotiation offers exactly one.
  *
- * `0.4` leads because a preview client that speaks it can render motion, and a
- * client that cannot still gets `0.3`. The singular
- * `localPreviewContractVersion` deliberately stays `0.3`: it names the release
- * candidate, not the newest draft, exactly as `paywallContractVersion` does.
+ * These stay collections rather than collapsing into the singular constants
+ * because negotiation is still a negotiation: a peer that speaks nothing in
+ * this list is refused with `preview.noMutualVersion` rather than served a
+ * version it did not ask for.
  */
-export const localPreviewVersionPreference = Object.freeze(["0.4", "0.3"]);
+export const localPreviewContractVersions = Object.freeze([
+  localPreviewContractVersion,
+]);
+export const localPreviewVersionPreference = localPreviewContractVersions;
 export const localPreviewWebSocketProtocols = Object.freeze({
-  "0.3": "mosaic.local-preview.v0.3",
-  "0.4": "mosaic.local-preview.v0.4",
+  [localPreviewContractVersion]: localPreviewWebSocketProtocol,
 });
 export const previewMessageTypes = Object.freeze([
   ...previewMessageSchema.properties.type.enum,
 ]);
-export const previewMessageTypesByVersion = Object.freeze({
-  "0.3": previewMessageTypes,
-  "0.4": Object.freeze([...previewMessageV04Schema.properties.type.enum]),
-});
 export const requiredPreviewCapabilities = Object.freeze([
   ...previewMessageSchema.$defs.previewCapabilityName.enum,
 ]);
-const requiredPreviewCapabilitiesV03 = requiredPreviewCapabilities;
-const requiredPreviewCapabilitiesByVersion = Object.freeze({
-  "0.3": requiredPreviewCapabilitiesV03,
-  "0.4": Object.freeze([
-    ...previewMessageV04Schema.$defs.previewCapabilityName.enum,
-  ]),
-});
 export const canonicalSchemas = Object.freeze({
   paywall: paywallSchema,
   previewMessage: previewMessageSchema,
   localProject: localProjectSchema,
 });
-export const canonicalSchemasByVersion = Object.freeze({
-  "0.3": Object.freeze({
-    paywall: paywallSchema,
-    previewMessage: previewMessageSchema,
-    localProject: localProjectSchema,
-  }),
-  "0.4": Object.freeze({
-    paywall: paywallV04Schema,
-    previewMessage: previewMessageV04Schema,
-    localProject: localProjectV04Schema,
-  }),
-});
 
-function incompatibleSchemaVersionDiagnostic(version = "0.3") {
+function incompatibleSchemaVersionDiagnostic(version = localPreviewContractVersion) {
   return {
     code: "preview.incompatibleSchemaVersion",
     message: `This preview client cannot receive the current Protocol ${version} draft.`,
@@ -260,13 +232,7 @@ export function decideLocalPreviewDraftDelivery({
       version,
     ]),
   );
-  // Local Preview capability names are the same in 0.3 and 0.4; the version is
-  // the whole signal. A client reporting the 0.3 generation of them is a client
-  // that has not been rebuilt against the 0.4 message schema.
-  const requiredPreviewCapabilityNames =
-    requiredPreviewCapabilitiesByVersion[selectedVersion] ??
-    requiredPreviewCapabilitiesV03;
-  const missingPreviewCapabilities = requiredPreviewCapabilityNames.filter(
+  const missingPreviewCapabilities = requiredPreviewCapabilities.filter(
     (name) => previewCapabilities.get(name) !== selectedVersion,
   );
   if (missingPreviewCapabilities.length > 0) {
@@ -333,24 +299,12 @@ export function decideLocalPreviewDraftDelivery({
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 ajv.addSchema(paywallSchema);
-ajv.addSchema(paywallV04Schema);
 ajv.addSchema(previewMessageSchema);
-ajv.addSchema(previewMessageV04Schema);
 const validatePaywallSchema = ajv.getSchema(paywallSchema.$id);
-const validatePaywallV04Schema = ajv.getSchema(paywallV04Schema.$id);
 const validatePreviewMessageSchema = ajv.getSchema(previewMessageSchema.$id);
-const validatePreviewMessageV04Schema = ajv.getSchema(
-  previewMessageV04Schema.$id,
-);
 const validateLocalProjectSchema = ajv.compile(localProjectSchema);
-const validateLocalProjectV04Schema = ajv.compile(localProjectV04Schema);
 
-if (
-  !validatePaywallSchema ||
-  !validatePaywallV04Schema ||
-  !validatePreviewMessageSchema ||
-  !validatePreviewMessageV04Schema
-) {
+if (!validatePaywallSchema || !validatePreviewMessageSchema) {
   throw new Error("Canonical Mosaic schemas were not registered.");
 }
 
@@ -419,7 +373,7 @@ const countdownUnitOrder = Object.freeze({
 
 /**
  * Localization keys the protocol consumes itself. Mirrors
- * `tools/validation-v0.3.mjs`; the two must agree, and a test asserts it.
+ * `tools/paywall-document-rules.mjs`; the two must agree, and a test asserts it.
  */
 export const reservedAccessibilityKeys = Object.freeze({
   "mosaic.a11y.rating": Object.freeze({
@@ -439,7 +393,7 @@ export const reservedAccessibilityKeys = Object.freeze({
 /**
  * A rating in points, as substituted into `{{ rating.value }}`. `value` counts
  * steps and `maximum` counts points, so announcing `value` directly says
- * "9 out of 5". Locale-independent by design -- see docs/protocol/v0.3.md.
+ * "9 out of 5". Locale-independent by design -- see docs/protocol/v0.4.md.
  */
 export function ratingPoints(rating) {
   const stepsPerPoint = rating.step === "half" ? 2 : 1;
@@ -760,14 +714,7 @@ export function resolveShadowToken(document, shadow) {
 }
 
 // ---------------------------------------------------------------------------
-// Paywall Protocol 0.4 (draft): the motion contract.
-//
-// 0.4 is a draft and Studio does not author it yet, so the browser runtime
-// exposes the part of it that has no 0.3 equivalent -- the motion vocabulary,
-// its capability names, and the reference frame resolver -- rather than a
-// second copy of the semantic validator whose rules 0.4 does not change.
-// Adding full 0.4 browser validation later is additive and needs no contract
-// version, exactly as it was for the Phase 9A billing contracts.
+// The motion contract.
 //
 // `resolveMotionFrame` mirrors `resolveV04MotionFrame` in
 // `tools/validation-v0.4.mjs`. A test drives every frame of every committed
@@ -775,15 +722,7 @@ export function resolveShadowToken(document, shadow) {
 // cannot drift without the protocol gate failing.
 // ---------------------------------------------------------------------------
 
-export const paywallV04ContractVersion = paywallV04Schema.$defs.version.const;
-export const paywallContractVersions = Object.freeze(["0.3", "0.4"]);
-export const paywallSchemasByVersion = Object.freeze({
-  "0.3": paywallSchema,
-  "0.4": paywallV04Schema,
-});
-export const paywallV04CapabilityNames = Object.freeze([
-  ...paywallV04Schema.$defs.capabilityName.enum,
-]);
+export const paywallContractVersions = Object.freeze([paywallContractVersion]);
 export const motionCapabilityNames = Object.freeze([
   "motion.appear",
   "motion.selection",
@@ -1285,11 +1224,11 @@ export function paywallRuntimeDiagnostics(
   selectionState,
   navigationState,
 ) {
-  if (document?.schemaVersion !== "0.3") {
+  if (document?.schemaVersion !== paywallContractVersion) {
     // Returning no diagnostics here would read as "nothing is wrong with this
     // document", which is the opposite of what an unreadable version means.
     throw new TypeError(
-      "Runtime diagnostics require a Paywall Protocol 0.3 document.",
+      `Runtime diagnostics require a Paywall Protocol ${paywallContractVersion} document.`,
     );
   }
   const entries = walkDocumentNodes(document);
@@ -1497,7 +1436,7 @@ export function accessibilityAnnouncement(node, { strings, state = null } = {}) 
     decorative.push("connector");
   } else {
     throw new TypeError(
-      `${node.type} has no composed announcement contract in Protocol 0.3.`,
+      `${node.type} has no composed announcement contract in Protocol ${paywallContractVersion}.`,
     );
   }
 
@@ -1710,11 +1649,10 @@ function deriveDocumentCapabilities(document, nodeEntries) {
     if (node.type === "productSelector") {
       capabilities.add("fallback.product");
       capabilities.add("outcome.normalized");
-      capabilities.add("style.productCardStates");
     }
-    if (node.type === "productCard" || node.type === "productBadge") {
-      capabilities.add("style.productCardStates");
-    }
+    if (node.motion?.appear) capabilities.add("motion.appear");
+    if (node.motion?.selection) capabilities.add("motion.selection");
+    if (node.motion?.loop) capabilities.add("motion.loop");
     if (node.action?.type) {
       capabilities.add(`action.${node.action.type}`);
       if (["purchase", "restore", "close"].includes(node.action.type)) {
@@ -1727,28 +1665,7 @@ function deriveDocumentCapabilities(document, nodeEntries) {
 }
 
 /**
- * The capabilities a 0.4 document requires.
- *
- * A delta over the 0.3 derivation rather than a second copy of it, because
- * "0.4 is 0.3 plus motion minus one co-derived capability" is the whole
- * compatibility claim, and a copy would let the two answers drift while each
- * stayed internally consistent. It mirrors `expectedV04DocumentCapabilities` in
- * `tools/validation-v0.4.mjs`, and the browser/Node agreement test drives a 0.4
- * document through both validators.
- */
-function deriveV04DocumentCapabilities(document, nodeEntries) {
-  const capabilities = deriveDocumentCapabilities(document, nodeEntries);
-  capabilities.delete("style.productCardStates");
-  for (const { node } of nodeEntries) {
-    if (node.motion?.appear) capabilities.add("motion.appear");
-    if (node.motion?.selection) capabilities.add("motion.selection");
-    if (node.motion?.loop) capabilities.add("motion.loop");
-  }
-  return capabilities;
-}
-
-/**
- * The 0.4 rules that have no 0.3 equivalent.
+ * The motion rules.
  *
  * Deliberately asymmetric with the colour, background, and shadow catalogs: an
  * unreferenced colour is inert, but an unreferenced motion is a duration whose
@@ -1952,14 +1869,11 @@ const designSystemCategoryByTokenType = Object.freeze({
   motionToken: "motions",
 });
 
-function semanticPaywallDiagnostics(document, version = paywallContractVersion) {
+function semanticPaywallDiagnostics(document) {
   const diagnostics = [];
-  const isV04 = version === paywallV04ContractVersion;
-  const manifest = isV04 ? compatibilityManifestV04 : compatibilityManifest;
+  const manifest = compatibilityManifest;
   const nodeEntries = walkDocumentNodes(document);
-  const expectedCapabilities = isV04
-    ? deriveV04DocumentCapabilities(document, nodeEntries)
-    : deriveDocumentCapabilities(document, nodeEntries);
+  const expectedCapabilities = deriveDocumentCapabilities(document, nodeEntries);
   const declaredCapabilities = document.compatibility.requiredCapabilities;
   const declaredByName = new Map();
   const supportedByName = new Map(
@@ -1973,7 +1887,7 @@ function semanticPaywallDiagnostics(document, version = paywallContractVersion) 
     colorToken: document.designSystem.colors,
     backgroundToken: document.designSystem.backgrounds,
     shadowToken: document.designSystem.shadows,
-    ...(isV04 ? { motionToken: document.designSystem.motions } : {}),
+    motionToken: document.designSystem.motions,
   };
   for (const [type, catalog] of Object.entries(catalogs)) {
     const category = designSystemCategoryByTokenType[type];
@@ -3130,7 +3044,7 @@ function semanticPaywallDiagnostics(document, version = paywallContractVersion) 
     );
   }
 
-  if (isV04) addV04MotionDiagnostics(diagnostics, document, nodeEntries);
+  addV04MotionDiagnostics(diagnostics, document, nodeEntries);
 
   return diagnostics;
 }
@@ -3230,48 +3144,16 @@ function duplicateCapabilityDiagnostics(message) {
   return diagnostics;
 }
 
-/**
- * The contract version a value claims, defaulting to the release candidate.
- *
- * Anything that is not an explicit `0.4` claim is read as `0.3`, so a value
- * with a missing, malformed, or unknown `schemaVersion` produces exactly the
- * 0.3 schema diagnostics it produced before 0.4 existed. Dispatching on the
- * claim rather than on shape matters because 0.4 is a superset: a 0.3 document
- * validated against the 0.4 schema would be rejected only by its version
- * `const`, which is a confusing way to say "this reader is newer than you".
- */
-export function paywallDocumentVersion(value) {
-  return isRecord(value) && value.schemaVersion === paywallV04ContractVersion
-    ? paywallV04ContractVersion
-    : paywallContractVersion;
-}
-
 export function validatePaywallDocument(value) {
-  const version = paywallDocumentVersion(value);
-  const schemaErrors = schemaDiagnostics(
-    version === paywallV04ContractVersion
-      ? validatePaywallV04Schema
-      : validatePaywallSchema,
-    value,
-  );
+  const schemaErrors = schemaDiagnostics(validatePaywallSchema, value);
   if (schemaErrors.length > 0) return failure(schemaErrors);
 
-  const semanticErrors = semanticPaywallDiagnostics(value, version);
+  const semanticErrors = semanticPaywallDiagnostics(value);
   return semanticErrors.length > 0 ? failure(semanticErrors) : success(value);
 }
 
 export function validatePreviewMessage(value, options = {}) {
-  const previewVersion =
-    isRecord(value) &&
-    value.previewProtocolVersion === localPreviewV04ContractVersion
-      ? localPreviewV04ContractVersion
-      : localPreviewContractVersion;
-  const schemaErrors = schemaDiagnostics(
-    previewVersion === localPreviewV04ContractVersion
-      ? validatePreviewMessageV04Schema
-      : validatePreviewMessageSchema,
-    value,
-  );
+  const schemaErrors = schemaDiagnostics(validatePreviewMessageSchema, value);
   if (schemaErrors.length > 0) return failure(schemaErrors);
 
   const diagnostics = duplicateCapabilityDiagnostics(value);
@@ -3291,12 +3173,7 @@ export function validatePreviewMessage(value, options = {}) {
 }
 
 export function validateLocalProject(value) {
-  const schemaErrors = schemaDiagnostics(
-    isRecord(value) && value.fileFormatVersion === localPreviewV04ContractVersion
-      ? validateLocalProjectV04Schema
-      : validateLocalProjectSchema,
-    value,
-  );
+  const schemaErrors = schemaDiagnostics(validateLocalProjectSchema, value);
   if (schemaErrors.length > 0) return failure(schemaErrors);
 
   const documentResult = validatePaywallDocument(value.document);

@@ -1,5 +1,27 @@
 # Authoritative Entitlement Contract changelog
 
+## Version 1 deleted; v2 is the sole contract - 2026-08-13
+
+Status: draft
+
+Owner ruling, single-version contracts
+([ADR-0028](../../docs/architecture/decisions/0028-single-version-contracts.md)).
+Version `1` is deleted outright, with every reference and reader fallback that
+accepted it beside `2`. A `1` record is an unknown version to a `2` reader and is
+rejected atomically, resolving to `unknown` rather than `inactive`.
+
+`2` absorbed the surface it had not restated: the entitlement check, restore
+result, subscription snapshot, and customer entitlement snapshot schemas moved
+into `schema/authoritative-entitlement/v2/` under `v2` URNs, their fixtures moved
+to `fixtures/authoritative-entitlement/v2/`, and every
+`authoritativeEntitlementContractVersion` discriminator moved from `"1"` to
+`"2"`. No record type, state, uncertainty reason, or fixture scenario was
+dropped.
+
+The cross-implementation reference vectors in `packages/test-fixtures` were
+rebuilt against the `v2` corpus. Digest values are unchanged, because `2` embeds
+the customer entitlement snapshot body verbatim.
+
 ## Version 2 - 2026-07-29
 
 Status: draft

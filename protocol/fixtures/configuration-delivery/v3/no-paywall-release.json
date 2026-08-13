@@ -1,0 +1,85 @@
+{
+  "configurationDeliveryVersion": "3",
+  "release": {
+    "id": "release_no_paywall",
+    "number": 13,
+    "projectId": "project_alpha",
+    "environment": {
+      "id": "environment_production",
+      "key": "production",
+      "mode": "production"
+    },
+    "publishedAt": "2026-07-26T12:00:00.000Z",
+    "contentDigest": "sha256:adb286c321619ebb18aff87437f20debaa1a09c4c6a4e344dcbdc97f931dabf1",
+    "compatibility": {
+      "placementDecisionContracts": [
+        {
+          "version": "1",
+          "requiredFeatures": [
+            "outcome.no_paywall"
+          ],
+          "bucketingAlgorithms": []
+        }
+      ],
+      "paywallProtocols": [
+        {
+          "version": "0.4",
+          "requiredCapabilities": []
+        }
+      ],
+      "acceptance": "atomic",
+      "experimentAssignmentContracts": [
+        {
+          "version": "1",
+          "requiredFeatures": [],
+          "bucketingAlgorithms": [],
+          "schedulePolicies": []
+        }
+      ]
+    },
+    "placementDecisions": [
+      {
+        "placementDecisionVersion": "1",
+        "ruleSet": {
+          "id": "ruleset_onboarding_complete",
+          "version": 7,
+          "projectId": "project_alpha",
+          "environmentId": "environment_production",
+          "environmentKey": "production",
+          "placementId": "placement_onboarding_complete",
+          "placementKey": "onboarding_complete",
+          "enabled": true,
+          "assignmentPolicy": "installation",
+          "attributeDefinitions": [
+            {
+              "key": "student",
+              "type": "boolean",
+              "sensitivity": "standard",
+              "allowedOperators": [
+                "equals",
+                "exists"
+              ]
+            }
+          ],
+          "fallbacks": [],
+          "rules": [],
+          "defaultOutcome": {
+            "type": "no_paywall"
+          },
+          "qaOverrides": [],
+          "compatibility": {
+            "requiredFeatures": [
+              "outcome.no_paywall"
+            ],
+            "bucketingAlgorithms": []
+          }
+        }
+      }
+    ],
+    "paywallVersions": [],
+    "productReferences": [],
+    "entitlementReferences": [],
+    "assetReferences": [],
+    "experimentAssignments": []
+  }
+}

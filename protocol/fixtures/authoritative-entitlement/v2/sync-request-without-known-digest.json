@@ -10,7 +10,6 @@
       "appVersion": "4.2.0",
       "sdkVersion": "2.0.0",
       "supportedContractVersions": [
-        "1",
         "2"
       ],
       "capabilities": [

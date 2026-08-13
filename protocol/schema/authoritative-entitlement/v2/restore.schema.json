@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:restore",
+  "title": "Mosaic Authoritative Entitlement Contract v2 restore result",
+  "description": "The outcome of a restore, reported on two independent axes: what the native provider did, and what Mosaic's authoritative state now says. They are separate members because a successful native restore that has not yet reached an accepted snapshot is not restored access, and reporting it as one is how a restore flow starts lying. Carried forward unchanged from Contract 1; dispatch lives in the contract schema.",
+  "$defs": {
+    "restoreOutcome": {
+      "description": "Mosaic's authoritative answer. restored is admissible only once an accepted snapshot reflects the restored source.",
+      "enum": [
+        "restored",
+        "no_additional_purchases",
+        "validation_pending",
+        "identity_unresolved",
+        "product_unresolved",
+        "provider_unavailable",
+        "failed"
+      ]
+    },
+    "providerOutcome": {
+      "description": "What the native provider restore itself did, reported separately and never merged into the authoritative outcome.",
+      "enum": [
+        "completed",
+        "no_purchases_found",
+        "cancelled",
+        "failed",
+        "unsupported",
+        "not_attempted"
+      ]
+    },
+    "restoreResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "restoreId",
+        "projectId",
+        "environmentId",
+        "storePlatform",
+        "outcome",
+        "providerOutcome",
+        "requestedAt",
+        "correlationId"
+      ],
+      "properties": {
+        "restoreId": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+        },
+        "billingCustomerId": {
+          "description": "Absent when identity could not be resolved, which is exactly the identity_unresolved outcome.",
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+        },
+        "projectId": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+        },
+        "environmentId": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+        },
+        "storePlatform": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/storePlatform"
+        },
+        "outcome": {
+          "$ref": "#/$defs/restoreOutcome"
+        },
+        "providerOutcome": {
+          "$ref": "#/$defs/providerOutcome"
+        },
+        "requestedAt": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/utcTimestamp"
+        },
+        "completedAt": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/utcTimestamp"
+        },
+        "snapshotVersion": {
+          "description": "The accepted snapshot that reflects the restore. Required for restored; it is the evidence that makes the outcome authoritative rather than hopeful.",
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/snapshotVersion"
+        },
+        "observedTransactionCount": {
+          "description": "How many provider transaction references the restore submitted for validation. It is never evidence of access.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "pendingValidationCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "uncertainty": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/uncertainty"
+        },
+        "correlationId": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/identifier"
+        },
+        "diagnostics": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/diagnostics"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "restored"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "required": [
+              "billingCustomerId",
+              "snapshotVersion",
+              "completedAt"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "validation_pending"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "required": [
+              "pendingValidationCount"
+            ]
+          }
+        },
+        {
+          "$comment": "Every outcome that is not a definite answer carries the reason it is not, on the same uncertainty vocabulary every other surface uses.",
+          "if": {
+            "properties": {
+              "outcome": {
+                "enum": [
+                  "validation_pending",
+                  "identity_unresolved",
+                  "product_unresolved",
+                  "provider_unavailable",
+                  "failed"
+                ]
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "required": [
+              "uncertainty"
+            ],
+            "properties": {
+              "uncertainty": {
+                "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/definiteUncertainty"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "identity_unresolved"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "billingCustomerId"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

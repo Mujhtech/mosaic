@@ -7,8 +7,12 @@
     "authoritativeEntitlementContractVersion",
     "status",
     "schema",
+    "supportingSchemas",
     "canonicalFixtures",
     "recordTypes",
+    "stateAxes",
+    "canonicalSerialization",
+    "limits",
     "conformancePlatforms",
     "readerPolicy"
   ],
@@ -30,8 +34,8 @@
     },
     "canonicalFixtures": {
       "type": "array",
-      "minItems": 4,
-      "maxItems": 32,
+      "minItems": 40,
+      "maxItems": 80,
       "uniqueItems": true,
       "items": {
         "type": "string",
@@ -40,12 +44,13 @@
     },
     "recordTypes": {
       "type": "array",
-      "minItems": 4,
-      "maxItems": 4,
+      "minItems": 8,
+      "maxItems": 8,
       "uniqueItems": true,
       "items": {
         "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:contract#/properties/recordType"
-      }
+      },
+      "description": "The record-type set is closed by the manifest as well as by the schema: the four authority-aware records plus the check, subscription, and restore records carried forward from Contract 1."
     },
     "conformancePlatforms": {
       "const": [
@@ -70,7 +75,30 @@
         "requestScopeAuthority",
         "knownSnapshotAuthorityDigest",
         "unchangedEligibility",
-        "unchangedResponse"
+        "unchangedResponse",
+        "unknownContractVersion",
+        "unknownRecordType",
+        "unknownField",
+        "unknownAccessState",
+        "unknownLifecycleState",
+        "unknownUncertaintyReason",
+        "unknownExplanationCode",
+        "unknownChangeReason",
+        "unknownSourceType",
+        "unknownEntitlementKey",
+        "rejectedRecord",
+        "inactiveInference",
+        "olderSnapshotVersion",
+        "customerBindingMismatch",
+        "contentDigestMismatch",
+        "expiredCache",
+        "neverProjectedCustomer",
+        "entityTagOrdering",
+        "unavailableInSnapshotEntry",
+        "billingDisabled",
+        "snapshotAsCredential",
+        "providerStatusString",
+        "partialAcceptance"
       ],
       "properties": {
         "authorityPrecedence": {
@@ -113,7 +141,294 @@
           "const": "exactDigestScopeEpochAndSnapshotMatch"
         },
         "unchangedResponse": {
-          "const": "embedExactV1PayloadAndSlideFreshness"
+          "description": "An unchanged response embeds the exact snapshotUnchanged payload; the reader preserves its cached snapshot and slides its freshness window.",
+          "const": "preserveCacheEmbedExactPayloadSlideFreshness"
+        },
+        "unknownContractVersion": {
+          "const": "rejectRecord"
+        },
+        "unknownRecordType": {
+          "const": "rejectRecord"
+        },
+        "unknownField": {
+          "const": "rejectRecord"
+        },
+        "unknownAccessState": {
+          "const": "rejectRecord"
+        },
+        "unknownLifecycleState": {
+          "const": "rejectRecord"
+        },
+        "unknownUncertaintyReason": {
+          "const": "rejectRecord"
+        },
+        "unknownExplanationCode": {
+          "const": "rejectRecord"
+        },
+        "unknownChangeReason": {
+          "const": "rejectRecord"
+        },
+        "unknownSourceType": {
+          "const": "rejectRecord"
+        },
+        "unknownEntitlementKey": {
+          "description": "Entitlement keys are Project data, not contract vocabulary. A key a reader has never seen is carried, not rejected: rejecting it would make defining a new Entitlement a breaking change for every already-shipped SDK.",
+          "const": "acceptAsProjectData"
+        },
+        "rejectedRecord": {
+          "description": "The normative rule of this contract. However a record is rejected -- unknown version, unknown field, unknown enumeration member, digest mismatch, regression -- the reader reports accessState unknown and preserves whatever cache it already had. It never derives inactive from a rejection.",
+          "const": "reportUnknownPreserveCache"
+        },
+        "inactiveInference": {
+          "description": "inactive is only ever the result of a snapshot Mosaic issued and the reader fully accepted. It is never inferred from a failure, a timeout, an expiry, a rejection, or an absence.",
+          "const": "forbidden"
+        },
+        "olderSnapshotVersion": {
+          "const": "rejectPreserveCache"
+        },
+        "customerBindingMismatch": {
+          "description": "A snapshot for another Billing Customer, Project, or Environment is not merely rejected: the reader clears its cache, because continuing to serve the previous customer's access after an identity change is the leak this rule exists to prevent.",
+          "const": "clearCacheReportUnknown"
+        },
+        "contentDigestMismatch": {
+          "const": "rejectPreserveCache"
+        },
+        "expiredCache": {
+          "const": "reportUnknownNeverInactive"
+        },
+        "neverProjectedCustomer": {
+          "description": "A Billing Customer no projection has ever run for is answered with a customerEntitlementSnapshot at snapshotVersion 0, not with an error and not with an empty version 1. The placeholder is cacheable like any other snapshot, and because issued versions start at 1 it sorts below everything that can supersede it, so the ordinary monotonic gate replaces it and no reader needs a special case. Its entries are empty, which the contract already reads as unknown per key rather than inactive.",
+          "const": "placeholderSnapshotVersionZero"
+        },
+        "entityTagOrdering": {
+          "description": "The entity tag is an opaque equality token. Monotonicity is decided by snapshotVersion alone; comparing entity tags for magnitude is meaningless.",
+          "const": "equalityOnly"
+        },
+        "unavailableInSnapshotEntry": {
+          "const": "forbidden"
+        },
+        "billingDisabled": {
+          "const": "unavailableNeverInactive"
+        },
+        "snapshotAsCredential": {
+          "description": "An Access Decision Snapshot is a read model. It authorizes nothing, and a backend must never accept one presented by a client as proof of access.",
+          "const": "forbidden"
+        },
+        "providerStatusString": {
+          "const": "forbidden"
+        },
+        "partialAcceptance": {
+          "description": "A snapshot is accepted whole or rejected whole. A reader never keeps the entries it understood from a document it rejected.",
+          "const": "forbidden"
+        }
+      }
+    },
+    "supportingSchemas": {
+      "description": "The $defs libraries the contract schema references. They carry no dispatch of their own.",
+      "const": [
+        "../../schema/authoritative-entitlement/v2/snapshot.schema.json",
+        "../../schema/authoritative-entitlement/v2/check.schema.json",
+        "../../schema/authoritative-entitlement/v2/subscription.schema.json",
+        "../../schema/authoritative-entitlement/v2/restore.schema.json"
+      ]
+    },
+    "stateAxes": {
+      "description": "The four state axes plus the uncertainty vocabulary, pinned so a reader's own enumerations can be reconciled against the contract mechanically. Every axis is closed and deliberately over-provisioned.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accessState",
+        "lifecycleState",
+        "renewalIntent",
+        "billingState",
+        "uncertaintyReason",
+        "persistedEntitlementState"
+      ],
+      "properties": {
+        "accessState": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/accessState"
+          }
+        },
+        "lifecycleState": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/lifecycleState"
+          }
+        },
+        "renewalIntent": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/renewalIntent"
+          }
+        },
+        "billingState": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/billingState"
+          }
+        },
+        "uncertaintyReason": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/uncertaintyReason"
+          }
+        },
+        "persistedEntitlementState": {
+          "description": "The states an immutable snapshot entry may carry. unavailable is absent by construction: it is a read-time service state.",
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:snapshot#/$defs/persistedEntitlementState"
+          }
+        }
+      }
+    },
+    "canonicalSerialization": {
+      "description": "The exact serialization the contentDigest and checksum members are computed over. It is pinned because five independent implementations must produce byte-identical input or the digests silently stop meaning anything.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "form",
+        "hash",
+        "encoding",
+        "output",
+        "keyOrdering",
+        "arrayOrdering",
+        "timestampPrecision",
+        "absentVersusNull",
+        "numberForm",
+        "excludedMembers"
+      ],
+      "properties": {
+        "form": {
+          "const": "minifiedJsonSortedKeys"
+        },
+        "hash": {
+          "const": "SHA-256"
+        },
+        "encoding": {
+          "const": "UTF-8"
+        },
+        "output": {
+          "const": "sha256_prefixed_lowercase_hex"
+        },
+        "keyOrdering": {
+          "const": "ascendingByUtf16CodeUnit"
+        },
+        "arrayOrdering": {
+          "description": "Array order is significant and is part of the contract: entries ascend by entitlementKey and sources ascend by sourceId, so two producers of identical state produce identical bytes.",
+          "const": "documentOrderIsNormative"
+        },
+        "timestampPrecision": {
+          "const": "exactlyThreeFractionalDigits"
+        },
+        "absentVersusNull": {
+          "description": "An absent member and a null member are not the same thing, and null is never emitted anywhere in this contract. A serializer that writes null for an absent optional produces a different digest.",
+          "const": "absentOnlyNullForbidden"
+        },
+        "numberForm": {
+          "const": "shortestIntegerNoExponent"
+        },
+        "excludedMembers": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "contentDigest",
+              "checksum"
+            ]
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxRecordBytes",
+        "maxEntriesPerSnapshot",
+        "maxSourcesPerSnapshot",
+        "maxSourcesPerEntry",
+        "maxEntitlementKeysPerRequest",
+        "maxDiagnosticsPerRecord",
+        "clockSkewToleranceSeconds",
+        "defaultRefreshAfterSeconds",
+        "defaultValidUntilSeconds",
+        "defaultStaleGraceSeconds",
+        "maxValidUntilSeconds",
+        "maxStaleGraceSeconds",
+        "maxCacheHorizonSeconds",
+        "restorePollAttempts",
+        "restorePollBudgetSeconds"
+      ],
+      "properties": {
+        "maxRecordBytes": {
+          "const": 65536
+        },
+        "maxEntriesPerSnapshot": {
+          "const": 200
+        },
+        "maxSourcesPerSnapshot": {
+          "const": 200
+        },
+        "maxSourcesPerEntry": {
+          "const": 64
+        },
+        "maxEntitlementKeysPerRequest": {
+          "const": 64
+        },
+        "maxDiagnosticsPerRecord": {
+          "const": 10
+        },
+        "clockSkewToleranceSeconds": {
+          "const": 60
+        },
+        "defaultRefreshAfterSeconds": {
+          "const": 3600
+        },
+        "defaultValidUntilSeconds": {
+          "const": 604800
+        },
+        "defaultStaleGraceSeconds": {
+          "description": "Bounded grace is the shipped offline policy (OD-5), so the default grace window is 24 hours rather than zero. A zero default would ship the strict policy under a bounded-grace decision. In Phase 9B this and the other two freshness settings are configured deployment-wide server-side, not per Environment; per-Environment configuration is a tracked follow-up. Strict remains expressible as a grace window of zero.",
+          "const": 86400
+        },
+        "maxValidUntilSeconds": {
+          "const": 2592000
+        },
+        "maxStaleGraceSeconds": {
+          "const": 2592000
+        },
+        "maxCacheHorizonSeconds": {
+          "description": "The hard bound is on the COMBINED horizon: (validUntil - issuedAt) + staleGraceSeconds may never exceed 30 days. The two individual maxima above bound each field, but only this bound stops a 30-day validity and a 30-day grace window from composing into 60 days of offline access. Enforced by the semantic validator.",
+          "const": 2592000
+        },
+        "restorePollAttempts": {
+          "const": 3
+        },
+        "restorePollBudgetSeconds": {
+          "const": 6
         }
       }
     }

@@ -8,14 +8,11 @@ consumes it in production, and it may change without a version bump.
 `protocol/compatibility/local-preview/v0.4.json` records `status: "draft"` and
 carries no `releaseCandidate` label.
 
-Local Preview `0.3` remains the release candidate, is unchanged by this work,
-and remains correct for Paywall Protocol `0.3` drafts. Its schemas, manifest,
-and fixtures are byte-identical to what they were before `0.4` existed.
-
-Local Preview is version-locked to the paywall contract: the message schema
-`$ref`s the paywall schema URN directly, so a paywall bump *is* a Local Preview
-bump. `0.4` retargets that reference to
-`urn:mosaic:protocol:schema:v0.4:paywall`.
+`0.4` is the **only** Local Preview version. Local Preview is version-locked to
+the paywall contract — the message schema `$ref`s the paywall schema URN
+directly, so a paywall replacement *is* a Local Preview replacement — and `0.3`
+was deleted alongside Paywall `0.3` under the single-version policy in
+[ADR-0028](../architecture/decisions/0028-single-version-contracts.md).
 
 Canonical artifacts:
 
@@ -35,10 +32,11 @@ Every peer uses `mosaic.local-preview.v0.4`, and every envelope uses
 `fileFormatVersion: "0.4"`. With no supported subprotocol, the relay rejects the
 connection rather than translating or downgrading the document.
 
-Negotiation offers `0.4` **ahead of** `0.3`
-(`localPreviewVersionPreference` in `protocol/browser/index.js`). A client that
-speaks only `0.3` is still served `0.3`: adding a draft version may not strand a
-client that has not been rebuilt.
+Negotiation offers exactly one subprotocol
+(`localPreviewVersionPreference` in `protocol/browser/index.js` is `["0.4"]`). A
+client that speaks anything else is refused with `preview.noMutualVersion` and
+Studio keeps its last accepted draft; it is never served a version it did not
+offer.
 
 Before Studio sends a draft, the client capability report must:
 
@@ -47,11 +45,11 @@ Before Studio sends a draft, the client capability report must:
 - include every Local Preview capability at exact version `0.4`; and
 - declare a document byte limit large enough for the complete draft.
 
-The Local Preview capability **names** are unchanged from `0.3`
-(`preview.liveUpdate`, `preview.mockCommerce`, `preview.localeOverride`,
-`preview.textScale`, `preview.diagnostics`). The version is the whole signal: a
-client reporting the `0.3` generation of those names has not been rebuilt
-against the `0.4` message schema, and the draft is withheld with
+The five Local Preview capability names are `preview.liveUpdate`,
+`preview.mockCommerce`, `preview.localeOverride`, `preview.textScale`, and
+`preview.diagnostics`. The reported *version* is the whole signal: a client
+reporting an older generation of those names has not been rebuilt against the
+`0.4` message schema, and the draft is withheld with
 `preview.unsupportedPreviewCapability`.
 
 The document capability set follows Paywall Protocol `0.4`: it drops
@@ -151,56 +149,45 @@ bundled fallback during a Studio demo.
 The message taxonomy, the compatibility-warning `fallback` vocabulary
 (`keepLastAcceptedDraft`, `useDeclaredAssetFallback`, `useSelectorFallback`,
 `nativeApproximation`), the `recovery` requirement, and the eight structured
-delivery diagnostic codes are **unchanged** from `0.3`. See
-[Local Preview 0.3](local-preview-v0.3.md#compatibility-diagnostics-and-the-fallback-vocabulary)
-for the full table; `0.4` does not restate it, and
-`preview-validation-v0.4.mjs` aliases the `0.3` diagnostic-code list rather than
-copying it, so the two cannot drift apart while each stays internally
-consistent.
+delivery diagnostic codes are **unchanged** from what `0.3` specified. See
+[the compatibility policy](compatibility-policy.md) for the full table. The
+eight codes are declared once, in `preview-validation-v0.4.mjs`, and the
+compatibility manifest is asserted to declare exactly that set.
 
-One deliberate rename: the manifest's `readerPolicy.portableExchange` is
-`rawProtocol04Json`. The `0.3` manifest still spells this value
-`rawProtocol02Json`, a name left behind by the `0.2` deletion. `0.4` names the
-version it actually exchanges rather than inheriting the misnomer; `0.3` is not
-edited, because a released contract is not corrected in place.
+The manifest's `readerPolicy.portableExchange` is `rawProtocol04Json`. The `0.3`
+manifest spelled it `rawProtocol02Json`, a name left behind by the `0.2`
+deletion; `0.4` names the version it actually exchanges.
 
 ## Browser runtime support
 
-`protocol/browser/index.js` reads both generations. The entry points dispatch on
-the version a value claims:
-
-| Entry point | Dispatches on |
-| --- | --- |
-| `validatePaywallDocument`, `parsePortablePaywallJson`, `serializePortablePaywallJson` | `schemaVersion` |
-| `validatePreviewMessage` | `previewProtocolVersion` |
-| `validateLocalProject` | `fileFormatVersion` |
-
-Anything that is not an explicit `0.4` claim is read as `0.3`, so a value with a
-missing, malformed, or unknown version produces exactly the `0.3` diagnostics it
-produced before `0.4` existed. `paywallDocumentVersion(value)` exposes the same
-decision to callers that need to branch.
+`protocol/browser/index.js` reads exactly one generation. `validatePaywallDocument`,
+`parsePortablePaywallJson`, `serializePortablePaywallJson`,
+`validatePreviewMessage`, and `validateLocalProject` each validate against the
+single registered schema; there is no version dispatch and no
+`paywallDocumentVersion`. A value whose `schemaVersion`, `previewProtocolVersion`,
+or `fileFormatVersion` is missing, malformed, or anything other than `0.4` is
+refused by the schema's version `const`.
 
 `MosaicAnyPaywallDocument`, `MosaicAnyPreviewMessage`, and
-`MosaicAnyLocalProject` are unions of both generations, because the reader entry
-points genuinely return either. `MosaicPaywallDocument` stays `0.3` and is the
-narrow name for callers that want exactly the release candidate.
+`MosaicAnyLocalProject` each name the `0.4` type. They are kept as names so that
+a parallel version at GA widens an alias rather than renaming a public symbol.
+`MosaicPaywallDocument` names the same type.
 
-**Deferred to the Studio preview wave, deliberately:** the browser runtime's
-`runtimeStateForAcceptedRevision` does not yet emit the `motion.playedAppearScreens`
-member and `paywallRuntimeDiagnostics` still refuses anything that is not a `0.3`
-document. Both are runtime-state surfaces consumed by a live preview client, and
+`paywallRuntimeDiagnostics` reads `0.4` documents.
+
+**Still deferred to the Studio preview wave:** the browser runtime's
+`runtimeStateForAcceptedRevision` does not emit the `motion.playedAppearScreens`
+member. It is a runtime-state surface consumed by a live preview client, and
 Studio's live-preview surface is a later wave; the reference implementation of
 the suppression rule is `runtimeStateForAcceptedV04Revision` in
 `protocol/tools/validation-v0.4.mjs`, which is what the fixture pins and what
-that wave will mirror into the browser runtime. This is an intentional gap, not
-an omission: nothing consumes those two entry points on `0.4` yet, and adding a
-motion member no client reads would be an unexercised second implementation of a
-rule the validator already owns.
+that wave will mirror. This is an intentional gap, not an omission: nothing
+consumes that member yet, and adding one no client reads would be an unexercised
+second implementation of a rule the validator already owns.
 
 ## Related documents
 
 - [Protocol 0.4](v0.4.md) — the paywall contract this accompanies.
-- [Local Preview 0.3](local-preview-v0.3.md) — the contract `0.4` supersets.
 - [versioning.md](versioning.md), [compatibility
   policy](compatibility-policy.md), [fixture
   lifecycle](fixture-lifecycle.md).

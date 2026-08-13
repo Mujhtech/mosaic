@@ -1,0 +1,1815 @@
+{
+  "configurationDeliveryVersion": "3",
+  "release": {
+    "id": "release_advanced",
+    "number": 12,
+    "projectId": "project_alpha",
+    "environment": {
+      "id": "environment_production",
+      "key": "production",
+      "mode": "production"
+    },
+    "publishedAt": "2026-07-26T12:00:00.000Z",
+    "contentDigest": "sha256:ebc8f01c9659fcb597621df5f5e2aea7c89db612f6fb04d4b55bcc5dd514cfcf",
+    "compatibility": {
+      "placementDecisionContracts": [
+        {
+          "version": "1",
+          "requiredFeatures": [
+            "condition.all",
+            "condition.not",
+            "operator.does_not_exist",
+            "operator.equals",
+            "operator.exists",
+            "operator.greater_than",
+            "operator.greater_than_or_equal",
+            "operator.in",
+            "operator.locale_matches",
+            "operator.not_equals",
+            "operator.not_in",
+            "outcome.fallback",
+            "outcome.no_paywall",
+            "outcome.paywall",
+            "source.application.locale",
+            "source.application.version",
+            "source.context.country",
+            "source.device.platform",
+            "source.entitlement_state",
+            "source.product_availability",
+            "source.user_attribute"
+          ],
+          "bucketingAlgorithms": [
+            "sha256_length_prefixed_v1"
+          ]
+        }
+      ],
+      "paywallProtocols": [
+        {
+          "version": "0.4",
+          "requiredCapabilities": [
+            {
+              "name": "accessibility.metadata",
+              "version": "0.4"
+            },
+            {
+              "name": "action.navigateBack",
+              "version": "0.4"
+            },
+            {
+              "name": "action.navigateTo",
+              "version": "0.4"
+            },
+            {
+              "name": "action.openExternalUrl",
+              "version": "0.4"
+            },
+            {
+              "name": "component.button",
+              "version": "0.4"
+            },
+            {
+              "name": "component.text",
+              "version": "0.4"
+            },
+            {
+              "name": "layout.scrollContainer",
+              "version": "0.4"
+            },
+            {
+              "name": "layout.stack",
+              "version": "0.4"
+            },
+            {
+              "name": "localization.catalogs",
+              "version": "0.4"
+            },
+            {
+              "name": "navigation.screens",
+              "version": "0.4"
+            },
+            {
+              "name": "style.box",
+              "version": "0.4"
+            },
+            {
+              "name": "style.colors",
+              "version": "0.4"
+            },
+            {
+              "name": "style.typography",
+              "version": "0.4"
+            }
+          ]
+        }
+      ],
+      "acceptance": "atomic",
+      "experimentAssignmentContracts": [
+        {
+          "version": "1",
+          "requiredFeatures": [],
+          "bucketingAlgorithms": [],
+          "schedulePolicies": []
+        }
+      ]
+    },
+    "placementDecisions": [
+      {
+        "placementDecisionVersion": "1",
+        "ruleSet": {
+          "id": "ruleset_export_pdf",
+          "version": 7,
+          "projectId": "project_alpha",
+          "environmentId": "environment_production",
+          "environmentKey": "production",
+          "placementId": "placement_export_pdf",
+          "placementKey": "export_pdf",
+          "enabled": true,
+          "assignmentPolicy": "installation",
+          "attributeDefinitions": [
+            {
+              "key": "student",
+              "type": "boolean",
+              "sensitivity": "standard",
+              "allowedOperators": [
+                "equals",
+                "exists"
+              ]
+            }
+          ],
+          "fallbacks": [
+            {
+              "key": "product_unavailable",
+              "safeLabel": "Product unavailable fallback",
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_fallback"
+              }
+            }
+          ],
+          "rules": [
+            {
+              "id": "rule_pro",
+              "priority": 10,
+              "enabled": true,
+              "safeLabel": "Active Pro access",
+              "conditions": {
+                "type": "condition",
+                "source": {
+                  "kind": "entitlement_state",
+                  "key": "pro"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "string",
+                  "value": "active"
+                }
+              },
+              "outcome": {
+                "type": "no_paywall"
+              }
+            },
+            {
+              "id": "rule_product_unavailable",
+              "priority": 20,
+              "enabled": true,
+              "safeLabel": "Unavailable export Product",
+              "conditions": {
+                "type": "condition",
+                "source": {
+                  "kind": "product_availability",
+                  "productId": "product_export_pro"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "string",
+                  "value": "unavailable"
+                }
+              },
+              "outcome": {
+                "type": "fallback",
+                "key": "product_unavailable"
+              }
+            },
+            {
+              "id": "rule_student_de",
+              "priority": 30,
+              "enabled": true,
+              "safeLabel": "German students",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "context.country"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "DE"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "user_attribute",
+                      "key": "student"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "boolean",
+                      "value": true
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_student"
+              }
+            },
+            {
+              "id": "rule_country_present_but_unusable",
+              "priority": 31,
+              "enabled": true,
+              "safeLabel": "Host-supplied country exists even when it is unusable",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.4"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "context.country"
+                    },
+                    "operator": "exists"
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_country_absent",
+              "priority": 32,
+              "enabled": true,
+              "safeLabel": "No country reported by the host application",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.3"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "context.country"
+                    },
+                    "operator": "does_not_exist"
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_fallback"
+              }
+            },
+            {
+              "id": "rule_country_equals_unusable",
+              "priority": 33,
+              "enabled": true,
+              "safeLabel": "Unusable country equality is never true",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.2"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "context.country"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "DE"
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_country_not_equals_unusable",
+              "priority": 34,
+              "enabled": true,
+              "safeLabel": "Unusable country inequality is never true",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.1"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "context.country"
+                    },
+                    "operator": "not_equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "DE"
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_platform_out_of_set",
+              "priority": 35,
+              "enabled": true,
+              "safeLabel": "Out-of-set platform equality is never true",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "6.6.6"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "device.platform"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "ios"
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_platform_out_of_set_negated",
+              "priority": 36,
+              "enabled": true,
+              "safeLabel": "Out-of-set platform equality is never false",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "6.6.5"
+                    }
+                  },
+                  {
+                    "type": "not",
+                    "child": {
+                      "type": "condition",
+                      "source": {
+                        "kind": "device.platform"
+                      },
+                      "operator": "equals",
+                      "operand": {
+                        "type": "string",
+                        "value": "ios"
+                      }
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_operand_unnormalizable",
+              "priority": 37,
+              "enabled": true,
+              "safeLabel": "Unnormalizable locale operand is never true",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "6.6.4"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "en-US-verylongsubtag"
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_operand_unnormalizable_negated",
+              "priority": 38,
+              "enabled": true,
+              "safeLabel": "Unnormalizable locale operand is never false",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "6.6.3"
+                    }
+                  },
+                  {
+                    "type": "not",
+                    "child": {
+                      "type": "condition",
+                      "source": {
+                        "kind": "application.locale"
+                      },
+                      "operator": "equals",
+                      "operand": {
+                        "type": "string",
+                        "value": "en-US-verylongsubtag"
+                      }
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_operand_unnormalizable_not_in",
+              "priority": 39,
+              "enabled": true,
+              "safeLabel": "Unnormalizable locale list member is never false",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "6.6.2"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "not_in",
+                    "operand": {
+                      "type": "string_list",
+                      "value": [
+                        "pt-BR",
+                        "!!bad"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_ios_rollout",
+              "priority": 40,
+              "enabled": true,
+              "safeLabel": "iOS English minimum version rollout",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "device.platform"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "ios"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "locale_matches",
+                    "operand": {
+                      "type": "string",
+                      "value": "en"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "greater_than_or_equal",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "2.3"
+                    }
+                  }
+                ]
+              },
+              "rollout": {
+                "algorithm": "sha256_length_prefixed_v1",
+                "thresholdBasisPoints": 7000
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_operand_unnormalizable_in",
+              "priority": 41,
+              "enabled": true,
+              "safeLabel": "Unnormalizable locale list member is never true",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "6.6.1"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "in",
+                    "operand": {
+                      "type": "string_list",
+                      "value": [
+                        "pt-BR",
+                        "!!bad"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_matches_unnormalizable_range",
+              "priority": 42,
+              "enabled": true,
+              "safeLabel": "Unnormalizable locale range is never true",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.6"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "locale_matches",
+                    "operand": {
+                      "type": "string",
+                      "value": "en-AA-BB-CC-DD-EE-FF-GG-HH"
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_matches_unnormalizable_range_negated",
+              "priority": 43,
+              "enabled": true,
+              "safeLabel": "Unnormalizable locale range is never false",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.5"
+                    }
+                  },
+                  {
+                    "type": "not",
+                    "child": {
+                      "type": "condition",
+                      "source": {
+                        "kind": "application.locale"
+                      },
+                      "operator": "locale_matches",
+                      "operand": {
+                        "type": "string",
+                        "value": "en-AA-BB-CC-DD-EE-FF-GG-HH"
+                      }
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_present_but_unusable",
+              "priority": 44,
+              "enabled": true,
+              "safeLabel": "Host-supplied locale exists even when it is unusable",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "7.7.7"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "exists"
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_locale_equals",
+              "priority": 45,
+              "enabled": true,
+              "safeLabel": "Canonical English US locale equality",
+              "conditions": {
+                "type": "condition",
+                "source": {
+                  "kind": "application.locale"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "string",
+                  "value": "en-US"
+                }
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_student"
+              }
+            },
+            {
+              "id": "rule_locale_in",
+              "priority": 46,
+              "enabled": true,
+              "safeLabel": "Canonical locale membership",
+              "conditions": {
+                "type": "condition",
+                "source": {
+                  "kind": "application.locale"
+                },
+                "operator": "in",
+                "operand": {
+                  "type": "string_list",
+                  "value": [
+                    "pt-BR",
+                    "de-DE"
+                  ]
+                }
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_fallback"
+              }
+            },
+            {
+              "id": "rule_malformed_version_equals",
+              "priority": 47,
+              "enabled": true,
+              "safeLabel": "Malformed version equality remains unknown",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "zz-EQ"
+                    }
+                  },
+                  {
+                    "type": "not",
+                    "child": {
+                      "type": "condition",
+                      "source": {
+                        "kind": "application.version"
+                      },
+                      "operator": "equals",
+                      "operand": {
+                        "type": "semantic_version",
+                        "value": "2.3"
+                      }
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_malformed_version_not_equals",
+              "priority": 48,
+              "enabled": true,
+              "safeLabel": "Malformed version inequality remains unknown",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "zz-NE"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "not_equals",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "2.3"
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            },
+            {
+              "id": "rule_malformed_version_ordering",
+              "priority": 49,
+              "enabled": true,
+              "safeLabel": "Malformed version ordering remains unknown",
+              "conditions": {
+                "type": "all",
+                "children": [
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.locale"
+                    },
+                    "operator": "equals",
+                    "operand": {
+                      "type": "string",
+                      "value": "zz-OR"
+                    }
+                  },
+                  {
+                    "type": "condition",
+                    "source": {
+                      "kind": "application.version"
+                    },
+                    "operator": "greater_than",
+                    "operand": {
+                      "type": "semantic_version",
+                      "value": "2.3"
+                    }
+                  }
+                ]
+              },
+              "outcome": {
+                "type": "paywall",
+                "paywallVersionId": "paywall_version_ios"
+              }
+            }
+          ],
+          "defaultOutcome": {
+            "type": "no_paywall"
+          },
+          "qaOverrides": [],
+          "compatibility": {
+            "requiredFeatures": [
+              "condition.all",
+              "condition.not",
+              "operator.does_not_exist",
+              "operator.equals",
+              "operator.exists",
+              "operator.greater_than",
+              "operator.greater_than_or_equal",
+              "operator.in",
+              "operator.locale_matches",
+              "operator.not_equals",
+              "operator.not_in",
+              "outcome.fallback",
+              "outcome.no_paywall",
+              "outcome.paywall",
+              "source.application.locale",
+              "source.application.version",
+              "source.context.country",
+              "source.device.platform",
+              "source.entitlement_state",
+              "source.product_availability",
+              "source.user_attribute"
+            ],
+            "bucketingAlgorithms": [
+              "sha256_length_prefixed_v1"
+            ]
+          }
+        }
+      }
+    ],
+    "paywallVersions": [
+      {
+        "id": "paywall_version_fallback",
+        "paywallId": "paywall_fallback",
+        "protocolVersion": "0.4",
+        "documentDigest": "sha256:ef5690cdd0dd9891a5a1e2e72014c7f1205eaf89f98e041d32e9f6f3f84736d4",
+        "document": {
+          "schemaVersion": "0.4",
+          "id": "paywall_fallback",
+          "revision": 1,
+          "compatibility": {
+            "requiredCapabilities": [
+              {
+                "name": "layout.scrollContainer",
+                "version": "0.4"
+              },
+              {
+                "name": "layout.stack",
+                "version": "0.4"
+              },
+              {
+                "name": "navigation.screens",
+                "version": "0.4"
+              },
+              {
+                "name": "component.text",
+                "version": "0.4"
+              },
+              {
+                "name": "component.button",
+                "version": "0.4"
+              },
+              {
+                "name": "localization.catalogs",
+                "version": "0.4"
+              },
+              {
+                "name": "action.navigateTo",
+                "version": "0.4"
+              },
+              {
+                "name": "action.navigateBack",
+                "version": "0.4"
+              },
+              {
+                "name": "action.openExternalUrl",
+                "version": "0.4"
+              },
+              {
+                "name": "accessibility.metadata",
+                "version": "0.4"
+              },
+              {
+                "name": "style.colors",
+                "version": "0.4"
+              },
+              {
+                "name": "style.box",
+                "version": "0.4"
+              },
+              {
+                "name": "style.typography",
+                "version": "0.4"
+              }
+            ]
+          },
+          "localization": {
+            "defaultLocale": "en",
+            "fallbackLocale": "en",
+            "locales": {
+              "en": {
+                "direction": "ltr",
+                "strings": {
+                  "navigation.start.screen": "Start screen",
+                  "navigation.details.screen": "Details screen",
+                  "navigation.forward": "View details",
+                  "navigation.back": "Back",
+                  "navigation.privacy": "Privacy policy"
+                }
+              }
+            }
+          },
+          "assets": [],
+          "products": [],
+          "initialScreenId": "start",
+          "screens": [
+            {
+              "id": "start",
+              "accessibilityLabel": {
+                "default": "Start screen",
+                "localizationKey": "navigation.start.screen"
+              },
+              "layout": {
+                "type": "scrollContainer",
+                "id": "start-scroll",
+                "axis": "vertical",
+                "safeArea": "respect",
+                "showsIndicators": false,
+                "content": {
+                  "type": "stack",
+                  "id": "start-content",
+                  "direction": "vertical",
+                  "gap": 0,
+                  "padding": {
+                    "top": 0,
+                    "start": 0,
+                    "bottom": 0,
+                    "end": 0
+                  },
+                  "mainAxisDistribution": "start",
+                  "crossAxisAlignment": "stretch",
+                  "children": [
+                    {
+                      "type": "button",
+                      "id": "view-details",
+                      "direction": "horizontal",
+                      "gap": 8,
+                      "mainAxisDistribution": "center",
+                      "crossAxisAlignment": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "view-details-label",
+                          "value": {
+                            "default": "View details",
+                            "localizationKey": "navigation.forward"
+                          },
+                          "typography": {
+                            "style": "label",
+                            "fontSize": 16,
+                            "lineHeightMultiplier": 1.25,
+                            "weight": "semibold",
+                            "color": "text.primary",
+                            "alignment": "center"
+                          },
+                          "accessibility": {
+                            "role": "text"
+                          }
+                        }
+                      ],
+                      "action": {
+                        "type": "navigateTo",
+                        "screenId": "details"
+                      },
+                      "accessibility": {
+                        "label": {
+                          "default": "View details",
+                          "localizationKey": "navigation.forward"
+                        }
+                      }
+                    },
+                    {
+                      "type": "button",
+                      "id": "privacy-policy",
+                      "direction": "horizontal",
+                      "gap": 8,
+                      "mainAxisDistribution": "center",
+                      "crossAxisAlignment": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "privacy-policy-label",
+                          "value": {
+                            "default": "Privacy policy",
+                            "localizationKey": "navigation.privacy"
+                          },
+                          "typography": {
+                            "style": "label",
+                            "fontSize": 16,
+                            "lineHeightMultiplier": 1.25,
+                            "weight": "semibold",
+                            "color": "text.primary",
+                            "alignment": "center"
+                          },
+                          "accessibility": {
+                            "role": "text"
+                          }
+                        }
+                      ],
+                      "action": {
+                        "type": "openExternalUrl",
+                        "url": "https://example.com/privacy"
+                      },
+                      "accessibility": {
+                        "label": {
+                          "default": "Privacy policy",
+                          "localizationKey": "navigation.privacy"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "presentation": {
+                "type": "screen"
+              }
+            },
+            {
+              "id": "details",
+              "accessibilityLabel": {
+                "default": "Details screen",
+                "localizationKey": "navigation.details.screen"
+              },
+              "layout": {
+                "type": "scrollContainer",
+                "id": "details-scroll",
+                "axis": "vertical",
+                "safeArea": "respect",
+                "showsIndicators": false,
+                "content": {
+                  "type": "stack",
+                  "id": "details-content",
+                  "direction": "vertical",
+                  "gap": 0,
+                  "padding": {
+                    "top": 0,
+                    "start": 0,
+                    "bottom": 0,
+                    "end": 0
+                  },
+                  "mainAxisDistribution": "start",
+                  "crossAxisAlignment": "stretch",
+                  "children": [
+                    {
+                      "type": "button",
+                      "id": "details-back",
+                      "direction": "horizontal",
+                      "gap": 8,
+                      "mainAxisDistribution": "center",
+                      "crossAxisAlignment": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "details-back-label",
+                          "value": {
+                            "default": "Back",
+                            "localizationKey": "navigation.back"
+                          },
+                          "typography": {
+                            "style": "label",
+                            "fontSize": 16,
+                            "lineHeightMultiplier": 1.25,
+                            "weight": "semibold",
+                            "color": "text.primary",
+                            "alignment": "center"
+                          },
+                          "accessibility": {
+                            "role": "text"
+                          }
+                        }
+                      ],
+                      "action": {
+                        "type": "navigateBack"
+                      },
+                      "accessibility": {
+                        "label": {
+                          "default": "Back",
+                          "localizationKey": "navigation.back"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "presentation": {
+                "type": "screen"
+              }
+            }
+          ],
+          "designSystem": {
+            "colors": [],
+            "backgrounds": [],
+            "shadows": [],
+            "motions": []
+          }
+        },
+        "productReferenceIds": [],
+        "assetBindings": []
+      },
+      {
+        "id": "paywall_version_student",
+        "paywallId": "paywall_student",
+        "protocolVersion": "0.4",
+        "documentDigest": "sha256:7fa204e3c3fe7c4ae363bd9fc4ae18cd4e008d8b34891582bb54c9696e43358a",
+        "document": {
+          "schemaVersion": "0.4",
+          "id": "paywall_student",
+          "revision": 1,
+          "compatibility": {
+            "requiredCapabilities": [
+              {
+                "name": "layout.scrollContainer",
+                "version": "0.4"
+              },
+              {
+                "name": "layout.stack",
+                "version": "0.4"
+              },
+              {
+                "name": "navigation.screens",
+                "version": "0.4"
+              },
+              {
+                "name": "component.text",
+                "version": "0.4"
+              },
+              {
+                "name": "component.button",
+                "version": "0.4"
+              },
+              {
+                "name": "localization.catalogs",
+                "version": "0.4"
+              },
+              {
+                "name": "action.navigateTo",
+                "version": "0.4"
+              },
+              {
+                "name": "action.navigateBack",
+                "version": "0.4"
+              },
+              {
+                "name": "action.openExternalUrl",
+                "version": "0.4"
+              },
+              {
+                "name": "accessibility.metadata",
+                "version": "0.4"
+              },
+              {
+                "name": "style.colors",
+                "version": "0.4"
+              },
+              {
+                "name": "style.box",
+                "version": "0.4"
+              },
+              {
+                "name": "style.typography",
+                "version": "0.4"
+              }
+            ]
+          },
+          "localization": {
+            "defaultLocale": "en",
+            "fallbackLocale": "en",
+            "locales": {
+              "en": {
+                "direction": "ltr",
+                "strings": {
+                  "navigation.start.screen": "Start screen",
+                  "navigation.details.screen": "Details screen",
+                  "navigation.forward": "View details",
+                  "navigation.back": "Back",
+                  "navigation.privacy": "Privacy policy"
+                }
+              }
+            }
+          },
+          "assets": [],
+          "products": [],
+          "initialScreenId": "start",
+          "screens": [
+            {
+              "id": "start",
+              "accessibilityLabel": {
+                "default": "Start screen",
+                "localizationKey": "navigation.start.screen"
+              },
+              "layout": {
+                "type": "scrollContainer",
+                "id": "start-scroll",
+                "axis": "vertical",
+                "safeArea": "respect",
+                "showsIndicators": false,
+                "content": {
+                  "type": "stack",
+                  "id": "start-content",
+                  "direction": "vertical",
+                  "gap": 0,
+                  "padding": {
+                    "top": 0,
+                    "start": 0,
+                    "bottom": 0,
+                    "end": 0
+                  },
+                  "mainAxisDistribution": "start",
+                  "crossAxisAlignment": "stretch",
+                  "children": [
+                    {
+                      "type": "button",
+                      "id": "view-details",
+                      "direction": "horizontal",
+                      "gap": 8,
+                      "mainAxisDistribution": "center",
+                      "crossAxisAlignment": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "view-details-label",
+                          "value": {
+                            "default": "View details",
+                            "localizationKey": "navigation.forward"
+                          },
+                          "typography": {
+                            "style": "label",
+                            "fontSize": 16,
+                            "lineHeightMultiplier": 1.25,
+                            "weight": "semibold",
+                            "color": "text.primary",
+                            "alignment": "center"
+                          },
+                          "accessibility": {
+                            "role": "text"
+                          }
+                        }
+                      ],
+                      "action": {
+                        "type": "navigateTo",
+                        "screenId": "details"
+                      },
+                      "accessibility": {
+                        "label": {
+                          "default": "View details",
+                          "localizationKey": "navigation.forward"
+                        }
+                      }
+                    },
+                    {
+                      "type": "button",
+                      "id": "privacy-policy",
+                      "direction": "horizontal",
+                      "gap": 8,
+                      "mainAxisDistribution": "center",
+                      "crossAxisAlignment": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "privacy-policy-label",
+                          "value": {
+                            "default": "Privacy policy",
+                            "localizationKey": "navigation.privacy"
+                          },
+                          "typography": {
+                            "style": "label",
+                            "fontSize": 16,
+                            "lineHeightMultiplier": 1.25,
+                            "weight": "semibold",
+                            "color": "text.primary",
+                            "alignment": "center"
+                          },
+                          "accessibility": {
+                            "role": "text"
+                          }
+                        }
+                      ],
+                      "action": {
+                        "type": "openExternalUrl",
+                        "url": "https://example.com/privacy"
+                      },
+                      "accessibility": {
+                        "label": {
+                          "default": "Privacy policy",
+                          "localizationKey": "navigation.privacy"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "presentation": {
+                "type": "screen"
+              }
+            },
+            {
+              "id": "details",
+              "accessibilityLabel": {
+                "default": "Details screen",
+                "localizationKey": "navigation.details.screen"
+              },
+              "layout": {
+                "type": "scrollContainer",
+                "id": "details-scroll",
+                "axis": "vertical",
+                "safeArea": "respect",
+                "showsIndicators": false,
+                "content": {
+                  "type": "stack",
+                  "id": "details-content",
+                  "direction": "vertical",
+                  "gap": 0,
+                  "padding": {
+                    "top": 0,
+                    "start": 0,
+                    "bottom": 0,
+                    "end": 0
+                  },
+                  "mainAxisDistribution": "start",
+                  "crossAxisAlignment": "stretch",
+                  "children": [
+                    {
+                      "type": "button",
+                      "id": "details-back",
+                      "direction": "horizontal",
+                      "gap": 8,
+                      "mainAxisDistribution": "center",
+                      "crossAxisAlignment": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "details-back-label",
+                          "value": {
+                            "default": "Back",
+                            "localizationKey": "navigation.back"
+                          },
+                          "typography": {
+                            "style": "label",
+                            "fontSize": 16,
+                            "lineHeightMultiplier": 1.25,
+                            "weight": "semibold",
+                            "color": "text.primary",
+                            "alignment": "center"
+                          },
+                          "accessibility": {
+                            "role": "text"
+                          }
+                        }
+                      ],
+                      "action": {
+                        "type": "navigateBack"
+                      },
+                      "accessibility": {
+                        "label": {
+                          "default": "Back",
+                          "localizationKey": "navigation.back"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "presentation": {
+                "type": "screen"
+              }
+            }
+          ],
+          "designSystem": {
+            "colors": [],
+            "backgrounds": [],
+            "shadows": [],
+            "motions": []
+          }
+        },
+        "productReferenceIds": [],
+        "assetBindings": []
+      },
+      {
+        "id": "paywall_version_ios",
+        "paywallId": "paywall_ios",
+        "protocolVersion": "0.4",
+        "documentDigest": "sha256:0b2d2eeeb4a8b63e255bbf7625e2708adda3e9f2504ba54a1b1ca4e3731e1c4b",
+        "document": {
+          "schemaVersion": "0.4",
+          "id": "paywall_ios",
+          "revision": 1,
+          "compatibility": {
+            "requiredCapabilities": [
+              {
+                "name": "layout.scrollContainer",
+                "version": "0.4"
+              },
+              {
+                "name": "layout.stack",
+                "version": "0.4"
+              },
+              {
+                "name": "navigation.screens",
+                "version": "0.4"
+              },
+              {
+                "name": "component.text",
+                "version": "0.4"
+              },
+              {
+                "name": "component.button",
+                "version": "0.4"
+              },
+              {
+                "name": "localization.catalogs",
+                "version": "0.4"
+              },
+              {
+                "name": "action.navigateTo",
+                "version": "0.4"
+              },
+              {
+                "name": "action.navigateBack",
+                "version": "0.4"
+              },
+              {
+                "name": "action.openExternalUrl",
+                "version": "0.4"
+              },
+              {
+                "name": "accessibility.metadata",
+                "version": "0.4"
+              },
+              {
+                "name": "style.colors",
+                "version": "0.4"
+              },
+              {
+                "name": "style.box",
+                "version": "0.4"
+              },
+              {
+                "name": "style.typography",
+                "version": "0.4"
+              }
+            ]
+          },
+          "localization": {
+            "defaultLocale": "en",
+            "fallbackLocale": "en",
+            "locales": {
+              "en": {
+                "direction": "ltr",
+                "strings": {
+                  "navigation.start.screen": "Start screen",
+                  "navigation.details.screen": "Details screen",
+                  "navigation.forward": "View details",
+                  "navigation.back": "Back",
+                  "navigation.privacy": "Privacy policy"
+                }
+              }
+            }
+          },
+          "assets": [],
+          "products": [],
+          "initialScreenId": "start",
+          "screens": [
+            {
+              "id": "start",
+              "accessibilityLabel": {
+                "default": "Start screen",
+                "localizationKey": "navigation.start.screen"
+              },
+              "layout": {
+                "type": "scrollContainer",
+                "id": "start-scroll",
+                "axis": "vertical",
+                "safeArea": "respect",
+                "showsIndicators": false,
+                "content": {
+                  "type": "stack",
+                  "id": "start-content",
+                  "direction": "vertical",
+                  "gap": 0,
+                  "padding": {
+                    "top": 0,
+                    "start": 0,
+                    "bottom": 0,
+                    "end": 0
+                  },
+                  "mainAxisDistribution": "start",
+                  "crossAxisAlignment": "stretch",
+                  "children": [
+                    {
+                      "type": "button",
+                      "id": "view-details",
+                      "direction": "horizontal",
+                      "gap": 8,
+                      "mainAxisDistribution": "center",
+                      "crossAxisAlignment": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "view-details-label",
+                          "value": {
+                            "default": "View details",
+                            "localizationKey": "navigation.forward"
+                          },
+                          "typography": {
+                            "style": "label",
+                            "fontSize": 16,
+                            "lineHeightMultiplier": 1.25,
+                            "weight": "semibold",
+                            "color": "text.primary",
+                            "alignment": "center"
+                          },
+                          "accessibility": {
+                            "role": "text"
+                          }
+                        }
+                      ],
+                      "action": {
+                        "type": "navigateTo",
+                        "screenId": "details"
+                      },
+                      "accessibility": {
+                        "label": {
+                          "default": "View details",
+                          "localizationKey": "navigation.forward"
+                        }
+                      }
+                    },
+                    {
+                      "type": "button",
+                      "id": "privacy-policy",
+                      "direction": "horizontal",
+                      "gap": 8,
+                      "mainAxisDistribution": "center",
+                      "crossAxisAlignment": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "privacy-policy-label",
+                          "value": {
+                            "default": "Privacy policy",
+                            "localizationKey": "navigation.privacy"
+                          },
+                          "typography": {
+                            "style": "label",
+                            "fontSize": 16,
+                            "lineHeightMultiplier": 1.25,
+                            "weight": "semibold",
+                            "color": "text.primary",
+                            "alignment": "center"
+                          },
+                          "accessibility": {
+                            "role": "text"
+                          }
+                        }
+                      ],
+                      "action": {
+                        "type": "openExternalUrl",
+                        "url": "https://example.com/privacy"
+                      },
+                      "accessibility": {
+                        "label": {
+                          "default": "Privacy policy",
+                          "localizationKey": "navigation.privacy"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "presentation": {
+                "type": "screen"
+              }
+            },
+            {
+              "id": "details",
+              "accessibilityLabel": {
+                "default": "Details screen",
+                "localizationKey": "navigation.details.screen"
+              },
+              "layout": {
+                "type": "scrollContainer",
+                "id": "details-scroll",
+                "axis": "vertical",
+                "safeArea": "respect",
+                "showsIndicators": false,
+                "content": {
+                  "type": "stack",
+                  "id": "details-content",
+                  "direction": "vertical",
+                  "gap": 0,
+                  "padding": {
+                    "top": 0,
+                    "start": 0,
+                    "bottom": 0,
+                    "end": 0
+                  },
+                  "mainAxisDistribution": "start",
+                  "crossAxisAlignment": "stretch",
+                  "children": [
+                    {
+                      "type": "button",
+                      "id": "details-back",
+                      "direction": "horizontal",
+                      "gap": 8,
+                      "mainAxisDistribution": "center",
+                      "crossAxisAlignment": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "details-back-label",
+                          "value": {
+                            "default": "Back",
+                            "localizationKey": "navigation.back"
+                          },
+                          "typography": {
+                            "style": "label",
+                            "fontSize": 16,
+                            "lineHeightMultiplier": 1.25,
+                            "weight": "semibold",
+                            "color": "text.primary",
+                            "alignment": "center"
+                          },
+                          "accessibility": {
+                            "role": "text"
+                          }
+                        }
+                      ],
+                      "action": {
+                        "type": "navigateBack"
+                      },
+                      "accessibility": {
+                        "label": {
+                          "default": "Back",
+                          "localizationKey": "navigation.back"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "presentation": {
+                "type": "screen"
+              }
+            }
+          ],
+          "designSystem": {
+            "colors": [],
+            "backgrounds": [],
+            "shadows": [],
+            "motions": []
+          }
+        },
+        "productReferenceIds": [],
+        "assetBindings": []
+      }
+    ],
+    "productReferences": [
+      {
+        "id": "product_export_pro",
+        "type": "subscription",
+        "fallbackDisplayName": "Export Pro",
+        "readiness": "ready"
+      }
+    ],
+    "entitlementReferences": [
+      {
+        "id": "entitlement_pro",
+        "key": "pro"
+      }
+    ],
+    "assetReferences": [],
+    "experimentAssignments": []
+  }
+}

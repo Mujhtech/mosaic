@@ -8,10 +8,6 @@ import {
   validateCommerceProviderV2Record,
 } from "./commerce-provider-validation-v2.mjs";
 import {
-  loadCommerceProviderV1Artifacts,
-  validateCommerceProviderV1Artifacts,
-} from "./commerce-provider-validation-v1.mjs";
-import {
   loadCommerceConfigurationV2Artifacts,
 } from "./commerce-configuration-validation-v2.mjs";
 
@@ -22,11 +18,6 @@ function fixture(artifacts, name) {
   assert.notEqual(index, -1, `Missing fixture ${name}`);
   return structuredClone(artifacts.fixtures[index]);
 }
-
-test("Commerce Provider v1 remains valid beside v2", () => {
-  const v1 = loadCommerceProviderV1Artifacts();
-  assert.deepEqual(validateCommerceProviderV1Artifacts(v1), []);
-});
 
 test("Commerce Provider v2 canonical artifacts are valid and formatted", () => {
   const artifacts = loadCommerceProviderV2Artifacts();

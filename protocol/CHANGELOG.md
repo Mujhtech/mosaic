@@ -4,6 +4,191 @@ All notable Mosaic protocol changes are recorded here. A contract's artifacts
 become immutable when its `status` reaches `approved`; before that, its review
 gate may still change them. Every Mosaic contract is `approved` as of v1 GA.
 
+## One version per contract: Authoritative Entitlement v2, Billing State Webhook v2 - 2026-08-13
+
+Status: breaking. Owner ruling, single-version contracts. See
+[ADR-0028](../docs/architecture/decisions/0028-single-version-contracts.md).
+
+Authoritative Entitlement and Billing State Webhook each carry exactly one
+version, v2. The collapse absorbs everything v1 carried rather than deleting
+product surface: v2 is the authority-aware contract plus the v1 surface v2 had
+never restated.
+
+### Carried forward into v2
+
+- Authoritative Entitlement: the `entitlementCheckRequest`,
+  `entitlementCheckResult`, `subscriptionSnapshot`, and `restoreResult` record
+  types (never restated in v2) join the v2 envelope's `recordType` dispatch;
+  the v1 snapshot/check/subscription/restore schemas move to
+  `protocol/schema/authoritative-entitlement/v2/` under v2 URNs as
+  `$defs`-only libraries; `requestedEntitlementKeys` returns to the sync
+  request; the v1 snapshot scenario corpus is re-issued as authority-wrapped
+  v2 fixtures; state axes, canonical serialization, limits, and the
+  fail-closed reader policy (rejection resolves to `unknown`, never
+  `inactive`) move into the v2 compatibility manifest.
+- Billing State Webhook: the nine reserved v1 event types join the v2
+  `eventType` vocabulary (fourteen members); `stateSummary`, `sourceReason`,
+  `subscriptionInstanceId`, `projectionRuleVersion`, `isTestSource`, and
+  `diagnostics` become optional event members; the delivery-attempt record is
+  inlined into the v2 contract schema; signing, limits, producer policy, and
+  the consumer obligations (signature-before-parsing, dedup by event ID,
+  ordering, snapshot re-read) move into the v2 compatibility manifest. Event
+  snapshot-version monotonicity is now scoped to one authority epoch, since a
+  rollback opens a new epoch whose versions restart.
+
+### Deleted
+
+- `protocol/schema/authoritative-entitlement/v1/`,
+  `protocol/fixtures/authoritative-entitlement/v1/`,
+  `protocol/compatibility/authoritative-entitlement/v1.json`
+- `protocol/schema/billing-state-webhook/v1/`,
+  `protocol/fixtures/billing-state-webhook/v1/`,
+  `protocol/compatibility/billing-state-webhook/v1.json`
+- `protocol/tools/authoritative-entitlement-validation-v1.mjs` and
+  `protocol/tools/billing-state-webhook-validation-v1.mjs` (+ tests); their
+  semantics and guards relocate to the unsuffixed
+  `authoritative-entitlement-validation.mjs` and
+  `billing-state-webhook-validation.mjs`, consumed by
+  `phase9c-contract-validation.mjs`
+- `docs/protocol/authoritative-entitlement-v1.md`,
+  `docs/protocol/billing-state-webhook-v1.md`
+- Version fallbacks: `supportedContractVersions` no longer admits `"1"`, and
+  the webhook manifest's v1-destination arms
+  (`v1Destination`/`readiness`) are gone
+
+## One version per contract: Paywall 0.4, Local Preview 0.4, Delivery v3 - 2026-08-13
+
+Status: breaking. Owner ruling, single-version contracts. See
+[ADR-0028](../docs/architecture/decisions/0028-single-version-contracts.md).
+
+While Mosaic has no production usage, every protocol contract carries exactly
+one version: the latest. A contract change replaces its version rather than
+adding one beside it, and the replaced version is deleted outright along with
+every reference, version-dispatch arm, projection, migration path, and version
+fallback that named it. Parallel versions begin at GA.
+
+The capability system and the `renderWithoutMotion` enhancement tier are
+capability-level mechanisms rather than version debt, and are unchanged.
+
+### Deleted
+
+- `protocol/schema/v0.3/`, `protocol/fixtures/v0.3/`,
+  `protocol/compatibility/v0.3.json`
+- `protocol/schema/local-preview/v0.3/`,
+  `protocol/fixtures/local-preview/v0.3/`,
+  `protocol/compatibility/local-preview/v0.3.json`
+- `protocol/schema/configuration-delivery/v1/` and `v2/`,
+  `protocol/fixtures/configuration-delivery/v1/` and `v2/`,
+  `protocol/compatibility/configuration-delivery/v1.json` and `v2.json`
+- `protocol/tools/`: `validation-v0.3.mjs` (+ test),
+  `preview-validation-v0.3.mjs`, `locale-resolution-v0.3.mjs` (+ test),
+  `delivery-validation-v1.mjs` (+ test), `delivery-validation-v2.mjs` (+ test),
+  `generate-delivery-fixtures-v1.mjs`, `generate-phase5-fixtures.mjs`
+- `docs/protocol/v0.3.md`, `docs/protocol/local-preview-v0.3.md`,
+  `docs/protocol/configuration-delivery-v1.md`,
+  `docs/protocol/configuration-delivery-v2.md`,
+  and the whole of `docs/protocol/migration/`
+- The v2 -> v1 and v3 -> v2 Configuration Delivery projections, their fixtures,
+  and the reader policy entries that described them.
+
+### Relocated
+
+- `protocol/tools/validation-v0.3.mjs` -> `paywall-document-rules.mjs`, with
+  every `V03`/`v03` symbol renamed to an unsuffixed one. The module holds the
+  rules the paywall contract carries at every version; `validation-v0.4.mjs`
+  layers only what motion adds. The `style.productCardStates` derivation was
+  removed and the motion derivation folded in, so there is one capability
+  derivation rather than a base and a delta.
+- `protocol/tools/locale-resolution-v0.3.mjs` -> `locale-resolution.mjs`.
+- `protocol/tools/delivery-v1-common.mjs` -> `delivery-common.mjs`.
+- `protocol/fixtures/v0.3/rating-announcement.json` and `locale-resolution.json`
+  -> `protocol/fixtures/v0.4/`. Both are version-neutral cross-SDK corpora that
+  0.4 consumes and never duplicated.
+- The Local Preview negotiation and draft-delivery decision moved from
+  `preview-validation-v0.3.mjs` into `preview-validation-v0.4.mjs`.
+
+### Re-pinned
+
+Configuration Delivery `3` now carries Paywall Protocol `0.4`:
+
+- `paywallVersion.protocolVersion`: `const "0.3"` -> `const "0.4"`
+- `protocolCompatibility.version`: `const "0.3"` -> `const "0.4"`
+- `paywallVersion.document`: `$ref urn:mosaic:protocol:schema:v0.3:paywall` ->
+  `urn:mosaic:protocol:schema:v0.4:paywall`
+- capability request `supportedPaywallProtocol.version` and
+  `supportedCapability.version`: `const "0.3"` -> `const "0.4"`, with the
+  capability-name `$ref` following
+- `compatibility/configuration-delivery/v3.json`: `supportedPaywallProtocols`
+  `["0.3"]` -> `["0.4"]`; `legacyProjectionFixture` and
+  `readerPolicy.legacyProjection` removed
+
+The v3 release and capability-request schemas inlined the `$defs` they had been
+borrowing from v1, so v3 is self-contained.
+
+This is what makes `0.4` deliverable. The backend refusal gates that existed
+only because delivery structurally pinned `0.3` are removable, and the
+publish-time projectability check that Paywall `0.4` flagged as unimplemented is
+no longer required at all.
+
+### Browser package
+
+`parsePortablePaywallJson` and `validatePaywallDocument` accept `0.4` only; the
+`schemaVersion` dispatch and `paywallDocumentVersion` are gone.
+`MosaicAnyPaywallDocument` is the `0.4` type, `MosaicPaywallDocument` follows,
+and `paywallRuntimeDiagnostics` now works on `0.4`. `paywallSchemasByVersion`,
+`canonicalSchemasByVersion`, `previewMessageTypesByVersion`,
+`paywallV04ContractVersion`, and `paywallV04CapabilityNames` are removed;
+`paywallContractVersion` is `"0.4"` and `capabilityNames` is the `0.4` enum.
+Local Preview negotiation offers exactly one subprotocol. Generated declarations
+carry `MosaicPaywallV04*`, `MosaicPreviewV04*`, `MosaicConfigurationDeliveryV3*`,
+`MosaicExperimentAssignmentV1*`, and the v2 commerce types only.
+
+### Figma plugin
+
+`packages/figma-plugin` emits `schemaVersion: "0.4"` with capabilities derived
+at `version: "0.4"` and an empty `designSystem.motions` catalog. A Figma frame is
+a static composition, so no motion is authored, which is valid.
+
+## Commerce Provider, Commerce Configuration, and Analytics Event are v2-only - 2026-08-13
+
+Status: breaking. Owner ruling, single-version contracts.
+
+While Mosaic has no production usage, every protocol contract carries exactly
+one version: the latest. Commerce Provider Contract `1`, Commerce Configuration
+`1`, and Analytics Event Contract `1` are deleted outright, along with every
+reference, version-dispatch arm, and reader fallback that accepted them beside
+`2`. There is no migration path; a `1` document is an unknown version to a `2`
+reader and is rejected atomically.
+
+### Deleted
+
+- `protocol/schema/{commerce-provider,commerce-configuration,analytics-event}/v1/`
+- `protocol/fixtures/{commerce-provider,commerce-configuration,analytics-event}/v1/`
+- `protocol/compatibility/{commerce-provider,commerce-configuration,analytics-event}/v1.json`
+- `protocol/tools/{commerce-provider,commerce-configuration,analytics-event}-validation-v1.mjs` and their tests
+- `protocol/tools/generate-phase7-contracts.mjs`, which derived the Analytics
+  Event v2 schemas and manifest by patching the v1 ones. Those v2 artifacts are
+  now canonical committed source rather than generated output, and
+  `generate:phase7-contracts` is gone from `npm run generate`.
+- `docs/protocol/{commerce-provider,commerce-configuration,analytics-event}-v1.md`
+- `docs/protocol/migration/{commerce-provider,commerce-configuration}-v1-to-v2.md`,
+  `docs/protocol/migration/analytics-event-v1-to-v2.md`
+
+### Re-pinned
+
+- Analytics Event v2 `$defs/context/configurationDeliveryVersion`: `["1","2","3"]` to `["3"]`.
+- Analytics Event v2 `$defs/context/commerceProviderContractVersion`: `["1","2"]` to `["2"]`.
+- Analytics Event v2 compatibility manifest: `readerPolicy.olderContractVersion`
+  (`"acceptAlongsideV2"`) deleted from the manifest and from its schema's
+  `properties` and `required`. Accepting `1` beside `2` is a version fallback.
+
+### Moved
+
+- The version-neutral Analytics Event reporting helpers (`describeSchemaError`,
+  `schemaErrors`, `focusedEventSchemaErrors`) moved from
+  `analytics-event-validation-v1.mjs` to the unsuffixed
+  `protocol/tools/analytics-event-rules.mjs`.
+
 ## Paywall Protocol 0.3 replaces 0.2 - 2026-08-06
 
 Status: release candidate (RC1). Breaking. Owner decision, recorded explicitly

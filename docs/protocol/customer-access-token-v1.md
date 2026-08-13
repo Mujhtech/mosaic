@@ -162,7 +162,7 @@ Content-Type: application/json
 
 The sync surface is a `POST` because contract negotiation and the conditional
 `knownSnapshotVersion` / `entityTag` live in the
-[`entitlementSyncRequest`](authoritative-entitlement-v1.md#the-sdk-conformant-sync-form)
+[`entitlementSyncRequest`](authoritative-entitlement-v2.md#request-negotiation)
 body rather than in headers. An SDK does not use conditional `GET`,
 `If-None-Match`, or a bare `304`; the unchanged path is a `200` carrying the
 `snapshotUnchanged` record.
@@ -204,7 +204,7 @@ verified by inspection and by the SDK cache tests, not by any schema.
 | Logging | **Forbidden.** The token never appears in a log, a diagnostic, a crash report, or telemetry. |
 
 A `null` token or a signed-out user yields `unavailable`, consistent with
-[Authoritative Entitlement v1](authoritative-entitlement-v1.md)'s top rule.
+[Authoritative Entitlement v2](authoritative-entitlement-v2.md)'s top rule.
 
 ## What a token never contains
 
@@ -254,6 +254,6 @@ canonical schema.
 
 ## Related documents
 
-- [Authoritative Entitlement Contract v1](authoritative-entitlement-v1.md)
-- [Billing State Webhook Contract v1](billing-state-webhook-v1.md)
+- [Authoritative Entitlement Contract v2](authoritative-entitlement-v2.md)
+- [Billing State Webhook Contract v2](billing-state-webhook-v2.md)
 - [Compatibility policy](compatibility-policy.md) · [Versioning](versioning.md)

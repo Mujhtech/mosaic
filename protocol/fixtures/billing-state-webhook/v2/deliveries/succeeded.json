@@ -1,0 +1,15 @@
+{
+  "billingStateWebhookContractVersion": "2",
+  "recordType": "webhookDeliveryAttempt",
+  "payload": {
+    "destinationId": "fixture-destination-0001",
+    "maxAttempts": 8,
+    "deliveryId": "fixture-delivery-0002",
+    "eventId": "fixture-event-0001",
+    "attempt": 1,
+    "status": "succeeded",
+    "requestedAt": "2026-07-01T09:00:04.000Z",
+    "respondedAt": "2026-07-01T09:00:04.000Z",
+    "responseStatusCode": 200
+  }
+}

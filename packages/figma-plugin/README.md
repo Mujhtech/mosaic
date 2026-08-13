@@ -1,6 +1,6 @@
 # Mosaic Export (Figma plugin)
 
-Maps a Figma frame into a **Mosaic Paywall Protocol 0.3** document and hands you
+Maps a Figma frame into a **Mosaic Paywall Protocol 0.4** document and hands you
 the JSON. You import that JSON into Mosaic Studio with its existing **Import**
 button; the plugin never talks to the network and never touches the backend.
 
@@ -56,7 +56,7 @@ report.
 
 ## What it maps
 
-| Figma | Mosaic Protocol 0.3 |
+| Figma | Mosaic Protocol 0.4 |
 | --- | --- |
 | Selected frame | one screen, `scrollContainer` (vertical, safe-area respecting) wrapping the root stack |
 | Auto-layout frame / component / instance | `stack` |
@@ -281,7 +281,7 @@ it. Any change is a new `formatVersion`, not an edit.
 {
   "format": "mosaic.figma-export",
   "formatVersion": 1,
-  "document": "<valid protocol 0.3 document, exactly as the plain export>",
+  "document": "<valid protocol 0.4 document, exactly as the plain export>",
   "report": {
     "warnings": [{ "code": "string", "message": "string", "layerPath": "string" }],
     "skipped": [{ "kind": "string", "message": "string", "layerPath": "string" }]

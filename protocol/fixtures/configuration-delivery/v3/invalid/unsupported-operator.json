@@ -1,0 +1,91 @@
+{
+  "configurationDeliveryVersion": "3",
+  "release": {
+    "id": "release_invalid_unsupported_operator",
+    "number": 99,
+    "projectId": "project_alpha",
+    "environment": {
+      "id": "environment_production",
+      "key": "production",
+      "mode": "production"
+    },
+    "publishedAt": "2026-07-26T12:00:00.000Z",
+    "contentDigest": "sha256:26b673bf595ebc41a003967c1ecdacb3fc63110000806d185f35dc1c11ef8c42",
+    "compatibility": {
+      "placementDecisionContracts": [
+        {
+          "version": "1",
+          "requiredFeatures": [],
+          "bucketingAlgorithms": []
+        }
+      ],
+      "paywallProtocols": [
+        {
+          "version": "0.4",
+          "requiredCapabilities": []
+        }
+      ],
+      "acceptance": "atomic",
+      "experimentAssignmentContracts": [
+        {
+          "version": "1",
+          "requiredFeatures": [],
+          "bucketingAlgorithms": [],
+          "schedulePolicies": []
+        }
+      ]
+    },
+    "placementDecisions": [
+      {
+        "placementDecisionVersion": "1",
+        "ruleSet": {
+          "id": "ruleset_invalid_operator",
+          "version": 1,
+          "projectId": "project_alpha",
+          "environmentId": "environment_production",
+          "environmentKey": "production",
+          "placementId": "placement_export_pdf",
+          "placementKey": "export_pdf",
+          "enabled": true,
+          "assignmentPolicy": "installation",
+          "attributeDefinitions": [],
+          "fallbacks": [],
+          "rules": [
+            {
+              "id": "rule_invalid",
+              "priority": 0,
+              "enabled": true,
+              "conditions": {
+                "type": "condition",
+                "source": {
+                  "kind": "device.platform"
+                },
+                "operator": "starts_with",
+                "operand": {
+                  "type": "string",
+                  "value": "i"
+                }
+              },
+              "outcome": {
+                "type": "no_paywall"
+              }
+            }
+          ],
+          "defaultOutcome": {
+            "type": "no_paywall"
+          },
+          "qaOverrides": [],
+          "compatibility": {
+            "requiredFeatures": [],
+            "bucketingAlgorithms": []
+          }
+        }
+      }
+    ],
+    "paywallVersions": [],
+    "productReferences": [],
+    "entitlementReferences": [],
+    "assetReferences": [],
+    "experimentAssignments": []
+  }
+}

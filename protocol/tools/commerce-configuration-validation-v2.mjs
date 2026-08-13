@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
 
-import { canonicalJson, sha256Digest } from "./delivery-v1-common.mjs";
+import { canonicalJson, sha256Digest } from "./delivery-common.mjs";
 import { nativeCapabilitySupport } from "./commerce-provider-validation-v2.mjs";
 
 const toolsDirectory = dirname(fileURLToPath(import.meta.url));

@@ -5,9 +5,9 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 
 import {
-  describeSchemaError,
   focusedEventSchemaErrors,
-} from "./analytics-event-validation-v1.mjs";
+  schemaErrors,
+} from "./analytics-event-rules.mjs";
 import { REJECTION_LAYERS_FILENAME } from "./generate-rejection-layers.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -24,11 +24,6 @@ const read = (path) => JSON.parse(readFileSync(path, "utf8"));
 // not a fixture. See tools/generate-rejection-layers.mjs.
 function jsonPaths(directory) { return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => { const path = resolve(directory, entry.name); if (entry.isDirectory()) return jsonPaths(path); if (entry.name === REJECTION_LAYERS_FILENAME) return []; return entry.name.endsWith(".json") ? [path] : []; }).sort(); }
 const duplicates = (values) => { const seen = new Set(); return values.filter((value) => seen.has(value) || !seen.add(value)); };
-const schemaErrors = (label, errors = []) => {
-  const specific = errors.filter((error) => error.keyword !== "oneOf");
-  const reported = specific.length > 0 ? specific : errors;
-  return [...new Set(reported.map((error) => describeSchemaError(label, error)))];
-};
 
 export function loadAnalyticsEventV2Artifacts() {
   const paths = jsonPaths(analyticsEventV2Paths.fixtureDirectory);

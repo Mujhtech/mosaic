@@ -10,8 +10,12 @@
     "canonicalFixtures",
     "recordTypes",
     "eventTypes",
+    "emittedEventTypes",
     "authorityEventBindings",
     "delivery",
+    "signing",
+    "limits",
+    "producerPolicy",
     "consumerPolicy"
   ],
   "properties": {
@@ -32,8 +36,8 @@
     },
     "canonicalFixtures": {
       "type": "array",
-      "minItems": 4,
-      "maxItems": 24,
+      "minItems": 16,
+      "maxItems": 40,
       "uniqueItems": true,
       "items": {
         "type": "string",
@@ -51,8 +55,8 @@
     },
     "eventTypes": {
       "type": "array",
-      "minItems": 5,
-      "maxItems": 5,
+      "minItems": 14,
+      "maxItems": 14,
       "uniqueItems": true,
       "items": {
         "$ref": "urn:mosaic:protocol:schema:billing-state-webhook:v2:contract#/$defs/event/properties/eventType"
@@ -84,7 +88,10 @@
       "required": [
         "semantics",
         "eventIdOnRetry",
-        "signing"
+        "signing",
+        "deduplicationKey",
+        "orderingKey",
+        "failureIsolation"
       ],
       "properties": {
         "semantics": {
@@ -95,6 +102,15 @@
         },
         "signing": {
           "const": "hmacSha256V1RawBodyUnchanged"
+        },
+        "deduplicationKey": {
+          "const": "eventId"
+        },
+        "orderingKey": {
+          "const": "snapshotVersion"
+        },
+        "failureIsolation": {
+          "const": "deliveryNeverRollsBackState"
         }
       }
     },
@@ -106,8 +122,9 @@
         "unknownEventType",
         "unknownEnumeration",
         "authoritativeState",
-        "v1Destination",
-        "readiness"
+        "ordering",
+        "duplicateEvent",
+        "signatureVerification"
       ],
       "properties": {
         "unknownField": {
@@ -122,11 +139,149 @@
         "authoritativeState": {
           "const": "reReadAuthoritativeEntitlementV2"
         },
-        "v1Destination": {
-          "const": "receivesV1EventsOnly"
+        "ordering": {
+          "const": "ignoreOlderSnapshotVersion"
         },
-        "readiness": {
-          "const": "v1DestinationCannotSatisfyAuthorityAwareGate"
+        "duplicateEvent": {
+          "const": "deduplicateByEventId"
+        },
+        "signatureVerification": {
+          "const": "requiredBeforeParsing"
+        }
+      }
+    },
+    "emittedEventTypes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 14,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:mosaic:protocol:schema:billing-state-webhook:v2:contract#/$defs/event/properties/eventType"
+      }
+    },
+    "signing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "header",
+        "algorithm",
+        "signingVersion",
+        "signedPayloadTemplate",
+        "encoding",
+        "timestampParameter",
+        "signatureParameter",
+        "multipleActiveSignatures",
+        "replayWindowSeconds",
+        "testEndpointSupported",
+        "signatureVectors"
+      ],
+      "properties": {
+        "header": {
+          "const": "Mosaic-Signature"
+        },
+        "algorithm": {
+          "const": "HMAC-SHA256"
+        },
+        "signingVersion": {
+          "const": "v1"
+        },
+        "signedPayloadTemplate": {
+          "const": "{signingVersion}.{timestamp}.{eventId}.{rawBody}"
+        },
+        "encoding": {
+          "const": "lowercase_hex"
+        },
+        "timestampParameter": {
+          "const": "t"
+        },
+        "signatureParameter": {
+          "const": "v1"
+        },
+        "multipleActiveSignatures": {
+          "const": true
+        },
+        "replayWindowSeconds": {
+          "const": 300
+        },
+        "testEndpointSupported": {
+          "const": true
+        },
+        "signatureVectors": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxRecordBytes",
+        "maxChangedEntitlementsPerEvent",
+        "maxResponseExcerptCharacters",
+        "maxDeliveryAttempts",
+        "maxDiagnosticsPerRecord",
+        "replayWindowSeconds"
+      ],
+      "properties": {
+        "maxRecordBytes": {
+          "const": 32768
+        },
+        "maxChangedEntitlementsPerEvent": {
+          "const": 200
+        },
+        "maxResponseExcerptCharacters": {
+          "const": 240
+        },
+        "maxDeliveryAttempts": {
+          "const": 32
+        },
+        "maxDiagnosticsPerRecord": {
+          "const": 10
+        },
+        "replayWindowSeconds": {
+          "const": 300
+        }
+      }
+    },
+    "producerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownField",
+        "unknownEventType",
+        "providerSecret",
+        "rawPurchaseToken",
+        "rawProviderPayload",
+        "eventIdStability",
+        "exactlyOnceDelivery",
+        "deliveryRecordTransport"
+      ],
+      "properties": {
+        "unknownField": {
+          "const": "rejectRecord"
+        },
+        "unknownEventType": {
+          "const": "rejectRecord"
+        },
+        "providerSecret": {
+          "const": "forbidden"
+        },
+        "rawPurchaseToken": {
+          "const": "forbidden"
+        },
+        "rawProviderPayload": {
+          "const": "forbidden"
+        },
+        "eventIdStability": {
+          "const": "stableAcrossAttemptsAndReplays"
+        },
+        "exactlyOnceDelivery": {
+          "const": "neverPromised"
+        },
+        "deliveryRecordTransport": {
+          "const": "neverSentToDestination"
         }
       }
     }

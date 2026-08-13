@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Figma plugin that maps a Figma frame into a Mosaic Paywall Protocol 0.3 document for import into Mosaic Studio.",
+  "description": "Figma plugin that maps a Figma frame into a Mosaic Paywall Protocol 0.4 document for import into Mosaic Studio.",
   "engines": {
     "node": ">=22.12.0"
   },

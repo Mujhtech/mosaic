@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import paywallSchema from "../../../../protocol/schema/v0.3/paywall.schema.json" with { type: "json" };
+import paywallSchema from "../../../../protocol/schema/v0.4/paywall.schema.json" with { type: "json" };
 import {
   clampFontSize,
   isAllCaps,

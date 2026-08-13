@@ -1,8 +1,7 @@
 # Analytics Event Contract v2
 
-Analytics Event Contract `2` is a backward-compatible revision for immutable
-Experiment attribution. Analytics Event `1` remains unchanged and ingestion
-accepts v1 and v2 as separate exact batch versions.
+Analytics Event Contract `2` is the only Analytics Event contract. Ingestion
+accepts exactly this batch version and permanently rejects any other.
 
 Canonical artifacts are under `protocol/schema/analytics-event/v2/`,
 `protocol/compatibility/analytics-event/v2.json`, and
@@ -51,6 +50,6 @@ attribution and the actually presented Paywall identity in its typed payload.
 It never emits or implies original-Variant exposure. Analytics delivery remains
 nonblocking.
 
-Event objects remain closed, tenant scope remains authentication-derived, and
-v1 size, authority, idempotency, timestamp, partial-batch, privacy, and
-occurrence-time identity policies continue unchanged in v2.
+Event objects are closed, tenant scope is authentication-derived, and the
+size, authority, idempotency, timestamp, partial-batch, privacy, and
+occurrence-time identity policies apply to every event.

@@ -6,8 +6,8 @@
    `purchase_completed_client`, `experiment_exposed`, and every other name in
    the tables below are the contract names. They are what the SDKs emit, what
    `POST /v1/analytics/events` accepts, what
-   `protocol/schema/analytics-event/v1/event.schema.json` and its v2 counterpart
-   enumerate in `$defs/eventName`, and what appears in every canonical fixture.
+   `protocol/schema/analytics-event/v2/event.schema.json` enumerates in
+   `$defs/eventName`, and what appears in every canonical fixture.
 
 2. **Mosaic's own exports emit canonical unprefixed names.** Mosaic's NDJSON and
    CSV analytics exports write the canonical name verbatim in the event-name
@@ -35,9 +35,9 @@
    Applying a different convention is not a protocol change and requires no
    contract version.
 
-## Recommended mapping — Analytics Event v1
+## Recommended mapping — Analytics Event v2
 
-All 27 v1 events. Contract version `1`; `eventSchemaVersion: "1"`.
+All 31 events. Contract version `2`; `eventSchemaVersion: "2"`.
 
 | Canonical wire name (normative) | Recommended downstream name | Family |
 | --- | --- | --- |
@@ -68,24 +68,15 @@ All 27 v1 events. Contract version `1`; `eventSchemaVersion: "1"`.
 | `restore_nothing_found` | `mosaic_restore_nothing_found` | Restore |
 | `restore_cancelled` | `mosaic_restore_cancelled` | Restore |
 | `restore_failed` | `mosaic_restore_failed` | Restore |
-
-## Recommended mapping — Analytics Event v2
-
-Analytics Event v2 is a superset: all 27 v1 names carry over unchanged with the
-same recommended mapping, plus the four Experiment events below. Contract
-version `2`; `eventSchemaVersion: "2"`.
-
-| Canonical wire name (normative) | Recommended downstream name | Family |
-| --- | --- | --- |
 | `experiment_assigned` | `mosaic_experiment_assigned` | Experiment |
 | `experiment_exposed` | `mosaic_experiment_exposed` | Experiment |
 | `experiment_fallback_presented` | `mosaic_experiment_fallback_presented` | Experiment |
 | `experiment_assignment_failed` | `mosaic_experiment_assignment_failed` | Experiment |
 
-The v1 and v2 recommended names are identical for the 27 shared events. A
-downstream destination receiving both contract versions distinguishes them by
-`eventSchemaVersion`, never by name. Renaming per contract version would break
-longitudinal analysis across a contract upgrade.
+The recommended name is derived from the canonical name alone. A downstream
+destination distinguishes contract revisions by `eventSchemaVersion`, never by
+name: renaming per contract version would break longitudinal analysis across a
+contract upgrade.
 
 ## Reserved prefixes
 
@@ -110,6 +101,5 @@ inside Mosaic. Two properties matter:
 
 ## Related documents
 
-- [Analytics Event Contract v1](analytics-event-v1.md)
 - [Analytics Event Contract v2](analytics-event-v2.md)
 - [Compatibility policy](compatibility-policy.md)

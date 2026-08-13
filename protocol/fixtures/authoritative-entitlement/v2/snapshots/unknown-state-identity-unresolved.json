@@ -1,0 +1,107 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "customerEntitlementSnapshot",
+  "payload": {
+    "authority": {
+      "authorityEpoch": 5,
+      "authorityKind": "mosaic",
+      "scope": {
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "applicationId": "fixture-application-ios",
+        "platform": "ios"
+      },
+      "transitionState": "stabilizing",
+      "cutoverAt": "2026-07-28T12:30:00.000Z"
+    },
+    "snapshot": {
+      "snapshotId": "fixture-customer-snapshot-0005",
+      "billingCustomerId": "fixture-customer-0001",
+      "projectId": "fixture-project-mosaic",
+      "environmentId": "fixture-environment-production",
+      "snapshotVersion": 12,
+      "previousSnapshotVersion": 11,
+      "projectionRuleVersion": 1,
+      "issuedAt": "2026-07-28T12:00:00.000Z",
+      "asOf": "2026-07-28T11:59:58.000Z",
+      "refreshAfter": "2026-07-28T13:00:00.000Z",
+      "validUntil": "2026-08-04T12:00:00.000Z",
+      "entityTag": "cs-0005-v12",
+      "contentDigest": "sha256:8a42de799f17c006ea7cb20a825a28bb21c57d591412fc23e70dcdde9cc5689b",
+      "entries": [
+        {
+          "entitlementId": "fixture-entitlement-pro",
+          "entitlementKey": "pro",
+          "state": "unknown",
+          "endKnown": false,
+          "sourceIds": [
+            "fixture-source-subscription-0001"
+          ],
+          "sourceCount": 1,
+          "primaryExplanation": {
+            "code": "identity_unresolved",
+            "sourceId": "fixture-source-subscription-0001",
+            "safeSummary": "Two application users claim this purchase; access is frozen until an operator resolves it."
+          },
+          "uncertainty": {
+            "reason": "identity_unresolved",
+            "since": "2026-07-28T10:30:00.000Z",
+            "expectedResolution": "operator_action",
+            "diagnosticCode": "entitlement.identity.conflict_open"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "sourceId": "fixture-source-subscription-0001",
+          "sourceType": "active_subscription",
+          "subscriptionInstanceId": "fixture-subscription-instance-0001",
+          "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+          "grantVersionId": "fixture-grant-version-0001",
+          "sourceSnapshotId": "fixture-subscription-snapshot-0001",
+          "storePlatform": "apple_app_store",
+          "start": "2026-07-01T09:00:00.000Z",
+          "end": "2026-08-01T09:00:00.000Z",
+          "sourceState": "unknown",
+          "uncertainty": {
+            "reason": "identity_unresolved",
+            "since": "2026-07-28T10:30:00.000Z",
+            "expectedResolution": "operator_action"
+          },
+          "explanationCode": "identity_unresolved",
+          "isTestSource": false
+        }
+      ],
+      "projectionStatus": {
+        "state": "degraded",
+        "lastProjectedAt": "2026-07-28T11:59:58.000Z",
+        "diagnosticCode": "entitlement.projection.identity_frozen"
+      },
+      "changeReason": "identity_conflict_opened",
+      "correlationId": "fixture-correlation-0001",
+      "diagnostics": [
+        {
+          "code": "entitlement.identity.conflict_open",
+          "safeMessage": "Customer association is disputed; projection is frozen for this lineage.",
+          "severity": "warning",
+          "retryable": false,
+          "correlationId": "fixture-correlation-0001",
+          "recoveryAction": "resolveIdentityConflict"
+        }
+      ]
+    },
+    "snapshotAuthorityDigest": "sha256:d15cd5d57dd25e479ebedb3e1525f862b070d330a5fdcb57fdcec54e56966c82",
+    "minimumSupport": {
+      "minimumContractVersion": "2",
+      "minimumSdkVersion": "2.0.0",
+      "supportedAppVersionWindow": {
+        "minimumInclusive": "4.0.0",
+        "maximumInclusive": "5.9.9"
+      },
+      "requiredCapabilities": [
+        "authority_epoch",
+        "authority_scope"
+      ]
+    }
+  }
+}

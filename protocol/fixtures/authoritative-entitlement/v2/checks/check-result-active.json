@@ -1,0 +1,45 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "entitlementCheckResult",
+  "payload": {
+    "billingCustomerId": "fixture-customer-0001",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "snapshotVersion": 4,
+    "projectionRuleVersion": 1,
+    "issuedAt": "2026-07-28T12:01:00.000Z",
+    "asOf": "2026-07-28T11:59:58.000Z",
+    "results": [
+      {
+        "entitlementKey": "pro",
+        "state": "active",
+        "effectiveStart": "2026-07-01T09:00:00.000Z",
+        "effectiveEnd": "2026-08-01T09:00:00.000Z",
+        "endKnown": true,
+        "sourceCount": 1,
+        "sourceIds": [
+          "fixture-source-subscription-0001"
+        ],
+        "primaryExplanation": {
+          "code": "active_subscription_period",
+          "sourceId": "fixture-source-subscription-0001"
+        },
+        "isTestSource": false
+      },
+      {
+        "entitlementKey": "pro_lifetime",
+        "state": "inactive",
+        "endKnown": true,
+        "sourceCount": 0,
+        "primaryExplanation": {
+          "code": "no_qualifying_source"
+        }
+      }
+    ],
+    "projectionStatus": {
+      "state": "current",
+      "lastProjectedAt": "2026-07-28T11:59:58.000Z"
+    },
+    "correlationId": "fixture-correlation-0006"
+  }
+}

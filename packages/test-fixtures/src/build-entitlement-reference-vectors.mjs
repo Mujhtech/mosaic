@@ -12,7 +12,7 @@
  * assert every implementation against a value no implementation produces.
  *
  * Run: node packages/test-fixtures/src/build-entitlement-reference-vectors.mjs
- * Verified by: protocol/tools/authoritative-entitlement-validation-v1.test.mjs
+ * Verified by: protocol/tools/authoritative-entitlement-validation.test.mjs
  */
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -22,14 +22,14 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = resolve(here, "../../..");
 
-const CONTRACT = "Authoritative Entitlement Contract v1";
+const CONTRACT = "Authoritative Entitlement Contract v2";
 const PROVENANCE =
   "Generated cross-implementation reference vectors. Regenerate with " +
   "packages/test-fixtures/src/build-entitlement-reference-vectors.mjs; never hand-edit a digest.";
 
 /**
  * The canonical serialization pinned by
- * `protocol/compatibility/authoritative-entitlement/v1.json`.
+ * `protocol/compatibility/authoritative-entitlement/v2.json`.
  */
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
@@ -65,19 +65,22 @@ const digestVector = (id, payload, notes) => {
   };
 };
 
+// The active-subscription scenario is carried verbatim inside the iOS full
+// snapshot: v2 wraps the customer entitlement snapshot in an authority envelope
+// rather than restating it, so `payload.snapshot` is the body the digest covers.
 const canonicalFixturePath =
-  "protocol/fixtures/authoritative-entitlement/v1/snapshots/active-subscription.json";
+  "protocol/fixtures/authoritative-entitlement/v2/ios-full-snapshot.json";
 const canonicalFixture = JSON.parse(
   readFileSync(resolve(repository, canonicalFixturePath), "utf8"),
 );
-const canonicalFixturePayload = { ...canonicalFixture.payload };
+const canonicalFixturePayload = { ...canonicalFixture.payload.snapshot };
 delete canonicalFixturePayload.contentDigest;
 
 const digestDocument = {
   $comment: PROVENANCE,
   contract: CONTRACT,
-  contractVersion: "1",
-  compatibilityManifest: "protocol/compatibility/authoritative-entitlement/v1.json",
+  contractVersion: "2",
+  compatibilityManifest: "protocol/compatibility/authoritative-entitlement/v2.json",
   canonicalSerialization: {
     form: "minifiedJsonSortedKeys",
     hash: "SHA-256",
@@ -102,7 +105,7 @@ const digestDocument = {
     digestVector(
       "canonical-fixture-snapshot",
       canonicalFixturePayload,
-      `The payload of ${canonicalFixturePath} with contentDigest removed. An implementation ` +
+      `The \`payload.snapshot\` of ${canonicalFixturePath} with contentDigest removed. An implementation ` +
         "that reproduces this digest agrees with the canonical fixture, which is the only " +
         "agreement that matters at run time.",
     ),
@@ -178,7 +181,7 @@ const cacheVector = (id, cached, incoming, decision, reason, cacheAction, result
 });
 
 const CACHED = Object.freeze({
-  contractVersion: "1",
+  contractVersion: "2",
   billingCustomerId: "fixture-customer-0001",
   projectId: "fixture-project-mosaic",
   environmentId: "fixture-environment-production",
@@ -192,8 +195,8 @@ const incoming = (overrides) => ({ ...CACHED, ...overrides });
 const cacheDocument = {
   $comment: PROVENANCE,
   contract: CONTRACT,
-  contractVersion: "1",
-  compatibilityManifest: "protocol/compatibility/authoritative-entitlement/v1.json",
+  contractVersion: "2",
+  compatibilityManifest: "protocol/compatibility/authoritative-entitlement/v2.json",
   evaluationOrder: [
     "unsupportedContractVersion",
     "customerBindingMismatch",
@@ -287,12 +290,12 @@ const cacheDocument = {
     cacheVector(
       "unsupported-contract-version",
       CACHED,
-      incoming({ contractVersion: "2", snapshotVersion: 5 }),
+      incoming({ contractVersion: "3", snapshotVersion: 5 }),
       "reject",
       "unsupported_contract_version",
       "preserve",
       "unknownIfNoCacheOtherwiseCached",
-      "Exact-match reading. A '2' document is as unreadable to a '1' reader as a '9.9' document; numeric ordering never implies support. This check runs first because a document in an unknown version cannot be trusted to have interpretable binding fields.",
+      "Exact-match reading. A '3' document is as unreadable to a '2' reader as a '9.9' document; numeric ordering never implies support. This check runs first because a document in an unknown version cannot be trusted to have interpretable binding fields.",
     ),
     cacheVector(
       "as-of-regression-rejected",
@@ -351,8 +354,8 @@ const strictWindow = { ...WINDOW, staleGraceSeconds: 0 };
 const freshnessDocument = {
   $comment: PROVENANCE,
   contract: CONTRACT,
-  contractVersion: "1",
-  compatibilityManifest: "protocol/compatibility/authoritative-entitlement/v1.json",
+  contractVersion: "2",
+  compatibilityManifest: "protocol/compatibility/authoritative-entitlement/v2.json",
   policy: {
     name: "boundedGrace",
     clockSkewToleranceSeconds: 60,

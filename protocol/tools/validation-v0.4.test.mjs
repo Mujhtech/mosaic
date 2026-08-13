@@ -7,21 +7,16 @@ import {
   motionEasingControlPoints,
   motionLoopMinimumDurationMilliseconds,
   parsePortablePaywallJson as parseBrowserPortablePaywallJson,
-  paywallDocumentVersion as browserPaywallDocumentVersion,
+  capabilityNames as browserCapabilityNames,
+  paywallContractVersion,
   paywallContractVersions,
-  paywallV04CapabilityNames,
-  paywallV04ContractVersion,
   resolveMotionFrame as resolveBrowserMotionFrame,
   resolveMotionToken as resolveBrowserMotionToken,
   validatePaywallDocument as validateBrowserPaywallDocument,
 } from "../browser/index.js";
 import { rejectionLayerTargets } from "./generate-rejection-layers.mjs";
 import { buildMotionFrameVectors } from "./generate-motion-frames-v0.4.mjs";
-import {
-  readV03Json,
-  protocolV03Paths,
-  walkObjectValues,
-} from "./validation-v0.3.mjs";
+import { walkObjectValues } from "./paywall-document-rules.mjs";
 import {
   expectedV04DocumentCapabilities,
   loadProtocolV04Artifacts,
@@ -340,7 +335,7 @@ test("motion capabilities are derived only from the motion that occurs", () => {
   assert.ok(remaining.has("motion.appear"));
 });
 
-test("style.productCardStates is gone from the 0.4 vocabulary but still in 0.3", () => {
+test("style.productCardStates is gone from the capability vocabulary", () => {
   const input = artifacts();
   assert.equal(
     input.paywallSchema.$defs.capabilityName.enum.includes(
@@ -354,10 +349,14 @@ test("style.productCardStates is gone from the 0.4 vocabulary but still in 0.3",
     ),
     false,
   );
-  const frozen = readV03Json(protocolV03Paths.paywallSchema);
-  assert.ok(
-    frozen.$defs.capabilityName.enum.includes("style.productCardStates"),
-    "0.3 is a release candidate and must not have been edited",
+  // The derivation must not produce it either. A co-derived capability that
+  // survives only in the deriving code is the exact drift the removal
+  // addressed, and nothing else would catch it.
+  assert.equal(
+    expectedV04DocumentCapabilities(input.document).has(
+      "style.productCardStates",
+    ),
+    false,
   );
 });
 
@@ -413,22 +412,21 @@ test("the reader policy splits the two capability tiers", () => {
 // The bundled Feature List cleanup.
 // ---------------------------------------------------------------------------
 
-test("a Feature List item can negate its marker and the 0.3 constant is gone", () => {
+test("a Feature List item can negate its marker, and the bare string is refused", () => {
   const input = artifacts();
   const features = node(input.document, "features");
   assert.deepEqual(features.marker, { kind: "icon", name: "checkmark" });
   assert.deepEqual(features.items.at(-1).marker, { kind: "icon", name: "close" });
   assert.deepEqual(errors(input), []);
 
+  // The marker used to be the single string constant "checkmark". A document
+  // still authoring it that way is rejected rather than read leniently.
   const legacy = artifacts();
   node(legacy.document, "features").marker = "checkmark";
   assert.notDeepEqual(errors(legacy), []);
-
-  const frozen = readV03Json(protocolV03Paths.paywallSchema);
   assert.equal(
-    frozen.$defs.featureListComponent.properties.marker.const,
-    "checkmark",
-    "0.3 keeps its single-constant marker",
+    input.paywallSchema.$defs.featureListComponent.properties.marker.const,
+    undefined,
   );
 });
 
@@ -725,11 +723,11 @@ test("the browser runtime resolves every committed frame identically", () => {
   assert.equal(compared, 229);
 });
 
-test("the browser runtime exposes the 0.4 motion contract without widening 0.3", () => {
+test("the browser runtime exposes the motion contract", () => {
   const { document, paywallSchema, manifest } = artifacts();
-  assert.equal(paywallV04ContractVersion, "0.4");
-  assert.deepEqual(paywallContractVersions, ["0.3", "0.4"]);
-  assert.deepEqual(paywallV04CapabilityNames, paywallSchema.$defs.capabilityName.enum);
+  assert.equal(paywallContractVersion, "0.4");
+  assert.deepEqual(paywallContractVersions, ["0.4"]);
+  assert.deepEqual(browserCapabilityNames, paywallSchema.$defs.capabilityName.enum);
   assert.deepEqual(motionEasingControlPoints, V04_EASING_CONTROL_POINTS);
   assert.equal(
     motionLoopMinimumDurationMilliseconds,
@@ -792,7 +790,6 @@ test("the browser reads 0.4 documents and agrees with the Node validator", () =>
       `valid fixture ${document.id}`,
     );
     assert.equal(validateBrowserPaywallDocument(document).ok, true);
-    assert.equal(browserPaywallDocumentVersion(document), "0.4");
   }
 
   // Every committed invalid 0.4 fixture: both readers refuse. This is the
@@ -834,26 +831,19 @@ test("the browser rejects 0.4 motion mistakes with addressable diagnostics", () 
   assert.equal(errors(input).length > 0, true);
 });
 
-test("a 0.3 document is still read as 0.3 by the dispatching entry points", () => {
-  const v03 = readV03Json(protocolV03Paths.canonicalFixture);
-
-  assert.equal(browserPaywallDocumentVersion(v03), "0.3");
-  assert.equal(validateBrowserPaywallDocument(v03).ok, true);
-  assert.equal(
-    parseBrowserPortablePaywallJson(JSON.stringify(v03)).ok,
-    true,
-  );
-
-  // And a 0.4 document round-trips through the portable reader, which is the
-  // entry point Studio builds on next.
-  const v04 = artifacts().document;
-  const parsed = parseBrowserPortablePaywallJson(JSON.stringify(v04));
+test("the portable reader round-trips a document and refuses an unknown version", () => {
+  const document = artifacts().document;
+  const parsed = parseBrowserPortablePaywallJson(JSON.stringify(document));
   assert.equal(parsed.ok, true);
   assert.equal(parsed.value.schemaVersion, "0.4");
 
-  // An unknown version is read as 0.3 and refused there, rather than silently
-  // treated as the newest thing this runtime happens to know.
-  const future = { ...v04, schemaVersion: "9.9" };
-  assert.equal(browserPaywallDocumentVersion(future), "0.3");
+  // There is exactly one contract version, so an unknown `schemaVersion` is
+  // refused rather than read as some older generation this runtime still keeps
+  // a decoder for.
+  const future = { ...document, schemaVersion: "9.9" };
   assert.equal(validateBrowserPaywallDocument(future).ok, false);
+  assert.equal(
+    parseBrowserPortablePaywallJson(JSON.stringify(future)).ok,
+    false,
+  );
 });

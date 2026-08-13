@@ -14,7 +14,6 @@ import {
   validatePreviewV04Artifacts,
   validatePreviewV04JsonFormatting,
 } from "./preview-validation-v0.4.mjs";
-import { localPreviewV03DeliveryDiagnosticCodes } from "./preview-validation-v0.3.mjs";
 import { runtimeStateForAcceptedV04Revision } from "./validation-v0.4.mjs";
 
 function artifacts() {
@@ -109,27 +108,28 @@ test("a runtime-reset fixture that replays every entrance is rejected", () => {
   assert.ok(errors.length > 0, "expected the cleared motion member to fail");
 });
 
-test("Local Preview 0.4 negotiates ahead of 0.3 on its own subprotocol", () => {
-  assert.deepEqual(localPreviewVersionPreference, ["0.4", "0.3"]);
+test("Local Preview negotiation offers exactly one version and refuses the rest", () => {
+  assert.deepEqual(localPreviewVersionPreference, ["0.4"]);
   assert.equal(
     localPreviewWebSocketProtocols["0.4"],
     "mosaic.local-preview.v0.4",
   );
 
-  const both = negotiateLocalPreviewVersion(["0.3", "0.4"], ["0.3", "0.4"]);
-  assert.deepEqual(both, {
+  const agreed = negotiateLocalPreviewVersion(["0.4"], ["0.4"]);
+  assert.deepEqual(agreed, {
     ok: true,
     selectedVersion: "0.4",
     selectedWebSocketSubprotocol: "mosaic.local-preview.v0.4",
   });
 
-  // A 0.3-only client still gets 0.3 rather than a refusal.
-  const legacy = negotiateLocalPreviewVersion(["0.3", "0.4"], ["0.3"]);
-  assert.equal(legacy.selectedVersion, "0.3");
-  assert.equal(
-    legacy.selectedWebSocketSubprotocol,
-    "mosaic.local-preview.v0.3",
-  );
+  // A client that speaks only a version Mosaic no longer carries is refused
+  // with a structured diagnostic; it is never served a version it did not
+  // offer, and Studio keeps its last accepted draft.
+  const stale = negotiateLocalPreviewVersion(["0.4"], ["0.3"]);
+  assert.equal(stale.ok, false);
+  assert.equal(stale.selectedVersion, null);
+  assert.equal(stale.diagnostic.code, "preview.noMutualVersion");
+  assert.equal(stale.diagnostic.fallback, "keepLastAcceptedDraft");
 });
 
 test("0.4 draft delivery requires 0.4 preview capabilities", () => {
@@ -167,11 +167,19 @@ test("0.4 draft delivery requires 0.4 preview capabilities", () => {
   );
 });
 
-test("the 0.4 preview capability and diagnostic vocabularies are unchanged", () => {
-  assert.deepEqual(
-    localPreviewV04DeliveryDiagnosticCodes,
-    localPreviewV03DeliveryDiagnosticCodes,
-  );
+test("the preview capability and diagnostic vocabularies are closed", () => {
+  // Every code the delivery decision can emit, and nothing else: the manifest
+  // declares exactly this set, and validatePreviewV04Artifacts asserts that.
+  assert.deepEqual([...localPreviewV04DeliveryDiagnosticCodes], [
+    "preview.noMutualVersion",
+    "preview.invalidNegotiation",
+    "preview.invalidDraft",
+    "preview.incompatibleSchemaVersion",
+    "preview.invalidCapabilityReport",
+    "preview.unsupportedPreviewCapability",
+    "preview.unsupportedCapability",
+    "preview.documentTooLarge",
+  ]);
   assert.deepEqual(requiredLocalPreviewV04Capabilities, [
     "preview.liveUpdate",
     "preview.mockCommerce",

@@ -3,7 +3,7 @@ import {
   requiredCapabilitiesFor,
   validatePaywallDocument,
 } from "../../../../protocol/browser/index.js";
-import type { MosaicPaywallV03Document } from "../../../../protocol/browser/index.js";
+import type { MosaicPaywallV04Document } from "../../../../protocol/browser/index.js";
 import { mapDocument } from "./map-document.js";
 import {
   box,
@@ -116,7 +116,7 @@ describe("required capabilities", () => {
     (_name, tree) => {
       const { document } = mapDocument(tree);
       expect(document.compatibility.requiredCapabilities).toEqual(
-        requiredCapabilitiesFor(document as MosaicPaywallV03Document),
+        requiredCapabilitiesFor(document as MosaicPaywallV04Document),
       );
     },
   );
@@ -149,7 +149,7 @@ describe("required capabilities", () => {
       "style.typography",
     ]);
     for (const capability of document.compatibility.requiredCapabilities) {
-      expect(capability.version).toBe("0.3");
+      expect(capability.version).toBe("0.4");
     }
   });
 
@@ -167,7 +167,7 @@ describe("required capabilities", () => {
     expect(names).toContain("outcome.normalized");
     expect(names).toContain("accessibility.metadata");
     expect(document.compatibility.requiredCapabilities).toEqual(
-      requiredCapabilitiesFor(document as MosaicPaywallV03Document),
+      requiredCapabilitiesFor(document as MosaicPaywallV04Document),
     );
   });
 
@@ -191,7 +191,7 @@ describe("required capabilities", () => {
     expect(names).toContain("layout.sizing");
     expect(names).toContain("layout.heightSizing");
     expect(document.compatibility.requiredCapabilities).toEqual(
-      requiredCapabilitiesFor(document as MosaicPaywallV03Document),
+      requiredCapabilitiesFor(document as MosaicPaywallV04Document),
     );
   });
 
@@ -223,7 +223,7 @@ describe("required capabilities", () => {
       compatibility: {
         requiredCapabilities: [
           ...document.compatibility.requiredCapabilities,
-          { name: "component.image", version: "0.3" },
+          { name: "component.image", version: "0.4" },
         ],
       },
     };

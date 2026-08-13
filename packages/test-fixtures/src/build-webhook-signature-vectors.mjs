@@ -11,7 +11,7 @@
  * Signatures are computed here, never hand-written.
  *
  * Run: node packages/test-fixtures/src/build-webhook-signature-vectors.mjs
- * Verified by: protocol/tools/billing-state-webhook-validation-v1.test.mjs
+ * Verified by: protocol/tools/billing-state-webhook-validation.test.mjs
  */
 import { createHmac } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -25,7 +25,12 @@ const SIGNING_VERSION = "v1";
 
 /**
  * The exact bytes the MAC covers, pinned by
- * `protocol/compatibility/billing-state-webhook/v1.json`.
+ * `protocol/compatibility/billing-state-webhook/v2.json`.
+ *
+ * `SIGNING_VERSION` is the signature *scheme* version carried in the
+ * `v1=` header parameter. It is not the contract version and does not move
+ * when the contract version does: a verifier reads `v1=` regardless of which
+ * Billing State Webhook contract produced the body.
  */
 function signedPayload({ timestamp, eventId, rawBody }) {
   return `${SIGNING_VERSION}.${timestamp}.${eventId}.${rawBody}`;
@@ -38,7 +43,7 @@ function sign({ secret, timestamp, eventId, rawBody }) {
 }
 
 const eventFixturePath =
-  "protocol/fixtures/billing-state-webhook/v1/events/entitlement-activated.json";
+  "protocol/fixtures/billing-state-webhook/v2/events/entitlement-activated.json";
 
 /**
  * The raw body is the bytes as transmitted, not a re-serialization. Mosaic
@@ -78,9 +83,9 @@ const document = {
   $comment:
     "Generated cross-implementation reference vectors. Regenerate with " +
     "packages/test-fixtures/src/build-webhook-signature-vectors.mjs; never hand-edit a signature.",
-  contract: "Billing State Webhook Contract v1",
-  contractVersion: "1",
-  compatibilityManifest: "protocol/compatibility/billing-state-webhook/v1.json",
+  contract: "Billing State Webhook Contract v2",
+  contractVersion: "2",
+  compatibilityManifest: "protocol/compatibility/billing-state-webhook/v2.json",
   eventFixture: eventFixturePath,
   scheme: {
     header: "Mosaic-Signature",

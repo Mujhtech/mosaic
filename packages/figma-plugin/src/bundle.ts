@@ -15,7 +15,7 @@
  * `exportAsync` is the one part of this that needs Figma.
  */
 
-import type { MosaicPaywallV03Document } from "../../../protocol/browser/index.js";
+import type { MosaicPaywallV04Document } from "../../../protocol/browser/index.js";
 import { toBase64 } from "./base64.js";
 import type { ImagePlacement } from "./mapper/map-document.js";
 import type { ExportReport, ExportWarning } from "./mapper/report.js";
@@ -69,7 +69,7 @@ export type BundleImage = {
 export type FigmaExportBundle = {
   readonly format: typeof BUNDLE_FORMAT;
   readonly formatVersion: typeof BUNDLE_FORMAT_VERSION;
-  readonly document: MosaicPaywallV03Document;
+  readonly document: MosaicPaywallV04Document;
   readonly report: {
     readonly warnings: readonly BundleWarning[];
     readonly skipped: readonly BundleSkip[];
@@ -153,7 +153,7 @@ function accessibilityLabelFor(name: string): string {
  * because a bundle without its document is not an export.
  */
 export function assembleBundle(input: {
-  readonly document: MosaicPaywallV03Document;
+  readonly document: MosaicPaywallV04Document;
   readonly report: ExportReport;
   readonly placements: readonly ImagePlacement[];
   readonly rendered: readonly RenderedImage[];

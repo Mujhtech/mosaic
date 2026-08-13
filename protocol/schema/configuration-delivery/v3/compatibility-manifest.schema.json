@@ -9,7 +9,6 @@
     "releaseSchema",
     "capabilityRequestSchema",
     "canonicalFixture",
-    "legacyProjectionFixture",
     "supportedPlacementDecisionContracts",
     "supportedExperimentAssignmentContracts",
     "supportedPaywallProtocols",
@@ -71,9 +70,6 @@
     "canonicalFixture": {
       "const": "../../fixtures/configuration-delivery/v3/experiment-release.json"
     },
-    "legacyProjectionFixture": {
-      "const": "../../fixtures/configuration-delivery/v3/legacy-v2-projection.json"
-    },
     "supportedPlacementDecisionContracts": {
       "type": "array",
       "minItems": 1,
@@ -95,7 +91,7 @@
       "minItems": 1,
       "maxItems": 1,
       "items": {
-        "const": "0.3"
+        "const": "0.4"
       }
     },
     "readerPolicy": {
@@ -112,8 +108,7 @@
         "candidateRejected",
         "noAcceptedRelease",
         "bundledReleaseRejected",
-        "partialAcceptance",
-        "legacyProjection"
+        "partialAcceptance"
       ],
       "properties": {
         "unknownDeliveryVersion": {
@@ -148,9 +143,6 @@
         },
         "partialAcceptance": {
           "const": "forbidden"
-        },
-        "legacyProjection": {
-          "const": "unchangedNormalPlacementV2"
         }
       }
     }

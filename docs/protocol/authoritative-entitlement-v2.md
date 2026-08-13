@@ -1,20 +1,30 @@
 # Authoritative Entitlement Contract v2
 
-Authoritative Entitlement `2` adds access-authority awareness without changing
-the strict Authoritative Entitlement `1` snapshot body. The v1 snapshot payload
-is embedded under `payload.snapshot`; `payload.authority` and
-`snapshotAuthorityDigest` bind it to an explicit authority epoch and
-`(project, environment, application, platform)` scope.
+Authoritative Entitlement `2` is the single version of this contract. It is
+the authority-aware synchronization surface plus every record type the
+Contract 1 draft carried: the strict snapshot body, the entitlement check
+question and answer, the subscription snapshot, and the restore result, all
+dispatched through one envelope schema
+(`schema/authoritative-entitlement/v2/contract.schema.json`) with the exact
+contract discriminator `"2"`.
 
-The v2 record set is `entitlementSyncRequest`,
-`customerEntitlementSnapshot`, `snapshotUnchanged`, and
-`authorityUnavailable`. All require the exact contract discriminator `"2"`.
+The record set is `entitlementSyncRequest`, `customerEntitlementSnapshot`,
+`snapshotUnchanged`, `authorityUnavailable`, `entitlementCheckRequest`,
+`entitlementCheckResult`, `subscriptionSnapshot`, and `restoreResult`. The
+snapshot payload is embedded under `payload.snapshot`; `payload.authority` and
+`snapshotAuthorityDigest` bind it to an explicit authority epoch and
+`(project, environment, application, platform)` scope. The check,
+subscription, and restore payloads are carried forward unchanged and are not
+authority-wrapped: they are read-time and operator-facing surfaces, not device
+caches.
 
 ## Request negotiation
 
 A sync request carries application identifier, `ios` or `android` platform,
-app version, SDK version, supported entitlement-contract versions, and explicit
-authority capabilities. A v2 request must advertise `authority_epoch`.
+app version, SDK version, supported entitlement-contract versions (`"2"` is
+the only member), and explicit authority capabilities. A request must
+advertise `authority_epoch`. It may carry `requestedEntitlementKeys` to narrow
+the response; unrecognized keys are project data and are accepted.
 
 The request may carry `knownSnapshotAuthorityDigest` in canonical
 `sha256:<64 lowercase hex>` form. It identifies the exact retained
@@ -45,6 +55,30 @@ omitted, and the field is forbidden on that branch. Every other unavailable
 reason still requires the exact frozen policy. `policy_unavailable` is safe
 unavailable, never inactive, and never permits authority inference.
 
+## Snapshot, check, subscription, and restore semantics
+
+The snapshot is an immutable read model, never a bearer credential. Its
+`contentDigest` is SHA-256 over the canonical serialization pinned in the
+compatibility manifest and binds customer, Project, Environment, and version.
+Entries ascend by `entitlementKey`, sources ascend by `sourceId`, an active
+entry always has a granting source, and unresolved evidence yields `unknown`,
+never `inactive`. Snapshot version `0` is the never-projected placeholder; the
+ordinary monotonic gate replaces it because issued versions start at `1`.
+
+The check result is the only surface where `unavailable` is admissible for an
+Entitlement: it says Mosaic could not answer, not that the customer lacks
+access. A persisted snapshot entry can never carry it. The restore result
+reports the native provider outcome and Mosaic's authoritative outcome on
+separate axes; `restored` requires the accepted snapshot version that proves
+it. The subscription snapshot pins the four state axes (`accessState`,
+`lifecycleState`, `renewalIntent`, `billingState`) with a `checksum` over the
+same canonical serialization.
+
+The freshness window is ordered `issuedAt <= refreshAfter <= validUntil`, and
+`(validUntil - issuedAt) + staleGraceSeconds` may never exceed 30 days.
+Bounded grace (24 hours) is the shipped default; strict is a grace of zero.
+Past the grace window a reader reports `unknown`, never `inactive`.
+
 ## Cache order and safe failure
 
 Authority epoch is evaluated before snapshot version:
@@ -53,23 +87,30 @@ Authority epoch is evaluated before snapshot version:
 2. Accept a newer authority epoch even when its snapshot version is lower.
 3. Within one epoch, apply ordinary monotonic snapshot ordering.
 
-Legacy v1 cache entries have `authority_unknown`. Unknown authority is
-unavailable, never inactive. A scope mismatch clears the mismatched cache and
-reports unavailable. Cache integrity binds customer, Environment, Application,
-platform, and epoch. An authority transition triggers urgent entitlement sync
-before normal configuration refresh.
+A cache with no recorded authority has `authority_unknown`. Unknown authority
+is unavailable, never inactive. A scope mismatch clears the mismatched cache
+and reports unavailable. Cache integrity binds customer, Environment,
+Application, platform, and epoch. An authority transition triggers urgent
+entitlement sync before normal configuration refresh.
+
+However a record is rejected — unknown version, unknown record type, unknown
+field, unknown enumeration member, digest mismatch, regression — the reader
+reports `unknown` and preserves its cache. `inactive` is only ever the result
+of a snapshot Mosaic issued and the reader fully accepted. The compatibility
+manifest pins this as `readerPolicy` and the validator rejects any policy
+string that resolves to inactive.
 
 Purchase provider and access authority remain independent. When the epoch says
 Mosaic is authoritative, targeting uses only Mosaic-authoritative access; a
 reader never unions provider-observed access.
 
-The additional digest is SHA-256 over canonical sorted-key JSON of
+The authority digest is SHA-256 over canonical sorted-key JSON of
 `{ "authority": ..., "snapshot": ... }`, preventing replay into another epoch
 or scope.
 
 ## Unchanged responses
 
-`snapshotUnchanged` embeds the exact v1 `snapshotUnchanged` payload under
+`snapshotUnchanged` embeds the exact `snapshotUnchanged` payload under
 `payload.unchanged`. It therefore carries customer, Project, Environment,
 snapshot version, entity tag, issued/evaluation/refresh/validity times,
 projection status, and correlation ID. Confirmation slides `refreshAfter` and
@@ -78,8 +119,8 @@ projection status, and correlation ID. Confirmation slides `refreshAfter` and
 The surrounding authority and `snapshotAuthorityDigest` must identify the
 retained full snapshot exactly. A reader verifies equal authority scope,
 customer, Project, Environment, snapshot version, entity tag, evaluation and
-projection state, validates the v1 freshness horizon, and rejects a regressing
+projection state, validates the freshness horizon, and rejects a regressing
 freshness window. The canonical iOS and Android request/full/unchanged triples
 exercise the same rules with exact platform and Application scope. A request
-without the optional known digest remains valid for backward compatibility but
-always receives a full snapshot.
+without the optional known digest remains valid but always receives a full
+snapshot.

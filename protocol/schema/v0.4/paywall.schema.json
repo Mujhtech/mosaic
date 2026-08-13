@@ -139,7 +139,7 @@
       }
     },
     "reservedAccessibilityKey": {
-      "description": "Localization keys the protocol itself consumes rather than any component referencing them. A renderer must never compose an accessibility phrase from a hardcoded string in any language; it reads these. Each is required exactly when the document contains the feature that consumes it and forbidden otherwise, enforced by the semantic validator. See docs/protocol/v0.3.md.",
+      "description": "Localization keys the protocol itself consumes rather than any component referencing them. A renderer must never compose an accessibility phrase from a hardcoded string in any language; it reads these. Each is required exactly when the document contains the feature that consumes it and forbidden otherwise, enforced by the semantic validator. See docs/protocol/v0.4.md.",
       "type": "string",
       "enum": [
         "mosaic.a11y.rating",
@@ -3327,7 +3327,7 @@
       }
     },
     "socialProofComponent": {
-      "description": "A testimonial: an attributed quotation, optionally rated and optionally illustrated. Passive: it has no action and no runtime state. Aggregate statistics such as \"2M+ users\" are not a variant of this component and are authored as Text; see docs/protocol/v0.3.md.",
+      "description": "A testimonial: an attributed quotation, optionally rated and optionally illustrated. Passive: it has no action and no runtime state. Aggregate statistics such as \"2M+ users\" are not a variant of this component and are authored as Text; see docs/protocol/v0.4.md.",
       "type": "object",
       "additionalProperties": false,
       "required": [

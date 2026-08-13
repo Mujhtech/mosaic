@@ -53,4 +53,21 @@ Protocol changes require:
 - compatibility review
 - implementation or fallback across all supported SDKs
 
----
+## One version per contract, until GA
+
+Mosaic is pre-GA, so every contract carries exactly one version: the latest. A
+contract change **replaces** its version rather than adding one beside it, and
+the replaced version is deleted outright — schemas, fixtures, compatibility
+manifest, tools, contract document, and every reference, version-dispatch arm,
+projection, migration path, and version fallback that named it.
+
+Do not add a second version of a contract, a reader that accepts two versions, a
+projection between versions, or a migration path. Parallel versions begin at GA,
+when the deprecation policy takes over.
+
+Version identifiers stay **exact** regardless: a reader declaring `0.4` accepts
+only `0.4` and never infers support from numeric ordering.
+
+See
+[ADR-0028](../decisions/0028-single-version-contracts.md) and
+[`docs/protocol/versioning.md`](../../protocol/versioning.md).

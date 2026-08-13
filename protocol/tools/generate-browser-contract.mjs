@@ -7,33 +7,21 @@ const protocolRoot = resolve(toolsDirectory, "..");
 const generatedDirectory = resolve(protocolRoot, "browser/generated");
 
 const schemaPaths = Object.freeze({
-  configurationDeliveryV1: resolve(
+  configurationDeliveryV3: resolve(
     protocolRoot,
-    "schema/configuration-delivery/v1/release.schema.json",
-  ),
-  configurationDeliveryV2: resolve(
-    protocolRoot,
-    "schema/configuration-delivery/v2/release.schema.json",
-  ),
-  commerceConfigurationV1: resolve(
-    protocolRoot,
-    "schema/commerce-configuration/v1/configuration.schema.json",
+    "schema/configuration-delivery/v3/release.schema.json",
   ),
   commerceConfigurationV2: resolve(
     protocolRoot,
     "schema/commerce-configuration/v2/configuration.schema.json",
   ),
-  commerceProviderV1: resolve(
-    protocolRoot,
-    "schema/commerce-provider/v1/contract.schema.json",
-  ),
   commerceProviderV2: resolve(
     protocolRoot,
     "schema/commerce-provider/v2/contract.schema.json",
   ),
-  localProjectV03: resolve(
+  experimentAssignmentV1: resolve(
     protocolRoot,
-    "schema/local-preview/v0.3/local-project.schema.json",
+    "schema/experiment-assignment/v1/assignment.schema.json",
   ),
   localProjectV04: resolve(
     protocolRoot,
@@ -43,12 +31,7 @@ const schemaPaths = Object.freeze({
     protocolRoot,
     "schema/placement-decision/v1/decision.schema.json",
   ),
-  paywallV03: resolve(protocolRoot, "schema/v0.3/paywall.schema.json"),
   paywallV04: resolve(protocolRoot, "schema/v0.4/paywall.schema.json"),
-  previewV03: resolve(
-    protocolRoot,
-    "schema/local-preview/v0.3/preview-message.schema.json",
-  ),
   previewV04: resolve(
     protocolRoot,
     "schema/local-preview/v0.4/preview-message.schema.json",
@@ -79,47 +62,42 @@ function previewTypePrefix(context) {
     : `MosaicPreview${context.slice("preview".length)}`;
 }
 
+const typePrefixByContext = Object.freeze({
+  paywallV04: "MosaicPaywallV04",
+  commerceProviderV2: "MosaicCommerceProviderV2",
+  commerceConfigurationV2: "MosaicCommerceConfigurationV2",
+  placementDecisionV1: "MosaicPlacementDecisionV1",
+  configurationDeliveryV3: "MosaicConfigurationDeliveryV3",
+  experimentAssignmentV1: "MosaicExperimentAssignmentV1",
+});
+
 function definitionTypeName(context, definitionName) {
   const name = pascalCase(definitionName);
-  if (context === "paywallV03") {
-    return `MosaicPaywallV03${name}`;
-  }
-  if (context === "paywallV04") {
-    return `MosaicPaywallV04${name}`;
-  }
-  if (context === "previewV03" || context === "previewV04") {
+  if (context === "previewV04") {
     const prefix = previewTypePrefix(context);
     return name.startsWith("Preview")
       ? `${prefix}${name.slice("Preview".length)}`
       : `${prefix}${name}`;
   }
-  if (context === "commerceProviderV1") {
-    return `MosaicCommerceProviderV1${name}`;
-  }
-  if (context === "commerceProviderV2") {
-    return `MosaicCommerceProviderV2${name}`;
-  }
-  if (context === "commerceConfigurationV1") {
-    return `MosaicCommerceConfigurationV1${name}`;
-  }
-  if (context === "commerceConfigurationV2") {
-    return `MosaicCommerceConfigurationV2${name}`;
-  }
-  if (context === "placementDecisionV1") {
-    return `MosaicPlacementDecisionV1${name}`;
-  }
-  if (context === "configurationDeliveryV1") {
-    return `MosaicConfigurationDeliveryV1${name}`;
-  }
-  if (context === "configurationDeliveryV2") {
-    return `MosaicConfigurationDeliveryV2${name}`;
-  }
-  throw new Error(`Unsupported declaration context ${context}`);
+  const prefix = typePrefixByContext[context];
+  if (!prefix) throw new Error(`Unsupported declaration context ${context}`);
+  return `${prefix}${name}`;
 }
 
 function literal(value) {
   return JSON.stringify(value);
 }
+
+const documentTypeBySchemaId = Object.freeze({
+  "urn:mosaic:protocol:schema:v0.4:paywall": ["paywallV04", "MosaicPaywallV04Document"],
+  "urn:mosaic:protocol:schema:local-preview:v0.4:message": ["previewV04", "MosaicPreviewV04Message"],
+  "urn:mosaic:protocol:schema:local-preview:v0.4:local-project": ["previewV04", "MosaicLocalProjectV04"],
+  "urn:mosaic:protocol:schema:placement-decision:v1:decision": ["placementDecisionV1", "MosaicPlacementDecisionV1"],
+  "urn:mosaic:protocol:schema:experiment-assignment:v1:assignment": ["experimentAssignmentV1", "MosaicExperimentAssignmentV1"],
+  "urn:mosaic:protocol:schema:commerce-provider:v2:contract": ["commerceProviderV2", "MosaicCommerceProviderV2Record"],
+  "urn:mosaic:protocol:schema:commerce-configuration:v2:configuration": ["commerceConfigurationV2", "MosaicCommerceConfigurationV2"],
+  "urn:mosaic:protocol:schema:configuration-delivery:v3:release": ["configurationDeliveryV3", "MosaicConfigurationDeliveryV3"],
+});
 
 function refType(ref, context) {
   if (ref.startsWith("#/$defs/")) {
@@ -127,112 +105,12 @@ function refType(ref, context) {
   }
 
   const [schemaId, fragment] = ref.split("#", 2);
-  if (schemaId === "urn:mosaic:protocol:schema:v0.3:paywall") {
-    return fragment?.startsWith("/$defs/")
-      ? definitionTypeName("paywallV03", fragment.slice("/$defs/".length))
-      : "MosaicPaywallV03Document";
-  }
-  if (schemaId === "urn:mosaic:protocol:schema:v0.4:paywall") {
-    return fragment?.startsWith("/$defs/")
-      ? definitionTypeName("paywallV04", fragment.slice("/$defs/".length))
-      : "MosaicPaywallV04Document";
-  }
-  if (
-    schemaId ===
-    "urn:mosaic:protocol:schema:local-preview:v0.3:message"
-  ) {
-    return fragment?.startsWith("/$defs/")
-      ? definitionTypeName("previewV03", fragment.slice("/$defs/".length))
-      : "MosaicPreviewV03Message";
-  }
-  if (
-    schemaId ===
-    "urn:mosaic:protocol:schema:configuration-delivery:v1:release"
-  ) {
-    return fragment?.startsWith("/$defs/")
-      ? definitionTypeName(
-          "configurationDeliveryV1",
-          fragment.slice("/$defs/".length),
-        )
-      : "MosaicConfigurationDeliveryV1";
-  }
-  if (
-    schemaId ===
-    "urn:mosaic:protocol:schema:placement-decision:v1:decision"
-  ) {
-    return fragment?.startsWith("/$defs/")
-      ? definitionTypeName(
-          "placementDecisionV1",
-          fragment.slice("/$defs/".length),
-        )
-      : "MosaicPlacementDecisionV1";
-  }
-  if (
-    schemaId ===
-    "urn:mosaic:protocol:schema:commerce-provider:v2:contract"
-  ) {
-    return fragment?.startsWith("/$defs/")
-      ? definitionTypeName(
-          "commerceProviderV2",
-          fragment.slice("/$defs/".length),
-        )
-      : "MosaicCommerceProviderV2Record";
-  }
-  if (
-    schemaId ===
-    "urn:mosaic:protocol:schema:local-preview:v0.4:message"
-  ) {
-    return fragment?.startsWith("/$defs/")
-      ? definitionTypeName("previewV04", fragment.slice("/$defs/".length))
-      : "MosaicPreviewV04Message";
-  }
-  if (
-    schemaId ===
-    "urn:mosaic:protocol:schema:local-preview:v0.3:local-project"
-  ) {
-    return "MosaicLocalProjectV03";
-  }
-  if (
-    schemaId ===
-    "urn:mosaic:protocol:schema:local-preview:v0.4:local-project"
-  ) {
-    return "MosaicLocalProjectV04";
-  }
-  if (
-    schemaId ===
-    "urn:mosaic:protocol:schema:commerce-configuration:v2:configuration"
-  ) {
-    return fragment?.startsWith("/$defs/")
-      ? definitionTypeName(
-          "commerceConfigurationV2",
-          fragment.slice("/$defs/".length),
-        )
-      : "MosaicCommerceConfigurationV2";
-  }
-  if (
-    schemaId ===
-    "urn:mosaic:protocol:schema:commerce-provider:v1:contract"
-  ) {
-    return fragment?.startsWith("/$defs/")
-      ? definitionTypeName(
-          "commerceProviderV1",
-          fragment.slice("/$defs/".length),
-        )
-      : "MosaicCommerceProviderV1Record";
-  }
-  if (
-    schemaId ===
-    "urn:mosaic:protocol:schema:commerce-configuration:v1:configuration"
-  ) {
-    return fragment?.startsWith("/$defs/")
-      ? definitionTypeName(
-          "commerceConfigurationV1",
-          fragment.slice("/$defs/".length),
-        )
-      : "MosaicCommerceConfigurationV1";
-  }
-
-  throw new Error(`Unsupported schema reference ${ref}`);
+  const target = documentTypeBySchemaId[schemaId];
+  if (!target) throw new Error(`Unsupported schema reference ${ref}`);
+  const [refContext, documentType] = target;
+  return fragment?.startsWith("/$defs/")
+    ? definitionTypeName(refContext, fragment.slice("/$defs/".length))
+    : documentType;
 }
 
 function indent(value, spaces = 2) {
@@ -376,14 +254,8 @@ function previewMessageSource(schema, context = "preview") {
   ].join("\n");
 }
 
-function commerceProviderRecordSource(
-  schema,
-  context = "commerceProviderV1",
-) {
-  const prefix =
-    context === "commerceProviderV1"
-      ? "MosaicCommerceProviderV1"
-      : "MosaicCommerceProviderV2";
+function commerceProviderRecordSource(schema, context = "commerceProviderV2") {
+  const prefix = typePrefixByContext[context];
   const commonProperties = Object.fromEntries(
     Object.entries(schema.properties).filter(
       ([name]) => name !== "recordType" && name !== "payload",
@@ -425,44 +297,21 @@ function commerceProviderRecordSource(
 }
 
 export function buildBrowserContractDeclarations() {
-  const configurationDeliveryV1 = readJson(
-    schemaPaths.configurationDeliveryV1,
-  );
-  const configurationDeliveryV2 = readJson(
-    schemaPaths.configurationDeliveryV2,
-  );
-  const commerceConfigurationV1 = readJson(
-    schemaPaths.commerceConfigurationV1,
-  );
-  const commerceConfigurationV2 = readJson(
-    schemaPaths.commerceConfigurationV2,
-  );
-  const commerceProviderV1 = readJson(schemaPaths.commerceProviderV1);
+  const configurationDeliveryV3 = readJson(schemaPaths.configurationDeliveryV3);
+  const commerceConfigurationV2 = readJson(schemaPaths.commerceConfigurationV2);
   const commerceProviderV2 = readJson(schemaPaths.commerceProviderV2);
-  const paywallV03 = readJson(schemaPaths.paywallV03);
+  const experimentAssignmentV1 = readJson(schemaPaths.experimentAssignmentV1);
   const paywallV04 = readJson(schemaPaths.paywallV04);
-  const previewV03 = readJson(schemaPaths.previewV03);
   const previewV04 = readJson(schemaPaths.previewV04);
-  const localProjectV03 = readJson(schemaPaths.localProjectV03);
   const localProjectV04 = readJson(schemaPaths.localProjectV04);
   const placementDecisionV1 = readJson(schemaPaths.placementDecisionV1);
 
   const contractTypes = [
     "// Generated from canonical Mosaic JSON Schemas. Do not edit.",
     "",
-    definitionsSource(paywallV03, "paywallV03"),
-    "",
-    `export type MosaicPaywallV03Document = ${schemaType(paywallV03, "paywallV03")};`,
-    "",
     definitionsSource(paywallV04, "paywallV04"),
     "",
     `export type MosaicPaywallV04Document = ${schemaType(paywallV04, "paywallV04")};`,
-    "",
-    definitionsSource(previewV03, "previewV03"),
-    "",
-    previewMessageSource(previewV03, "previewV03"),
-    "",
-    `export type MosaicLocalProjectV03 = ${schemaType(localProjectV03, "previewV03")};`,
     "",
     definitionsSource(previewV04, "previewV04"),
     "",
@@ -470,28 +319,11 @@ export function buildBrowserContractDeclarations() {
     "",
     `export type MosaicLocalProjectV04 = ${schemaType(localProjectV04, "previewV04")};`,
     "",
-    definitionsSource(commerceProviderV1, "commerceProviderV1"),
-    "",
-    commerceProviderRecordSource(commerceProviderV1),
-    "",
     definitionsSource(commerceProviderV2, "commerceProviderV2"),
     "",
     commerceProviderRecordSource(commerceProviderV2, "commerceProviderV2"),
     "",
-    definitionsSource(
-      commerceConfigurationV1,
-      "commerceConfigurationV1",
-    ),
-    "",
-    `export type MosaicCommerceConfigurationV1 = ${schemaType(
-      commerceConfigurationV1,
-      "commerceConfigurationV1",
-    )};`,
-    "",
-    definitionsSource(
-      commerceConfigurationV2,
-      "commerceConfigurationV2",
-    ),
+    definitionsSource(commerceConfigurationV2, "commerceConfigurationV2"),
     "",
     `export type MosaicCommerceConfigurationV2 = ${schemaType(
       commerceConfigurationV2,
@@ -502,36 +334,32 @@ export function buildBrowserContractDeclarations() {
     "",
     `export type MosaicPlacementDecisionV1 = ${schemaType(placementDecisionV1, "placementDecisionV1")};`,
     "",
-    definitionsSource(configurationDeliveryV1, "configurationDeliveryV1"),
+    definitionsSource(experimentAssignmentV1, "experimentAssignmentV1"),
     "",
-    `export type MosaicConfigurationDeliveryV1 = ${schemaType(configurationDeliveryV1, "configurationDeliveryV1")};`,
+    `export type MosaicExperimentAssignmentV1 = ${schemaType(experimentAssignmentV1, "experimentAssignmentV1")};`,
     "",
-    definitionsSource(configurationDeliveryV2, "configurationDeliveryV2"),
+    definitionsSource(configurationDeliveryV3, "configurationDeliveryV3"),
     "",
-    `export type MosaicConfigurationDeliveryV2 = ${schemaType(configurationDeliveryV2, "configurationDeliveryV2")};`,
+    `export type MosaicConfigurationDeliveryV3 = ${schemaType(configurationDeliveryV3, "configurationDeliveryV3")};`,
     "",
-    "export type MosaicPaywallDocument = MosaicPaywallV03Document;",
-    "export type MosaicPreviewMessage = MosaicPreviewV03Message;",
-    "export type MosaicLocalProject = MosaicLocalProjectV03;",
-    "export type MosaicPreviewCapabilityReportPayload = MosaicPreviewV03CapabilityReportPayload;",
-    "export type MosaicPreviewCapabilityName = MosaicPreviewV03CapabilityName;",
-    "export type MosaicPreviewValidationDiagnostic = MosaicPreviewV03ValidationDiagnostic;",
+    "export type MosaicPaywallDocument = MosaicPaywallV04Document;",
+    "export type MosaicPreviewMessage = MosaicPreviewV04Message;",
+    "export type MosaicLocalProject = MosaicLocalProjectV04;",
+    "export type MosaicPreviewCapabilityReportPayload = MosaicPreviewV04CapabilityReportPayload;",
+    "export type MosaicPreviewCapabilityName = MosaicPreviewV04CapabilityName;",
+    "export type MosaicPreviewValidationDiagnostic = MosaicPreviewV04ValidationDiagnostic;",
     "",
   ].join("\n");
 
   const indexDeclaration = `// Generated public declarations for protocol/browser/index.js. Do not edit.
 import type {
-  MosaicConfigurationDeliveryV1,
-  MosaicConfigurationDeliveryV2,
-  MosaicCommerceConfigurationV1,
   MosaicCommerceConfigurationV2,
-  MosaicCommerceProviderV1Record,
   MosaicCommerceProviderV2Record,
+  MosaicConfigurationDeliveryV3,
+  MosaicExperimentAssignmentV1,
   MosaicLocalProject,
-  MosaicLocalProjectV03,
   MosaicLocalProjectV04,
   MosaicPaywallDocument,
-  MosaicPaywallV03Document,
   MosaicPaywallV04Document,
   MosaicPaywallV04AppearMotion,
   MosaicPaywallV04CapabilityName,
@@ -540,30 +368,27 @@ import type {
   MosaicPaywallV04MotionEasing,
   MosaicPaywallV04SelectionMotion,
   MosaicPaywallV04SelectionStateStyle,
-  MosaicPaywallV03CountdownComponent,
-  MosaicPaywallV03AxisSizingValue,
-  MosaicPaywallV03Background,
-  MosaicPaywallV03Color,
-  MosaicPaywallV03NavigateBackAction,
-  MosaicPaywallV03NavigateToAction,
-  MosaicPaywallV03ProductBadgeComponent,
-  MosaicPaywallV03ProductCardComponent,
-  MosaicPaywallV03ProductCardDefaultStyle,
-  MosaicPaywallV03ProductSelectorComponent,
-  MosaicPaywallV03CapabilityName,
-  MosaicPaywallV03RequiredCapability,
-  MosaicPaywallV03ReservedAccessibilityKey,
-  MosaicPaywallV03SocialProofRating,
-  MosaicPaywallV03Localization,
-  MosaicPaywallV03Node,
-  MosaicPaywallV03Shadow,
-  MosaicPaywallV03Visibility,
+  MosaicPaywallV04CountdownComponent,
+  MosaicPaywallV04AxisSizingValue,
+  MosaicPaywallV04Background,
+  MosaicPaywallV04Color,
+  MosaicPaywallV04NavigateBackAction,
+  MosaicPaywallV04NavigateToAction,
+  MosaicPaywallV04ProductBadgeComponent,
+  MosaicPaywallV04ProductCardComponent,
+  MosaicPaywallV04ProductCardDefaultStyle,
+  MosaicPaywallV04ProductSelectorComponent,
+  MosaicPaywallV04RequiredCapability,
+  MosaicPaywallV04ReservedAccessibilityKey,
+  MosaicPaywallV04SocialProofRating,
+  MosaicPaywallV04Localization,
+  MosaicPaywallV04Node,
+  MosaicPaywallV04Shadow,
+  MosaicPaywallV04Visibility,
   MosaicPlacementDecisionV1,
   MosaicPreviewCapabilityReportPayload,
   MosaicPreviewCapabilityName,
   MosaicPreviewMessage,
-  MosaicPreviewV03CapabilityReportPayload,
-  MosaicPreviewV03Message,
   MosaicPreviewV04CapabilityReportPayload,
   MosaicPreviewV04Message,
   MosaicPreviewValidationDiagnostic,
@@ -575,40 +400,20 @@ export type MosaicContractDiagnostic = MosaicPreviewValidationDiagnostic;
 /**
  * Every paywall contract version this runtime can read.
  *
- * The 0.4 slice kept this alias at 0.3 on the grounds that widening it "would
- * tell every existing caller that a draft contract is deliverable". That
- * rationale conflated two different ideas under one name, and the reader
- * entry points are where the conflation shows: \`validatePaywallDocument\` and
- * \`parsePortablePaywallJson\` now genuinely return either generation, so an
- * alias that says 0.3 is simply a lie about what the function hands back.
- *
- * "Any" means any version the runtime understands, and that is what it now
- * means. What is *deliverable* is a separate question, it is decided by the
- * publishing backend rather than by a TypeScript alias, and no signature here
- * ever meant it. A caller that wants exactly the release candidate keeps
- * \`MosaicPaywallDocument\`, which stays 0.3 and is the narrow name to reach
- * for. Callers that must handle both narrow on \`schemaVersion\`; the union is
- * discriminated, so the compiler makes that unavoidable rather than optional.
+ * Every Mosaic contract carries exactly one version pre-GA, so each of these
+ * aliases names one type rather than a union. They are kept as names because
+ * they say what they mean at a call site -- "whatever this runtime reads" --
+ * and because a later parallel version widens the alias without renaming
+ * anything. See docs/architecture/decisions/0028-single-version-contracts.md.
  */
-export type MosaicAnyPaywallDocument =
-  | MosaicPaywallV03Document
-  | MosaicPaywallV04Document;
-export type MosaicAnyPreviewMessage =
-  | MosaicPreviewV03Message
-  | MosaicPreviewV04Message;
-export type MosaicAnyLocalProject =
-  | MosaicLocalProjectV03
-  | MosaicLocalProjectV04;
-export type MosaicAnyCommerceProviderRecord =
-  | MosaicCommerceProviderV1Record
-  | MosaicCommerceProviderV2Record;
-export type MosaicAnyCommerceConfiguration =
-  | MosaicCommerceConfigurationV1
-  | MosaicCommerceConfigurationV2;
+export type MosaicAnyPaywallDocument = MosaicPaywallV04Document;
+export type MosaicAnyPreviewMessage = MosaicPreviewV04Message;
+export type MosaicAnyLocalProject = MosaicLocalProjectV04;
+export type MosaicAnyCommerceProviderRecord = MosaicCommerceProviderV2Record;
+export type MosaicAnyCommerceConfiguration = MosaicCommerceConfigurationV2;
 export type MosaicAnyPlacementDecision = MosaicPlacementDecisionV1;
-export type MosaicAnyConfigurationDelivery =
-  | MosaicConfigurationDeliveryV1
-  | MosaicConfigurationDeliveryV2;
+export type MosaicAnyExperimentAssignment = MosaicExperimentAssignmentV1;
+export type MosaicAnyConfigurationDelivery = MosaicConfigurationDeliveryV3;
 
 export type MosaicLocalPreviewNegotiationDiagnostic = {
   readonly code: "preview.noMutualVersion" | "preview.incompatibleSchemaVersion" | "preview.invalidNegotiation" | "preview.invalidCapabilityReport" | "preview.invalidDraft" | "preview.unsupportedPreviewCapability" | "preview.unsupportedCapability" | "preview.documentTooLarge";
@@ -620,11 +425,6 @@ export type MosaicLocalPreviewNegotiationDiagnostic = {
   };
 };
 export type MosaicLocalPreviewNegotiation =
-  | {
-      readonly ok: true;
-      readonly selectedVersion: "0.3";
-      readonly selectedWebSocketSubprotocol: "mosaic.local-preview.v0.3";
-    }
   | {
       readonly ok: true;
       readonly selectedVersion: "0.4";
@@ -681,40 +481,19 @@ export type MosaicValidationResult<T> =
     };
 
 export declare const localPreviewContractVersion: ${literal(
-    previewV03.properties.previewProtocolVersion.const,
-  )};
-export declare const localPreviewWebSocketProtocol: ${literal(
-    `mosaic.local-preview.v${previewV03.properties.previewProtocolVersion.const}`,
-  )};
-export declare const localPreviewV04ContractVersion: ${literal(
     previewV04.properties.previewProtocolVersion.const,
   )};
-export declare const localPreviewContractVersions: readonly ["0.3", "0.4"];
-/** Most preferred first: a 0.4 client renders motion, a 0.3 client still connects. */
-export declare const localPreviewVersionPreference: readonly ["0.4", "0.3"];
+export declare const localPreviewWebSocketProtocol: ${literal(
+    `mosaic.local-preview.v${previewV04.properties.previewProtocolVersion.const}`,
+  )};
+export declare const localPreviewContractVersions: readonly ["0.4"];
+/** One version is still negotiated: a peer that speaks none of these is refused. */
+export declare const localPreviewVersionPreference: readonly ["0.4"];
 export declare const localPreviewWebSocketProtocols: Readonly<{
-  "0.3": "mosaic.local-preview.v0.3";
   "0.4": "mosaic.local-preview.v0.4";
 }>;
-export declare const paywallContractVersion: "0.3";
-
-/**
- * Paywall Protocol 0.4 (draft): the motion contract.
- *
- * The reader entry points dispatch on \`schemaVersion\` and validate a 0.4
- * document against the 0.4 schema and the 0.4 semantic rules. The 0.4 rules
- * are expressed as a delta over the 0.3 ones -- one motion catalog, three
- * motion capabilities, one removed co-derived capability -- rather than as a
- * second copy, so the two versions cannot drift apart while each stays
- * internally consistent.
- */
-export declare const paywallV04ContractVersion: "0.4";
-export declare const paywallContractVersions: readonly ["0.3", "0.4"];
-export declare const paywallSchemasByVersion: Readonly<{
-  "0.3": Readonly<Record<string, unknown>>;
-  "0.4": Readonly<Record<string, unknown>>;
-}>;
-export declare const paywallV04CapabilityNames: readonly MosaicPaywallV04CapabilityName[];
+export declare const paywallContractVersion: "0.4";
+export declare const paywallContractVersions: readonly ["0.4"];
 export declare const motionCapabilityNames: readonly [
   "motion.appear",
   "motion.selection",
@@ -802,14 +581,14 @@ export declare function resolveMotionFrame(
     readonly reducedMotion?: boolean;
   },
 ): MosaicPaywallLoopFrame;
-export declare const capabilityNames: readonly MosaicPaywallV03CapabilityName[];
+export declare const capabilityNames: readonly MosaicPaywallV04CapabilityName[];
 export declare const capabilityByComponentType: Readonly<
-  Record<string, MosaicPaywallV03CapabilityName>
+  Record<string, MosaicPaywallV04CapabilityName>
 >;
 export declare const colorFieldNames: readonly string[];
 export declare const reservedAccessibilityKeys: Readonly<
   Record<
-    MosaicPaywallV03ReservedAccessibilityKey,
+    MosaicPaywallV04ReservedAccessibilityKey,
     {
       readonly placeholders: readonly string[];
       readonly consumedBy: (
@@ -823,12 +602,12 @@ export declare const reservedAccessibilityKeys: Readonly<
 export declare function usesColor(value: unknown): boolean;
 
 export declare function expectedDocumentCapabilities(
-  document: MosaicPaywallV03Document,
-): readonly MosaicPaywallV03CapabilityName[];
+  document: MosaicPaywallV04Document,
+): readonly MosaicPaywallV04CapabilityName[];
 
 export declare function requiredCapabilitiesFor(
-  document: MosaicPaywallV03Document,
-): readonly MosaicPaywallV03RequiredCapability[];
+  document: MosaicPaywallV04Document,
+): readonly MosaicPaywallV04RequiredCapability[];
 
 export declare type MosaicPaywallAnnouncement = {
   readonly composition: "separateElements" | "singleElement";
@@ -849,12 +628,12 @@ export declare type MosaicPaywallAnnouncement = {
 };
 
 export declare function resolvedCatalogStrings(
-  localization: MosaicPaywallV03Localization,
+  localization: MosaicPaywallV04Localization,
   requestedLocale: string,
 ): Readonly<Record<string, string>>;
 
 export declare function accessibilityAnnouncement(
-  node: MosaicPaywallV03Node,
+  node: MosaicPaywallV04Node,
   options: {
     readonly strings: Readonly<Record<string, string>>;
     readonly state?: "idle" | "inProgress" | null;
@@ -862,38 +641,22 @@ export declare function accessibilityAnnouncement(
 ): MosaicPaywallAnnouncement;
 
 export declare function ratingPoints(
-  rating: MosaicPaywallV03SocialProofRating,
+  rating: MosaicPaywallV04SocialProofRating,
 ): string;
 export declare function ratingMaximumPoints(
-  rating: MosaicPaywallV03SocialProofRating,
+  rating: MosaicPaywallV04SocialProofRating,
 ): string;
 export declare function resolveRatingAnnouncement(
-  rating: MosaicPaywallV03SocialProofRating,
+  rating: MosaicPaywallV04SocialProofRating,
   template: string,
 ): string;
 
 export declare const previewMessageTypes: readonly MosaicPreviewMessage["type"][];
-export declare const previewMessageTypesByVersion: Readonly<{
-  "0.3": readonly MosaicPreviewV03Message["type"][];
-  "0.4": readonly MosaicPreviewV04Message["type"][];
-}>;
 export declare const requiredPreviewCapabilities: readonly MosaicPreviewCapabilityName[];
 export declare const canonicalSchemas: Readonly<{
   paywall: Readonly<Record<string, unknown>>;
   previewMessage: Readonly<Record<string, unknown>>;
   localProject: Readonly<Record<string, unknown>>;
-}>;
-export declare const canonicalSchemasByVersion: Readonly<{
-  "0.3": Readonly<{
-    paywall: Readonly<Record<string, unknown>>;
-    previewMessage: Readonly<Record<string, unknown>>;
-    localProject: Readonly<Record<string, unknown>>;
-  }>;
-  "0.4": Readonly<{
-    paywall: Readonly<Record<string, unknown>>;
-    previewMessage: Readonly<Record<string, unknown>>;
-    localProject: Readonly<Record<string, unknown>>;
-  }>;
 }>;
 
 export declare function negotiateLocalPreviewVersion(
@@ -904,36 +667,35 @@ export declare function negotiateLocalPreviewVersion(
 export declare function decideLocalPreviewDraftDelivery(options?: {
   readonly capabilityReport?:
     | MosaicPreviewCapabilityReportPayload
-    | MosaicPreviewV03CapabilityReportPayload
     | MosaicPreviewV04CapabilityReportPayload;
   readonly document?: MosaicAnyPaywallDocument;
   readonly negotiation?: MosaicLocalPreviewNegotiation;
 }): MosaicLocalPreviewDeliveryDecision;
 
 export declare function resolveColorToken(
-  document: MosaicPaywallV03Document,
-  color: MosaicPaywallV03Color,
-): Exclude<MosaicPaywallV03Color, { readonly type: "colorToken" }> | null;
+  document: MosaicPaywallV04Document,
+  color: MosaicPaywallV04Color,
+): Exclude<MosaicPaywallV04Color, { readonly type: "colorToken" }> | null;
 
 export declare function resolveBackgroundToken(
-  document: MosaicPaywallV03Document,
-  background: MosaicPaywallV03Background,
-): Exclude<MosaicPaywallV03Background, { readonly type: "backgroundToken" }> | null;
+  document: MosaicPaywallV04Document,
+  background: MosaicPaywallV04Background,
+): Exclude<MosaicPaywallV04Background, { readonly type: "backgroundToken" }> | null;
 
 export declare function resolveShadowToken(
-  document: MosaicPaywallV03Document,
-  shadow: MosaicPaywallV03Shadow,
-): Exclude<MosaicPaywallV03Shadow, { readonly type: "shadowToken" }> | null;
+  document: MosaicPaywallV04Document,
+  shadow: MosaicPaywallV04Shadow,
+): Exclude<MosaicPaywallV04Shadow, { readonly type: "shadowToken" }> | null;
 
 export declare function resolveAxisSizing(
-  value: MosaicPaywallV03AxisSizingValue,
+  value: MosaicPaywallV04AxisSizingValue,
   options?: {
     readonly axis?: "width" | "height";
     readonly bounded?: boolean;
     readonly componentId?: string | null;
   },
 ): {
-  readonly value: MosaicPaywallV03AxisSizingValue;
+  readonly value: MosaicPaywallV04AxisSizingValue;
   readonly diagnostic: null | {
     readonly code: "layout.unboundedFill";
     readonly componentId: string | null;
@@ -944,11 +706,11 @@ export declare function resolveAxisSizing(
 };
 
 export declare function resolveMediaBackgroundFallback(
-  document: MosaicPaywallV03Document,
-  background: MosaicPaywallV03Background,
+  document: MosaicPaywallV04Document,
+  background: MosaicPaywallV04Background,
   availableAssetIds: readonly string[],
 ): {
-  readonly background: MosaicPaywallV03Background | null;
+  readonly background: MosaicPaywallV04Background | null;
   readonly diagnostic: null | Readonly<{
     code: "background.videoUnavailable" | "background.imageUnavailable";
     assetId: string;
@@ -958,14 +720,14 @@ export declare function resolveMediaBackgroundFallback(
 };
 
 export declare function resolveProductCardStyle(
-  productCard: MosaicPaywallV03ProductCardComponent,
+  productCard: MosaicPaywallV04ProductCardComponent,
   selected: boolean,
-): MosaicPaywallV03ProductCardDefaultStyle;
+): MosaicPaywallV04ProductCardDefaultStyle;
 
 export declare function resolveProductBadgeStyle(
-  productBadge: MosaicPaywallV03ProductBadgeComponent,
+  productBadge: MosaicPaywallV04ProductBadgeComponent,
   selected: boolean,
-): MosaicPaywallV03ProductCardDefaultStyle;
+): MosaicPaywallV04ProductCardDefaultStyle;
 
 export declare function interpolateProductText(
   value: string,
@@ -977,7 +739,7 @@ export declare function interpolateProductText(
 ): MosaicProductTemplateResolution;
 
 export declare function resolveProductSelectorSelection(
-  productSelector: MosaicPaywallV03ProductSelectorComponent,
+  productSelector: MosaicPaywallV04ProductSelectorComponent,
   availableProductReferenceIds: readonly string[],
   currentProductCardId?: string,
 ): {
@@ -988,7 +750,7 @@ export declare function resolveProductSelectorSelection(
 };
 
 export declare function runtimeStateForAcceptedRevision(
-  document: MosaicPaywallV03Document,
+  document: MosaicPaywallV04Document,
 ): {
   readonly switches: Readonly<Record<string, boolean>>;
   readonly tabs: Readonly<Record<string, string>>;
@@ -999,14 +761,14 @@ export declare function runtimeStateForAcceptedRevision(
 
 export declare function applyNavigationAction(
   navigationState: MosaicPaywallNavigationState,
-  action: MosaicPaywallV03NavigateToAction | MosaicPaywallV03NavigateBackAction,
+  action: MosaicPaywallV04NavigateToAction | MosaicPaywallV04NavigateBackAction,
 ): {
   readonly state: MosaicPaywallNavigationState;
   readonly diagnostic: MosaicPaywallRuntimeDiagnostic | null;
 };
 
 export declare function evaluateVisibility(
-  visibility: MosaicPaywallV03Visibility | undefined,
+  visibility: MosaicPaywallV04Visibility | undefined,
   selectionState?: Partial<MosaicPaywallSelectionState>,
 ): boolean;
 
@@ -1017,24 +779,15 @@ export declare function paywallRuntimeDiagnostics(
 ): readonly MosaicPaywallRuntimeDiagnostic[];
 
 export declare function resolveCountdownState(
-  countdown: MosaicPaywallV03CountdownComponent,
+  countdown: MosaicPaywallV04CountdownComponent,
   now: Date | string | number,
 ): {
   readonly completed: boolean;
   readonly remainingMilliseconds: number;
-  readonly largestUnit: MosaicPaywallV03CountdownComponent["largestUnit"];
-  readonly smallestUnit: MosaicPaywallV03CountdownComponent["smallestUnit"];
-  readonly completedText: MosaicPaywallV03CountdownComponent["completedText"];
+  readonly largestUnit: MosaicPaywallV04CountdownComponent["largestUnit"];
+  readonly smallestUnit: MosaicPaywallV04CountdownComponent["smallestUnit"];
+  readonly completedText: MosaicPaywallV04CountdownComponent["completedText"];
 };
-
-/**
- * The contract version a value claims, defaulting to the release candidate.
- *
- * Anything that is not an explicit 0.4 claim reads as 0.3, so a value with a
- * missing or unknown \`schemaVersion\` produces exactly the 0.3 diagnostics it
- * produced before 0.4 existed.
- */
-export declare function paywallDocumentVersion(value: unknown): "0.3" | "0.4";
 
 export declare function validatePaywallDocument(
   value: unknown,

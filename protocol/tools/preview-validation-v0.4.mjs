@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
 
-import { localPreviewV03DeliveryDiagnosticCodes } from "./preview-validation-v0.3.mjs";
 import {
   loadProtocolV04Artifacts,
   runtimeStateForAcceptedV04Revision,
@@ -80,20 +79,284 @@ function schemaValidators(artifacts) {
 export const localPreviewV04VersionPreference = Object.freeze(["0.4"]);
 
 /**
- * The delivery diagnostic vocabulary is unchanged by 0.4.
- *
- * Aliased rather than copied. Two identical lists in two files is exactly the
- * drift this repository has already been bitten by: each stays internally
- * consistent while the pair stops agreeing. If 0.4 ever needs a code 0.3 does
- * not have, this becomes a real list and the divergence is deliberate.
+ * Every structured diagnostic code `decideLocalPreviewDraftDelivery` can emit.
+ * The Local Preview 0.4 compatibility manifest must declare exactly this set.
  */
-export const localPreviewV04DeliveryDiagnosticCodes =
-  localPreviewV03DeliveryDiagnosticCodes;
+export const localPreviewV04DeliveryDiagnosticCodes = Object.freeze([
+  "preview.noMutualVersion",
+  "preview.invalidNegotiation",
+  "preview.invalidDraft",
+  "preview.incompatibleSchemaVersion",
+  "preview.invalidCapabilityReport",
+  "preview.unsupportedPreviewCapability",
+  "preview.unsupportedCapability",
+  "preview.documentTooLarge",
+]);
 
 export const requiredLocalPreviewV04Capabilities = Object.freeze([
   ...readJson(previewV04Paths.previewMessageSchema).$defs.previewCapabilityName
     .enum,
 ]);
+
+function structuredDeliveryDiagnostic({
+  action = "updatePreviewClient",
+  code,
+  message,
+  recoveryMessage,
+}) {
+  return {
+    code,
+    message,
+    fallback: "keepLastAcceptedDraft",
+    recovery: {
+      action,
+      message: recoveryMessage,
+    },
+  };
+}
+
+function incompatibleSchemaDiagnostic() {
+  return {
+    code: "preview.incompatibleSchemaVersion",
+    message: "This preview client cannot receive the current Protocol 0.4 draft.",
+    fallback: "keepLastAcceptedDraft",
+    recovery: {
+      action: "updatePreviewClient",
+      message:
+        "Update the preview client to a version that supports Local Preview and Protocol 0.4.",
+    },
+  };
+}
+
+export function negotiateLocalPreviewVersion(
+  localSupportedVersions,
+  remoteSupportedVersions,
+) {
+  const local = new Set(
+    Array.isArray(localSupportedVersions) ? localSupportedVersions : [],
+  );
+  const remote = new Set(
+    Array.isArray(remoteSupportedVersions) ? remoteSupportedVersions : [],
+  );
+  const selectedVersion = localPreviewV04VersionPreference.find(
+    (version) => local.has(version) && remote.has(version),
+  );
+  if (!selectedVersion) {
+    return {
+      ok: false,
+      selectedVersion: null,
+      selectedWebSocketSubprotocol: null,
+      diagnostic: {
+        code: "preview.noMutualVersion",
+        message: "Studio and the preview client have no mutually supported Local Preview version.",
+        fallback: "keepLastAcceptedDraft",
+        recovery: {
+          action: "updatePreviewClient",
+          message: "Update Studio or the preview client to a mutually supported version.",
+        },
+      },
+    };
+  }
+  return {
+    ok: true,
+    selectedVersion,
+    selectedWebSocketSubprotocol: `mosaic.local-preview.v${selectedVersion}`,
+  };
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasValidUniqueCapabilities(value) {
+  if (!Array.isArray(value)) return false;
+  const seen = new Set();
+  for (const capability of value) {
+    if (
+      !isRecord(capability) ||
+      typeof capability.name !== "string" ||
+      capability.name.length === 0 ||
+      typeof capability.version !== "string" ||
+      capability.version.length === 0 ||
+      seen.has(capability.name)
+    ) {
+      return false;
+    }
+    seen.add(capability.name);
+  }
+  return true;
+}
+
+function isWellFormedCapabilityReport(capabilityReport) {
+  return (
+    isRecord(capabilityReport) &&
+    typeof capabilityReport.clientId === "string" &&
+    capabilityReport.clientId.length > 0 &&
+    Array.isArray(capabilityReport.supportedSchemaVersions) &&
+    capabilityReport.supportedSchemaVersions.length > 0 &&
+    capabilityReport.supportedSchemaVersions.every(
+      (version) => typeof version === "string" && version.length > 0,
+    ) &&
+    new Set(capabilityReport.supportedSchemaVersions).size ===
+      capabilityReport.supportedSchemaVersions.length &&
+    hasValidUniqueCapabilities(capabilityReport.supportedCapabilities) &&
+    hasValidUniqueCapabilities(capabilityReport.previewCapabilities) &&
+    isRecord(capabilityReport.limits) &&
+    Number.isInteger(capabilityReport.limits.maxDocumentBytes) &&
+    capabilityReport.limits.maxDocumentBytes > 0
+  );
+}
+
+function serializedDocumentBytes(document) {
+  try {
+    const serialized = JSON.stringify(document);
+    return typeof serialized === "string"
+      ? new TextEncoder().encode(serialized).byteLength
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function decideLocalPreviewDraftDelivery({
+  capabilityReport,
+  document,
+  negotiation,
+} = {}) {
+  if (!isRecord(negotiation)) {
+    return {
+      delivery: "withhold",
+      diagnostic: structuredDeliveryDiagnostic({
+        code: "preview.invalidNegotiation",
+        message: "Local Preview negotiation state is missing or malformed.",
+        recoveryMessage:
+          "Renegotiate a supported Local Preview subprotocol before sending a draft.",
+      }),
+    };
+  }
+  if (negotiation.ok !== true) {
+    return {
+      delivery: "withhold",
+      diagnostic: isRecord(negotiation.diagnostic)
+        ? negotiation.diagnostic
+        : structuredDeliveryDiagnostic({
+            code: "preview.invalidNegotiation",
+            message: "Local Preview negotiation did not select a version.",
+            recoveryMessage:
+              "Renegotiate a supported Local Preview subprotocol before sending a draft.",
+          }),
+    };
+  }
+  if (
+    !isRecord(document) ||
+    typeof document.schemaVersion !== "string" ||
+    !isRecord(document.compatibility) ||
+    !Array.isArray(document.compatibility.requiredCapabilities)
+  ) {
+    return {
+      delivery: "withhold",
+      diagnostic: structuredDeliveryDiagnostic({
+        action: "editProperty",
+        code: "preview.invalidDraft",
+        message: "The preview draft is missing its version or capability contract.",
+        recoveryMessage: "Validate the complete draft before preview delivery.",
+      }),
+    };
+  }
+  if (negotiation.selectedVersion !== document.schemaVersion) {
+    return {
+      delivery: "withhold",
+      diagnostic: incompatibleSchemaDiagnostic(),
+    };
+  }
+  if (!isWellFormedCapabilityReport(capabilityReport)) {
+    return {
+      delivery: "withhold",
+      diagnostic: structuredDeliveryDiagnostic({
+        code: "preview.invalidCapabilityReport",
+        message: "The preview client's capability report is missing or malformed.",
+        recoveryMessage:
+          "Reconnect or update the preview client so it sends a complete capability report.",
+      }),
+    };
+  }
+  if (!capabilityReport.supportedSchemaVersions.includes(document.schemaVersion)) {
+    return {
+      delivery: "withhold",
+      diagnostic: incompatibleSchemaDiagnostic(),
+    };
+  }
+  const previewCapabilities = new Map(
+    capabilityReport.previewCapabilities.map(({ name, version }) => [
+      name,
+      version,
+    ]),
+  );
+  const missingPreviewCapabilities = requiredLocalPreviewV04Capabilities.filter(
+    (name) => previewCapabilities.get(name) !== "0.4",
+  );
+  if (missingPreviewCapabilities.length > 0) {
+    return {
+      delivery: "withhold",
+      diagnostic: structuredDeliveryDiagnostic({
+        code: "preview.unsupportedPreviewCapability",
+        message:
+          "The preview client does not support every required Local Preview capability at version 0.4.",
+        recoveryMessage: `Update the preview client to support: ${missingPreviewCapabilities.join(", ")}@0.4.`,
+      }),
+    };
+  }
+  const supported = new Map(
+    capabilityReport.supportedCapabilities.map(({ name, version }) => [
+      name,
+      version,
+    ]),
+  );
+  const missingCapabilities = document.compatibility.requiredCapabilities
+    .filter(({ name, version }) => supported.get(name) !== version)
+    .map(({ name }) => name);
+  if (missingCapabilities.length > 0) {
+    return {
+      delivery: "withhold",
+      diagnostic: {
+        code: "preview.unsupportedCapability",
+        message:
+          "The preview client does not support every capability required by this draft.",
+        fallback: "keepLastAcceptedDraft",
+        recovery: {
+          action: "updatePreviewClient",
+          message: `Update the preview client to support: ${missingCapabilities.join(", ")}.`,
+        },
+      },
+    };
+  }
+  const documentBytes = serializedDocumentBytes(document);
+  if (documentBytes === null) {
+    return {
+      delivery: "withhold",
+      diagnostic: structuredDeliveryDiagnostic({
+        action: "editProperty",
+        code: "preview.invalidDraft",
+        message: "The preview draft cannot be serialized safely.",
+        recoveryMessage: "Validate and serialize the draft before preview delivery.",
+      }),
+    };
+  }
+  if (documentBytes > capabilityReport.limits.maxDocumentBytes) {
+    return {
+      delivery: "withhold",
+      diagnostic: structuredDeliveryDiagnostic({
+        action: "removeComponent",
+        code: "preview.documentTooLarge",
+        message:
+          "The serialized preview draft exceeds the client's document byte limit.",
+        recoveryMessage:
+          "Reduce the draft size or use a preview client with a larger document limit.",
+      }),
+    };
+  }
+  return { delivery: "send" };
+}
 
 function validateMockCommerceState(document, state) {
   const errors = [];

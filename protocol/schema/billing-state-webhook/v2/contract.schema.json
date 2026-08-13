@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:mosaic:protocol:schema:billing-state-webhook:v2:contract",
   "title": "Mosaic Billing State Webhook Contract v2",
-  "description": "Authority-aware billing state and transition notifications. Events notify; consumers always re-read Authoritative Entitlement v2.",
+  "description": "Authority-aware billing state and transition notifications, carrying forward the Contract 1 event vocabulary, state summary, and delivery-attempt record. This is the single version of the Billing State Webhook contract. Events notify; consumers always re-read Authoritative Entitlement v2.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -56,7 +56,7 @@
       "then": {
         "properties": {
           "payload": {
-            "$ref": "urn:mosaic:protocol:schema:billing-state-webhook:v1:delivery#/$defs/webhookDeliveryAttempt"
+            "$ref": "#/$defs/webhookDeliveryAttempt"
           }
         }
       }
@@ -291,8 +291,18 @@
           "$ref": "#/$defs/id"
         },
         "eventType": {
+          "description": "The complete, closed event-type set: the ten Contract 1 members carried forward plus the four authority transition members. Reserved names have defined meanings, and a producer that emits one before it is specified is a defect. No member names a provider.",
           "enum": [
             "customer.entitlements.changed",
+            "subscription.state.changed",
+            "subscription.period.changed",
+            "subscription.renewal_intent.changed",
+            "subscription.expired",
+            "subscription.revoked",
+            "subscription.refunded",
+            "customer.billing_identity.conflict",
+            "customer.projection.failed",
+            "customer.projection.recovered",
             "authority.cutover.pending",
             "authority.cutover.completed",
             "authority.rollback.completed",
@@ -330,6 +340,26 @@
           "items": {
             "$ref": "#/$defs/changedEntitlement"
           }
+        },
+        "subscriptionInstanceId": {
+          "$ref": "#/$defs/id"
+        },
+        "projectionRuleVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "stateSummary": {
+          "$ref": "#/$defs/stateSummary"
+        },
+        "sourceReason": {
+          "$ref": "#/$defs/sourceReason"
+        },
+        "isTestSource": {
+          "type": "boolean"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/diagnostics"
         }
       },
       "allOf": [
@@ -453,6 +483,415 @@
                   }
                 }
               }
+            }
+          }
+        }
+      ]
+    },
+    "safeText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[^\\r\\n\\u0000-\\u001F\\u007F]*$"
+    },
+    "accessState": {
+      "description": "Access under accepted policy, as summarized on an event. unavailable is deliberately ABSENT, unlike the read-time accessState of Authoritative Entitlement 1: unavailable means Mosaic could not answer a read, and an event is not a read. An event exists only because a projection committed a new snapshot, so the projection did answer; the worst it can say about an axis is unknown, with the uncertainty that explains why. Emitting unavailable here would let a consumer read a service-delivery state as a customer state on a record that is not even authoritative.",
+      "enum": [
+        "active",
+        "inactive",
+        "unknown"
+      ]
+    },
+    "lifecycleState": {
+      "enum": [
+        "trialing",
+        "active",
+        "grace_period",
+        "billing_retry",
+        "paused",
+        "expired",
+        "revoked",
+        "refunded",
+        "superseded",
+        "unknown"
+      ]
+    },
+    "renewalIntent": {
+      "enum": [
+        "auto_renew_enabled",
+        "auto_renew_disabled",
+        "provider_managed",
+        "paused",
+        "unknown"
+      ]
+    },
+    "billingState": {
+      "enum": [
+        "current",
+        "retrying",
+        "grace",
+        "failed",
+        "refunded",
+        "revoked",
+        "unknown"
+      ]
+    },
+    "uncertaintyReason": {
+      "enum": [
+        "none",
+        "provider_unavailable",
+        "missing_fact",
+        "identity_unresolved",
+        "product_unresolved",
+        "conflicting_facts",
+        "projection_failed",
+        "stale_validation",
+        "unsupported_provider_state"
+      ]
+    },
+    "diagnosticCode": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 96,
+      "pattern": "^[a-z][a-zA-Z0-9]*(?:[._-][a-zA-Z0-9]+)+$"
+    },
+    "uncertainty": {
+      "description": "Structurally the Authoritative Entitlement uncertainty shape, copied rather than referenced so this contract does not inherit another contract's lifecycle.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason"
+      ],
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/uncertaintyReason"
+        },
+        "since": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "diagnosticCode": {
+          "$ref": "#/$defs/diagnosticCode"
+        }
+      },
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "none"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "since"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "since"
+        ]
+      }
+    },
+    "sourceReason": {
+      "description": "Why the committed state changed. Identical vocabulary to the Authoritative Entitlement changeReason, copied locally.",
+      "enum": [
+        "initial_projection",
+        "subscription_state_changed",
+        "subscription_period_changed",
+        "renewal_intent_changed",
+        "source_added",
+        "source_ended",
+        "refund_applied",
+        "revocation_applied",
+        "grant_version_changed",
+        "identity_changed",
+        "identity_conflict_opened",
+        "identity_conflict_resolved",
+        "projection_replayed",
+        "projection_rule_upgraded",
+        "projection_recovered",
+        "projection_failed",
+        "manual_reprojection"
+      ]
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "safeMessage",
+        "severity",
+        "retryable",
+        "correlationId"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/diagnosticCode"
+        },
+        "safeMessage": {
+          "$ref": "#/$defs/safeText"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "retryAfterSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "correlationId": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "stateSummary": {
+      "description": "The four state axes of the subscription the change came from, as a safe summary. It is a convenience for routing and logging: the authoritative answer is always the snapshot the consumer re-reads.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accessState",
+        "lifecycleState",
+        "renewalIntent",
+        "billingState",
+        "uncertainty"
+      ],
+      "properties": {
+        "accessState": {
+          "$ref": "#/$defs/accessState"
+        },
+        "lifecycleState": {
+          "$ref": "#/$defs/lifecycleState"
+        },
+        "renewalIntent": {
+          "$ref": "#/$defs/renewalIntent"
+        },
+        "billingState": {
+          "$ref": "#/$defs/billingState"
+        },
+        "uncertainty": {
+          "$ref": "#/$defs/uncertainty"
+        }
+      },
+      "if": {
+        "properties": {
+          "accessState": {
+            "const": "unknown"
+          }
+        },
+        "required": [
+          "accessState"
+        ]
+      },
+      "then": {
+        "properties": {
+          "uncertainty": {
+            "properties": {
+              "reason": {
+                "not": {
+                  "const": "none"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "webhookDeliveryAttempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deliveryId",
+        "eventId",
+        "destinationId",
+        "attempt",
+        "maxAttempts",
+        "status",
+        "requestedAt"
+      ],
+      "properties": {
+        "deliveryId": {
+          "$ref": "#/$defs/id"
+        },
+        "eventId": {
+          "description": "Stable across attempts. A retry of the same event carries the same eventId with a higher attempt number, which is what makes consumer-side deduplication possible.",
+          "$ref": "#/$defs/id"
+        },
+        "destinationId": {
+          "$ref": "#/$defs/id"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "maxAttempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "succeeded",
+            "failed",
+            "exhausted",
+            "skipped"
+          ]
+        },
+        "requestedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "respondedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "responseStatusCode": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "responseExcerpt": {
+          "description": "A bounded, control-character-free excerpt of the destination's response body, kept only so an integrator can see why their endpoint refused. It is never parsed and never influences Mosaic state.",
+          "$ref": "#/$defs/safeText"
+        },
+        "nextAttemptAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "skippedReason": {
+          "enum": [
+            "destination_disabled",
+            "event_type_not_enabled",
+            "destination_deleted",
+            "tenant_suspended"
+          ]
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/diagnostics"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "succeeded"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "respondedAt",
+              "responseStatusCode"
+            ],
+            "not": {
+              "required": [
+                "nextAttemptAt"
+              ]
+            }
+          }
+        },
+        {
+          "$comment": "A pending attempt has not been answered, so it can carry no answer.",
+          "if": {
+            "properties": {
+              "status": {
+                "const": "pending"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "respondedAt"
+                  ]
+                },
+                {
+                  "required": [
+                    "responseStatusCode"
+                  ]
+                },
+                {
+                  "required": [
+                    "responseExcerpt"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "$comment": "Exhaustion is terminal: there is no next attempt to schedule.",
+          "if": {
+            "properties": {
+              "status": {
+                "const": "exhausted"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nextAttemptAt"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "skipped"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "skippedReason"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "responseStatusCode"
+                  ]
+                },
+                {
+                  "required": [
+                    "nextAttemptAt"
+                  ]
+                }
+              ]
             }
           }
         }

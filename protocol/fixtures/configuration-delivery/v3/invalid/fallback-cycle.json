@@ -1,0 +1,91 @@
+{
+  "configurationDeliveryVersion": "3",
+  "release": {
+    "id": "release_invalid_fallback_cycle",
+    "number": 99,
+    "projectId": "project_alpha",
+    "environment": {
+      "id": "environment_production",
+      "key": "production",
+      "mode": "production"
+    },
+    "publishedAt": "2026-07-26T12:00:00.000Z",
+    "contentDigest": "sha256:8e036830c92907fcd1223411992526d495e4b004c58d9bc4223de97b493a32a7",
+    "compatibility": {
+      "placementDecisionContracts": [
+        {
+          "version": "1",
+          "requiredFeatures": [
+            "outcome.fallback"
+          ],
+          "bucketingAlgorithms": []
+        }
+      ],
+      "paywallProtocols": [
+        {
+          "version": "0.4",
+          "requiredCapabilities": []
+        }
+      ],
+      "acceptance": "atomic",
+      "experimentAssignmentContracts": [
+        {
+          "version": "1",
+          "requiredFeatures": [],
+          "bucketingAlgorithms": [],
+          "schedulePolicies": []
+        }
+      ]
+    },
+    "placementDecisions": [
+      {
+        "placementDecisionVersion": "1",
+        "ruleSet": {
+          "id": "ruleset_fallback_cycle",
+          "version": 1,
+          "projectId": "project_alpha",
+          "environmentId": "environment_production",
+          "environmentKey": "production",
+          "placementId": "placement_export_pdf",
+          "placementKey": "export_pdf",
+          "enabled": true,
+          "assignmentPolicy": "installation",
+          "attributeDefinitions": [],
+          "fallbacks": [
+            {
+              "key": "first",
+              "outcome": {
+                "type": "fallback",
+                "key": "second"
+              }
+            },
+            {
+              "key": "second",
+              "outcome": {
+                "type": "fallback",
+                "key": "first"
+              }
+            }
+          ],
+          "rules": [],
+          "defaultOutcome": {
+            "type": "fallback",
+            "key": "first"
+          },
+          "qaOverrides": [],
+          "compatibility": {
+            "requiredFeatures": [
+              "outcome.fallback"
+            ],
+            "bucketingAlgorithms": []
+          }
+        }
+      }
+    ],
+    "paywallVersions": [],
+    "productReferences": [],
+    "entitlementReferences": [],
+    "assetReferences": [],
+    "experimentAssignments": []
+  }
+}

@@ -3,8 +3,8 @@
 ## Purpose and compatibility
 
 Commerce Configuration `2` is the immutable release-associated sidecar for
-native-store providers and v2-capable adapters. It is parallel to Commerce
-Configuration `1`; v1 remains valid and unchanged.
+native-store providers and their adapters. It is the only Commerce
+Configuration version.
 
 The exact discriminator is:
 
@@ -12,9 +12,9 @@ The exact discriminator is:
 commerceConfigurationVersion = "2"
 ```
 
-The v1 release association, canonical digest, atomic cache association,
-closed-reader, credential exclusion, and ambiguity rejection rules continue
-to apply. V2 does not modify Paywall Protocol or Configuration Delivery.
+Release association, canonical digest, atomic cache association,
+closed-reader, credential exclusion, and ambiguity rejection rules all apply.
+The sidecar does not modify Paywall Protocol or Configuration Delivery.
 
 ## Activation and recovery
 
@@ -94,7 +94,7 @@ available for providers that expose genuine provider Entitlement identifiers.
 
 ## Native freshness and observation
 
-Provider-connected and SDK-local v1 freshness shapes remain representable.
+Provider-connected and SDK-local freshness shapes are representable.
 Native activation uses `nativeStoreConfiguration`:
 
 - `configured` records structural configuration only;
@@ -109,13 +109,14 @@ customer identity, raw provider response, or credential.
 ## Negotiation and fallback
 
 Clients advertise exact supported Commerce Configuration versions. The server
-serves v2 only to a v2-capable client. An unsupported, malformed, mismatched,
-ambiguous, or digest-invalid v2 sidecar is rejected atomically.
+serves the sidecar only to a client that declares `2`. An unsupported,
+malformed, mismatched, ambiguous, or digest-invalid sidecar is rejected
+atomically.
 
 Rejection preserves the last accepted sidecar associated with its exact
 Configuration Release. If none exists, the SDK uses a compatible bundled
 fallback; otherwise it reports configuration unavailable. Readers never
-partially reinterpret v2 as v1 or combine mappings from different versions.
+partially reinterpret a sidecar or combine mappings from different versions.
 
 Commerce Provider v2 `configurationRevision` is exactly this sidecar's
 `configuration.contentDigest`, including the `sha256:` prefix. Update routing

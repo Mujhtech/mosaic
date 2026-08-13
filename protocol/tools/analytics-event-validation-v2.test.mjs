@@ -26,7 +26,7 @@ test("assignment is diagnostic, exposure requires presentation, and fallback ide
   assert.ok(fallback.payload.presentedPaywallVersionId);
 });
 
-test("v2 preserves event-specific closed correlation and attribution from v1", () => {
+test("event-specific correlation and attribution stay closed", () => {
   const artifacts = loadAnalyticsEventV2Artifacts();
   const event = structuredClone(artifacts.events.find((candidate) => candidate.eventName === "product_selected"));
   event.correlation.providerUpdateId = "provider_update_unrelated";

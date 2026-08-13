@@ -1,0 +1,22 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "restoreResult",
+  "payload": {
+    "restoreId": "fixture-restore-0003",
+    "billingCustomerId": "fixture-customer-0001",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "storePlatform": "apple_app_store",
+    "outcome": "validation_pending",
+    "providerOutcome": "completed",
+    "requestedAt": "2026-07-28T12:12:00.000Z",
+    "observedTransactionCount": 1,
+    "pendingValidationCount": 1,
+    "uncertainty": {
+      "reason": "missing_fact",
+      "since": "2026-07-28T12:12:06.000Z",
+      "expectedResolution": "automatic_retry"
+    },
+    "correlationId": "fixture-correlation-0022"
+  }
+}

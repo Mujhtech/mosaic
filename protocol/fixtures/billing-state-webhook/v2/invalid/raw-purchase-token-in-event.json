@@ -1,0 +1,46 @@
+{
+  "billingStateWebhookContractVersion": "2",
+  "recordType": "billingStateEvent",
+  "payload": {
+    "eventId": "fixture-event-0001",
+    "eventType": "customer.entitlements.changed",
+    "billingCustomerId": "fixture-customer-0001",
+    "authority": {
+      "authorityEpoch": 5,
+      "authorityKind": "mosaic",
+      "scope": {
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "applicationId": "fixture-application-ios",
+        "platform": "ios"
+      },
+      "transitionState": "stabilizing",
+      "cutoverAt": "2026-07-01T08:00:00.000Z",
+      "snapshotAuthorityDigest": "sha256:b659fc1560544193b6599e1e4a82861a55cae857fcad73fa340b611abe877c34"
+    },
+    "projectionRuleVersion": 1,
+    "sourceReason": "initial_projection",
+    "isTestSource": false,
+    "subscriptionInstanceId": "fixture-subscription-instance-0001",
+    "snapshotVersion": 1,
+    "occurredAt": "2026-07-01T09:00:00.000Z",
+    "createdAt": "2026-07-01T09:00:03.000Z",
+    "changedEntitlements": [
+      {
+        "entitlementKey": "pro",
+        "previousState": "absent",
+        "currentState": "active"
+      }
+    ],
+    "stateSummary": {
+      "accessState": "active",
+      "lifecycleState": "active",
+      "renewalIntent": "auto_renew_enabled",
+      "billingState": "current",
+      "uncertainty": {
+        "reason": "none"
+      }
+    },
+    "correlationId": "eyJhbGciOiJFUzI1NiJ9.eyJwdXJjaGFzZVRva2VuIjoiZmFrZS10b2tlbiJ9.c2lnbmF0dXJl"
+  }
+}

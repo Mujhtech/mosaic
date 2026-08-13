@@ -269,12 +269,16 @@ test("repair records carry bounded scope and a complete audit result", () => {
   assert.equal(artifacts.manifest.policy.pendingRepairExecution, "durableReservationUnsettledNoAfterStateClaims");
 });
 
-test("webhook v2 preserves signing/delivery and makes v1 destinations ineligible for readiness", () => {
+test("webhook preserves signing/delivery and the consumer obligations", () => {
   const manifest = loadPhase9CArtifacts("billingStateWebhookV2").manifest;
   assert.equal(manifest.delivery.signing, "hmacSha256V1RawBodyUnchanged");
   assert.equal(manifest.delivery.eventIdOnRetry, "stable");
-  assert.equal(manifest.consumerPolicy.v1Destination, "receivesV1EventsOnly");
-  assert.equal(manifest.consumerPolicy.readiness, "v1DestinationCannotSatisfyAuthorityAwareGate");
+  assert.equal(manifest.delivery.deduplicationKey, "eventId");
+  assert.equal(manifest.delivery.orderingKey, "snapshotVersion");
+  assert.equal(manifest.delivery.failureIsolation, "deliveryNeverRollsBackState");
+  assert.equal(manifest.consumerPolicy.signatureVerification, "requiredBeforeParsing");
+  assert.equal(manifest.consumerPolicy.duplicateEvent, "deduplicateByEventId");
+  assert.equal(manifest.consumerPolicy.ordering, "ignoreOlderSnapshotVersion");
 });
 
 test("every authority transition event has one exact authority kind and state", () => {

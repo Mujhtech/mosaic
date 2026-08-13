@@ -1,0 +1,137 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "customerEntitlementSnapshot",
+  "payload": {
+    "authority": {
+      "authorityEpoch": 5,
+      "authorityKind": "mosaic",
+      "scope": {
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "applicationId": "fixture-application-ios",
+        "platform": "ios"
+      },
+      "transitionState": "stabilizing",
+      "cutoverAt": "2026-07-28T12:30:00.000Z"
+    },
+    "snapshot": {
+      "snapshotId": "fixture-customer-snapshot-0007",
+      "billingCustomerId": "fixture-customer-0001",
+      "projectId": "fixture-project-mosaic",
+      "environmentId": "fixture-environment-production",
+      "snapshotVersion": 5,
+      "previousSnapshotVersion": 4,
+      "projectionRuleVersion": 1,
+      "issuedAt": "2026-07-28T12:00:00.000Z",
+      "asOf": "2026-07-28T11:59:58.000Z",
+      "refreshAfter": "2026-07-28T13:00:00.000Z",
+      "validUntil": "2026-08-04T12:00:00.000Z",
+      "entityTag": "cs-0007-v5",
+      "contentDigest": "sha256:dab761bd33f93c14af8e922d8c5747ebc72bc74a6d5cd09330d9b429f5ceadc6",
+      "entries": [
+        {
+          "entitlementId": "fixture-entitlement-pro-lifetime",
+          "entitlementKey": "pro_lifetime",
+          "state": "inactive",
+          "endKnown": true,
+          "sourceIds": [],
+          "sourceCount": 0,
+          "primaryExplanation": {
+            "code": "no_qualifying_source"
+          }
+        },
+        {
+          "entitlementId": "fixture-entitlement-pro",
+          "entitlementKey": "pro",
+          "state": "active",
+          "effectiveStart": "2026-05-20T08:00:00.000Z",
+          "effectiveEnd": "2027-05-20T08:00:00.000Z",
+          "endKnown": true,
+          "sourceIds": [
+            "fixture-source-family-0001",
+            "fixture-source-subscription-0001",
+            "fixture-source-subscription-0002"
+          ],
+          "sourceCount": 3,
+          "primaryExplanation": {
+            "code": "active_subscription_period",
+            "sourceId": "fixture-source-subscription-0002",
+            "safeSummary": "Three sources grant this Entitlement; the latest finite end is reported."
+          }
+        }
+      ],
+      "sources": [
+        {
+          "sourceId": "fixture-source-family-0001",
+          "sourceType": "family_shared",
+          "subscriptionInstanceId": "fixture-subscription-instance-0003",
+          "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+          "grantVersionId": "fixture-grant-version-0001",
+          "sourceSnapshotId": "fixture-subscription-snapshot-0003",
+          "storePlatform": "apple_app_store",
+          "start": "2026-05-20T08:00:00.000Z",
+          "end": "2026-08-20T08:00:00.000Z",
+          "sourceState": "granting",
+          "uncertainty": {
+            "reason": "none"
+          },
+          "explanationCode": "family_shared_source",
+          "isTestSource": false
+        },
+        {
+          "sourceId": "fixture-source-subscription-0001",
+          "sourceType": "active_subscription",
+          "subscriptionInstanceId": "fixture-subscription-instance-0001",
+          "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+          "grantVersionId": "fixture-grant-version-0001",
+          "sourceSnapshotId": "fixture-subscription-snapshot-0001",
+          "storePlatform": "apple_app_store",
+          "start": "2026-07-01T09:00:00.000Z",
+          "end": "2026-08-01T09:00:00.000Z",
+          "sourceState": "granting",
+          "uncertainty": {
+            "reason": "none"
+          },
+          "explanationCode": "active_subscription_period",
+          "isTestSource": false
+        },
+        {
+          "sourceId": "fixture-source-subscription-0002",
+          "sourceType": "active_subscription",
+          "subscriptionInstanceId": "fixture-subscription-instance-0002",
+          "mosaicProductId": "fixture-mosaic-product-pro-yearly",
+          "grantVersionId": "fixture-grant-version-0001",
+          "sourceSnapshotId": "fixture-subscription-snapshot-0002",
+          "storePlatform": "google_play",
+          "start": "2026-05-20T08:00:00.000Z",
+          "end": "2027-05-20T08:00:00.000Z",
+          "sourceState": "granting",
+          "uncertainty": {
+            "reason": "none"
+          },
+          "explanationCode": "active_subscription_period",
+          "isTestSource": false
+        }
+      ],
+      "projectionStatus": {
+        "state": "current",
+        "lastProjectedAt": "2026-07-28T11:59:58.000Z"
+      },
+      "changeReason": "source_added",
+      "correlationId": "fixture-correlation-0001"
+    },
+    "snapshotAuthorityDigest": "sha256:f9224b997f5698769c379a265535bab457e00dea5eec2fb4ab8119e5ac427c12",
+    "minimumSupport": {
+      "minimumContractVersion": "2",
+      "minimumSdkVersion": "2.0.0",
+      "supportedAppVersionWindow": {
+        "minimumInclusive": "4.0.0",
+        "maximumInclusive": "5.9.9"
+      },
+      "requiredCapabilities": [
+        "authority_epoch",
+        "authority_scope"
+      ]
+    }
+  }
+}

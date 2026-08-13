@@ -1,0 +1,190 @@
+{
+  "contract": "Paywall Protocol 0.3",
+  "description": "Conformance vectors for the Social Proof rating announcement. `value` counts steps and `maximum` counts points, so a renderer that announces `value` directly says \"9 out of 5\". `points` is the exact steps-to-points conversion; `expectedAnnouncement` is the complete string a renderer must produce, byte for byte, after substituting the reserved mosaic.a11y.rating template. Numerals are locale-independent by design -- see docs/protocol/v0.4.md.",
+  "placeholders": [
+    "{{ rating.value }}",
+    "{{ rating.maximum }}"
+  ],
+  "cases": [
+    {
+      "id": "half-four-and-a-half-of-five",
+      "note": "a half step short of the maximum",
+      "locale": "en",
+      "rating": {
+        "symbol": "star",
+        "value": 9,
+        "maximum": 5,
+        "step": "half",
+        "size": 16,
+        "filledColor": "action.primary",
+        "emptyColor": "border.default"
+      },
+      "template": "{{ rating.value }} out of {{ rating.maximum }} stars",
+      "points": "4.5",
+      "maximumPoints": "5",
+      "expectedAnnouncement": "4.5 out of 5 stars"
+    },
+    {
+      "id": "half-five-of-five",
+      "note": "the boundary: every step earned",
+      "locale": "en",
+      "rating": {
+        "symbol": "star",
+        "value": 10,
+        "maximum": 5,
+        "step": "half",
+        "size": 16,
+        "filledColor": "action.primary",
+        "emptyColor": "border.default"
+      },
+      "template": "{{ rating.value }} out of {{ rating.maximum }} stars",
+      "points": "5",
+      "maximumPoints": "5",
+      "expectedAnnouncement": "5 out of 5 stars"
+    },
+    {
+      "id": "half-zero-of-five",
+      "note": "zero is a rating, not an absent one",
+      "locale": "en",
+      "rating": {
+        "symbol": "star",
+        "value": 0,
+        "maximum": 5,
+        "step": "half",
+        "size": 16,
+        "filledColor": "action.primary",
+        "emptyColor": "border.default"
+      },
+      "template": "{{ rating.value }} out of {{ rating.maximum }} stars",
+      "points": "0",
+      "maximumPoints": "5",
+      "expectedAnnouncement": "0 out of 5 stars"
+    },
+    {
+      "id": "half-half-of-five",
+      "note": "a single half step formats with a fraction digit",
+      "locale": "en",
+      "rating": {
+        "symbol": "star",
+        "value": 1,
+        "maximum": 5,
+        "step": "half",
+        "size": 16,
+        "filledColor": "action.primary",
+        "emptyColor": "border.default"
+      },
+      "template": "{{ rating.value }} out of {{ rating.maximum }} stars",
+      "points": "0.5",
+      "maximumPoints": "5",
+      "expectedAnnouncement": "0.5 out of 5 stars"
+    },
+    {
+      "id": "whole-five-of-five",
+      "note": "whole steps never gain a fraction digit",
+      "locale": "en",
+      "rating": {
+        "symbol": "star",
+        "value": 5,
+        "maximum": 5,
+        "step": "whole",
+        "size": 16,
+        "filledColor": "action.primary",
+        "emptyColor": "border.default"
+      },
+      "template": "{{ rating.value }} out of {{ rating.maximum }} stars",
+      "points": "5",
+      "maximumPoints": "5",
+      "expectedAnnouncement": "5 out of 5 stars"
+    },
+    {
+      "id": "whole-three-of-five",
+      "note": "an ordinary whole rating",
+      "locale": "en",
+      "rating": {
+        "symbol": "star",
+        "value": 3,
+        "maximum": 5,
+        "step": "whole",
+        "size": 16,
+        "filledColor": "action.primary",
+        "emptyColor": "border.default"
+      },
+      "template": "{{ rating.value }} out of {{ rating.maximum }} stars",
+      "points": "3",
+      "maximumPoints": "5",
+      "expectedAnnouncement": "3 out of 5 stars"
+    },
+    {
+      "id": "whole-seven-of-ten",
+      "note": "the maximum bound of the scale",
+      "locale": "en",
+      "rating": {
+        "symbol": "star",
+        "value": 7,
+        "maximum": 10,
+        "step": "whole",
+        "size": 16,
+        "filledColor": "action.primary",
+        "emptyColor": "border.default"
+      },
+      "template": "{{ rating.value }} out of {{ rating.maximum }} stars",
+      "points": "7",
+      "maximumPoints": "10",
+      "expectedAnnouncement": "7 out of 10 stars"
+    },
+    {
+      "id": "half-four-and-a-half-of-five-de",
+      "note": "translated phrasing, identical numerals",
+      "locale": "de",
+      "rating": {
+        "symbol": "star",
+        "value": 9,
+        "maximum": 5,
+        "step": "half",
+        "size": 16,
+        "filledColor": "action.primary",
+        "emptyColor": "border.default"
+      },
+      "template": "{{ rating.value }} von {{ rating.maximum }} Sternen",
+      "points": "4.5",
+      "maximumPoints": "5",
+      "expectedAnnouncement": "4.5 von 5 Sternen"
+    },
+    {
+      "id": "half-four-and-a-half-of-five-ar",
+      "note": "RTL phrasing, identical numerals",
+      "locale": "ar",
+      "rating": {
+        "symbol": "star",
+        "value": 9,
+        "maximum": 5,
+        "step": "half",
+        "size": 16,
+        "filledColor": "action.primary",
+        "emptyColor": "border.default"
+      },
+      "template": "{{ rating.value }} من {{ rating.maximum }} نجوم",
+      "points": "4.5",
+      "maximumPoints": "5",
+      "expectedAnnouncement": "4.5 من 5 نجوم"
+    },
+    {
+      "id": "whole-one-of-one",
+      "note": "the smallest declarable scale",
+      "locale": "en",
+      "rating": {
+        "symbol": "star",
+        "value": 1,
+        "maximum": 1,
+        "step": "whole",
+        "size": 16,
+        "filledColor": "action.primary",
+        "emptyColor": "border.default"
+      },
+      "template": "{{ rating.value }} out of {{ rating.maximum }} stars",
+      "points": "1",
+      "maximumPoints": "1",
+      "expectedAnnouncement": "1 out of 1 stars"
+    }
+  ]
+}

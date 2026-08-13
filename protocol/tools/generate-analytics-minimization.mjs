@@ -1,6 +1,6 @@
 /**
  * Projects the Analytics Event correlation/attribution allow-lists from the
- * semantic validator tables into the canonical v1 and v2 event schemas.
+ * semantic validator tables into the canonical event schema.
  *
  * Mosaic's release-blocker policy treats "canonical schema, semantic validator,
  * and API runtime path disagreeing about validity" as a blocker. Deriving the
@@ -26,10 +26,6 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  analyticsEventV1AttributionAllowLists,
-  analyticsEventV1CorrelationAllowLists,
-} from "./analytics-event-validation-v1.mjs";
 import {
   analyticsEventV2AttributionAllowLists,
   analyticsEventV2CorrelationAllowLists,
@@ -195,7 +191,7 @@ const RULE_SET_DEPENDENT_REQUIRED = {
   winningRuleId: ["placementRuleSetId", "placementRuleSetVersion"],
 };
 
-/** Experiment attribution is an all-or-nothing tuple (v2 only). */
+/** Experiment attribution is an all-or-nothing tuple. */
 const EXPERIMENT_TUPLE = [
   "experimentId",
   "experimentVersionId",
@@ -346,13 +342,20 @@ function project({ schemaPath, correlationAllowLists, attributionAllowLists }) {
     defs[name] = usedScopes.get(name);
   }
 
-  // 3. Tuple-atomicity rules.
-  const hasExperimentTuple = EXPERIMENT_TUPLE.every(
-    (field) => defs.attribution.properties[field] !== undefined,
+  // 3. Tuple-atomicity rules. `dependentRequired` can only bind fields the
+  // subschema declares, so a missing tuple field would emit a rule over nothing.
+  const missingTuple = EXPERIMENT_TUPLE.filter(
+    (field) => defs.attribution.properties[field] === undefined,
   );
+  if (missingTuple.length > 0) {
+    throw new Error(
+      `${schemaPath}: $defs/attribution does not declare [${missingTuple.join(", ")}], ` +
+        "so Experiment tuple atomicity cannot be projected onto it.",
+    );
+  }
   defs.attribution.dependentRequired = {
     ...RULE_SET_DEPENDENT_REQUIRED,
-    ...(hasExperimentTuple ? tupleDependentRequired(EXPERIMENT_TUPLE) : {}),
+    ...tupleDependentRequired(EXPERIMENT_TUPLE),
   };
   defs.placementSelectionPayload.dependentRequired =
     tupleDependentRequired(ROLLOUT_TUPLE);
@@ -362,11 +365,6 @@ function project({ schemaPath, correlationAllowLists, attributionAllowLists }) {
 }
 
 export const analyticsMinimizationTargets = Object.freeze([
-  Object.freeze({
-    schemaPath: "schema/analytics-event/v1/event.schema.json",
-    correlationAllowLists: analyticsEventV1CorrelationAllowLists,
-    attributionAllowLists: analyticsEventV1AttributionAllowLists,
-  }),
   Object.freeze({
     schemaPath: "schema/analytics-event/v2/event.schema.json",
     correlationAllowLists: analyticsEventV2CorrelationAllowLists,
@@ -430,19 +428,24 @@ export function validateAnalyticsMinimizationProjection() {
         }
       }
     }
-    const hasExperimentTuple = EXPERIMENT_TUPLE.every(
-      (field) => defs.attribution.properties[field] !== undefined,
+    const missingTuple = EXPERIMENT_TUPLE.filter(
+      (field) => defs.attribution.properties[field] === undefined,
     );
+    if (missingTuple.length > 0) {
+      errors.push(
+        `${target.schemaPath}: $defs/attribution does not declare [${missingTuple.join(", ")}], so Experiment tuple atomicity binds nothing`,
+      );
+    }
     const expectedAttribution = {
       ...RULE_SET_DEPENDENT_REQUIRED,
-      ...(hasExperimentTuple ? tupleDependentRequired(EXPERIMENT_TUPLE) : {}),
+      ...tupleDependentRequired(EXPERIMENT_TUPLE),
     };
     if (
       JSON.stringify(defs.attribution.dependentRequired) !==
       JSON.stringify(expectedAttribution)
     ) {
       errors.push(
-        `${target.schemaPath}: $defs/attribution dependentRequired does not encode the Rule Set${hasExperimentTuple ? " and Experiment tuple" : ""} pairing rules`,
+        `${target.schemaPath}: $defs/attribution dependentRequired does not encode the Rule Set and Experiment tuple pairing rules`,
       );
     }
     if (

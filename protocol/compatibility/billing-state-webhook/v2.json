@@ -8,13 +8,42 @@
     "../../fixtures/billing-state-webhook/v2/events/entitlements-changed.json",
     "../../fixtures/billing-state-webhook/v2/events/rollback-completed.json",
     "../../fixtures/billing-state-webhook/v2/events/stabilization-completed.json",
-    "../../fixtures/billing-state-webhook/v2/deliveries/retry.json"
+    "../../fixtures/billing-state-webhook/v2/deliveries/retry.json",
+    "../../fixtures/billing-state-webhook/v2/events/entitlement-activated.json",
+    "../../fixtures/billing-state-webhook/v2/events/entitlement-deactivated.json",
+    "../../fixtures/billing-state-webhook/v2/events/expiry-extended.json",
+    "../../fixtures/billing-state-webhook/v2/events/refund.json",
+    "../../fixtures/billing-state-webhook/v2/events/revocation.json",
+    "../../fixtures/billing-state-webhook/v2/events/subscription-cancelled-access-active.json",
+    "../../fixtures/billing-state-webhook/v2/events/unknown-state-transition.json",
+    "../../fixtures/billing-state-webhook/v2/deliveries/exhausted.json",
+    "../../fixtures/billing-state-webhook/v2/deliveries/failed-retry-scheduled.json",
+    "../../fixtures/billing-state-webhook/v2/deliveries/pending.json",
+    "../../fixtures/billing-state-webhook/v2/deliveries/retry-same-event-id.json",
+    "../../fixtures/billing-state-webhook/v2/deliveries/skipped-destination-disabled.json",
+    "../../fixtures/billing-state-webhook/v2/deliveries/succeeded.json"
   ],
   "recordTypes": [
     "billingStateEvent",
     "webhookDeliveryAttempt"
   ],
   "eventTypes": [
+    "customer.entitlements.changed",
+    "subscription.state.changed",
+    "subscription.period.changed",
+    "subscription.renewal_intent.changed",
+    "subscription.expired",
+    "subscription.revoked",
+    "subscription.refunded",
+    "customer.billing_identity.conflict",
+    "customer.projection.failed",
+    "customer.projection.recovered",
+    "authority.cutover.pending",
+    "authority.cutover.completed",
+    "authority.rollback.completed",
+    "authority.stabilization.completed"
+  ],
+  "emittedEventTypes": [
     "customer.entitlements.changed",
     "authority.cutover.pending",
     "authority.cutover.completed",
@@ -42,14 +71,49 @@
   "delivery": {
     "semantics": "atLeastOnce",
     "eventIdOnRetry": "stable",
-    "signing": "hmacSha256V1RawBodyUnchanged"
+    "signing": "hmacSha256V1RawBodyUnchanged",
+    "deduplicationKey": "eventId",
+    "orderingKey": "snapshotVersion",
+    "failureIsolation": "deliveryNeverRollsBackState"
+  },
+  "signing": {
+    "header": "Mosaic-Signature",
+    "algorithm": "HMAC-SHA256",
+    "signingVersion": "v1",
+    "signedPayloadTemplate": "{signingVersion}.{timestamp}.{eventId}.{rawBody}",
+    "encoding": "lowercase_hex",
+    "timestampParameter": "t",
+    "signatureParameter": "v1",
+    "multipleActiveSignatures": true,
+    "replayWindowSeconds": 300,
+    "testEndpointSupported": true,
+    "signatureVectors": "packages/test-fixtures/src/webhook-signature-vectors.json"
+  },
+  "limits": {
+    "maxRecordBytes": 32768,
+    "maxChangedEntitlementsPerEvent": 200,
+    "maxResponseExcerptCharacters": 240,
+    "maxDeliveryAttempts": 32,
+    "maxDiagnosticsPerRecord": 10,
+    "replayWindowSeconds": 300
+  },
+  "producerPolicy": {
+    "unknownField": "rejectRecord",
+    "unknownEventType": "rejectRecord",
+    "providerSecret": "forbidden",
+    "rawPurchaseToken": "forbidden",
+    "rawProviderPayload": "forbidden",
+    "eventIdStability": "stableAcrossAttemptsAndReplays",
+    "exactlyOnceDelivery": "neverPromised",
+    "deliveryRecordTransport": "neverSentToDestination"
   },
   "consumerPolicy": {
     "unknownField": "ignore",
     "unknownEventType": "ignore",
     "unknownEnumeration": "ignore",
     "authoritativeState": "reReadAuthoritativeEntitlementV2",
-    "v1Destination": "receivesV1EventsOnly",
-    "readiness": "v1DestinationCannotSatisfyAuthorityAwareGate"
+    "ordering": "ignoreOlderSnapshotVersion",
+    "duplicateEvent": "deduplicateByEventId",
+    "signatureVerification": "requiredBeforeParsing"
   }
 }

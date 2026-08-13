@@ -6,8 +6,9 @@ import {
   addUniqueCapabilities,
   addUniqueFieldValues,
   createSchemaValidators,
-  expectedV03DocumentCapabilities,
+  expectedDocumentCapabilities,
   formatSchemaErrors,
+  orderedCapabilities,
   validateAccessibilityAnnouncementVectors,
   validateAssetReferences,
   validateDesignSystem,
@@ -15,10 +16,10 @@ import {
   validateLayoutAndRuntime,
   validateLocalization,
   validateProductReferences,
-  runtimeStateForAcceptedV03Revision,
+  runtimeStateForAcceptedRevision,
   walkObjectValues,
-  walkV03DocumentNodes,
-} from "./validation-v0.3.mjs";
+  walkDocumentNodes,
+} from "./paywall-document-rules.mjs";
 
 const toolsDirectory = dirname(fileURLToPath(import.meta.url));
 
@@ -160,7 +161,7 @@ export function readV04Json(filePath) {
  * Re-exporting rather than copying is what keeps that true: a future container
  * added to one walk cannot be missing from the other.
  */
-export const walkV04DocumentNodes = walkV03DocumentNodes;
+export const walkV04DocumentNodes = walkDocumentNodes;
 
 /**
  * Normative cubic-bezier control points for the four easing presets.
@@ -351,7 +352,7 @@ function requireEndpoints(trigger, resolvedFrom, resolvedTo) {
 /**
  * The frame a renderer must be showing at an exact elapsed time.
  *
- * Pure and integer-in, following the `resolveV03CountdownState` precedent: a
+ * Pure and integer-in, following the `resolveCountdownState` precedent: a
  * clock that cannot be trusted throws rather than resolving, because arithmetic
  * on a bad clock yields a frame that reads back as plausible.
  *
@@ -488,30 +489,15 @@ export function resolveV04MotionFrame(
 }
 
 /**
- * The capabilities a 0.4 document requires.
+ * The capabilities a document requires, and the same set ordered for
+ * `compatibility.requiredCapabilities`.
  *
- * Expressed as a delta over the 0.3 derivation rather than as a second copy of
- * it, because "0.4 is 0.3 plus motion minus one co-derived capability" is the
- * whole compatibility claim and a copy would let the two answers drift while
- * each stayed internally consistent.
+ * One derivation, in the shared rules module: motion is derived at the node it
+ * is authored on, exactly like every other capability. These names are kept so
+ * the 0.4 call sites read the same as the rest of this module.
  */
-export function expectedV04DocumentCapabilities(document) {
-  const capabilities = new Set(expectedV03DocumentCapabilities(document));
-  capabilities.delete("style.productCardStates");
-  for (const { node } of walkV04DocumentNodes(document)) {
-    if (node.motion?.appear) capabilities.add("motion.appear");
-    if (node.motion?.selection) capabilities.add("motion.selection");
-    if (node.motion?.loop) capabilities.add("motion.loop");
-  }
-  return capabilities;
-}
-
-export function orderedV04Capabilities(document, paywallSchema) {
-  const expected = expectedV04DocumentCapabilities(document);
-  return paywallSchema.$defs.capabilityName.enum
-    .filter((name) => expected.has(name))
-    .map((name) => ({ name, version: "0.4" }));
-}
+export const expectedV04DocumentCapabilities = expectedDocumentCapabilities;
+export const orderedV04Capabilities = orderedCapabilities;
 
 export const V04_MOTION_CAPABILITIES = Object.freeze([
   "motion.appear",
@@ -773,7 +759,7 @@ export function runtimeStateForAcceptedV04Revision(
 ) {
   const played = new Set(previousRuntime?.motion?.playedAppearScreens ?? []);
   return {
-    ...runtimeStateForAcceptedV03Revision(document),
+    ...runtimeStateForAcceptedRevision(document),
     motion: {
       playedAppearScreens: document.screens
         .map((screen) => screen.id)

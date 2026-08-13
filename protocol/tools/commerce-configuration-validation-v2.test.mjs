@@ -8,10 +8,6 @@ import {
   validateCommerceConfigurationV2Artifacts,
   validateCommerceConfigurationV2JsonFormatting,
 } from "./commerce-configuration-validation-v2.mjs";
-import {
-  loadCommerceConfigurationV1Artifacts,
-  validateCommerceConfigurationV1Artifacts,
-} from "./commerce-configuration-validation-v1.mjs";
 
 function fixture(artifacts, name) {
   const index = artifacts.fixturePaths.findIndex((path) =>
@@ -25,11 +21,6 @@ function redigest(configuration) {
   configuration.configuration.contentDigest =
     commerceConfigurationV2MaterialDigest(configuration);
 }
-
-test("Commerce Configuration v1 remains valid beside v2", () => {
-  const v1 = loadCommerceConfigurationV1Artifacts();
-  assert.deepEqual(validateCommerceConfigurationV1Artifacts(v1), []);
-});
 
 test("Commerce Configuration v2 canonical artifacts are valid and formatted", () => {
   const artifacts = loadCommerceConfigurationV2Artifacts();
@@ -204,7 +195,7 @@ test("native configured state is distinct from a fresh provider observation", ()
   );
 });
 
-test("unsupported v2 is rejected without weakening v1 fallback policy", () => {
+test("an unsupported version is rejected without weakening the bundled-fallback policy", () => {
   const artifacts = loadCommerceConfigurationV2Artifacts();
   const configuration = fixture(artifacts, "storekit-configuration.json");
   configuration.commerceConfigurationVersion = "3";

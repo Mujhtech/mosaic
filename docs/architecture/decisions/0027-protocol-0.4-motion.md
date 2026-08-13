@@ -1,6 +1,10 @@
 # ADR 0027: Open Paywall Protocol 0.4 "Motion" as a bounded draft
 
-- Status: Accepted
+- Status: Accepted. The `0.3` projection, the projectability rule, and the
+  "Configuration Delivery cannot carry `0.4`" deferral are superseded by
+  [ADR-0028](0028-single-version-contracts.md), which deleted `0.3` and
+  re-pinned Configuration Delivery `3` to `0.4`. The motion contract itself,
+  the enhancement tier, and every ruling in this ADR stand unchanged.
 - Date: 2026-08-10
 
 ## Context

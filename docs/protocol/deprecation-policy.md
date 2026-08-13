@@ -2,7 +2,14 @@
 
 How an approved contract version stops being current, and how long that takes.
 Applies to every contract in the
-[approved set](compatibility-policy.md#approved-contract-set-at-v1-ga).
+[contract set](compatibility-policy.md#contract-set).
+
+**This policy does not bind before GA.** While Mosaic has no production usage,
+every contract carries exactly one version and a change replaces it rather than
+deprecating it — see
+[ADR-0028](../architecture/decisions/0028-single-version-contracts.md). The
+runway below begins the moment a contract version is read by software Mosaic
+does not build. Nothing here is being relaxed; it is simply not yet load-bearing.
 
 ## The problem this solves
 
@@ -29,7 +36,7 @@ A contract version may not be deprecated until:
 
 1. its **successor has been `approved` for at least 6 months**; and
 2. a migration guide for the successor exists under
-   [`migration/`](migration/); and
+   `docs/protocol/migration/`; and
 3. the deprecation is approved by the product owner and recorded in
    `protocol/CHANGELOG.md`.
 
@@ -74,7 +81,7 @@ schema accepts it; the block is absent for `draft`, `releaseCandidate`, and
     "deprecatedAt": "2027-06-01",
     "retiresAt": "2028-06-01",
     "supersededBy": "3",
-    "migrationGuide": "docs/protocol/migration/delivery-v2-to-v3.md"
+    "migrationGuide": "docs/protocol/migration/delivery-v3-to-v4.md"
   }
 }
 ```
@@ -127,7 +134,7 @@ they meet.
 
 ## Local Preview is development-only
 
-Local Preview `0.3` declares `audience: "developmentOnly"`. No shipped
+Local Preview `0.4` declares `audience: "developmentOnly"`. No shipped
 application reads it: it is the Studio-to-preview-client authoring transport.
 Its runway is bounded by tooling releases rather than by installed applications,
 so the 6+12-month schedule does not apply. It may be deprecated and retired
