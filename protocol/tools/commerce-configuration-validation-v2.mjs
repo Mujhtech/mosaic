@@ -474,6 +474,54 @@ export function validateCommerceConfigurationV2Artifacts(
       ),
     );
   });
+  errors.push(...declaredVocabularyCoverage(artifacts));
+  return errors;
+}
+
+/**
+ * Every activation source, adapter mapping kind, and freshness source the
+ * contract declares must be exercised by a canonical fixture.
+ *
+ * A declared vocabulary with no fixture is a surface every SDK implements from
+ * prose: nothing pins what a `revenueCatPackage` mapping or an `sdkLocal`
+ * activation actually looks like, and nothing fails when one stops being
+ * produced. This corpus lost exactly that coverage once, when the v1 fixtures
+ * were deleted and only the two native-store v2 fixtures remained.
+ */
+function declaredVocabularyCoverage(artifacts) {
+  const errors = [];
+  const activationSources = new Set();
+  const adapterMappingKinds = new Set();
+  const freshnessSources = new Set();
+  for (const { configuration } of artifacts.fixtures) {
+    activationSources.add(configuration.activeProvider.activation.source);
+    freshnessSources.add(configuration.freshness.source);
+    for (const mapping of configuration.productMappings) {
+      adapterMappingKinds.add(mapping.adapterMapping.kind);
+    }
+  }
+  for (const [declared, exercised, label] of [
+    [
+      artifacts.compatibilityManifest.activationSources,
+      activationSources,
+      "activation source",
+    ],
+    [
+      artifacts.compatibilityManifest.adapterMappingKinds,
+      adapterMappingKinds,
+      "adapter mapping kind",
+    ],
+  ]) {
+    for (const value of declared) {
+      if (exercised.has(value)) continue;
+      errors.push(`no canonical fixture exercises declared ${label} ${value}`);
+    }
+  }
+  // Freshness has no manifest list; the schema's own union is the vocabulary.
+  for (const source of ["providerSynchronization", "sdkLocalSnapshot", "nativeStoreConfiguration"]) {
+    if (freshnessSources.has(source)) continue;
+    errors.push(`no canonical fixture exercises freshness source ${source}`);
+  }
   return errors;
 }
 

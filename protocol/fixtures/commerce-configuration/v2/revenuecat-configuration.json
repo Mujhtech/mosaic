@@ -1,0 +1,140 @@
+{
+  "commerceConfigurationVersion": "2",
+  "configuration": {
+    "id": "commerce_configuration_release_42_ios_revenuecat",
+    "environmentId": "environment_production",
+    "applicationId": "application_ios",
+    "storePlatform": "ios",
+    "configurationRelease": {
+      "id": "configuration_release_42",
+      "contentDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "contentDigest": "sha256:25124bd90a32db33e3691c9366f51c3eb53cdef74561cb7d053561a0e2541e3b",
+    "activeProvider": {
+      "identity": {
+        "id": "revenuecat",
+        "displayName": "RevenueCat",
+        "adapterVersion": "1.0.0"
+      },
+      "activation": {
+        "source": "providerConnection",
+        "providerConnectionId": "provider_connection_revenuecat_production"
+      },
+      "capabilities": [
+        {
+          "name": "productLoading",
+          "support": "supported"
+        },
+        {
+          "name": "subscriptions",
+          "support": "supported"
+        },
+        {
+          "name": "oneTimeNonConsumables",
+          "support": "supported"
+        },
+        {
+          "name": "trials",
+          "support": "conditional",
+          "reasonCode": "provider.platformCapabilityVaries"
+        },
+        {
+          "name": "introductoryOffers",
+          "support": "conditional",
+          "reasonCode": "provider.platformCapabilityVaries"
+        },
+        {
+          "name": "promotionalOffers",
+          "support": "conditional",
+          "reasonCode": "provider.runtimeEligibilityRequired"
+        },
+        {
+          "name": "restore",
+          "support": "supported"
+        },
+        {
+          "name": "activeEntitlementLookup",
+          "support": "supported"
+        },
+        {
+          "name": "pendingPurchases",
+          "support": "supported"
+        },
+        {
+          "name": "deferredPurchases",
+          "support": "unsupported",
+          "reasonCode": "provider.outcomeNotDistinct"
+        },
+        {
+          "name": "serverConfirmedTransactions",
+          "support": "conditional",
+          "reasonCode": "provider.runtimeConfirmation"
+        },
+        {
+          "name": "productSynchronization",
+          "support": "supported"
+        },
+        {
+          "name": "providerDiagnostics",
+          "support": "supported"
+        }
+      ],
+      "recoveryMode": "providerDefined"
+    },
+    "productMappings": [
+      {
+        "mosaicProductId": "mosaic_pro_monthly",
+        "mappingId": "mapping_pro_monthly_revenuecat",
+        "productType": "subscription",
+        "entitlementKeys": [
+          "pro"
+        ],
+        "providerProductReference": "com.example.pro.monthly",
+        "adapterMapping": {
+          "kind": "directProduct"
+        }
+      },
+      {
+        "mosaicProductId": "mosaic_pro_yearly",
+        "mappingId": "mapping_pro_yearly_revenuecat",
+        "productType": "subscription",
+        "entitlementKeys": [
+          "pro"
+        ],
+        "providerProductReference": "com.example.pro.yearly",
+        "adapterMapping": {
+          "kind": "revenueCatPackage",
+          "offeringIdentifier": "default",
+          "packageIdentifier": "$rc_annual"
+        }
+      },
+      {
+        "mosaicProductId": "mosaic_lifetime",
+        "mappingId": "mapping_lifetime_revenuecat",
+        "productType": "one_time_non_consumable",
+        "entitlementKeys": [
+          "pro"
+        ],
+        "providerProductReference": "com.example.lifetime",
+        "adapterMapping": {
+          "kind": "directProduct"
+        }
+      }
+    ],
+    "entitlementMappings": [
+      {
+        "mosaicEntitlementKey": "pro",
+        "providerEntitlementIdentifier": "pro"
+      }
+    ],
+    "freshness": {
+      "source": "providerSynchronization",
+      "status": "fresh",
+      "providerObservedAt": "2026-07-23T12:00:00Z",
+      "synchronizedAt": "2026-07-23T12:01:00Z",
+      "staleAt": "2026-07-24T12:01:00Z",
+      "expiresAt": "2026-07-30T12:01:00Z"
+    },
+    "diagnostics": []
+  }
+}

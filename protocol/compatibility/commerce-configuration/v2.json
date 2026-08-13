@@ -4,7 +4,9 @@
   "schema": "../../schema/commerce-configuration/v2/configuration.schema.json",
   "canonicalFixtures": [
     "../../fixtures/commerce-configuration/v2/storekit-configuration.json",
-    "../../fixtures/commerce-configuration/v2/google-play-configuration.json"
+    "../../fixtures/commerce-configuration/v2/google-play-configuration.json",
+    "../../fixtures/commerce-configuration/v2/revenuecat-configuration.json",
+    "../../fixtures/commerce-configuration/v2/sdk-local-configuration.json"
   ],
   "activationSources": [
     "providerConnection",
