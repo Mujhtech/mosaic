@@ -585,13 +585,6 @@ func (r reader) Release(id string) (hostedpublishing.Release, bool) {
 	return one(r, `SELECT `+releaseColumns+` FROM configuration_releases WHERE id=$1`, scanRelease, id)
 }
 
-func (r reader) ReleaseRepresentation(releaseID, version string) (hostedpublishing.ReleaseRepresentation, bool) {
-	return one(r, `SELECT release_id,environment_id,delivery_contract_version,payload_bytes,content_hash,created_at FROM configuration_release_representations WHERE release_id=$1 AND delivery_contract_version=$2`, func(row pgx.Row) (hostedpublishing.ReleaseRepresentation, error) {
-		var value hostedpublishing.ReleaseRepresentation
-		return value, row.Scan(&value.ReleaseID, &value.EnvironmentID, &value.DeliveryContractVersion, &value.Payload, &value.ContentHash, &value.CreatedAt)
-	}, releaseID, version)
-}
-
 func (r reader) Releases(environmentID string) []hostedpublishing.Release {
 	return many(r, `SELECT `+releaseColumns+` FROM configuration_releases WHERE environment_id=$1 ORDER BY release_number DESC`, scanRelease, environmentID)
 }
@@ -752,9 +745,6 @@ func (t *transaction) SaveRelease(value hostedpublishing.Release) {
 	t.exec(`INSERT INTO configuration_releases(id,project_id,environment_id,release_number,delivery_contract_version,payload,payload_bytes,content_hash,source_release_id,rollback_source_release_id,published_by_actor_id,published_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, value.ID, value.ProjectID, value.EnvironmentID, value.ReleaseNumber, value.DeliveryContractVersion, value.Payload, []byte(value.Payload), value.ContentHash, nullable(value.SourceReleaseID), nullable(value.RollbackSourceReleaseID), value.PublishedByActorID, value.PublishedAt)
 }
 
-func (t *transaction) SaveReleaseRepresentation(value hostedpublishing.ReleaseRepresentation) {
-	t.exec(`INSERT INTO configuration_release_representations(release_id,environment_id,delivery_contract_version,payload,payload_bytes,content_hash,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)`, value.ReleaseID, value.EnvironmentID, value.DeliveryContractVersion, string(value.Payload), []byte(value.Payload), value.ContentHash, value.CreatedAt)
-}
 func (t *transaction) SaveReleaseRuleSetVersion(releaseID, environmentID, projectID, versionID, placementID string) {
 	t.exec(`INSERT INTO configuration_release_rule_set_versions(release_id,environment_id,project_id,rule_set_version_id,placement_id) VALUES($1,$2,$3,$4,$5)`, releaseID, environmentID, projectID, versionID, placementID)
 }

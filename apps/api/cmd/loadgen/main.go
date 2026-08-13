@@ -222,7 +222,7 @@ func issue(ctx context.Context, client *http.Client, opts options, etag string, 
 	}
 }
 
-// paywallCapabilities is the full Paywall 0.3 capability vocabulary a current
+// paywallCapabilities is the full Paywall 0.4 capability vocabulary a current
 // SDK advertises. Capability negotiation is a closed contract: a request that
 // advertises nothing is answered 406 for every delivery version, so without
 // these headers the delivery scenarios measured the refusal path and never
@@ -238,10 +238,11 @@ var paywallCapabilities = []string{
 	"asset.bundledImage", "asset.remoteImage", "asset.bundledVideo", "asset.remoteVideo",
 	"action.purchase", "action.restore", "action.close", "action.navigateTo", "action.navigateBack",
 	"action.openExternalUrl",
-	"accessibility.metadata", "fallback.asset", "fallback.product", "outcome.normalized",
+	"accessibility.metadata", "accessibility.reservedStrings", "fallback.asset", "fallback.product", "outcome.normalized",
 	"style.colors", "style.designTokens", "style.gradientBackground", "style.mediaBackground", "style.shadow",
-	"style.box", "style.clipping", "style.typography", "style.productCardStates",
+	"style.box", "style.clipping", "style.typography",
 	"visibility.static", "condition.switchVisibility", "condition.tabVisibility",
+	"motion.appear", "motion.selection", "motion.loop",
 }
 
 var experimentFeatures = []string{
@@ -250,18 +251,18 @@ var experimentFeatures = []string{
 	"group.mutual_exclusion", "override.qa", "schedule.trusted_server_time",
 }
 
-// setCapabilityHeaders makes the request look like a current SDK that supports
-// every delivery contract, so negotiation selects the highest representation
-// the Environment actually serves.
+// setCapabilityHeaders makes the request look like a current SDK. There is
+// exactly one delivery contract version and one Paywall Protocol version
+// (ADR-0028), so the headers advertise exactly those.
 func setCapabilityHeaders(request *http.Request, opts options) {
 	request.Header.Set("Authorization", "Bearer "+opts.key)
 	request.Header.Set("Mosaic-SDK-Platform", opts.platform)
 	request.Header.Set("Mosaic-SDK-Version", opts.sdkVersion)
-	request.Header.Set("Mosaic-Configuration-Versions", "3,2,1")
-	request.Header.Set("Mosaic-Paywall-Protocol-Versions", "0.3")
+	request.Header.Set("Mosaic-Configuration-Versions", "3")
+	request.Header.Set("Mosaic-Paywall-Protocol-Versions", "0.4")
 	capabilities := make([]string, 0, len(paywallCapabilities))
 	for _, name := range paywallCapabilities {
-		capabilities = append(capabilities, name+"@0.3")
+		capabilities = append(capabilities, name+"@0.4")
 	}
 	request.Header.Set("Mosaic-Paywall-Capabilities", strings.Join(capabilities, ","))
 	request.Header.Set("Mosaic-Placement-Decision-Versions", "1")
@@ -347,7 +348,7 @@ func syntheticBatch(opts options, worker int) ([]byte, error) {
 		}
 		events = append(events, map[string]any{
 			"eventId":            "loadgen_" + id,
-			"eventSchemaVersion": "1",
+			"eventSchemaVersion": "2",
 			"eventName":          "placement_requested",
 			"occurredAt":         timestamp,
 			"queuedAt":           timestamp,
@@ -368,7 +369,7 @@ func syntheticBatch(opts options, worker int) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(map[string]any{
-		"analyticsEventContractVersion": "1",
+		"analyticsEventContractVersion": "2",
 		"batchId":                       "loadgen_batch_" + batchID,
 		"sentAt":                        timestamp,
 		"events":                        events,

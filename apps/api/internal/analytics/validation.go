@@ -91,13 +91,10 @@ func ValidateEvent(event Event, sentAt, now time.Time) (Candidate, string) {
 	if event.Identity.Generation < 0 {
 		return Candidate{}, "event_schema_invalid"
 	}
-	if event.EventSchemaVersion != EventSchemaVersion && event.EventSchemaVersion != EventSchemaVersionV2 {
+	if event.EventSchemaVersion != EventSchemaVersion {
 		return Candidate{}, "unsupported_event_schema"
 	}
 	if _, ok := eventNames[event.EventName]; !ok {
-		return Candidate{}, "unsupported_event_name"
-	}
-	if strings.HasPrefix(event.EventName, "experiment_") && event.EventSchemaVersion != EventSchemaVersionV2 {
 		return Candidate{}, "unsupported_event_name"
 	}
 	attribution := event.Attribution
@@ -110,9 +107,6 @@ func ValidateEvent(event Event, sentAt, now time.Time) (Candidate, string) {
 	}
 	if present != 0 && present != len(experimentFields) {
 		return Candidate{}, "experiment_attribution_incomplete"
-	}
-	if present != 0 && event.EventSchemaVersion != EventSchemaVersionV2 {
-		return Candidate{}, "unsupported_event_schema"
 	}
 	if strings.HasPrefix(event.EventName, "experiment_") && present != len(experimentFields) {
 		return Candidate{}, "experiment_attribution_incomplete"

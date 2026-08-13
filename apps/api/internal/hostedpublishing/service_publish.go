@@ -25,38 +25,59 @@ type PublishCommand struct {
 	IdempotencyKey          string `json:"-"`
 }
 
+// deliveryEnvelope is the Configuration Delivery v3 wire envelope — the one
+// Delivery contract (ADR-0028). Its release member carries Placement Decision
+// v1 Rule Sets, Paywall Protocol 0.4 documents, exact Product and Entitlement
+// references, and Experiment Assignment v1 definitions.
 type deliveryEnvelope struct {
 	ConfigurationDeliveryVersion string          `json:"configurationDeliveryVersion"`
 	Release                      deliveryRelease `json:"release"`
 }
 
 type deliveryRelease struct {
-	ID                string                `json:"id"`
-	Number            int64                 `json:"number"`
-	Environment       deliveryEnvironment   `json:"environment"`
-	PublishedAt       string                `json:"publishedAt"`
-	ContentDigest     string                `json:"contentDigest"`
-	Compatibility     deliveryCompatibility `json:"compatibility"`
-	Placements        []deliveryPlacement   `json:"placements"`
-	PaywallVersions   []deliveryVersion     `json:"paywallVersions"`
-	ProductReferences []deliveryProduct     `json:"productReferences"`
-	AssetReferences   []deliveryAsset       `json:"assetReferences"`
+	ID                    string                 `json:"id"`
+	Number                int64                  `json:"number"`
+	ProjectID             string                 `json:"projectId"`
+	Environment           deliveryEnvironment    `json:"environment"`
+	PublishedAt           string                 `json:"publishedAt"`
+	ContentDigest         string                 `json:"contentDigest"`
+	Compatibility         deliveryCompatibility  `json:"compatibility"`
+	PlacementDecisions    []json.RawMessage      `json:"placementDecisions"`
+	PaywallVersions       []deliveryVersion      `json:"paywallVersions"`
+	ProductReferences     []deliveryProduct      `json:"productReferences"`
+	EntitlementReferences []EntitlementReference `json:"entitlementReferences"`
+	AssetReferences       []deliveryAsset        `json:"assetReferences"`
+	ExperimentAssignments []json.RawMessage      `json:"experimentAssignments"`
 }
 
 type deliveryEnvironment struct {
-	ID  string `json:"id"`
-	Key string `json:"key"`
-}
-
-type deliveryV2Environment struct {
 	ID   string `json:"id"`
 	Key  string `json:"key"`
 	Mode string `json:"mode"`
 }
 
 type deliveryCompatibility struct {
-	PaywallProtocols []deliveryProtocolCompatibility `json:"paywallProtocols"`
-	Acceptance       string                          `json:"acceptance"`
+	PlacementDecisionContracts    []deliveryDecisionCompatibility   `json:"placementDecisionContracts"`
+	PaywallProtocols              []deliveryProtocolCompatibility   `json:"paywallProtocols"`
+	Acceptance                    string                            `json:"acceptance"`
+	ExperimentAssignmentContracts []deliveryExperimentCompatibility `json:"experimentAssignmentContracts"`
+}
+
+type deliveryDecisionCompatibility struct {
+	Version             string   `json:"version"`
+	RequiredFeatures    []string `json:"requiredFeatures"`
+	BucketingAlgorithms []string `json:"bucketingAlgorithms"`
+}
+
+// deliveryExperimentCompatibility declares the exact union of Experiment
+// Assignment requirements a Release carries. A Release published without
+// Experiments still declares the contract entry (the schema pins exactly one)
+// with empty unions.
+type deliveryExperimentCompatibility struct {
+	Version             string   `json:"version"`
+	RequiredFeatures    []string `json:"requiredFeatures"`
+	BucketingAlgorithms []string `json:"bucketingAlgorithms"`
+	SchedulePolicies    []string `json:"schedulePolicies"`
 }
 
 type deliveryProtocolCompatibility struct {
@@ -67,11 +88,6 @@ type deliveryProtocolCompatibility struct {
 type deliveryRequiredCapability struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
-}
-
-type deliveryPlacement struct {
-	Key              string `json:"key"`
-	PaywallVersionID string `json:"paywallVersionId"`
 }
 
 type deliveryVersion struct {
@@ -93,6 +109,7 @@ type deliveryProduct struct {
 	ID                  string `json:"id"`
 	Type                string `json:"type"`
 	FallbackDisplayName string `json:"fallbackDisplayName"`
+	Readiness           string `json:"readiness"`
 }
 
 type deliveryAsset struct {
@@ -310,9 +327,6 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 		for _, issue := range providerIssues {
 			warnings = append(warnings, providerPublicationWarning(issue))
 		}
-		if err := undeliverableReleaseProtocolError(versions); err != nil {
-			return err
-		}
 		state, ok := tx.ReleaseState(environment.ID)
 		if !ok || state.ProjectID != project.ID {
 			return ErrNotFound
@@ -320,7 +334,7 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 		releaseID := tx.NextID("release")
 		releaseNumber := state.LastReleaseNumber + 1
 		sortPlacements(resolved)
-		payload, contentHash, err := buildDeliveryPayload(releaseID, releaseNumber, environment, now, resolved, versions, products, assets)
+		payload, contentHash, err := buildDeliveryPayload(releaseID, releaseNumber, project.ID, environment, now, resolved, decisionVersions, versions, products, entitlements, assets)
 		if err != nil {
 			return err
 		}
@@ -329,26 +343,9 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 			DeliveryContractVersion: DeliveryVersion, Payload: payload, ContentHash: contentHash,
 			SourceReleaseID: state.CurrentReleaseID, PublishedByActorID: actor.ID, PublishedAt: now,
 		}
-		if len(decisionVersions) != 0 {
-			release.DeliveryContractVersion = "2"
-		}
 		tx.SaveRelease(release)
-		if projected, safe := projectDeliveryV1Placements(resolved, decisionVersions); safe {
-			v1Payload, v1Hash, err := buildDeliveryPayload(releaseID, releaseNumber, environment, now, projected, versions, products, assets)
-			if err != nil {
-				return err
-			}
-			tx.SaveReleaseRepresentation(ReleaseRepresentation{ReleaseID: release.ID, EnvironmentID: environment.ID, DeliveryContractVersion: "1", Payload: v1Payload, ContentHash: v1Hash, CreatedAt: now})
-		}
-		if len(decisionVersions) != 0 {
-			v2Payload, v2Hash, err := buildDeliveryV2Payload(payload, project.ID, environment.Mode, decisionVersions, products, entitlements)
-			if err != nil {
-				return err
-			}
-			tx.SaveReleaseRepresentation(ReleaseRepresentation{ReleaseID: release.ID, EnvironmentID: environment.ID, DeliveryContractVersion: "2", Payload: v2Payload, ContentHash: v2Hash, CreatedAt: now})
-			for _, decisionVersion := range decisionVersions {
-				tx.SaveReleaseRuleSetVersion(release.ID, environment.ID, project.ID, decisionVersion.ID, decisionVersion.PlacementID)
-			}
+		for _, decisionVersion := range decisionVersions {
+			tx.SaveReleaseRuleSetVersion(release.ID, environment.ID, project.ID, decisionVersion.ID, decisionVersion.PlacementID)
 		}
 		for index := range resolved {
 			resolved[index].ReleaseID = release.ID
@@ -651,28 +648,91 @@ func (s *Service) resolveDocumentAssets(reader Reader, projectID string, referen
 	return bindings, assets, nil
 }
 
-func buildDeliveryPayload(releaseID string, releaseNumber int64, environment Environment, publishedAt time.Time, placements []ReleasePlacement, versions map[string]PaywallVersion, products map[string]Product, assets map[string]Asset) (json.RawMessage, string, error) {
-	deliveryPlacements := make([]deliveryPlacement, 0, len(placements))
+// buildDeliveryPayload renders the Configuration Delivery v3 envelope — the
+// Release's single stored representation.
+//
+// v3 carries Placement material as Placement Decision v1 Rule Sets rather than
+// bare Placement-to-Paywall bindings, so a bound Placement without a published
+// Rule Set is carried as a synthesized unconditional Rule Set whose default
+// outcome is the bound Paywall Version. The synthesis is lossless — a binding
+// means "always this Paywall" and that is exactly what the unconditional Rule
+// Set evaluates to — and it is the forward direction: a Variant is never
+// turned into an unconditional binding.
+func buildDeliveryPayload(releaseID string, releaseNumber int64, projectID string, environment Environment, publishedAt time.Time, placements []ReleasePlacement, decisions []PublishedDecisionVersion, versions map[string]PaywallVersion, products map[string]Product, entitlements map[string]EntitlementReference, assets map[string]Asset) (json.RawMessage, string, error) {
+	type placementDecision struct {
+		placementKey string
+		placementID  string
+		document     json.RawMessage
+	}
+	decisionFeatures := map[string]struct{}{}
+	decisionAlgorithms := map[string]struct{}{}
+	collectCompatibility := func(document placementdecision.Document) {
+		compatibility := placementdecision.DeriveCompatibility(document)
+		for _, feature := range compatibility.RequiredFeatures {
+			decisionFeatures[feature] = struct{}{}
+		}
+		for _, algorithm := range compatibility.RequiredBucketingAlgorithms {
+			decisionAlgorithms[algorithm] = struct{}{}
+		}
+	}
+	decided := map[string]bool{}
+	placementDecisions := make([]placementDecision, 0, len(decisions)+len(placements))
+	for _, version := range decisions {
+		document, canonical, _, err := placementdecision.Canonicalize(version.Document)
+		if err != nil {
+			return nil, "", err
+		}
+		decided[document.PlacementID] = true
+		placementDecisions = append(placementDecisions, placementDecision{placementKey: document.PlacementKey, placementID: document.PlacementID, document: canonical})
+		collectCompatibility(document)
+	}
 	for _, placement := range placements {
-		deliveryPlacements = append(deliveryPlacements, deliveryPlacement{Key: placement.PlacementKey, PaywallVersionID: placement.PaywallVersionID})
+		if decided[placement.PlacementID] {
+			continue
+		}
+		document := placementdecision.Document{
+			RuleSetID: "binding:" + placement.PlacementID, Version: 1,
+			ProjectID: projectID, EnvironmentID: environment.ID, EnvironmentKey: environment.Key,
+			PlacementID: placement.PlacementID, PlacementKey: placement.PlacementKey,
+			Enabled: true, AssignmentPolicy: "installation",
+			AttributeDefinitions: []placementdecision.ContractAttributeDefinition{},
+			DefaultOutcome:       placementdecision.Outcome{Type: "paywall", PaywallVersionID: placement.PaywallVersionID},
+			Fallbacks:            []placementdecision.Fallback{},
+			Rules:                []placementdecision.Rule{},
+			QAOverrides:          []placementdecision.PublishedOverride{},
+		}
+		document.Compatibility = placementdecision.DeriveCompatibility(document)
+		placementDecisions = append(placementDecisions, placementDecision{placementKey: placement.PlacementKey, placementID: placement.PlacementID, document: placementdecision.MarshalDocument(document)})
+		collectCompatibility(document)
+	}
+	sort.Slice(placementDecisions, func(i, j int) bool {
+		if placementDecisions[i].placementKey == placementDecisions[j].placementKey {
+			return placementDecisions[i].placementID < placementDecisions[j].placementID
+		}
+		return placementDecisions[i].placementKey < placementDecisions[j].placementKey
+	})
+	decisionDocuments := make([]json.RawMessage, 0, len(placementDecisions))
+	for _, decision := range placementDecisions {
+		decisionDocuments = append(decisionDocuments, decision.document)
 	}
 	versionValues := make([]PaywallVersion, 0, len(versions))
 	for _, version := range versions {
 		versionValues = append(versionValues, version)
 	}
 	sort.Slice(versionValues, func(i, j int) bool { return versionValues[i].ID < versionValues[j].ID })
-	members := make([]releaseProtocolMember, 0, len(versionValues))
-	for _, version := range versionValues {
-		members = append(members, releaseProtocolMember{paywallID: version.PaywallID, protocolVersion: version.ProtocolVersion})
-	}
-	if err := mixedReleaseProtocolError(members); err != nil {
-		return nil, "", err
-	}
 	deliveryVersions := make([]deliveryVersion, 0, len(versionValues))
-	requiredCapabilities := make(map[string]map[string]deliveryRequiredCapability)
+	requiredCapabilities := map[string]deliveryRequiredCapability{}
 	for _, version := range versionValues {
-		if err := accumulateProtocolCapabilities(requiredCapabilities, version.ProtocolVersion, version.Document); err != nil {
+		capabilities, err := documentRequiredCapabilities(version.Document)
+		if err != nil {
 			return nil, "", err
+		}
+		for _, capability := range capabilities {
+			requiredCapabilities[capability.Name+"@"+capability.Version] = capability
+		}
+		protocolVersion := version.ProtocolVersion
+		if protocolVersion == "" {
+			protocolVersion = ProtocolVersion
 		}
 		assetBindings := make([]deliveryAssetBinding, 0, len(version.Assets))
 		for _, binding := range version.Assets {
@@ -680,7 +740,7 @@ func buildDeliveryPayload(releaseID string, releaseNumber int64, environment Env
 		}
 		sort.Slice(assetBindings, func(i, j int) bool { return assetBindings[i].DocumentAssetID < assetBindings[j].DocumentAssetID })
 		deliveryVersions = append(deliveryVersions, deliveryVersion{
-			ID: version.ID, PaywallID: version.PaywallID, ProtocolVersion: version.ProtocolVersion,
+			ID: version.ID, PaywallID: version.PaywallID, ProtocolVersion: protocolVersion,
 			DocumentDigest: canonicalRawDigest(version.Document), Document: version.Document,
 			ProductReferenceIDs: uniqueStrings(version.ProductIDs), AssetBindings: assetBindings,
 		})
@@ -692,8 +752,17 @@ func buildDeliveryPayload(releaseID string, releaseNumber int64, environment Env
 	sort.Slice(productValues, func(i, j int) bool { return productValues[i].ID < productValues[j].ID })
 	deliveryProducts := make([]deliveryProduct, 0, len(productValues))
 	for _, product := range productValues {
-		deliveryProducts = append(deliveryProducts, deliveryProduct{ID: product.ID, Type: product.Type, FallbackDisplayName: product.InternalName})
+		readiness := "not_ready"
+		if product.ReadinessReady {
+			readiness = "ready"
+		}
+		deliveryProducts = append(deliveryProducts, deliveryProduct{ID: product.ID, Type: product.Type, FallbackDisplayName: product.InternalName, Readiness: readiness})
 	}
+	entitlementValues := make([]EntitlementReference, 0, len(entitlements))
+	for _, value := range entitlements {
+		entitlementValues = append(entitlementValues, value)
+	}
+	sort.Slice(entitlementValues, func(i, j int) bool { return entitlementValues[i].Key < entitlementValues[j].Key })
 	assetValues := make([]Asset, 0, len(assets))
 	for _, asset := range assets {
 		assetValues = append(assetValues, asset)
@@ -703,17 +772,36 @@ func buildDeliveryPayload(releaseID string, releaseNumber int64, environment Env
 	for _, asset := range assetValues {
 		deliveryAssets = append(deliveryAssets, deliveryAsset{ID: asset.ID, Kind: asset.Kind, MediaType: asset.MediaType, ByteLength: asset.ByteLength, ContentDigest: asset.ContentDigest, URL: asset.URL})
 	}
-	paywallProtocols, err := protocolCompatibilityEntries(requiredCapabilities)
-	if err != nil {
-		return nil, "", err
+	capabilityValues := make([]deliveryRequiredCapability, 0, len(requiredCapabilities))
+	for _, capability := range requiredCapabilities {
+		capabilityValues = append(capabilityValues, capability)
 	}
+	sort.Slice(capabilityValues, func(i, j int) bool {
+		if capabilityValues[i].Name == capabilityValues[j].Name {
+			return capabilityValues[i].Version < capabilityValues[j].Version
+		}
+		return capabilityValues[i].Name < capabilityValues[j].Name
+	})
 	envelope := deliveryEnvelope{ConfigurationDeliveryVersion: DeliveryVersion, Release: deliveryRelease{
-		ID: releaseID, Number: releaseNumber, Environment: deliveryEnvironment{ID: environment.ID, Key: environment.Key},
+		ID: releaseID, Number: releaseNumber, ProjectID: projectID,
+		Environment: deliveryEnvironment{ID: environment.ID, Key: environment.Key, Mode: environment.Mode},
 		PublishedAt: publishedAt.UTC().Format(time.RFC3339Nano), Compatibility: deliveryCompatibility{
-			PaywallProtocols: paywallProtocols,
+			PlacementDecisionContracts: []deliveryDecisionCompatibility{{
+				Version:             placementdecision.ContractVersion,
+				RequiredFeatures:    sortedSet(decisionFeatures),
+				BucketingAlgorithms: sortedSet(decisionAlgorithms),
+			}},
+			PaywallProtocols: []deliveryProtocolCompatibility{{Version: ProtocolVersion, RequiredCapabilities: capabilityValues}},
 			Acceptance:       "atomic",
+			// A publish carries no Experiment material; Experiment publication
+			// re-emits the Release with its Assignments and their exact unions.
+			ExperimentAssignmentContracts: []deliveryExperimentCompatibility{{
+				Version: "1", RequiredFeatures: []string{}, BucketingAlgorithms: []string{}, SchedulePolicies: []string{},
+			}},
 		},
-		Placements: deliveryPlacements, PaywallVersions: deliveryVersions, ProductReferences: deliveryProducts, AssetReferences: deliveryAssets,
+		PlacementDecisions: decisionDocuments, PaywallVersions: deliveryVersions,
+		ProductReferences: deliveryProducts, EntitlementReferences: entitlementValues,
+		AssetReferences: deliveryAssets, ExperimentAssignments: []json.RawMessage{},
 	}}
 	material, err := json.Marshal(envelope.Release)
 	if err != nil {
@@ -734,6 +822,15 @@ func buildDeliveryPayload(releaseID string, releaseNumber int64, environment Env
 		return nil, "", err
 	}
 	return payload, digestString(string(payload)), nil
+}
+
+func sortedSet(values map[string]struct{}) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func decisionReferences(document placementdecision.Document) (paywallVersionIDs, productIDs, entitlementKeys []string) {
@@ -772,328 +869,6 @@ func decisionReferences(document placementdecision.Document) (paywallVersionIDs,
 		visitCondition(rule.Condition)
 	}
 	return uniqueStrings(paywallVersionIDs), uniqueStrings(productIDs), uniqueStrings(entitlementKeys)
-}
-
-func safeV1Projection(decisions []PublishedDecisionVersion) bool {
-	_, safe := projectDeliveryV1Placements(nil, decisions)
-	return safe
-}
-
-func projectDeliveryV1Placements(legacy []ReleasePlacement, decisions []PublishedDecisionVersion) ([]ReleasePlacement, bool) {
-	projected := make(map[string]ReleasePlacement, len(legacy)+len(decisions))
-	for _, placement := range legacy {
-		projected[placement.PlacementID] = placement
-	}
-	for _, version := range decisions {
-		document, _, _, err := placementdecision.Canonicalize(version.Document)
-		if err != nil || document.DefaultOutcome.Type != "paywall" {
-			return nil, false
-		}
-		projected[document.PlacementID] = ReleasePlacement{ProjectID: document.ProjectID, EnvironmentID: document.EnvironmentID, PlacementID: document.PlacementID, PlacementKey: document.PlacementKey, PaywallVersionID: document.DefaultOutcome.PaywallVersionID}
-	}
-	result := make([]ReleasePlacement, 0, len(projected))
-	for _, placement := range projected {
-		result = append(result, placement)
-	}
-	sortPlacements(result)
-	return result, true
-}
-
-type deliveryV2Envelope struct {
-	ConfigurationDeliveryVersion string            `json:"configurationDeliveryVersion"`
-	Release                      deliveryV2Release `json:"release"`
-}
-type deliveryV2Release struct {
-	ID                    string                  `json:"id"`
-	Number                int64                   `json:"number"`
-	ProjectID             string                  `json:"projectId"`
-	Environment           deliveryV2Environment   `json:"environment"`
-	PublishedAt           string                  `json:"publishedAt"`
-	ContentDigest         string                  `json:"contentDigest"`
-	Compatibility         deliveryV2Compatibility `json:"compatibility"`
-	PlacementDecisions    []json.RawMessage       `json:"placementDecisions"`
-	PaywallVersions       []deliveryVersion       `json:"paywallVersions"`
-	ProductReferences     []deliveryV2Product     `json:"productReferences"`
-	EntitlementReferences []EntitlementReference  `json:"entitlementReferences"`
-	AssetReferences       []deliveryAsset         `json:"assetReferences"`
-}
-type deliveryV2Compatibility struct {
-	PlacementDecisionContracts []deliveryDecisionCompatibility `json:"placementDecisionContracts"`
-	PaywallProtocols           []deliveryProtocolCompatibility `json:"paywallProtocols"`
-	Acceptance                 string                          `json:"acceptance"`
-}
-type deliveryDecisionCompatibility struct {
-	Version             string   `json:"version"`
-	RequiredFeatures    []string `json:"requiredFeatures"`
-	BucketingAlgorithms []string `json:"bucketingAlgorithms"`
-}
-type deliveryV2Product struct {
-	ID                  string `json:"id"`
-	Type                string `json:"type"`
-	FallbackDisplayName string `json:"fallbackDisplayName"`
-	Readiness           string `json:"readiness"`
-}
-
-func buildDeliveryV2Payload(v1Payload json.RawMessage, projectID, environmentMode string, decisions []PublishedDecisionVersion, products map[string]Product, entitlements map[string]EntitlementReference) (json.RawMessage, string, error) {
-	var v1 deliveryEnvelope
-	if err := json.Unmarshal(v1Payload, &v1); err != nil {
-		return nil, "", err
-	}
-	decisionDocuments := make([]json.RawMessage, 0, len(decisions))
-	featureSet := map[string]struct{}{}
-	algorithmSet := map[string]struct{}{}
-	requiredPaywalls := map[string]struct{}{}
-	requiredProducts := map[string]struct{}{}
-	for _, version := range decisions {
-		document, canonical, _, err := placementdecision.Canonicalize(version.Document)
-		if err != nil {
-			return nil, "", err
-		}
-		decisionDocuments = append(decisionDocuments, canonical)
-		paywalls, conditionProducts, _ := decisionReferences(document)
-		for _, id := range paywalls {
-			requiredPaywalls[id] = struct{}{}
-		}
-		for _, id := range conditionProducts {
-			requiredProducts[id] = struct{}{}
-		}
-		compatibility := placementdecision.DeriveCompatibility(document)
-		for _, feature := range compatibility.RequiredFeatures {
-			featureSet[feature] = struct{}{}
-		}
-		for _, algorithm := range compatibility.RequiredBucketingAlgorithms {
-			algorithmSet[algorithm] = struct{}{}
-		}
-	}
-	features := make([]string, 0, len(featureSet))
-	for value := range featureSet {
-		features = append(features, value)
-	}
-	sort.Strings(features)
-	algorithms := make([]string, 0, len(algorithmSet))
-	for value := range algorithmSet {
-		algorithms = append(algorithms, value)
-	}
-	sort.Strings(algorithms)
-	deliveryPaywalls := make([]deliveryVersion, 0, len(requiredPaywalls))
-	requiredAssets := map[string]struct{}{}
-	requiredCapabilities := map[string]map[string]deliveryRequiredCapability{}
-	members := make([]releaseProtocolMember, 0, len(requiredPaywalls))
-	for _, version := range v1.Release.PaywallVersions {
-		if _, ok := requiredPaywalls[version.ID]; !ok {
-			continue
-		}
-		members = append(members, releaseProtocolMember{paywallID: version.PaywallID, protocolVersion: version.ProtocolVersion})
-		deliveryPaywalls = append(deliveryPaywalls, version)
-		for _, id := range version.ProductReferenceIDs {
-			requiredProducts[id] = struct{}{}
-		}
-		for _, binding := range version.AssetBindings {
-			requiredAssets[binding.AssetReferenceID] = struct{}{}
-		}
-		if err := accumulateProtocolCapabilities(requiredCapabilities, version.ProtocolVersion, version.Document); err != nil {
-			return nil, "", err
-		}
-	}
-	productValues := make([]Product, 0, len(requiredProducts))
-	for _, product := range products {
-		if _, ok := requiredProducts[product.ID]; ok {
-			productValues = append(productValues, product)
-		}
-	}
-	sort.Slice(productValues, func(i, j int) bool { return productValues[i].ID < productValues[j].ID })
-	deliveryProducts := make([]deliveryV2Product, 0, len(productValues))
-	for _, product := range productValues {
-		readiness := "not_ready"
-		if product.ReadinessReady {
-			readiness = "ready"
-		}
-		deliveryProducts = append(deliveryProducts, deliveryV2Product{ID: product.ID, Type: product.Type, FallbackDisplayName: product.InternalName, Readiness: readiness})
-	}
-	entitlementValues := make([]EntitlementReference, 0, len(entitlements))
-	for _, value := range entitlements {
-		entitlementValues = append(entitlementValues, value)
-	}
-	sort.Slice(entitlementValues, func(i, j int) bool { return entitlementValues[i].Key < entitlementValues[j].Key })
-	deliveryAssets := make([]deliveryAsset, 0, len(requiredAssets))
-	for _, asset := range v1.Release.AssetReferences {
-		if _, ok := requiredAssets[asset.ID]; ok {
-			deliveryAssets = append(deliveryAssets, asset)
-		}
-	}
-	if err := mixedReleaseProtocolError(members); err != nil {
-		return nil, "", err
-	}
-	paywallProtocols, err := protocolCompatibilityEntries(requiredCapabilities)
-	if err != nil {
-		return nil, "", err
-	}
-	envelope := deliveryV2Envelope{ConfigurationDeliveryVersion: "2", Release: deliveryV2Release{ID: v1.Release.ID, Number: v1.Release.Number, ProjectID: projectID, Environment: deliveryV2Environment{ID: v1.Release.Environment.ID, Key: v1.Release.Environment.Key, Mode: environmentMode}, PublishedAt: v1.Release.PublishedAt, Compatibility: deliveryV2Compatibility{PlacementDecisionContracts: []deliveryDecisionCompatibility{{Version: "1", RequiredFeatures: features, BucketingAlgorithms: algorithms}}, PaywallProtocols: paywallProtocols, Acceptance: "atomic"}, PlacementDecisions: decisionDocuments, PaywallVersions: deliveryPaywalls, ProductReferences: deliveryProducts, EntitlementReferences: entitlementValues, AssetReferences: deliveryAssets}}
-	material, err := json.Marshal(envelope.Release)
-	if err != nil {
-		return nil, "", err
-	}
-	var canonicalMaterial map[string]any
-	if err := json.Unmarshal(material, &canonicalMaterial); err != nil {
-		return nil, "", err
-	}
-	delete(canonicalMaterial, "contentDigest")
-	canonicalBytes, err := canonicalJSON(canonicalMaterial)
-	if err != nil {
-		return nil, "", err
-	}
-	envelope.Release.ContentDigest = "sha256:" + digestString(string(canonicalBytes))
-	payload, err := json.Marshal(envelope)
-	if err != nil {
-		return nil, "", err
-	}
-	return payload, digestString(string(payload)), nil
-}
-
-// accumulateProtocolCapabilities collects a Paywall Version's declared required
-// capabilities under the protocol version the Version itself carries. A Version
-// persisted before the field was authoritative counts as the 0.3 baseline.
-func accumulateProtocolCapabilities(byVersion map[string]map[string]deliveryRequiredCapability, protocolVersion string, document json.RawMessage) error {
-	capabilities, err := documentRequiredCapabilities(document)
-	if err != nil {
-		return err
-	}
-	if protocolVersion == "" {
-		protocolVersion = ProtocolVersion
-	}
-	bucket := byVersion[protocolVersion]
-	if bucket == nil {
-		bucket = map[string]deliveryRequiredCapability{}
-		byVersion[protocolVersion] = bucket
-	}
-	for _, capability := range capabilities {
-		bucket[capability.Name+"@"+capability.Version] = capability
-	}
-	return nil
-}
-
-// releaseProtocolMember is one Paywall's protocol-version claim on a Release,
-// used to refuse a mixed-version Release before a payload is built.
-type releaseProtocolMember struct {
-	paywallID       string
-	protocolVersion string
-}
-
-// mixedReleaseProtocolError refuses a Release whose Paywalls span more than one
-// Paywall Protocol version. The frozen Configuration Delivery contracts (v1,
-// v2, and v3) pin compatibility.paywallProtocols to exactly one entry and every
-// shipped SDK decoder enforces exactly-one, so a mixed Release would ship a
-// schema-invalid payload that hard-fails every decode. Refusal follows the
-// v1-projection precedent: when the frozen contract cannot express a state,
-// publishing refuses rather than manufacturing a shape no reader was built for.
-// A Version persisted before the protocol-version field was authoritative
-// counts as the 0.3 baseline, matching accumulateProtocolCapabilities.
-func mixedReleaseProtocolError(members []releaseProtocolMember) error {
-	paywallsByVersion := map[string]map[string]bool{}
-	for _, member := range members {
-		version := member.protocolVersion
-		if version == "" {
-			version = ProtocolVersion
-		}
-		if paywallsByVersion[version] == nil {
-			paywallsByVersion[version] = map[string]bool{}
-		}
-		paywallsByVersion[version][member.paywallID] = true
-	}
-	if len(paywallsByVersion) <= 1 {
-		return nil
-	}
-	detail := make(map[string][]string, len(paywallsByVersion))
-	for version, paywalls := range paywallsByVersion {
-		ids := make([]string, 0, len(paywalls))
-		for id := range paywalls {
-			ids = append(ids, id)
-		}
-		sort.Strings(ids)
-		detail[version] = ids
-	}
-	return &ReleaseProtocolMixError{PaywallIDsByProtocolVersion: detail}
-}
-
-// deliverableReleaseProtocolVersions lists the Paywall Protocol versions a
-// frozen Configuration Delivery contract can express. 0.4 is deliberately
-// absent: Delivery v1, v2, and v3 all pin Protocol 0.3 structurally
-// (paywallVersion.protocolVersion and protocolCompatibility.version are
-// const "0.3", and paywallVersion.document $refs the 0.3 paywall schema), so a
-// 0.4 Release has no hosted delivery representation until the new Delivery
-// version deferred in docs/protocol/v0.4.md ("Configuration Delivery cannot
-// yet carry 0.4") ships. Add a version here only alongside that contract work.
-var deliverableReleaseProtocolVersions = map[string]bool{ProtocolVersion: true}
-
-// undeliverableReleaseProtocolError refuses publication when any Paywall
-// Version in the Release declares a protocol version outside
-// deliverableReleaseProtocolVersions. This is the publish-time policy gate for
-// the delivery deferral above: emitting the payload anyway would manufacture a
-// release every frozen Delivery schema rejects and every SDK decode hard-fails,
-// so publishing refuses with the Paywalls named instead. It runs before the
-// payload builders, so a Release that is both mixed and undeliverable reports
-// the undeliverable Paywalls -- the ones the operator cannot ship at all today.
-// An empty protocol version counts as the 0.3 baseline, matching
-// accumulateProtocolCapabilities.
-func undeliverableReleaseProtocolError(versions map[string]PaywallVersion) error {
-	paywallsByVersion := map[string]map[string]bool{}
-	for _, version := range versions {
-		protocolVersion := version.ProtocolVersion
-		if protocolVersion == "" {
-			protocolVersion = ProtocolVersion
-		}
-		if deliverableReleaseProtocolVersions[protocolVersion] {
-			continue
-		}
-		if paywallsByVersion[protocolVersion] == nil {
-			paywallsByVersion[protocolVersion] = map[string]bool{}
-		}
-		paywallsByVersion[protocolVersion][version.PaywallID] = true
-	}
-	if len(paywallsByVersion) == 0 {
-		return nil
-	}
-	detail := make(map[string][]string, len(paywallsByVersion))
-	for protocolVersion, paywalls := range paywallsByVersion {
-		ids := make([]string, 0, len(paywalls))
-		for id := range paywalls {
-			ids = append(ids, id)
-		}
-		sort.Strings(ids)
-		detail[protocolVersion] = ids
-	}
-	return &ReleaseProtocolUndeliverableError{PaywallIDsByProtocolVersion: detail}
-}
-
-// protocolCompatibilityEntries renders the Release's single compatibility
-// entry. The frozen Delivery contracts pin paywallProtocols to exactly one
-// entry, so publishing refuses a mixed Release (mixedReleaseProtocolError) with
-// the operator-facing detail before this point; the error returned here is the
-// invariant's last line of defence, not an operator surface. A Release with no
-// Paywall Versions keeps the frozen v1 shape: a single baseline entry with no
-// required capabilities.
-func protocolCompatibilityEntries(byVersion map[string]map[string]deliveryRequiredCapability) ([]deliveryProtocolCompatibility, error) {
-	if len(byVersion) == 0 {
-		return []deliveryProtocolCompatibility{{Version: ProtocolVersion, RequiredCapabilities: []deliveryRequiredCapability{}}}, nil
-	}
-	if len(byVersion) > 1 {
-		return nil, ErrReleaseProtocolMixed
-	}
-	entries := make([]deliveryProtocolCompatibility, 0, 1)
-	for version, capabilities := range byVersion {
-		capabilityValues := make([]deliveryRequiredCapability, 0, len(capabilities))
-		for _, capability := range capabilities {
-			capabilityValues = append(capabilityValues, capability)
-		}
-		sort.Slice(capabilityValues, func(i, j int) bool {
-			if capabilityValues[i].Name == capabilityValues[j].Name {
-				return capabilityValues[i].Version < capabilityValues[j].Version
-			}
-			return capabilityValues[i].Name < capabilityValues[j].Name
-		})
-		entries = append(entries, deliveryProtocolCompatibility{Version: version, RequiredCapabilities: capabilityValues})
-	}
-	return entries, nil
 }
 
 func documentRequiredCapabilities(document json.RawMessage) ([]deliveryRequiredCapability, error) {
@@ -1199,35 +974,8 @@ func (s *Service) Rollback(ctx context.Context, actor Actor, projectID, environm
 		}
 		result = Release{ID: releaseID, ProjectID: project.ID, EnvironmentID: environment.ID, ReleaseNumber: releaseNumber, DeliveryContractVersion: target.DeliveryContractVersion, Payload: payload, ContentHash: contentHash, SourceReleaseID: state.CurrentReleaseID, RollbackSourceReleaseID: target.ID, PublishedByActorID: actor.ID, PublishedAt: now}
 		tx.SaveRelease(result)
-		safeTargetV1 := target.DeliveryContractVersion == "1"
-		v1SourcePayload := target.Payload
-		if target.DeliveryContractVersion == "2" {
-			var targetV1 ReleaseRepresentation
-			targetV1, safeTargetV1 = tx.ReleaseRepresentation(target.ID, "1")
-			if safeTargetV1 {
-				v1SourcePayload = targetV1.Payload
-			}
-		}
-		if safeTargetV1 {
-			v1Payload, v1Hash, err := cloneDeliveryPayload(v1SourcePayload, result.ID, releaseNumber, now)
-			if err != nil {
-				return err
-			}
-			tx.SaveReleaseRepresentation(ReleaseRepresentation{ReleaseID: result.ID, EnvironmentID: environment.ID, DeliveryContractVersion: "1", Payload: v1Payload, ContentHash: v1Hash, CreatedAt: now})
-		}
-		if target.DeliveryContractVersion == "2" {
-			targetV2, ok := tx.ReleaseRepresentation(target.ID, "2")
-			if !ok {
-				return ErrUnsupportedCapability
-			}
-			v2Payload, v2Hash, err := cloneDeliveryV2Payload(targetV2.Payload, result.ID, releaseNumber, now)
-			if err != nil {
-				return err
-			}
-			tx.SaveReleaseRepresentation(ReleaseRepresentation{ReleaseID: result.ID, EnvironmentID: environment.ID, DeliveryContractVersion: "2", Payload: v2Payload, ContentHash: v2Hash, CreatedAt: now})
-			for _, decisionVersion := range tx.ReleaseDecisionVersions(target.ID) {
-				tx.SaveReleaseRuleSetVersion(result.ID, environment.ID, project.ID, decisionVersion.ID, decisionVersion.PlacementID)
-			}
+		for _, decisionVersion := range tx.ReleaseDecisionVersions(target.ID) {
+			tx.SaveReleaseRuleSetVersion(result.ID, environment.ID, project.ID, decisionVersion.ID, decisionVersion.PlacementID)
 		}
 		for index := range placements {
 			placements[index].ReleaseID = result.ID
@@ -1277,33 +1025,6 @@ func cloneDeliveryPayload(target json.RawMessage, releaseID string, releaseNumbe
 	envelope.Release.Number = releaseNumber
 	envelope.Release.PublishedAt = publishedAt.UTC().Format(time.RFC3339Nano)
 	envelope.Release.ContentDigest = ""
-	material, err := json.Marshal(envelope.Release)
-	if err != nil {
-		return nil, "", err
-	}
-	var canonicalMaterial map[string]any
-	if err := json.Unmarshal(material, &canonicalMaterial); err != nil {
-		return nil, "", err
-	}
-	delete(canonicalMaterial, "contentDigest")
-	canonicalBytes, err := canonicalJSON(canonicalMaterial)
-	if err != nil {
-		return nil, "", err
-	}
-	envelope.Release.ContentDigest = "sha256:" + digestString(string(canonicalBytes))
-	payload, err := json.Marshal(envelope)
-	if err != nil {
-		return nil, "", err
-	}
-	return payload, digestString(string(payload)), nil
-}
-
-func cloneDeliveryV2Payload(target json.RawMessage, releaseID string, releaseNumber int64, publishedAt time.Time) (json.RawMessage, string, error) {
-	var envelope deliveryV2Envelope
-	if err := json.Unmarshal(target, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != "2" {
-		return nil, "", ErrUnsupportedCapability
-	}
-	envelope.Release.ID, envelope.Release.Number, envelope.Release.PublishedAt, envelope.Release.ContentDigest = releaseID, releaseNumber, publishedAt.UTC().Format(time.RFC3339Nano), ""
 	material, err := json.Marshal(envelope.Release)
 	if err != nil {
 		return nil, "", err

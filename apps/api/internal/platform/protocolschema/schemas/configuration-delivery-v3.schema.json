@@ -1,0 +1,483 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:configuration-delivery:v3:release",
+  "title": "Mosaic Configuration Delivery Contract v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "configurationDeliveryVersion",
+    "release"
+  ],
+  "properties": {
+    "configurationDeliveryVersion": {
+      "const": "3"
+    },
+    "release": {
+      "$ref": "#/$defs/release"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$"
+    },
+    "sha256Digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "immutableHttpsUrl": {
+      "type": "string",
+      "minLength": 9,
+      "maxLength": 2048,
+      "pattern": "^https://[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?(?:[/?#][^\\s\\\\\\u0000-\\u001F\\u007F]*)?$"
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "key",
+        "mode"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "mode": {
+          "enum": [
+            "development",
+            "staging",
+            "production"
+          ]
+        }
+      }
+    },
+    "decisionFeature": {
+      "enum": [
+        "condition.all",
+        "condition.any",
+        "condition.not",
+        "operator.contains_all",
+        "operator.contains_any",
+        "operator.does_not_exist",
+        "operator.equals",
+        "operator.exists",
+        "operator.greater_than",
+        "operator.greater_than_or_equal",
+        "operator.in",
+        "operator.less_than",
+        "operator.less_than_or_equal",
+        "operator.locale_matches",
+        "operator.not_equals",
+        "operator.not_in",
+        "outcome.fallback",
+        "outcome.no_paywall",
+        "outcome.paywall",
+        "outcome.unavailable",
+        "override.qa",
+        "source.application.locale",
+        "source.application.version",
+        "source.context.country",
+        "source.device.os_version",
+        "source.device.platform",
+        "source.entitlement_state",
+        "source.environment.id",
+        "source.environment.key",
+        "source.identity.user_present",
+        "source.product_availability",
+        "source.product_readiness",
+        "source.provider_capability",
+        "source.user_attribute"
+      ]
+    },
+    "assetBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "documentAssetId",
+        "assetReferenceId"
+      ],
+      "properties": {
+        "documentAssetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "assetReferenceId": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "paywallVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "paywallId",
+        "protocolVersion",
+        "documentDigest",
+        "document",
+        "productReferenceIds",
+        "assetBindings"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "paywallId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "protocolVersion": {
+          "const": "0.4"
+        },
+        "documentDigest": {
+          "$ref": "#/$defs/sha256Digest"
+        },
+        "document": {
+          "$ref": "urn:mosaic:protocol:schema:v0.4:paywall"
+        },
+        "productReferenceIds": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "assetBindings": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/assetBinding"
+          }
+        }
+      }
+    },
+    "assetReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "mediaType",
+        "byteLength",
+        "contentDigest",
+        "url"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "image",
+            "video"
+          ]
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 96,
+          "pattern": "^(image|video)/[a-z0-9][a-z0-9.+-]*$"
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 52428800
+        },
+        "contentDigest": {
+          "$ref": "#/$defs/sha256Digest"
+        },
+        "url": {
+          "$ref": "#/$defs/immutableHttpsUrl"
+        }
+      }
+    },
+    "productReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "fallbackDisplayName",
+        "readiness"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "type": {
+          "enum": [
+            "subscription",
+            "one_time_non_consumable"
+          ]
+        },
+        "fallbackDisplayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[^\\r\\n\\u0000-\\u001F\\u007F]*$"
+        },
+        "readiness": {
+          "enum": [
+            "ready",
+            "not_ready"
+          ]
+        }
+      }
+    },
+    "entitlementReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "key"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "key": {
+          "$ref": "#/$defs/key"
+        }
+      }
+    },
+    "decisionCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "requiredFeatures",
+        "bucketingAlgorithms"
+      ],
+      "properties": {
+        "version": {
+          "const": "1"
+        },
+        "requiredFeatures": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/decisionFeature"
+          }
+        },
+        "bucketingAlgorithms": {
+          "type": "array",
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "const": "sha256_length_prefixed_v1"
+          }
+        }
+      }
+    },
+    "paywallCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "requiredCapabilities"
+      ],
+      "properties": {
+        "version": {
+          "const": "0.4"
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:v0.4:paywall#/$defs/requiredCapability"
+          }
+        }
+      }
+    },
+    "experimentCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "requiredFeatures",
+        "bucketingAlgorithms",
+        "schedulePolicies"
+      ],
+      "properties": {
+        "version": {
+          "const": "1"
+        },
+        "requiredFeatures": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:experiment-assignment:v1:assignment#/$defs/assignmentFeature"
+          }
+        },
+        "bucketingAlgorithms": {
+          "type": "array",
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "experiment_sha256_length_prefixed_v1",
+              "experiment_group_sha256_length_prefixed_v1"
+            ]
+          }
+        },
+        "schedulePolicies": {
+          "type": "array",
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "const": "trusted_server_time_v1"
+          }
+        }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "placementDecisionContracts",
+        "paywallProtocols",
+        "acceptance",
+        "experimentAssignmentContracts"
+      ],
+      "properties": {
+        "placementDecisionContracts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "$ref": "#/$defs/decisionCompatibility"
+          }
+        },
+        "paywallProtocols": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "$ref": "#/$defs/paywallCompatibility"
+          }
+        },
+        "acceptance": {
+          "const": "atomic"
+        },
+        "experimentAssignmentContracts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "$ref": "#/$defs/experimentCompatibility"
+          }
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "number",
+        "projectId",
+        "environment",
+        "publishedAt",
+        "contentDigest",
+        "compatibility",
+        "placementDecisions",
+        "paywallVersions",
+        "productReferences",
+        "entitlementReferences",
+        "assetReferences",
+        "experimentAssignments"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "projectId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "environment": {
+          "$ref": "#/$defs/environment"
+        },
+        "publishedAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "contentDigest": {
+          "$ref": "#/$defs/sha256Digest"
+        },
+        "compatibility": {
+          "$ref": "#/$defs/compatibility"
+        },
+        "placementDecisions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:placement-decision:v1:decision"
+          }
+        },
+        "paywallVersions": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/paywallVersion"
+          }
+        },
+        "productReferences": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/$defs/productReference"
+          }
+        },
+        "entitlementReferences": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/$defs/entitlementReference"
+          }
+        },
+        "assetReferences": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/$defs/assetReference"
+          }
+        },
+        "experimentAssignments": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:experiment-assignment:v1:assignment#/$defs/assignment"
+          }
+        }
+      }
+    }
+  },
+  "description": "A complete immutable Environment release containing accepted Mosaic Paywall Protocol 0.4 documents, Placement Decision v1 Rule Sets, and Experiment Assignment v1 definitions."
+}

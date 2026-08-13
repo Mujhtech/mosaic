@@ -67,7 +67,7 @@ func (s *Service) Ingest(ctx context.Context, rawKey string, batch Batch) (Inges
 	ctx, span := otel.Tracer("mosaic/analytics").Start(ctx, "events.ingest")
 	defer span.End()
 	now := s.now().UTC()
-	if batch.ContractVersion != ContractVersion && batch.ContractVersion != ContractVersionV2 || !validID(batch.BatchID) || len(batch.Events) == 0 || len(batch.Events) > MaxBatchEvents {
+	if batch.ContractVersion != ContractVersion || !validID(batch.BatchID) || len(batch.Events) == 0 || len(batch.Events) > MaxBatchEvents {
 		return IngestionResponse{}, ErrInvalidBatch
 	}
 	sentAt, ok := ParseTimestamp(batch.SentAt)
@@ -86,7 +86,7 @@ func (s *Service) Ingest(ctx context.Context, rawKey string, batch Batch) (Inges
 		if err := json.Unmarshal(raw, &identity); err != nil || !validID(identity.EventID) {
 			return IngestionResponse{}, ErrInvalidBatch
 		}
-		if !batchAcceptsEventVersion(batch.ContractVersion, identity.EventSchemaVersion) {
+		if identity.EventSchemaVersion != EventSchemaVersion {
 			return IngestionResponse{}, ErrInvalidBatch
 		}
 		eventID := identity.EventID
@@ -147,11 +147,6 @@ func (s *Service) Ingest(ctx context.Context, rawKey string, batch Batch) (Inges
 	s.ingested.Add(ctx, int64(counts["accepted"]+counts["duplicate"]), metric.WithAttributes(attribute.String("outcome", "durable")))
 	s.rejected.Add(ctx, int64(counts["permanently_rejected"]), metric.WithAttributes(attribute.String("outcome", "permanent")))
 	return IngestionResponse{ContractVersion: batch.ContractVersion, BatchID: batch.BatchID, ReceivedAt: now.Format("2006-01-02T15:04:05.000Z"), Results: ordered}, nil
-}
-
-func batchAcceptsEventVersion(contractVersion, eventSchemaVersion string) bool {
-	return contractVersion == ContractVersion && eventSchemaVersion == EventSchemaVersion ||
-		contractVersion == ContractVersionV2 && eventSchemaVersion == EventSchemaVersionV2
 }
 
 func (s *Service) Settings(ctx context.Context, actor Actor, projectID, environmentID string) (Settings, error) {

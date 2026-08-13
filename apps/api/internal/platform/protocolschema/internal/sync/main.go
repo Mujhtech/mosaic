@@ -14,15 +14,11 @@ import (
 
 // copies maps the embedded file name to its canonical repository-relative path.
 var copies = map[string]string{
-	"paywall-v0.3.schema.json":              "protocol/schema/v0.3/paywall.schema.json",
 	"paywall-v0.4.schema.json":              "protocol/schema/v0.4/paywall.schema.json",
-	"paywall-v0.3-compatibility.json":       "protocol/compatibility/v0.3.json",
 	"paywall-v0.4-compatibility.json":       "protocol/compatibility/v0.4.json",
-	"commerce-provider-v1.schema.json":      "protocol/schema/commerce-provider/v1/contract.schema.json",
+	"configuration-delivery-v3.schema.json": "protocol/schema/configuration-delivery/v3/release.schema.json",
 	"commerce-provider-v2.schema.json":      "protocol/schema/commerce-provider/v2/contract.schema.json",
-	"commerce-configuration-v1.schema.json": "protocol/schema/commerce-configuration/v1/configuration.schema.json",
 	"commerce-configuration-v2.schema.json": "protocol/schema/commerce-configuration/v2/configuration.schema.json",
-	"analytics-event-v1.schema.json":        "protocol/schema/analytics-event/v1/event.schema.json",
 	"analytics-event-v2.schema.json":        "protocol/schema/analytics-event/v2/event.schema.json",
 }
 

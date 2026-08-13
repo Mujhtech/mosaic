@@ -7,6 +7,11 @@
 // documented environment variables; an explicit override always wins over the
 // embedded copy.
 //
+// Every contract carries exactly one version — the latest — per ADR-0028, so
+// the embedded set is exactly the surviving versions: Paywall 0.4 (schema and
+// compatibility manifest), Configuration Delivery v3, Commerce Provider v2,
+// Commerce Configuration v2, and Analytics Event v2.
+//
 // The embedded copies under schemas/ are byte-for-byte duplicates of the
 // canonical files under protocol/schema/** (plus the Protocol 0.4
 // compatibility manifest under protocol/compatibility/, which the runtime
@@ -36,20 +41,16 @@ var files embed.FS
 type Schema string
 
 const (
-	PaywallV03 Schema = "paywall/v0.3"
 	PaywallV04 Schema = "paywall/v0.4"
-	// PaywallV03Compatibility and PaywallV04Compatibility are compatibility
-	// manifests, not JSON Schemas. They are embedded through the same
-	// sync-and-drift-test pipeline because the runtime reads the capability
-	// vocabulary and its fallback tiers from them, and a stale copy would
-	// silently enforce a different delivery contract than the published one.
-	PaywallV03Compatibility Schema = "paywall/v0.3-compatibility"
+	// PaywallV04Compatibility is a compatibility manifest, not a JSON Schema.
+	// It is embedded through the same sync-and-drift-test pipeline because the
+	// runtime reads the capability vocabulary and its fallback tiers from it,
+	// and a stale copy would silently enforce a different delivery contract
+	// than the published one.
 	PaywallV04Compatibility Schema = "paywall/v0.4-compatibility"
-	CommerceProviderV1      Schema = "commerce-provider/v1"
+	ConfigurationDeliveryV3 Schema = "configuration-delivery/v3"
 	CommerceProviderV2      Schema = "commerce-provider/v2"
-	CommerceConfigurationV1 Schema = "commerce-configuration/v1"
 	CommerceConfigurationV2 Schema = "commerce-configuration/v2"
-	AnalyticsEventV1        Schema = "analytics-event/v1"
 	AnalyticsEventV2        Schema = "analytics-event/v2"
 )
 
@@ -59,15 +60,11 @@ type location struct {
 }
 
 var locations = map[Schema]location{
-	PaywallV03:              {"schemas/paywall-v0.3.schema.json", "protocol/schema/v0.3/paywall.schema.json"},
 	PaywallV04:              {"schemas/paywall-v0.4.schema.json", "protocol/schema/v0.4/paywall.schema.json"},
-	PaywallV03Compatibility: {"schemas/paywall-v0.3-compatibility.json", "protocol/compatibility/v0.3.json"},
 	PaywallV04Compatibility: {"schemas/paywall-v0.4-compatibility.json", "protocol/compatibility/v0.4.json"},
-	CommerceProviderV1:      {"schemas/commerce-provider-v1.schema.json", "protocol/schema/commerce-provider/v1/contract.schema.json"},
+	ConfigurationDeliveryV3: {"schemas/configuration-delivery-v3.schema.json", "protocol/schema/configuration-delivery/v3/release.schema.json"},
 	CommerceProviderV2:      {"schemas/commerce-provider-v2.schema.json", "protocol/schema/commerce-provider/v2/contract.schema.json"},
-	CommerceConfigurationV1: {"schemas/commerce-configuration-v1.schema.json", "protocol/schema/commerce-configuration/v1/configuration.schema.json"},
 	CommerceConfigurationV2: {"schemas/commerce-configuration-v2.schema.json", "protocol/schema/commerce-configuration/v2/configuration.schema.json"},
-	AnalyticsEventV1:        {"schemas/analytics-event-v1.schema.json", "protocol/schema/analytics-event/v1/event.schema.json"},
 	AnalyticsEventV2:        {"schemas/analytics-event-v2.schema.json", "protocol/schema/analytics-event/v2/event.schema.json"},
 }
 

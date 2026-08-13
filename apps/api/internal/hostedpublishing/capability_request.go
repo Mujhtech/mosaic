@@ -3,8 +3,6 @@ package hostedpublishing
 import (
 	"encoding/json"
 	"regexp"
-
-	"github.com/Mujhtech/mosaic/apps/api/internal/placementdecision"
 )
 
 const MaxSDKCapabilityCount = 128
@@ -48,38 +46,23 @@ type SDKCapabilityRequest struct {
 	SupportedExperimentSchedulePolicies    []string                    `json:"supportedExperimentSchedulePolicies,omitempty"`
 }
 
+// PreferredDeliveryVersion returns the one Configuration Delivery contract
+// version when the reader advertises it, and "" otherwise. There is exactly
+// one version (ADR-0028); identifiers are exact and carry no ordering.
 func PreferredDeliveryVersion(values []string) string {
 	for _, value := range values {
-		if value == "3" {
-			return "3"
-		}
-	}
-	for _, value := range values {
-		if value == "2" {
-			return "2"
-		}
-	}
-	for _, value := range values {
-		if value == "1" {
-			return "1"
+		if value == DeliveryVersion {
+			return DeliveryVersion
 		}
 	}
 	return ""
 }
 
-func ValidateSDKCapabilityPayload(request SDKCapabilityRequest, payload json.RawMessage, version string) error {
-	if version == "1" {
-		release := Release{DeliveryContractVersion: "1", Payload: payload}
-		return ValidateSDKCapabilityRequest(request, release)
-	}
-	if version == "3" {
-		return validateDeliveryV3(request, payload)
-	}
-	return validateDeliveryV2(request, payload, version)
-}
-
-func validateDeliveryV3(request SDKCapabilityRequest, payload json.RawMessage) error {
-	if err := requireExactUnique("configurationDeliveryVersion", request.SupportedConfigurationDeliveryVersions, "3", 8); err != nil {
+// ValidateSDKCapabilityPayload enforces the closed Delivery v3 request
+// contract and verifies that the selected immutable Release can be accepted
+// atomically by the requesting reader.
+func ValidateSDKCapabilityPayload(request SDKCapabilityRequest, payload json.RawMessage) error {
+	if err := requireExactUnique("configurationDeliveryVersion", request.SupportedConfigurationDeliveryVersions, DeliveryVersion, 8); err != nil {
 		return err
 	}
 	if err := requireExactUnique("experimentAssignmentContractVersion", request.SupportedExperimentAssignmentContracts, "1", 8); err != nil {
@@ -109,8 +92,8 @@ func validateDeliveryV3(request SDKCapabilityRequest, payload json.RawMessage) e
 			ExperimentAssignments []json.RawMessage `json:"experimentAssignments"`
 		} `json:"release"`
 	}
-	if err := json.Unmarshal(payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != "3" {
-		return unsupportedCapability("configurationDeliveryVersion", "", "3", CapabilityUnavailable)
+	if err := json.Unmarshal(payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != DeliveryVersion {
+		return unsupportedCapability("configurationDeliveryVersion", "", DeliveryVersion, CapabilityUnavailable)
 	}
 	features := stringSet(request.SupportedExperimentFeatures)
 	algorithms := stringSet(request.SupportedExperimentBucketingAlgorithms)
@@ -135,67 +118,7 @@ func validateDeliveryV3(request SDKCapabilityRequest, payload json.RawMessage) e
 			}
 		}
 	}
-	return validateEmbeddedV1(request, envelope.Release.Compatibility.PaywallProtocols)
-}
-
-func validateDeliveryV2(request SDKCapabilityRequest, payload json.RawMessage, version string) error {
-	if version != "2" {
-		return unsupportedCapability("configurationDeliveryVersion", "", version, CapabilityUnsupported)
-	}
-	if err := requireExactUnique("configurationDeliveryVersion", request.SupportedConfigurationDeliveryVersions, "2", 8); err != nil {
-		return err
-	}
-	if err := requireExactUnique("placementDecisionContractVersion", request.SupportedPlacementDecisionContracts, "1", 8); err != nil {
-		return err
-	}
-	var envelope deliveryV2Envelope
-	if err := json.Unmarshal(payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != "2" {
-		return unsupportedCapability("configurationDeliveryVersion", "", "2", CapabilityUnavailable)
-	}
-	features := map[string]struct{}{}
-	for _, feature := range request.SupportedDecisionFeatures {
-		if _, duplicate := features[feature]; duplicate {
-			return unsupportedCapability("decisionFeature", feature, "", CapabilityDuplicate)
-		}
-		features[feature] = struct{}{}
-	}
-	algorithms := map[string]struct{}{}
-	for _, algorithm := range request.SupportedBucketingAlgorithms {
-		if algorithm != placementdecision.BucketingAlgorithm {
-			return unsupportedCapability("bucketingAlgorithm", algorithm, "", CapabilityUnknown)
-		}
-		if _, duplicate := algorithms[algorithm]; duplicate {
-			return unsupportedCapability("bucketingAlgorithm", algorithm, "", CapabilityDuplicate)
-		}
-		algorithms[algorithm] = struct{}{}
-	}
-	for _, contract := range envelope.Release.Compatibility.PlacementDecisionContracts {
-		if contract.Version != "1" {
-			return unsupportedCapability("placementDecisionContractVersion", "", contract.Version, CapabilityUnsupported)
-		}
-		for _, feature := range contract.RequiredFeatures {
-			if _, ok := features[feature]; !ok {
-				return unsupportedCapability("decisionFeature", feature, "", CapabilityMissing)
-			}
-		}
-		for _, algorithm := range contract.BucketingAlgorithms {
-			if _, ok := algorithms[algorithm]; !ok {
-				return unsupportedCapability("bucketingAlgorithm", algorithm, "", CapabilityMissing)
-			}
-		}
-	}
-	return validateEmbeddedV1(request, envelope.Release.Compatibility.PaywallProtocols)
-}
-
-// validateEmbeddedV1 re-runs the Paywall-protocol half of negotiation against a
-// synthesized v1 envelope, so a v2 or v3 Release is still refused when the SDK
-// cannot render one of its Paywall capabilities.
-func validateEmbeddedV1(request SDKCapabilityRequest, protocols []deliveryProtocolCompatibility) error {
-	clone := request
-	clone.SupportedConfigurationDeliveryVersions = []string{"1"}
-	v1 := deliveryEnvelope{ConfigurationDeliveryVersion: "1", Release: deliveryRelease{Compatibility: deliveryCompatibility{PaywallProtocols: protocols, Acceptance: "atomic"}}}
-	v1Payload, _ := json.Marshal(v1)
-	return ValidateSDKCapabilityRequest(clone, Release{DeliveryContractVersion: "1", Payload: v1Payload})
+	return validatePaywallNegotiation(request, envelope.Release.Compatibility.PaywallProtocols)
 }
 
 // requireKnownUnique accepts a non-empty, bounded, duplicate-free list drawn
@@ -227,9 +150,12 @@ func stringSet(values []string) map[string]struct{} {
 	return result
 }
 
-// ValidateSDKCapabilityRequest enforces the closed Delivery v1 request contract
-// and verifies that the selected immutable Release can be accepted atomically.
-func ValidateSDKCapabilityRequest(request SDKCapabilityRequest, release Release) error {
+// validatePaywallNegotiation enforces the reader-identity half of the request
+// (platform, SDK version, application version) and the Paywall-protocol half
+// of negotiation: the reader must be able to render every protocol version the
+// Release carries — there is exactly one (ADR-0028), and a reader that speaks
+// only a deleted version is refused rather than served a projection.
+func validatePaywallNegotiation(request SDKCapabilityRequest, releaseProtocols []deliveryProtocolCompatibility) error {
 	if request.Platform != "flutter" && request.Platform != "ios" && request.Platform != "android" {
 		return unsupportedCapability("sdkPlatform", request.Platform, "", CapabilityUnsupported)
 	}
@@ -238,9 +164,6 @@ func ValidateSDKCapabilityRequest(request SDKCapabilityRequest, release Release)
 	}
 	if request.ApplicationVersion != "" && (len(request.ApplicationVersion) > 64 || !safeApplicationVersion(request.ApplicationVersion)) {
 		return unsupportedCapability("applicationVersion", "", "", CapabilityMalformed)
-	}
-	if err := requireExactUnique("configurationDeliveryVersion", request.SupportedConfigurationDeliveryVersions, DeliveryVersion, 8); err != nil {
-		return err
 	}
 	if len(request.SupportedPaywallProtocols) == 0 || len(request.SupportedPaywallProtocols) > 8 {
 		return unsupportedCapability("paywallProtocolVersion", "", "", CapabilityMalformed)
@@ -272,21 +195,15 @@ func ValidateSDKCapabilityRequest(request SDKCapabilityRequest, release Release)
 		}
 		protocols[protocol.Version] = capabilities
 	}
-	var envelope deliveryEnvelope
-	if err := json.Unmarshal(release.Payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != DeliveryVersion {
-		return unsupportedCapability("configurationDeliveryVersion", "", DeliveryVersion, CapabilityUnavailable)
-	}
-	if len(envelope.Release.Compatibility.PaywallProtocols) == 0 {
+	if len(releaseProtocols) == 0 {
 		return unsupportedCapability("paywallProtocolVersion", "", "", CapabilityUnavailable)
 	}
 	// Acceptance stays atomic: the SDK must be able to render every protocol
-	// version the Release carries, so a Release holding a 0.4 document is
-	// refused outright to a 0.3-only reader (the existing rejectDocument flow)
-	// rather than partially served. Within a version, a missing capability
+	// version the Release carries. Within a version, a missing capability
 	// rejects unless the manifest names renderWithoutMotion as its fallback:
 	// those are enhancement capabilities, and a reader without them renders the
 	// document statically and completely.
-	for _, protocol := range envelope.Release.Compatibility.PaywallProtocols {
+	for _, protocol := range releaseProtocols {
 		if !knownPaywallProtocolVersion(protocol.Version) {
 			return unsupportedCapability("paywallProtocolVersion", "", protocol.Version, CapabilityUnsupported)
 		}
@@ -324,7 +241,7 @@ func ValidateSDKCommerceCapabilityRequest(platform, sdkVersion string, configura
 }
 
 func ValidateSDKCommerceSnapshotCapability(version string, configurationVersions, providerContractVersions []string) error {
-	if version != "1" && version != "2" {
+	if version != "2" {
 		return unsupportedCapability("commerceConfigurationVersion", "", version, CapabilityUnsupported)
 	}
 	if err := requireExactUnique("commerceConfigurationVersion", configurationVersions, version, 8); err != nil {
@@ -374,7 +291,7 @@ func requireSupportedUnique(requirement string, values []string, limit int) erro
 	}
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		if value != "1" && value != "2" {
+		if value != "2" {
 			return unsupportedCapability(requirement, "", value, CapabilityUnsupported)
 		}
 		if _, duplicate := seen[value]; duplicate {

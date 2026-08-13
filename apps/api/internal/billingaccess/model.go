@@ -11,13 +11,14 @@ package billingaccess
 
 import "time"
 
-// ContractVersion is the Authoritative Entitlement Contract version this build
-// speaks. It appears on every record this package serializes.
-const ContractVersion = "1"
+// ContractVersion is the only Authoritative Entitlement Contract version
+// (ADR-0028: one version per contract until GA). v2 absorbed everything v1
+// carried, so every record this package serializes claims it.
+const ContractVersion = "2"
 
-// AuthorityContractVersion is the authority-aware SDK sync contract. V1 stays
-// the default for trusted-server and GET surfaces; only the negotiated SDK POST
-// may select this version.
+// AuthorityContractVersion is the authority-aware SDK sync negotiation term.
+// It names the same single contract version; the negotiated SDK POST requires
+// the authority capabilities alongside it.
 const AuthorityContractVersion = "2"
 
 // TokenContractVersion is the Customer Access Token Contract version.

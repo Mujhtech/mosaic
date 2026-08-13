@@ -14,18 +14,25 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/nativecommerce"
 )
 
+// CommerceConfigurationVersion is the only Commerce Configuration contract
+// version (ADR-0028: one version per contract until GA). v2 absorbed every
+// shape v1 carried, so every snapshot Mosaic builds claims it.
+const CommerceConfigurationVersion = "2"
+
 const (
-	commerceProviderSchemaID        = "urn:mosaic:protocol:schema:commerce-provider:v1:contract"
-	commerceConfigurationSchemaID   = "urn:mosaic:protocol:schema:commerce-configuration:v1:configuration"
-	commerceProviderV2SchemaID      = "urn:mosaic:protocol:schema:commerce-provider:v2:contract"
-	commerceConfigurationV2SchemaID = "urn:mosaic:protocol:schema:commerce-configuration:v2:configuration"
+	commerceProviderSchemaID      = "urn:mosaic:protocol:schema:commerce-provider:v2:contract"
+	commerceConfigurationSchemaID = "urn:mosaic:protocol:schema:commerce-configuration:v2:configuration"
 )
 
 type CommerceConfigurationValidator struct {
 	schemas map[string]*jsonschema.Schema
 }
 
-func CompileCommerceConfigurationValidator(providerSchema, configurationSchema io.Reader, v2Schemas ...io.Reader) (*CommerceConfigurationValidator, error) {
+// CompileCommerceConfigurationValidator compiles the canonical Commerce
+// Provider v2 and Commerce Configuration v2 schemas — the only versions
+// (ADR-0028). A snapshot claiming any other version is refused before the
+// schema is consulted.
+func CompileCommerceConfigurationValidator(providerSchema, configurationSchema io.Reader) (*CommerceConfigurationValidator, error) {
 	decode := func(name string, reader io.Reader) (any, error) {
 		var document any
 		decoder := json.NewDecoder(reader)
@@ -34,11 +41,11 @@ func CompileCommerceConfigurationValidator(providerSchema, configurationSchema i
 		}
 		return document, nil
 	}
-	providerDocument, err := decode("Commerce Provider v1", providerSchema)
+	providerDocument, err := decode("Commerce Provider v2", providerSchema)
 	if err != nil {
 		return nil, err
 	}
-	configurationDocument, err := decode("Commerce Configuration v1", configurationSchema)
+	configurationDocument, err := decode("Commerce Configuration v2", configurationSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -46,41 +53,16 @@ func CompileCommerceConfigurationValidator(providerSchema, configurationSchema i
 	compiler.UseRegexpEngine(compileECMARegexp)
 	compiler.AssertFormat()
 	if err := compiler.AddResource(commerceProviderSchemaID, providerDocument); err != nil {
-		return nil, fmt.Errorf("register canonical Commerce Provider v1 schema: %w", err)
+		return nil, fmt.Errorf("register canonical Commerce Provider v2 schema: %w", err)
 	}
 	if err := compiler.AddResource(commerceConfigurationSchemaID, configurationDocument); err != nil {
-		return nil, fmt.Errorf("register canonical Commerce Configuration v1 schema: %w", err)
+		return nil, fmt.Errorf("register canonical Commerce Configuration v2 schema: %w", err)
 	}
 	schema, err := compiler.Compile(commerceConfigurationSchemaID)
 	if err != nil {
-		return nil, fmt.Errorf("compile canonical Commerce Configuration v1 schema: %w", err)
+		return nil, fmt.Errorf("compile canonical Commerce Configuration v2 schema: %w", err)
 	}
-	schemas := map[string]*jsonschema.Schema{"1": schema}
-	if len(v2Schemas) != 0 {
-		if len(v2Schemas) != 2 {
-			return nil, errors.New("Commerce Configuration v2 requires provider and configuration schemas")
-		}
-		providerV2Document, err := decode("Commerce Provider v2", v2Schemas[0])
-		if err != nil {
-			return nil, err
-		}
-		configurationV2Document, err := decode("Commerce Configuration v2", v2Schemas[1])
-		if err != nil {
-			return nil, err
-		}
-		if err := compiler.AddResource(commerceProviderV2SchemaID, providerV2Document); err != nil {
-			return nil, fmt.Errorf("register canonical Commerce Provider v2 schema: %w", err)
-		}
-		if err := compiler.AddResource(commerceConfigurationV2SchemaID, configurationV2Document); err != nil {
-			return nil, fmt.Errorf("register canonical Commerce Configuration v2 schema: %w", err)
-		}
-		v2Schema, err := compiler.Compile(commerceConfigurationV2SchemaID)
-		if err != nil {
-			return nil, fmt.Errorf("compile canonical Commerce Configuration v2 schema: %w", err)
-		}
-		schemas["2"] = v2Schema
-	}
-	return &CommerceConfigurationValidator{schemas: schemas}, nil
+	return &CommerceConfigurationValidator{schemas: map[string]*jsonschema.Schema{CommerceConfigurationVersion: schema}}, nil
 }
 
 func (validator *CommerceConfigurationValidator) Validate(payload json.RawMessage) error {
@@ -317,9 +299,18 @@ func (s *Service) buildCommerceConfiguration(tx Transaction, release Release, en
 				PackageIdentifier: mapping.ProviderPackageIdentifier,
 			}
 		}
+		product, ok := tx.Product(mapping.ProductID)
+		if !ok || product.ProjectID != environment.ProjectID {
+			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
+		}
+		keys := tx.ProductEntitlementKeys(mapping.ProductID)
+		if len(keys) == 0 {
+			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
+		}
 		productMappings = append(productMappings, commerceProductMapping{
-			MosaicProductID: mapping.ProductID, MappingID: mapping.ID,
-			ProviderProductReference: mapping.ExpectedStoreProductID, AdapterMapping: adapter,
+			MosaicProductID: mapping.ProductID, MappingID: mapping.ID, ProductType: product.Type,
+			EntitlementKeys: keys, ProviderProductReference: mapping.ExpectedStoreProductID,
+			AdapterMapping: adapter,
 		})
 		observedAt = minTime(observedAt, snapshot.ObservedAt)
 		synchronizedAt = minTime(synchronizedAt, snapshot.SyncedAt)
@@ -369,9 +360,11 @@ func (s *Service) buildCommerceConfiguration(tx Transaction, release Release, en
 		EnvironmentID: environment.ID, ApplicationID: application.ID, StorePlatform: application.Platform,
 		ConfigurationRelease: commerceConfigurationRelease{ID: release.ID, ContentDigest: releaseDigest},
 		ActiveProvider: commerceActiveProvider{
-			Identity:     identity,
-			Activation:   commerceProviderActivation{Source: "providerConnection", ProviderConnectionID: connection.ID},
-			Capabilities: capabilities,
+			Identity:   identity,
+			Activation: commerceProviderActivation{Source: "providerConnection", ProviderConnectionID: connection.ID},
+			// Recovery for a server-connected provider is the provider's own
+			// behaviour, not a Mosaic-defined store recovery flow.
+			Capabilities: capabilities, RecoveryMode: "providerDefined",
 		},
 		ProductMappings: productMappings, EntitlementMappings: entitlementMappings,
 		Freshness: freshness, Diagnostics: []map[string]any{},
@@ -391,7 +384,7 @@ func (s *Service) buildCommerceConfiguration(tx Transaction, release Release, en
 	}
 	digest := sha256.Sum256(canonicalBytes)
 	document.ContentDigest = fmt.Sprintf("sha256:%x", digest)
-	payload, err := json.Marshal(commerceConfigurationEnvelope{Version: "1", Configuration: document})
+	payload, err := json.Marshal(commerceConfigurationEnvelope{Version: CommerceConfigurationVersion, Configuration: document})
 	if err != nil {
 		return CommerceConfigurationSnapshot{}, err
 	}
@@ -593,7 +586,7 @@ func (s *Service) buildNativeCommerceConfiguration(tx Transaction, release Relea
 	}
 	digest := sha256.Sum256(canonicalBytes)
 	document.ContentDigest = fmt.Sprintf("sha256:%x", digest)
-	payload, err := json.Marshal(commerceConfigurationEnvelope{Version: "2", Configuration: document})
+	payload, err := json.Marshal(commerceConfigurationEnvelope{Version: CommerceConfigurationVersion, Configuration: document})
 	if err != nil {
 		return CommerceConfigurationSnapshot{}, err
 	}
@@ -610,7 +603,7 @@ func (s *Service) buildNativeCommerceConfiguration(tx Transaction, release Relea
 
 func (s *Service) cloneCommerceConfiguration(target CommerceConfigurationSnapshot, release Release, now time.Time) (CommerceConfigurationSnapshot, error) {
 	var envelope commerceConfigurationEnvelope
-	if err := json.Unmarshal(target.Payload, &envelope); err != nil || (envelope.Version != "1" && envelope.Version != "2") {
+	if err := json.Unmarshal(target.Payload, &envelope); err != nil || envelope.Version != CommerceConfigurationVersion {
 		return CommerceConfigurationSnapshot{}, ErrProviderReadiness
 	}
 	releaseDigest, err := configurationReleaseDigest(release.Payload)
@@ -621,7 +614,7 @@ func (s *Service) cloneCommerceConfiguration(target CommerceConfigurationSnapsho
 	envelope.Configuration.ConfigurationRelease = commerceConfigurationRelease{
 		ID: release.ID, ContentDigest: releaseDigest,
 	}
-	if envelope.Version == "1" {
+	if envelope.Configuration.Freshness.StaleAt != "" {
 		staleAt, err := time.Parse(time.RFC3339Nano, envelope.Configuration.Freshness.StaleAt)
 		if err != nil {
 			return CommerceConfigurationSnapshot{}, ErrProviderReadiness

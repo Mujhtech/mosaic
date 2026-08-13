@@ -49,7 +49,7 @@ func TestOpenPrefersExplicitOverride(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"$id":"override"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	reader, err := Open(PaywallV03, path)
+	reader, err := Open(PaywallV04, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestOpenPrefersExplicitOverride(t *testing.T) {
 	if string(document[:n]) != `{"$id":"override"}` {
 		t.Fatalf("override was not used: %q", document[:n])
 	}
-	if _, err := Open(PaywallV03, filepath.Join(t.TempDir(), "missing.json")); err == nil {
+	if _, err := Open(PaywallV04, filepath.Join(t.TempDir(), "missing.json")); err == nil {
 		t.Fatal("a missing override must fail rather than silently fall back to the embedded schema")
 	}
 }

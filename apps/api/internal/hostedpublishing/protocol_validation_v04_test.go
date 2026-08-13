@@ -7,13 +7,10 @@ import (
 
 const protocolFixtureRoot04 = "../../../../protocol/fixtures/v0.4"
 
-// The 0.4 corpus is the contract the dispatch mirrors. Accepting every valid
-// fixture is what proves dispatching on schemaVersion actually reaches the 0.4
-// schema and the 0.4 semantic layer: a document validated against the 0.3
-// schema fails on designSystem.motions, and one validated against 0.3 semantics
-// fails capability reconciliation on style.productCardStates and motion.*.
-// Rejecting every invalid fixture is what proves the carried 0.3 rules did not
-// stop running when the version changed.
+// The 0.4 corpus is the contract this validator mirrors: every valid fixture
+// must be accepted and every invalid one rejected. Rejecting every invalid
+// fixture is what proves the rules carried forward from earlier protocol
+// versions did not stop running under the single-version collapse (ADR-0028).
 func TestCanonicalProtocolV04SchemaAndSemanticFixtures(t *testing.T) {
 	validator := newCanonicalProtocolValidator(t)
 	for _, name := range []string{"navigation-only.json", "edge-cases.json", "expired-countdown.json", "hidden-purchase-target.json", "complete-paywall.json", "screen-round-trip.json"} {
@@ -124,14 +121,14 @@ func TestProtocolV04UnusedMotionTokenReachabilityIsRootedAtNodeReferences(t *tes
 func TestProtocolV04CapabilityDerivationAddsMotionAndDropsProductCardStates(t *testing.T) {
 	root := readProtocolFixture(t, filepath.Join(protocolFixtureRoot04, "complete-paywall.json"))
 	entries := walkProtocolNodes(root)
-	if errors := validateProtocolCapabilities(root, entries, ProtocolVersion04); len(errors) != 0 {
+	if errors := validateProtocolCapabilities(root, entries); len(errors) != 0 {
 		t.Fatalf("canonical 0.4 fixture capability reconciliation failed: %v", errors)
 	}
 	declared := map[string]bool{}
 	for _, raw := range arrayValue(mapValue(root["compatibility"])["requiredCapabilities"]) {
 		capability := mapValue(raw)
-		if stringValue(capability["version"]) != ProtocolVersion04 {
-			t.Fatalf("capability %s is not pinned to %s", stringValue(capability["name"]), ProtocolVersion04)
+		if stringValue(capability["version"]) != ProtocolVersion {
+			t.Fatalf("capability %s is not pinned to %s", stringValue(capability["name"]), ProtocolVersion)
 		}
 		declared[stringValue(capability["name"])] = true
 	}
@@ -148,8 +145,8 @@ func TestProtocolV04CapabilityDerivationAddsMotionAndDropsProductCardStates(t *t
 		mutated := readProtocolFixture(t, filepath.Join(protocolFixtureRoot04, "complete-paywall.json"))
 		compatibility := mapValue(mutated["compatibility"])
 		compatibility["requiredCapabilities"] = append(arrayValue(compatibility["requiredCapabilities"]),
-			map[string]any{"name": "style.productCardStates", "version": ProtocolVersion04})
-		errors := validateProtocolCapabilities(mutated, walkProtocolNodes(mutated), ProtocolVersion04)
+			map[string]any{"name": "style.productCardStates", "version": ProtocolVersion})
+		errors := validateProtocolCapabilities(mutated, walkProtocolNodes(mutated))
 		if !containsString(errors, "protocol_capability_unused_or_unsupported") {
 			t.Fatalf("expected the removed capability to be rejected as unused, got %v", errors)
 		}
@@ -165,32 +162,9 @@ func TestProtocolV04CapabilityDerivationAddsMotionAndDropsProductCardStates(t *t
 			}
 		}
 		compatibility["requiredCapabilities"] = kept
-		errors := validateProtocolCapabilities(mutated, walkProtocolNodes(mutated), ProtocolVersion04)
+		errors := validateProtocolCapabilities(mutated, walkProtocolNodes(mutated))
 		if !containsString(errors, "protocol_capability_missing") {
 			t.Fatalf("expected an authored but undeclared motion capability to be rejected, got %v", errors)
-		}
-	})
-}
-
-// Versions are exact identifiers. A 0.4 document must not be validated against
-// the 0.3 rules and vice versa: a 0.3 document silently accepted as 0.4 would
-// be advertised to readers under a contract it was never checked against.
-func TestProtocolValidatorDispatchesOnDeclaredVersion(t *testing.T) {
-	validator := newCanonicalProtocolValidator(t)
-
-	t.Run("a_0.3_document_relabelled_0.4_is_rejected", func(t *testing.T) {
-		root := readProtocolFixture(t, filepath.Join(protocolFixtureRoot, "complete-paywall.json"))
-		root["schemaVersion"] = ProtocolVersion04
-		if errors := validator.Validate(root); len(errors) == 0 {
-			t.Fatal("a 0.3 document must not validate as 0.4")
-		}
-	})
-
-	t.Run("a_0.4_document_relabelled_0.3_is_rejected", func(t *testing.T) {
-		root := readProtocolFixture(t, filepath.Join(protocolFixtureRoot04, "complete-paywall.json"))
-		root["schemaVersion"] = ProtocolVersion
-		if errors := validator.Validate(root); len(errors) == 0 {
-			t.Fatal("a 0.4 document must not validate as 0.3")
 		}
 	})
 }

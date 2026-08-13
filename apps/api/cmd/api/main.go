@@ -89,13 +89,9 @@ func main() {
 // embedded in the binary; a configured path is an explicit operator override.
 func openSchemas(cfg config.Config) (map[protocolschema.Schema]io.ReadCloser, error) {
 	overrides := map[protocolschema.Schema]string{
-		protocolschema.PaywallV03:              cfg.Protocol.V03SchemaPath,
 		protocolschema.PaywallV04:              cfg.Protocol.V04SchemaPath,
-		protocolschema.CommerceProviderV1:      cfg.Protocol.CommerceProviderSchemaPath,
 		protocolschema.CommerceProviderV2:      cfg.Protocol.CommerceProviderV2SchemaPath,
-		protocolschema.CommerceConfigurationV1: cfg.Protocol.CommerceConfigurationSchemaPath,
 		protocolschema.CommerceConfigurationV2: cfg.Protocol.CommerceConfigurationV2SchemaPath,
-		protocolschema.AnalyticsEventV1:        cfg.Analytics.EventSchemaPath,
 		protocolschema.AnalyticsEventV2:        cfg.Analytics.EventV2SchemaPath,
 	}
 	readers := make(map[protocolschema.Schema]io.ReadCloser, len(overrides))
@@ -232,22 +228,19 @@ func run() (runErr error) {
 	if err != nil {
 		return err
 	}
-	protocolValidator, err := hostedpublishing.CompileProtocolValidator(schemas[protocolschema.PaywallV03], schemas[protocolschema.PaywallV04])
+	protocolValidator, err := hostedpublishing.CompileProtocolValidator(schemas[protocolschema.PaywallV04])
 	if err != nil {
 		closeSchemas(schemas)
 		return err
 	}
 	commerceValidator, err := hostedpublishing.CompileCommerceConfigurationValidator(
-		schemas[protocolschema.CommerceProviderV1], schemas[protocolschema.CommerceConfigurationV1],
 		schemas[protocolschema.CommerceProviderV2], schemas[protocolschema.CommerceConfigurationV2],
 	)
 	if err != nil {
 		closeSchemas(schemas)
 		return err
 	}
-	analyticsValidator, err := analytics.CompileSchemaValidators(
-		schemas[protocolschema.AnalyticsEventV1], schemas[protocolschema.AnalyticsEventV2],
-	)
+	analyticsValidator, err := analytics.CompileSchemaValidator(schemas[protocolschema.AnalyticsEventV2])
 	closeSchemas(schemas)
 	if err != nil {
 		return err

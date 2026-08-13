@@ -532,14 +532,12 @@ func (s *Service) GetPlacementBinding(ctx context.Context, actor Actor, projectI
 	return result, err
 }
 
-func (s *Service) AuthenticateSDKKey(ctx context.Context, rawKey string) (SDKConfiguration, error) {
-	return s.AuthenticateSDKKeyVersion(ctx, rawKey, "1")
-}
-
-func (s *Service) AuthenticateSDKKeyVersion(ctx context.Context, rawKey, deliveryVersion string) (SDKConfiguration, error) {
-	return s.AuthenticateSDKKeyVersions(ctx, rawKey, []string{deliveryVersion})
-}
-
+// AuthenticateSDKKeyVersions authenticates a public SDK key and resolves the
+// Environment's current Release. There is exactly one Configuration Delivery
+// contract version (ADR-0028), so negotiation is exact: a reader that does not
+// advertise it receives nothing new and retains its last accepted release,
+// then its bundled fallback. A Release stored at a deleted contract version is
+// unreadable, not degraded — it is withheld the same way until republished.
 func (s *Service) AuthenticateSDKKeyVersions(ctx context.Context, rawKey string, supportedVersions []string) (SDKConfiguration, error) {
 	parts := strings.SplitN(strings.TrimSpace(rawKey), ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
@@ -565,43 +563,23 @@ func (s *Service) AuthenticateSDKKeyVersions(ctx context.Context, rawKey string,
 			return ErrNoCurrentRelease
 		}
 		tx.TouchAPIKey(key.ID)
-		var representation ReleaseRepresentation
-		found := false
-		for _, deliveryVersion := range preferredDeliveryVersions(supportedVersions) {
-			if release.DeliveryContractVersion == deliveryVersion || deliveryVersion == "1" && release.DeliveryContractVersion == "" {
-				representation = ReleaseRepresentation{ReleaseID: release.ID, EnvironmentID: environment.ID, DeliveryContractVersion: deliveryVersion, Payload: release.Payload, ContentHash: release.ContentHash, CreatedAt: release.PublishedAt}
-				found = true
-				break
-			}
-			if candidate, ok := tx.ReleaseRepresentation(release.ID, deliveryVersion); ok {
-				representation = candidate
-				found = true
+		supported := false
+		for _, version := range supportedVersions {
+			if version == DeliveryVersion {
+				supported = true
 				break
 			}
 		}
-		if !found {
-			// The Environment has a current Release, but no representation in
-			// any delivery contract version the SDK advertised.
+		if !supported || release.DeliveryContractVersion != DeliveryVersion {
+			// The Environment has a current Release, but either the SDK did not
+			// advertise the one delivery contract version or the Release
+			// predates it (a record at a deleted version is unreadable).
 			return unsupportedCapability("configurationDeliveryVersion", "", strings.Join(supportedVersions, ","), CapabilityUnavailable)
 		}
-		result = SDKConfiguration{Release: release, Payload: representation.Payload, ContentHash: representation.ContentHash, DeliveryContractVersion: representation.DeliveryContractVersion, Environment: environment, APIKeyID: key.ID}
+		result = SDKConfiguration{Release: release, Payload: release.Payload, ContentHash: release.ContentHash, DeliveryContractVersion: release.DeliveryContractVersion, Environment: environment, APIKeyID: key.ID}
 		return nil
 	})
 	return result, err
-}
-
-func preferredDeliveryVersions(values []string) []string {
-	set := make(map[string]bool, len(values))
-	for _, value := range values {
-		set[value] = true
-	}
-	result := make([]string, 0, 3)
-	for _, version := range []string{"3", "2", "1"} {
-		if set[version] {
-			result = append(result, version)
-		}
-	}
-	return result
 }
 
 func (s *Service) AuthenticateSDKCommerceKey(ctx context.Context, rawKey, applicationID, sdkPlatform string) (SDKCommerceConfiguration, error) {

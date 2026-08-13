@@ -84,29 +84,17 @@ func (tx *commerceTestTransaction) ProviderMetadataSnapshot(id string) (Provider
 
 func commerceValidatorForTest(t *testing.T) *CommerceConfigurationValidator {
 	t.Helper()
-	providerSchema, err := os.Open("../../../../protocol/schema/commerce-provider/v1/contract.schema.json")
+	providerSchema, err := os.Open("../../../../protocol/schema/commerce-provider/v2/contract.schema.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer providerSchema.Close()
-	configurationSchema, err := os.Open("../../../../protocol/schema/commerce-configuration/v1/configuration.schema.json")
+	configurationSchema, err := os.Open("../../../../protocol/schema/commerce-configuration/v2/configuration.schema.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer configurationSchema.Close()
-	providerV2Schema, err := os.Open("../../../../protocol/schema/commerce-provider/v2/contract.schema.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer providerV2Schema.Close()
-	configurationV2Schema, err := os.Open("../../../../protocol/schema/commerce-configuration/v2/configuration.schema.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer configurationV2Schema.Close()
-	validator, err := CompileCommerceConfigurationValidator(
-		providerSchema, configurationSchema, providerV2Schema, configurationV2Schema,
-	)
+	validator, err := CompileCommerceConfigurationValidator(providerSchema, configurationSchema)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,6 +297,12 @@ func TestCommerceConfigurationUsesStoreAndCanonicalSDKLookupReferences(t *testin
 				entitlements: []CommerceEntitlementMapping{{
 					EntitlementID: "entitlement_1", EntitlementKey: "pro", ProviderEntitlementIdentifier: "pro",
 				}},
+				// Commerce Configuration v2 requires productType and
+				// entitlementKeys on every product mapping.
+				products: map[string]Product{
+					"product_1": {ID: "product_1", ProjectID: "project_1", Type: "subscription"},
+				},
+				entitlementKeys: map[string][]string{"product_1": {"pro"}},
 				snapshots: map[string]ProviderMetadataSnapshot{
 					"snapshot_1": {
 						ID: "snapshot_1", ObservedAt: now.Add(-2 * time.Minute),

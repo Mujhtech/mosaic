@@ -31,8 +31,6 @@ const (
 	multipartOverheadBytes              = 1 << 20
 	idempotencyHeader                   = "Idempotency-Key"
 	ifMatchHeader                       = "If-Match"
-	deliveryContentType                 = "application/vnd.mosaic.configuration+json;version=1"
-	commerceContentType                 = "application/vnd.mosaic.commerce-configuration+json;version=1"
 	commerceContentTypeV2               = "application/vnd.mosaic.commerce-configuration+json;version=2"
 	capabilitiesHeader                  = "Mosaic-Paywall-Capabilities"
 	experimentAssignmentVersionsHeader  = "Mosaic-Experiment-Assignment-Versions"
@@ -263,21 +261,6 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusServiceUnavailable, "asset_storage_failed", "Asset storage is temporarily unavailable."
 	case errors.Is(err, hostedpublishing.ErrPlacementUnpublished):
 		status, code, message = http.StatusConflict, "placement_unpublished", "Every active Placement binding must resolve to a published Paywall."
-	case errors.Is(err, hostedpublishing.ErrReleaseProtocolMixed):
-		status, code, message = http.StatusConflict, "release_protocol_mixed", "A Configuration Release must carry Paywalls on a single Paywall Protocol version. Republish the outdated Paywalls on one version, then publish again."
-		var mixed *hostedpublishing.ReleaseProtocolMixError
-		if errors.As(err, &mixed) {
-			apiError.Details = map[string]any{"paywallIdsByProtocolVersion": mixed.PaywallIDsByProtocolVersion}
-		}
-	case errors.Is(err, hostedpublishing.ErrReleaseProtocolUndeliverable):
-		status, code, message = http.StatusConflict, "release_protocol_undeliverable", "No Configuration Delivery contract can carry these Paywalls' protocol version yet. Keep them on protocol 0.3 until the Delivery contract extension tracked in docs/protocol/v0.4.md ships."
-		var undeliverable *hostedpublishing.ReleaseProtocolUndeliverableError
-		if errors.As(err, &undeliverable) {
-			apiError.Details = map[string]any{
-				"paywallIdsByProtocolVersion": undeliverable.PaywallIDsByProtocolVersion,
-				"deferral":                    "docs/protocol/v0.4.md#configuration-delivery-cannot-yet-carry-04",
-			}
-		}
 	case errors.Is(err, hostedpublishing.ErrProductInvalid):
 		status, code, message = http.StatusConflict, "product_invalid", "A referenced Product is missing, archived, or outside the Project."
 	case errors.Is(err, hostedpublishing.ErrProviderReadiness):
@@ -757,7 +740,7 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	deliveryVersion := configuration.DeliveryContractVersion
-	if err := hostedpublishing.ValidateSDKCapabilityPayload(capabilities, configuration.Payload, deliveryVersion); err != nil {
+	if err := hostedpublishing.ValidateSDKCapabilityPayload(capabilities, configuration.Payload); err != nil {
 		writeError(w, r, err)
 		return
 	}
@@ -794,9 +777,8 @@ func (h *Handler) sdkCommerceConfiguration(w http.ResponseWriter, r *http.Reques
 	if !h.allowDelivery(w, r, "ip:"+httpmiddleware.ClientIP(r)) {
 		return
 	}
-	if !headerContains(r.Header.Get("Accept"), commerceContentType) &&
-		!headerContains(r.Header.Get("Accept"), commerceContentTypeV2) {
-		writeError(w, r, hostedpublishing.NewCapabilityError("acceptMediaType", commerceContentType, "", hostedpublishing.CapabilityMissing))
+	if !headerContains(r.Header.Get("Accept"), commerceContentTypeV2) {
+		writeError(w, r, hostedpublishing.NewCapabilityError("acceptMediaType", commerceContentTypeV2, "", hostedpublishing.CapabilityMissing))
 		return
 	}
 	sdkPlatform := strings.TrimSpace(r.Header.Get("Mosaic-SDK-Platform"))

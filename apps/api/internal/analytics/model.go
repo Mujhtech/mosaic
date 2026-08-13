@@ -6,10 +6,11 @@ import (
 )
 
 const (
-	ContractVersion      = "1"
-	ContractVersionV2    = "2"
-	EventSchemaVersion   = "1"
-	EventSchemaVersionV2 = "2"
+	// ContractVersion is the only Analytics Event ingestion contract version
+	// (ADR-0028: one version per contract until GA).
+	ContractVersion = "2"
+	// EventSchemaVersion is the only event schema version.
+	EventSchemaVersion   = "2"
 	MaxBatchEvents       = 100
 	MaxBatchBytes        = 512 << 10
 	MaxEventBytes        = 32 << 10

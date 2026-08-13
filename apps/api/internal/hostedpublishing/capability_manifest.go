@@ -20,57 +20,49 @@ const capabilityFallbackRenderWithoutMotion = "renderWithoutMotion"
 // safe default for a capability whose degradation is unknown.
 const capabilityFallbackRejectDocument = "rejectDocument"
 
-// protocolCapabilityFallbacks maps each Paywall Protocol version to its
-// capability vocabulary and each capability's fallback tier.
+// protocolCapabilityFallbacks maps each Paywall Protocol version — there is
+// exactly one (ADR-0028) — to its capability vocabulary and each capability's
+// fallback tier.
 //
-// Sourced from the embedded copies of protocol/compatibility/*.json rather than
-// a list maintained here, so the vocabulary the runtime accepts and the
-// vocabulary Mosaic publishes cannot disagree. They previously did: the
-// hand-maintained 0.3 list omitted component.tabs, component.timeline,
-// component.award, component.socialProof, condition.tabVisibility, and
-// accessibility.reservedStrings, so a conformant 0.3 SDK advertising any of
-// them was refused every Release as advertising a capability Mosaic does not
-// define. The copies are refreshed by the protocolschema go:generate sync and
-// drift-tested against the canonical files.
+// Sourced from the embedded copy of protocol/compatibility/v0.4.json rather
+// than a list maintained here, so the vocabulary the runtime accepts and the
+// vocabulary Mosaic publishes cannot disagree. The hand-maintained list this
+// replaced omitted several published capabilities, so a conformant SDK
+// advertising any of them was refused every Release as advertising a
+// capability Mosaic does not define. The copy is refreshed by the
+// protocolschema go:generate sync and drift-tested against the canonical file.
 var protocolCapabilityFallbacks = mustLoadProtocolCapabilityFallbacks()
 
-// mustLoadProtocolCapabilityFallbacks parses the embedded manifests at package
+// mustLoadProtocolCapabilityFallbacks parses the embedded manifest at package
 // initialization. The bytes are compiled into the binary and drift-tested, so a
 // failure here is a build defect, and panicking at import time is the loudest
 // available equivalent of failing startup when a required contract is missing.
 func mustLoadProtocolCapabilityFallbacks() map[string]map[string]string {
-	result := make(map[string]map[string]string, 2)
-	for version, source := range map[string]protocolschema.Schema{
-		ProtocolVersion:   protocolschema.PaywallV03Compatibility,
-		ProtocolVersion04: protocolschema.PaywallV04Compatibility,
-	} {
-		document, err := protocolschema.Bytes(source)
-		if err != nil {
-			panic(fmt.Sprintf("load embedded Protocol %s compatibility manifest: %v", version, err))
-		}
-		var manifest struct {
-			SchemaVersion string `json:"schemaVersion"`
-			Capabilities  []struct {
-				Name     string `json:"name"`
-				Fallback string `json:"fallback"`
-			} `json:"capabilities"`
-		}
-		if err := json.Unmarshal(document, &manifest); err != nil {
-			panic(fmt.Sprintf("decode embedded Protocol %s compatibility manifest: %v", version, err))
-		}
-		if manifest.SchemaVersion != version || len(manifest.Capabilities) == 0 {
-			panic(fmt.Sprintf("embedded Protocol %s compatibility manifest does not describe Protocol %s", version, version))
-		}
-		fallbacks := make(map[string]string, len(manifest.Capabilities))
-		for _, capability := range manifest.Capabilities {
-			if capability.Name == "" || capability.Fallback == "" {
-				panic(fmt.Sprintf("Protocol %s compatibility manifest carries a capability without a name or fallback", version))
-			}
-			fallbacks[capability.Name] = capability.Fallback
-		}
-		result[version] = fallbacks
+	document, err := protocolschema.Bytes(protocolschema.PaywallV04Compatibility)
+	if err != nil {
+		panic(fmt.Sprintf("load embedded Protocol %s compatibility manifest: %v", ProtocolVersion, err))
 	}
-	return result
+	var manifest struct {
+		SchemaVersion string `json:"schemaVersion"`
+		Capabilities  []struct {
+			Name     string `json:"name"`
+			Fallback string `json:"fallback"`
+		} `json:"capabilities"`
+	}
+	if err := json.Unmarshal(document, &manifest); err != nil {
+		panic(fmt.Sprintf("decode embedded Protocol %s compatibility manifest: %v", ProtocolVersion, err))
+	}
+	if manifest.SchemaVersion != ProtocolVersion || len(manifest.Capabilities) == 0 {
+		panic(fmt.Sprintf("embedded Protocol %s compatibility manifest does not describe Protocol %s", ProtocolVersion, ProtocolVersion))
+	}
+	fallbacks := make(map[string]string, len(manifest.Capabilities))
+	for _, capability := range manifest.Capabilities {
+		if capability.Name == "" || capability.Fallback == "" {
+			panic(fmt.Sprintf("Protocol %s compatibility manifest carries a capability without a name or fallback", ProtocolVersion))
+		}
+		fallbacks[capability.Name] = capability.Fallback
+	}
+	return map[string]map[string]string{ProtocolVersion: fallbacks}
 }
 
 func knownPaywallProtocolVersion(version string) bool {

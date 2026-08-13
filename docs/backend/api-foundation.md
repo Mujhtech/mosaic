@@ -164,12 +164,9 @@ variables take precedence because `.env` loading does not overwrite them.
 | `MOSAIC_AUTH_REQUESTS_PER_MINUTE` | `12`                                 | Refill rate for each authentication IP and hashed-account bucket.                                           |
 | `MOSAIC_AUTH_BURST`               | `4`                                  | Burst size for each authentication limiter bucket.                                                          |
 | `MOSAIC_AUTH_LIMITER_ENTRIES`     | `10000`                              | Bound on in-process authentication limiter keys.                                                            |
-| `MOSAIC_PROTOCOL_V03_SCHEMA_PATH` | repository canonical schema path     | Canonical Protocol 0.3 JSON Schema compiled at startup.                                                      |
-| `MOSAIC_PROTOCOL_V04_SCHEMA_PATH` | repository canonical schema path     | Canonical Protocol 0.4 JSON Schema compiled at startup. A document is validated against exactly the version its `schemaVersion` declares. |
-| `MOSAIC_COMMERCE_PROVIDER_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Provider v1 JSON Schema compiled at API startup.                                          |
-| `MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Configuration v1 JSON Schema compiled at API startup.                              |
-| `MOSAIC_COMMERCE_PROVIDER_V2_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Provider v2 JSON Schema compiled at API startup. |
-| `MOSAIC_COMMERCE_CONFIGURATION_V2_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Configuration v2 JSON Schema compiled at API startup and publishing. |
+| `MOSAIC_PROTOCOL_V04_SCHEMA_PATH` | embedded canonical schema            | Optional override for the canonical Protocol 0.4 JSON Schema compiled at startup — the only Paywall Protocol version (ADR-0028). A document claiming any other version is rejected as unsupported. |
+| `MOSAIC_COMMERCE_PROVIDER_V2_SCHEMA_PATH` | embedded canonical schema | Optional override for the canonical Commerce Provider v2 JSON Schema compiled at API startup. |
+| `MOSAIC_COMMERCE_CONFIGURATION_V2_SCHEMA_PATH` | embedded canonical schema | Optional override for the canonical Commerce Configuration v2 JSON Schema compiled at API startup and publishing. |
 | `MOSAIC_OBJECT_STORAGE_ENDPOINT`  | `localhost:9000`                     | S3-compatible object-storage endpoint.                                                                      |
 | `MOSAIC_OBJECT_STORAGE_ACCESS_KEY`| `mosaic`                             | Object-storage access key; development value is rejected in hosted environments.                            |
 | `MOSAIC_OBJECT_STORAGE_SECRET_KEY`| `mosaic_dev_secret`                  | Object-storage secret; never logged and development value is rejected in hosted environments.               |

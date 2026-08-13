@@ -17,10 +17,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-const (
-	protocolSchemaID   = "urn:mosaic:protocol:schema:v0.3:paywall"
-	protocolSchemaID04 = "urn:mosaic:protocol:schema:v0.4:paywall"
-)
+const protocolSchemaID = "urn:mosaic:protocol:schema:v0.4:paywall"
 
 // protocolMotionLoopMinimumDurationMilliseconds is the flash-safety floor for a
 // looping motion. A 500ms cycle caps the perceived pulse rate at 1Hz, an order
@@ -29,11 +26,11 @@ const (
 // V04_LOOP_MINIMUM_DURATION_MILLISECONDS in protocol/tools/validation-v0.4.mjs.
 const protocolMotionLoopMinimumDurationMilliseconds = 500
 
-// ProtocolValidator validates paywall documents against the exact protocol
-// version each one declares. A version with no compiled schema still runs the
+// ProtocolValidator validates paywall documents against the one canonical
+// protocol version. A validator with no compiled schema still runs the
 // semantic rules, so a nil-schema validator (tests, analyzeDocument) degrades
 // to semantics-only rather than accepting everything.
-type ProtocolValidator struct{ schemas map[string]*jsonschema.Schema }
+type ProtocolValidator struct{ schema *jsonschema.Schema }
 
 type ecmaRegexp regexp2.Regexp
 
@@ -54,22 +51,15 @@ func compileECMARegexp(expression string) (jsonschema.Regexp, error) {
 	return (*ecmaRegexp)(compiled), nil
 }
 
-// CompileProtocolValidator compiles both canonical paywall schemas. Both are
-// required: a validator that silently lost one version would accept documents
-// against no schema at all.
-func CompileProtocolValidator(v03, v04 io.Reader) (*ProtocolValidator, error) {
-	schema03, err := compileProtocolSchema("0.3", protocolSchemaID, v03)
+// CompileProtocolValidator compiles the canonical paywall schema. There is
+// exactly one Paywall Protocol version (ADR-0028); a document claiming any
+// other version is rejected before the schema is consulted.
+func CompileProtocolValidator(v04 io.Reader) (*ProtocolValidator, error) {
+	schema, err := compileProtocolSchema(ProtocolVersion, protocolSchemaID, v04)
 	if err != nil {
 		return nil, err
 	}
-	schema04, err := compileProtocolSchema("0.4", protocolSchemaID04, v04)
-	if err != nil {
-		return nil, err
-	}
-	return &ProtocolValidator{schemas: map[string]*jsonschema.Schema{
-		ProtocolVersion:   schema03,
-		ProtocolVersion04: schema04,
-	}}, nil
+	return &ProtocolValidator{schema: schema}, nil
 }
 
 func compileProtocolSchema(version, id string, reader io.Reader) (*jsonschema.Schema, error) {
@@ -91,54 +81,43 @@ func compileProtocolSchema(version, id string, reader io.Reader) (*jsonschema.Sc
 	return schema, nil
 }
 
-// NewProtocolValidator wraps a compiled 0.3 schema (or nil for a semantics-only
-// validator). It carries no 0.4 schema; use CompileProtocolValidator when both
-// versions must be schema-checked.
+// NewProtocolValidator wraps a compiled 0.4 schema, or nil for a
+// semantics-only validator (tests, analyzeDocument).
 func NewProtocolValidator(schema *jsonschema.Schema) *ProtocolValidator {
-	if schema == nil {
-		return &ProtocolValidator{}
-	}
-	return &ProtocolValidator{schemas: map[string]*jsonschema.Schema{ProtocolVersion: schema}}
+	return &ProtocolValidator{schema: schema}
 }
 
 // Validate rejects a document atomically: any error means the whole document is
-// refused. The declared version is checked first and on its own so an unknown
-// version reports a named diagnostic rather than a generic schema failure, and
-// so the check holds even when this validator carries no compiled schema.
-// Versions are exact identifiers: a 0.3 document validates only against 0.3, a
-// 0.4 document only against 0.4, and anything else (including the superseded
-// 0.2) is an unknown version.
+// refused. The declared version is checked first and on its own so an
+// unsupported version reports a named diagnostic rather than a generic schema
+// failure, and so the check holds even when this validator carries no compiled
+// schema. Versions are exact identifiers, and exactly one exists (ADR-0028): a
+// document claiming anything but 0.4 — including the deleted 0.3 and the
+// superseded 0.2 — is an unsupported version, rejected whole.
 //
-// The 0.4 semantic layer is the 0.3 layer plus the motion rules, with two
-// version-scoped deltas handled inside validateProtocolCapabilities: 0.4 does
-// not derive style.productCardStates and does derive the motion.* enhancement
-// capabilities. This mirrors validateProtocolV04 in
-// protocol/tools/validation-v0.4.mjs, which reuses the 0.3 rules by reference.
+// The semantic layer mirrors validateProtocolV04 in
+// protocol/tools/validation-v0.4.mjs.
 func (validator *ProtocolValidator) Validate(root map[string]any) []string {
 	errors := make([]string, 0)
 	declared, ok := root["schemaVersion"].(string)
-	if !ok || (declared != ProtocolVersion && declared != ProtocolVersion04) {
+	if !ok || declared != ProtocolVersion {
 		return []string{"protocol_version_unsupported"}
 	}
-	if validator != nil {
-		if schema := validator.schemas[declared]; schema != nil {
-			if err := schema.Validate(root); err != nil {
-				return []string{"protocol_schema_invalid"}
-			}
+	if validator != nil && validator.schema != nil {
+		if err := validator.schema.Validate(root); err != nil {
+			return []string{"protocol_schema_invalid"}
 		}
 	}
 	entries := walkProtocolNodes(root)
-	errors = append(errors, validateProtocolCapabilities(root, entries, declared)...)
+	errors = append(errors, validateProtocolCapabilities(root, entries)...)
 	errors = append(errors, validateProtocolIdentifiers(root, entries)...)
 	errors = append(errors, validateProtocolDesignSystem(root, entries)...)
 	errors = append(errors, validateProtocolAssets(root, entries)...)
 	errors = append(errors, validateProtocolProducts(root, entries)...)
 	errors = append(errors, validateProtocolLocalization(root, entries)...)
 	errors = append(errors, validateProtocolLayout(root, entries)...)
-	if declared == ProtocolVersion04 {
-		errors = append(errors, validateProtocolMotionTokens(root, entries)...)
-		errors = append(errors, validateProtocolMotionSemantics(root, entries)...)
-	}
+	errors = append(errors, validateProtocolMotionTokens(root, entries)...)
+	errors = append(errors, validateProtocolMotionSemantics(root, entries)...)
 	if len(errors) > 0 {
 		return uniqueStrings(errors)
 	}
@@ -210,7 +189,7 @@ var colorFields = map[string]bool{
 	"textColor": true, "thumbColor": true,
 }
 
-func validateProtocolCapabilities(root map[string]any, entries []protocolNode, version string) []string {
+func validateProtocolCapabilities(root map[string]any, entries []protocolNode) []string {
 	expected := map[string]bool{"navigation.screens": true, "localization.catalogs": true}
 	localization := mapValue(root["localization"])
 	for _, raw := range mapValue(localization["locales"]) {
@@ -291,10 +270,9 @@ func validateProtocolCapabilities(root map[string]any, entries []protocolNode, v
 			}
 		}
 		if stringValue(node["type"]) == "productSelector" {
-			expected["fallback.product"], expected["outcome.normalized"], expected["style.productCardStates"] = true, true, true
+			expected["fallback.product"], expected["outcome.normalized"] = true, true
 		}
 		if stringValue(node["type"]) == "productCard" || stringValue(node["type"]) == "productBadge" {
-			expected["style.productCardStates"] = true
 			if containsProductTemplate(node) {
 				expected["localization.productTemplate"] = true
 			}
@@ -329,18 +307,13 @@ func validateProtocolCapabilities(root map[string]any, entries []protocolNode, v
 			}
 		})
 	}
-	// Expressed as a delta over the 0.3 derivation rather than a second copy of
-	// it: "0.4 is 0.3 plus motion minus one co-derived capability" is the whole
-	// compatibility claim, and a copy would let the two answers drift while
-	// each stayed internally consistent.
-	if version == ProtocolVersion04 {
-		delete(expected, "style.productCardStates")
-		for _, entry := range entries {
-			motion := mapValue(entry.value["motion"])
-			for _, trigger := range []string{"appear", "selection", "loop"} {
-				if motion[trigger] != nil {
-					expected["motion."+trigger] = true
-				}
+	// The motion.* enhancement capabilities are derived from authored motion
+	// blocks, mirroring deriveCapabilities in protocol/tools/validation-v0.4.mjs.
+	for _, entry := range entries {
+		motion := mapValue(entry.value["motion"])
+		for _, trigger := range []string{"appear", "selection", "loop"} {
+			if motion[trigger] != nil {
+				expected["motion."+trigger] = true
 			}
 		}
 	}
@@ -356,12 +329,12 @@ func validateProtocolCapabilities(root map[string]any, entries []protocolNode, v
 		declared[name] = declaredVersion
 	}
 	for name := range expected {
-		if declared[name] != version {
+		if declared[name] != ProtocolVersion {
 			errors = append(errors, "protocol_capability_missing")
 		}
 	}
 	for name, declaredVersion := range declared {
-		if !expected[name] || declaredVersion != version {
+		if !expected[name] || declaredVersion != ProtocolVersion {
 			errors = append(errors, "protocol_capability_unused_or_unsupported")
 		}
 	}
@@ -601,7 +574,7 @@ var productTemplatePattern = regexp.MustCompile(`\{\{\s*product\.(name|price)\s*
 // compose an accessibility phrase from a hardcoded string in any language, so
 // each key is required exactly when the document contains the feature that
 // announces it and forbidden otherwise. Mirrors reservedAccessibilityKeys in
-// protocol/tools/validation-v0.3.mjs.
+// protocol/tools/validation-v0.4.mjs.
 type reservedAccessibilityStrings struct {
 	key          string
 	placeholders []string

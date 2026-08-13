@@ -45,7 +45,6 @@ type Reader interface {
 	PlacementBinding(string, string) (PlacementBinding, bool)
 	PlacementBindings(string) []PlacementBinding
 	Release(string) (Release, bool)
-	ReleaseRepresentation(string, string) (ReleaseRepresentation, bool)
 	Releases(string) []Release
 	ReleasePlacements(string) []ReleasePlacement
 	ReleaseProducts(string) []string
@@ -73,7 +72,6 @@ type Transaction interface {
 	SavePlacement(Placement)
 	SavePlacementBinding(PlacementBinding)
 	SaveRelease(Release)
-	SaveReleaseRepresentation(ReleaseRepresentation)
 	SaveReleaseRuleSetVersion(string, string, string, string, string)
 	SaveReleasePlacement(ReleasePlacement)
 	SaveReleaseProduct(string, string, string, string)

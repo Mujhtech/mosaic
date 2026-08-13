@@ -68,14 +68,13 @@ func (repository deliveryTestRepository) Transact(_ context.Context, fn func(hos
 
 type deliveryTestTransaction struct {
 	hostedpublishing.Transaction
-	key             hostedpublishing.APIKeyRecord
-	environment     hostedpublishing.Environment
-	state           hostedpublishing.ReleaseState
-	release         hostedpublishing.Release
-	representations map[string]hostedpublishing.ReleaseRepresentation
-	application     hostedpublishing.Application
-	commerce        hostedpublishing.CommerceConfigurationSnapshot
-	asset           hostedpublishing.Asset
+	key         hostedpublishing.APIKeyRecord
+	environment hostedpublishing.Environment
+	state       hostedpublishing.ReleaseState
+	release     hostedpublishing.Release
+	application hostedpublishing.Application
+	commerce    hostedpublishing.CommerceConfigurationSnapshot
+	asset       hostedpublishing.Asset
 }
 
 func (transaction *deliveryTestTransaction) APIKeyByPrefix(prefix string) (hostedpublishing.APIKeyRecord, bool) {
@@ -92,11 +91,6 @@ func (transaction *deliveryTestTransaction) ReleaseState(id string) (hostedpubli
 
 func (transaction *deliveryTestTransaction) Release(id string) (hostedpublishing.Release, bool) {
 	return transaction.release, id == transaction.release.ID
-}
-
-func (transaction *deliveryTestTransaction) ReleaseRepresentation(releaseID, version string) (hostedpublishing.ReleaseRepresentation, bool) {
-	representation, ok := transaction.representations[version]
-	return representation, ok && releaseID == transaction.release.ID
 }
 
 func (transaction *deliveryTestTransaction) Applications(projectID string) []hostedpublishing.Application {
@@ -119,7 +113,7 @@ func (transaction *deliveryTestTransaction) Asset(id string) (hostedpublishing.A
 }
 
 func TestSDKConfigurationHTTPConditionalGzipAndExactCapabilities(t *testing.T) {
-	payload, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/configuration-delivery/v1/valid-release.json"))
+	payload, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/configuration-delivery/v3/rich-release.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +123,7 @@ func TestSDKConfigurationHTTPConditionalGzipAndExactCapabilities(t *testing.T) {
 		key:         hostedpublishing.APIKeyRecord{ID: "key_1", EnvironmentID: "environment_staging", Kind: "public_sdk", Prefix: "sdk_test", SecretDigest: digest[:]},
 		environment: hostedpublishing.Environment{ID: "environment_staging", ProjectID: "project_1", Key: "staging"},
 		state:       hostedpublishing.ReleaseState{EnvironmentID: "environment_staging", ProjectID: "project_1", CurrentReleaseID: "configuration-release-9"},
-		release:     hostedpublishing.Release{ID: "configuration-release-9", EnvironmentID: "environment_staging", Payload: payload},
+		release:     hostedpublishing.Release{ID: "configuration-release-9", EnvironmentID: "environment_staging", DeliveryContractVersion: hostedpublishing.DeliveryVersion, Payload: payload},
 	}
 	handler := &Handler{service: hostedpublishing.NewService(deliveryTestRepository{transaction: transaction})}
 	capabilities := releaseCapabilities(t, payload)
@@ -171,9 +165,6 @@ func TestSDKConfigurationParsesExperimentCapabilitiesAndVariesRepresentation(t *
 		environment: hostedpublishing.Environment{ID: "environment_staging", ProjectID: "project_1", Key: "staging"},
 		state:       hostedpublishing.ReleaseState{EnvironmentID: "environment_staging", ProjectID: "project_1", CurrentReleaseID: "configuration-release-experiment"},
 		release:     hostedpublishing.Release{ID: "configuration-release-experiment", EnvironmentID: "environment_staging", DeliveryContractVersion: "3", Payload: payload},
-		representations: map[string]hostedpublishing.ReleaseRepresentation{
-			"3": {ReleaseID: "configuration-release-experiment", EnvironmentID: "environment_staging", DeliveryContractVersion: "3", Payload: payload},
-		},
 	}
 	handler := &Handler{service: hostedpublishing.NewService(deliveryTestRepository{transaction: transaction})}
 	request := sdkRequest(rawKey, releaseCapabilities(t, payload))
@@ -203,37 +194,32 @@ func TestSDKConfigurationParsesExperimentCapabilitiesAndVariesRepresentation(t *
 	}
 }
 
-func TestSDKConfigurationFallsBackToCurrentV2ForV3CapableSDK(t *testing.T) {
-	payload, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/configuration-delivery/v2/advanced-release.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	const rawKey = "sdk_v3_v2_fallback.secret"
+// A Release stored at a deleted Delivery contract version is unreadable, not
+// degraded (ADR-0028): there is no projection to serve, so the SDK is answered
+// 406 and resolves through its ordinary safe-failure chain until the
+// Environment republishes.
+func TestSDKConfigurationWithholdsAReleaseStoredAtADeletedDeliveryVersion(t *testing.T) {
+	const rawKey = "sdk_v2_release.secret"
 	digest := sha256.Sum256([]byte(rawKey))
 	transaction := &deliveryTestTransaction{
-		key:         hostedpublishing.APIKeyRecord{ID: "key_v2", EnvironmentID: "environment_staging", Kind: "public_sdk", Prefix: "sdk_v3_v2_fallback", SecretDigest: digest[:]},
+		key:         hostedpublishing.APIKeyRecord{ID: "key_v2", EnvironmentID: "environment_staging", Kind: "public_sdk", Prefix: "sdk_v2_release", SecretDigest: digest[:]},
 		environment: hostedpublishing.Environment{ID: "environment_staging", ProjectID: "project_1", Key: "staging"},
 		state:       hostedpublishing.ReleaseState{EnvironmentID: "environment_staging", ProjectID: "project_1", CurrentReleaseID: "configuration-release-v2"},
-		release:     hostedpublishing.Release{ID: "configuration-release-v2", EnvironmentID: "environment_staging", DeliveryContractVersion: "2", Payload: payload},
+		release:     hostedpublishing.Release{ID: "configuration-release-v2", EnvironmentID: "environment_staging", DeliveryContractVersion: "2", Payload: []byte(`{"configurationDeliveryVersion":"2"}`)},
 	}
 	handler := &Handler{service: hostedpublishing.NewService(deliveryTestRepository{transaction: transaction})}
-	request := sdkRequest(rawKey, releaseCapabilities(t, payload))
-	request.Header.Set("Mosaic-Configuration-Versions", "3,2,1")
-	features, algorithms := decisionCapabilities(t, payload)
-	request.Header.Set("Mosaic-Placement-Decision-Versions", "1")
-	request.Header.Set("Mosaic-Decision-Features", strings.Join(features, ","))
-	request.Header.Set("Mosaic-Bucketing-Algorithms", strings.Join(algorithms, ","))
+	request := sdkRequest(rawKey, []string{"component.text@0.4"})
 	recorder := httptest.NewRecorder()
 
 	handler.sdkConfiguration(recorder, request)
 
-	if recorder.Code != http.StatusOK || recorder.Header().Get("Content-Type") != "application/vnd.mosaic.configuration+json;version=2" || !bytes.Equal(recorder.Body.Bytes(), payload) {
-		t.Fatalf("v3-capable fallback status=%d content-type=%q body=%s", recorder.Code, recorder.Header().Get("Content-Type"), recorder.Body.String())
+	if recorder.Code != http.StatusNotAcceptable || !strings.Contains(recorder.Body.String(), `"code":"unsupported_capability"`) {
+		t.Fatalf("deleted-version release status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 
 func TestSDKCommerceConfigurationAssociationConditionalAndPlatformIsolation(t *testing.T) {
-	payload, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/commerce-configuration/v1/revenuecat-configuration.json"))
+	payload, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/commerce-configuration/v2/storekit-configuration.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +248,7 @@ func TestSDKCommerceConfigurationAssociationConditionalAndPlatformIsolation(t *t
 	recorder := httptest.NewRecorder()
 	handler.sdkCommerceConfiguration(recorder, request)
 	if recorder.Code != http.StatusOK || !bytes.Equal(recorder.Body.Bytes(), payload) ||
-		recorder.Header().Get("Content-Type") != commerceContentType ||
+		recorder.Header().Get("Content-Type") != commerceContentTypeV2 ||
 		recorder.Header().Get("ETag") != `"`+transaction.commerce.ContentDigest+`"` ||
 		recorder.Header().Get("Mosaic-Configuration-Release-Id") != transaction.commerce.ConfigurationReleaseID {
 		t.Fatalf("commerce delivery status=%d headers=%v body=%s", recorder.Code, recorder.Header(), recorder.Body.String())
@@ -288,22 +274,16 @@ func TestSDKCommerceConfigurationAssociationConditionalAndPlatformIsolation(t *t
 		t.Fatalf("platform mismatch status=%d body=%s", mismatchedRecorder.Code, mismatchedRecorder.Body.String())
 	}
 
-	transaction.commerce.Payload = []byte(`{"commerceConfigurationVersion":"2"}`)
+	// A client advertising only the deleted v1 contract offers no version
+	// Mosaic still defines, so negotiation refuses it outright (ADR-0028).
+	v1OnlyRequest := commerceSDKRequest(rawKey, "ios")
+	v1OnlyRequest.Header.Set("Mosaic-Commerce-Configuration-Versions", "1")
+	v1OnlyRequest.Header.Set("Mosaic-Commerce-Provider-Contract-Versions", "1")
 	v1OnlyRecorder := httptest.NewRecorder()
-	handler.sdkCommerceConfiguration(v1OnlyRecorder, commerceSDKRequest(rawKey, "ios"))
+	handler.sdkCommerceConfiguration(v1OnlyRecorder, v1OnlyRequest)
 	if v1OnlyRecorder.Code != http.StatusNotAcceptable ||
 		!strings.Contains(v1OnlyRecorder.Body.String(), `"code":"unsupported_capability"`) {
-		t.Fatalf("v1-only client received v2 configuration status=%d body=%s", v1OnlyRecorder.Code, v1OnlyRecorder.Body.String())
-	}
-
-	v2Request := commerceSDKRequest(rawKey, "ios")
-	v2Request.Header.Set("Mosaic-Commerce-Configuration-Versions", "1, 2")
-	v2Request.Header.Set("Mosaic-Commerce-Provider-Contract-Versions", "1, 2")
-	v2Recorder := httptest.NewRecorder()
-	handler.sdkCommerceConfiguration(v2Recorder, v2Request)
-	if v2Recorder.Code != http.StatusOK ||
-		v2Recorder.Header().Get("Content-Type") != "application/vnd.mosaic.commerce-configuration+json;version=2" {
-		t.Fatalf("v2-capable client status=%d headers=%v body=%s", v2Recorder.Code, v2Recorder.Header(), v2Recorder.Body.String())
+		t.Fatalf("deleted-v1-only client status=%d body=%s", v1OnlyRecorder.Code, v1OnlyRecorder.Body.String())
 	}
 }
 
@@ -314,11 +294,11 @@ func commerceSDKRequest(rawKey, platform string) *http.Request {
 		nil,
 	)
 	request.Header.Set("Authorization", "Bearer "+rawKey)
-	request.Header.Set("Accept", commerceContentType)
+	request.Header.Set("Accept", commerceContentTypeV2)
 	request.Header.Set("Mosaic-SDK-Platform", platform)
 	request.Header.Set("Mosaic-SDK-Version", "1.0.0")
-	request.Header.Set("Mosaic-Commerce-Configuration-Versions", "1")
-	request.Header.Set("Mosaic-Commerce-Provider-Contract-Versions", "1")
+	request.Header.Set("Mosaic-Commerce-Configuration-Versions", "2")
+	request.Header.Set("Mosaic-Commerce-Provider-Contract-Versions", "2")
 	return request
 }
 
@@ -327,8 +307,12 @@ func sdkRequest(rawKey string, capabilities []string) *http.Request {
 	request.Header.Set("Authorization", "Bearer "+rawKey)
 	request.Header.Set("Mosaic-SDK-Platform", "flutter")
 	request.Header.Set("Mosaic-SDK-Version", "0.2.0-dev.5")
-	request.Header.Set("Mosaic-Configuration-Versions", "1")
-	request.Header.Set("Mosaic-Paywall-Protocol-Versions", "0.3")
+	request.Header.Set("Mosaic-Configuration-Versions", "3")
+	request.Header.Set("Mosaic-Paywall-Protocol-Versions", "0.4")
+	request.Header.Set(experimentAssignmentVersionsHeader, "1")
+	request.Header.Set(experimentFeaturesHeader, "allocation.ranges,assignment.installation,assignment.identified_user,assignment.identified_user_or_installation,fallback.normal_placement,group.mutual_exclusion,override.qa,schedule.trusted_server_time")
+	request.Header.Set(experimentBucketingAlgorithmsHeader, "experiment_sha256_length_prefixed_v1,experiment_group_sha256_length_prefixed_v1")
+	request.Header.Set(experimentSchedulePoliciesHeader, "trusted_server_time_v1")
 	request.Header.Set(capabilitiesHeader, strings.Join(capabilities, ","))
 	return request
 }

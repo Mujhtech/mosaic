@@ -1266,27 +1266,27 @@ paths:
       parameters:
         - { in: header, name: Mosaic-SDK-Platform, required: true, schema: { type: string, enum: [flutter, ios, android] } }
         - { in: header, name: Mosaic-SDK-Version, required: true, schema: { type: string, minLength: 1, maxLength: 64, pattern: "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:[-+][A-Za-z0-9.-]+)?$" } }
-        - { in: header, name: Mosaic-Configuration-Versions, required: true, schema: { type: string, pattern: "^(1|2|3)(, ?(1|2|3))*$" } }
-        - { in: header, name: Mosaic-Paywall-Protocol-Versions, required: true, description: The single Paywall Protocol version the SDK renders. Versions are exact identifiers; a reader declaring 0.4 accepts only 0.4., schema: { type: string, enum: ["0.3", "0.4"] } }
+        - { in: header, name: Mosaic-Configuration-Versions, required: true, description: The Configuration Delivery contract versions the SDK decodes. Exactly one version exists (v3); a reader that does not advertise it receives nothing new., schema: { type: string, pattern: "^3(, ?3)*$" } }
+        - { in: header, name: Mosaic-Paywall-Protocol-Versions, required: true, description: The single Paywall Protocol version the SDK renders. Versions are exact identifiers; a reader declaring 0.4 accepts only 0.4., schema: { type: string, enum: ["0.4"] } }
         - in: header
           name: Mosaic-Paywall-Capabilities
           required: true
           description: |
             Comma-separated unique exact Protocol capability pairs (`name@<version>`), bounded to 128 pairs, drawn from the compatibility manifest for the declared protocol version.
             The selected Release is returned only when every required pair is reported, with one exception: Protocol 0.4 `motion.*` capabilities carry the `renderWithoutMotion` fallback, so a Release is still delivered to a reader that omits them and the reader renders the document statically. Every other capability keeps `rejectDocument`.
-          schema: { type: string, minLength: 1, maxLength: 16384, example: "component.text@0.3,layout.stack@0.3" }
+          schema: { type: string, minLength: 1, maxLength: 16384, example: "component.text@0.4,layout.stack@0.4" }
         - { in: header, name: Mosaic-Placement-Decision-Versions, required: false, schema: { type: string, pattern: "^1$" } }
         - { in: header, name: Mosaic-Decision-Features, required: false, description: Comma-separated exact Placement Decision v1 feature identifiers., schema: { type: string, maxLength: 16384 } }
         - { in: header, name: Mosaic-Bucketing-Algorithms, required: false, schema: { type: string, enum: [sha256_length_prefixed_v1] } }
-        - { in: header, name: Mosaic-Experiment-Assignment-Versions, required: false, description: Required when Delivery v3 is requested. Comma-separated unique Experiment Assignment contract versions., schema: { type: string, maxLength: 16384, pattern: "^1$" } }
-        - { in: header, name: Mosaic-Experiment-Features, required: false, description: Required when Delivery v3 is requested. Comma-separated unique exact Experiment Assignment v1 feature identifiers., schema: { type: string, minLength: 1, maxLength: 16384 } }
-        - { in: header, name: Mosaic-Experiment-Bucketing-Algorithms, required: false, description: Required when Delivery v3 is requested. Comma-separated unique canonical Variant and Group bucketing algorithms., schema: { type: string, minLength: 1, maxLength: 16384 } }
-        - { in: header, name: Mosaic-Experiment-Schedule-Policies, required: false, description: Required when Delivery v3 is requested. Comma-separated unique trusted-time schedule policies., schema: { type: string, minLength: 1, maxLength: 16384 } }
+        - { in: header, name: Mosaic-Experiment-Assignment-Versions, required: true, description: Comma-separated unique Experiment Assignment contract versions., schema: { type: string, maxLength: 16384, pattern: "^1$" } }
+        - { in: header, name: Mosaic-Experiment-Features, required: true, description: Comma-separated unique exact Experiment Assignment v1 feature identifiers., schema: { type: string, minLength: 1, maxLength: 16384 } }
+        - { in: header, name: Mosaic-Experiment-Bucketing-Algorithms, required: true, description: Comma-separated unique canonical Variant and Group bucketing algorithms., schema: { type: string, minLength: 1, maxLength: 16384 } }
+        - { in: header, name: Mosaic-Experiment-Schedule-Policies, required: true, description: Comma-separated unique trusted-time schedule policies., schema: { type: string, minLength: 1, maxLength: 16384 } }
         - { in: header, name: Mosaic-App-Version, required: false, schema: { type: string, minLength: 1, maxLength: 64 } }
         - { in: header, name: If-None-Match, required: false, schema: { type: string } }
       responses:
         "200":
-          description: Highest mutually supported representation actually available for the current immutable Release. A v3-capable SDK falls back to an available v2 or safe v1 representation when that Release predates v3. Delivery v3 requires complete Experiment capability headers. A v1 candidate is withheld when an advanced Placement lacks an explicit Paywall default.
+          description: The current immutable Release in its single stored representation (Configuration Delivery v3, carrying Paywall Protocol 0.4). There are no projections to older Delivery versions; a Release stored at a deleted version is withheld with 406 until the Environment republishes.
           headers:
             ETag: { schema: { type: string } }
             Cache-Control: { schema: { type: string } }
@@ -1306,7 +1306,7 @@ paths:
       security: [{ PublicSDKKey: [] }]
       parameters:
         - { in: query, name: applicationId, required: true, schema: { type: string } }
-        - { in: header, name: Accept, required: true, schema: { type: string, description: "Comma-separated accepted Commerce media types. Supported versions are application/vnd.mosaic.commerce-configuration+json;version=1 and version=2." } }
+        - { in: header, name: Accept, required: true, schema: { type: string, description: "Comma-separated accepted Commerce media types. The only supported version is application/vnd.mosaic.commerce-configuration+json;version=2." } }
         - { in: header, name: Mosaic-SDK-Platform, required: true, schema: { type: string, enum: [flutter, ios, android] } }
         - { in: header, name: Mosaic-SDK-Version, required: true, schema: { type: string, minLength: 1, maxLength: 64, pattern: "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:[-+][A-Za-z0-9.-]+)?$" } }
         - { in: header, name: Mosaic-Commerce-Configuration-Versions, required: true, schema: { type: string, pattern: "^(1|2)(, ?(1|2))*$" } }
@@ -1868,7 +1868,7 @@ paths:
       tags: [Authoritative Entitlements]
       description: |
         The Access Decision Snapshot for the Billing Customer the Customer Access Token names,
-        as the Authoritative Entitlement Contract v1 customerEntitlementSnapshot record.
+        as the Authoritative Entitlement Contract v2 customerEntitlementSnapshot record.
 
         Two credentials are required and they answer different questions: the token decides
         WHICH customer is read, and the public SDK key in Mosaic-SDK-Key decides which
@@ -5255,24 +5255,6 @@ components:
         lastUsedAt: { type: string, format: date-time }
         tokenPrefix: { type: string, const: "mcat_" }
         digestAlgorithm: { type: string, const: sha256 }
-    EntitlementSyncRequestRecord:
-      type: object
-      additionalProperties: false
-      required: [authoritativeEntitlementContractVersion, recordType, payload]
-      properties:
-        authoritativeEntitlementContractVersion: { type: string, const: "1" }
-        recordType: { type: string, const: entitlementSyncRequest }
-        payload:
-          type: object
-          additionalProperties: false
-          required: [supportedAuthoritativeEntitlementContracts, correlationId]
-          properties:
-            billingCustomerId: { type: string, description: A hint only. Verified against the token; a mismatch is refused. }
-            knownSnapshotVersion: { type: integer, minimum: 1 }
-            entityTag: { type: string }
-            supportedAuthoritativeEntitlementContracts: { type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: { type: string, enum: ["1"] } }
-            requestedEntitlementKeys: { type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: { type: string, pattern: "^[a-z][a-z0-9_.-]*$" } }
-            correlationId: { type: string, minLength: 1, maxLength: 128 }
     AuthorityEntitlementSyncRequestRecord:
       type: object
       additionalProperties: false
@@ -5297,16 +5279,14 @@ components:
                 platform: { type: string, enum: [ios, android] }
                 appVersion: { type: string, minLength: 1, maxLength: 64 }
                 sdkVersion: { type: string, minLength: 1, maxLength: 64 }
-                supportedContractVersions: { type: array, minItems: 1, maxItems: 8, uniqueItems: true, contains: { const: "2" }, items: { type: string, enum: ["1", "2"] } }
+                supportedContractVersions: { type: array, minItems: 1, maxItems: 8, uniqueItems: true, contains: { const: "2" }, items: { type: string, enum: ["2"] } }
                 capabilities: { type: array, minItems: 1, maxItems: 16, uniqueItems: true, contains: { const: authority_epoch }, items: { type: string, enum: [authority_epoch, authority_scope, urgent_authority_sync, mosaic_authoritative_targeting] } }
     EntitlementSyncRequestUnion:
       oneOf:
-        - { $ref: "#/components/schemas/EntitlementSyncRequestRecord" }
         - { $ref: "#/components/schemas/AuthorityEntitlementSyncRequestRecord" }
       discriminator:
         propertyName: authoritativeEntitlementContractVersion
         mapping:
-          "1": "#/components/schemas/EntitlementSyncRequestRecord"
           "2": "#/components/schemas/AuthorityEntitlementSyncRequestRecord"
     BillingAuthorityScope:
       type: object
@@ -5445,13 +5425,13 @@ components:
       type: object
       additionalProperties: false
       description: |
-        The Authoritative Entitlement Contract v1 restoreRequest envelope. The normative shape is
-        protocol/schema/authoritative-entitlement/v1/restore.schema.json; this declaration exists
+        The Authoritative Entitlement Contract v2 restoreRequest envelope. The normative shape is
+        protocol/schema/authoritative-entitlement/v2/restore.schema.json; this declaration exists
         so the operation has a resolvable request schema and is deliberately not a second source
         of truth for the contract.
       required: [authoritativeEntitlementContractVersion, recordType, payload]
       properties:
-        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        authoritativeEntitlementContractVersion: { type: string, const: "2" }
         recordType: { type: string, const: restoreRequest }
         payload:
           type: object
@@ -5466,11 +5446,11 @@ components:
     RestoreResultRecord:
       type: object
       description: |
-        The Authoritative Entitlement Contract v1 restoreResult envelope. Normative shape:
-        protocol/schema/authoritative-entitlement/v1/restore.schema.json.
+        The Authoritative Entitlement Contract v2 restoreResult envelope. Normative shape:
+        protocol/schema/authoritative-entitlement/v2/restore.schema.json.
       required: [authoritativeEntitlementContractVersion, recordType, payload]
       properties:
-        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        authoritativeEntitlementContractVersion: { type: string, const: "2" }
         recordType: { type: string, const: restoreResult }
         payload:
           type: object
@@ -5497,13 +5477,13 @@ components:
     CustomerEntitlementSnapshotRecord:
       type: object
       description: |
-        The Authoritative Entitlement Contract v1 customerEntitlementSnapshot envelope. The
-        normative shape is protocol/schema/authoritative-entitlement/v1/snapshot.schema.json;
+        The Authoritative Entitlement Contract v2 customerEntitlementSnapshot envelope. The
+        normative shape is protocol/schema/authoritative-entitlement/v2/snapshot.schema.json;
         this declaration exists so the operation has a resolvable response schema and is
         deliberately not a second source of truth for the contract.
       required: [authoritativeEntitlementContractVersion, recordType, payload]
       properties:
-        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        authoritativeEntitlementContractVersion: { type: string, const: "2" }
         recordType: { type: string, enum: [customerEntitlementSnapshot, snapshotUnchanged] }
         payload:
           type: object
@@ -5589,7 +5569,7 @@ components:
       additionalProperties: false
       required: [authoritativeEntitlementContractVersion, recordType, payload]
       properties:
-        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        authoritativeEntitlementContractVersion: { type: string, const: "2" }
         recordType: { type: string, const: entitlementCheckRequest }
         payload:
           type: object
@@ -5599,13 +5579,13 @@ components:
             billingCustomerId: { type: string }
             entitlementKeys: { type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: { type: string, pattern: "^[a-z][a-z0-9_.-]*$" } }
             expectedSnapshotVersion: { type: integer, minimum: 1 }
-            supportedAuthoritativeEntitlementContracts: { type: array, minItems: 1, items: { type: string, enum: ["1"] } }
+            supportedAuthoritativeEntitlementContracts: { type: array, minItems: 1, items: { type: string, enum: ["2"] } }
             correlationId: { type: string, minLength: 1, maxLength: 128 }
     EntitlementCheckResultRecord:
       type: object
       required: [authoritativeEntitlementContractVersion, recordType, payload]
       properties:
-        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        authoritativeEntitlementContractVersion: { type: string, const: "2" }
         recordType: { type: string, const: entitlementCheckResult }
         payload:
           type: object
@@ -5640,11 +5620,11 @@ components:
     SubscriptionSnapshotRecord:
       type: object
       description: |
-        The Authoritative Entitlement Contract v1 subscriptionSnapshot envelope. The normative
-        shape is protocol/schema/authoritative-entitlement/v1/subscription.schema.json.
+        The Authoritative Entitlement Contract v2 subscriptionSnapshot envelope. The normative
+        shape is protocol/schema/authoritative-entitlement/v2/subscription.schema.json.
       required: [authoritativeEntitlementContractVersion, recordType, payload]
       properties:
-        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        authoritativeEntitlementContractVersion: { type: string, const: "2" }
         recordType: { type: string, const: subscriptionSnapshot }
         payload:
           type: object
@@ -5990,8 +5970,9 @@ components:
     WebhookDeliveryAttempt:
       type: object
       description: |
-        One recorded try. Mirrors the Billing State Webhook Contract v1 webhookDeliveryAttempt
-        record; the normative shape is protocol/schema/billing-state-webhook/v1/delivery.schema.json.
+        One recorded try. Mirrors the Billing State Webhook Contract v2 webhookDeliveryAttempt
+        record; the normative shape is the webhookDeliveryAttempt definition in
+        protocol/schema/billing-state-webhook/v2/contract.schema.json.
       properties:
         id: { type: string }
         deliveryId: { type: string }
@@ -7963,7 +7944,7 @@ components:
         status: { type: string, enum: [active, published, archived] }
         revision: { type: integer, minimum: 1 }
         sourceVersionId: { type: string }
-        protocolVersion: { type: string, enum: ["0.3", "0.4"] }
+        protocolVersion: { type: string, enum: ["0.4"] }
         validationStatus: { type: string, enum: [valid, invalid] }
         validation: { $ref: "#/components/schemas/ValidationSummary" }
         createdByActorId: { type: string }
@@ -7989,7 +7970,7 @@ components:
         versionNumber: { type: integer, minimum: 1 }
         sourceDraftId: { type: string }
         sourceRevision: { type: integer, minimum: 1 }
-        protocolVersion: { type: string, enum: ["0.3", "0.4"] }
+        protocolVersion: { type: string, enum: ["0.4"] }
         document: { type: object, additionalProperties: true }
         documentHash: { type: string, pattern: "^[0-9a-f]{64}$" }
         validation: { $ref: "#/components/schemas/ValidationSummary" }
@@ -8066,7 +8047,7 @@ components:
         projectId: { type: string }
         environmentId: { type: string }
         releaseNumber: { type: integer, minimum: 1 }
-        deliveryContractVersion: { type: string, const: "1" }
+        deliveryContractVersion: { type: string, const: "3" }
         contentHash: { type: string, pattern: "^[0-9a-f]{64}$" }
         sourceReleaseId: { type: string }
         rollbackSourceReleaseId: { type: string }

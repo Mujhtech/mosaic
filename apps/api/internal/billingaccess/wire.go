@@ -12,7 +12,7 @@ import (
 )
 
 // This file is the only place in Mosaic that produces Authoritative Entitlement
-// Contract v1 records. Two decisions make it the only place:
+// Contract records. Two decisions make it the only place:
 //
 //  1. Records are built as map[string]any rather than as tagged structs. The
 //     contract's canonical serialization must omit absent members and must

@@ -596,7 +596,7 @@ func seedAuthority(repository *fakeRepository) {
 
 func authorityRequest() AuthoritySyncRequest {
 	return AuthoritySyncRequest{ApplicationID: "app_1", Platform: "ios", AppVersion: "4.2.0", SDKVersion: "2.1.0",
-		SupportedContractVersions: []string{"1", "2"},
+		SupportedContractVersions: []string{"2"},
 		Capabilities:              []string{"authority_epoch", "authority_scope", "urgent_authority_sync"}}
 }
 
@@ -608,7 +608,10 @@ func validateAuthorityV2Record(t *testing.T, payload []byte) {
 		return (*authorityTestRegexp)(compiled), err
 	})
 	for _, relative := range []string{
-		"../../../../protocol/schema/authoritative-entitlement/v1/snapshot.schema.json",
+		"../../../../protocol/schema/authoritative-entitlement/v2/snapshot.schema.json",
+		"../../../../protocol/schema/authoritative-entitlement/v2/check.schema.json",
+		"../../../../protocol/schema/authoritative-entitlement/v2/subscription.schema.json",
+		"../../../../protocol/schema/authoritative-entitlement/v2/restore.schema.json",
 		"../../../../protocol/schema/authoritative-entitlement/v2/contract.schema.json",
 	} {
 		file, err := os.Open(relative)

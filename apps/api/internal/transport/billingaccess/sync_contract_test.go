@@ -58,7 +58,9 @@ func (stubRepository) AuthoritySelection(ctx context.Context, scope billingacces
 		MinimumSupport: billingaccess.MinimumSupport{ProgramID: "bmp_sync_test", MinimumSDKVersion: "2.0.0", MinimumAppVersion: "4.0.0", MaximumAppVersion: "5.9.9", RequiredCapabilities: []string{"authority_epoch"}}}, nil
 }
 func (stubRepository) ObservedSnapshotDigest(context.Context, billingaccess.AuthoritySelection, []byte) (bool, error) {
-	return false, nil
+	// The digest the conditional case presents was previously observed, so the
+	// unchanged answer is provable.
+	return true, nil
 }
 func (stubRepository) AppendSyncObservation(context.Context, billingaccess.SyncObservation) error {
 	return nil
@@ -158,35 +160,73 @@ func entityTag(t *testing.T, handler http.Handler) string {
 	return strings.Trim(recorder.Header().Get("ETag"), `"`)
 }
 
-func syncBody(version int64, tag string) string {
+func syncBody(knownEpoch, knownVersion *int64, knownDigest string) string {
+	inner := map[string]any{
+		"request": map[string]any{
+			"applicationId": "app_sync_test", "platform": "ios",
+			"appVersion": "4.2.0", "sdkVersion": "2.0.0",
+			"supportedContractVersions": []string{billingaccess.ContractVersion},
+			"capabilities":              []string{"authority_epoch"},
+		},
+	}
+	if knownEpoch != nil {
+		inner["knownAuthorityEpoch"] = *knownEpoch
+	}
+	if knownVersion != nil {
+		inner["knownSnapshotVersion"] = *knownVersion
+	}
+	if knownDigest != "" {
+		inner["knownSnapshotAuthorityDigest"] = knownDigest
+	}
 	payload := map[string]any{
 		"authoritativeEntitlementContractVersion": billingaccess.ContractVersion,
 		"recordType": "entitlementSyncRequest",
-		"payload": map[string]any{
-			"knownSnapshotVersion": version,
-			"entityTag":            tag,
-			"supportedAuthoritativeEntitlementContracts": []string{billingaccess.ContractVersion},
-			"correlationId": "corr_sync_test",
-		},
+		"payload":    inner,
 	}
 	encoded, _ := json.Marshal(payload)
 	return string(encoded)
 }
 
-func TestNegotiatedSyncAnswersUnchangedRecordRatherThanBare304(t *testing.T) {
-	handler := syncRouter()
-	tag := entityTag(t, handler)
-
-	// The hostile case: a matching version *and* an If-None-Match header, which
-	// is exactly what made the old handler take the 304 branch on POST.
-	request := httptest.NewRequest(http.MethodPost, "/sdk/billing/entitlements",
-		strings.NewReader(syncBody(testVersion, tag)))
+func postSync(t *testing.T, handler http.Handler, body, ifNoneMatch string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, "/sdk/billing/entitlements", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer "+testToken)
 	request.Header.Set(billingaccesshttp.SDKKeyHeader, testSDKKey)
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("If-None-Match", `"`+tag+`"`)
+	if ifNoneMatch != "" {
+		request.Header.Set("If-None-Match", ifNoneMatch)
+	}
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
+	return recorder
+}
+
+func TestNegotiatedSyncAnswersUnchangedRecordRatherThanBare304(t *testing.T) {
+	handler := syncRouter()
+
+	// Prime with a full negotiated sync to learn the authority epoch, snapshot
+	// version, and authority digest the server issued.
+	primed := postSync(t, handler, syncBody(nil, nil, ""), "")
+	if primed.Code != http.StatusOK {
+		t.Fatalf("priming negotiated sync: status %d (%s)", primed.Code, primed.Body.String())
+	}
+	var full struct {
+		Payload struct {
+			Authority struct {
+				AuthorityEpoch int64 `json:"authorityEpoch"`
+			} `json:"authority"`
+			SnapshotAuthorityDigest string `json:"snapshotAuthorityDigest"`
+		} `json:"payload"`
+	}
+	if err := json.Unmarshal(primed.Body.Bytes(), &full); err != nil {
+		t.Fatalf("decode primed snapshot: %v (%s)", err, primed.Body.String())
+	}
+
+	// The hostile case: a provably-unchanged snapshot *and* an If-None-Match
+	// header, which is exactly what made the old handler take the 304 branch.
+	epoch, version := full.Payload.Authority.AuthorityEpoch, testVersion
+	tag := entityTag(t, handler)
+	recorder := postSync(t, handler, syncBody(&epoch, &version, full.Payload.SnapshotAuthorityDigest), `"`+tag+`"`)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("negotiated sync with a matching version: status %d, want 200 (never a bare 304)", recorder.Code)
@@ -196,37 +236,39 @@ func TestNegotiatedSyncAnswersUnchangedRecordRatherThanBare304(t *testing.T) {
 		ContractVersion string `json:"authoritativeEntitlementContractVersion"`
 		RecordType      string `json:"recordType"`
 		Payload         struct {
-			SnapshotVersion   int64  `json:"snapshotVersion"`
-			RefreshAfter      string `json:"refreshAfter"`
-			ValidUntil        string `json:"validUntil"`
-			StaleGraceSeconds *int   `json:"staleGraceSeconds"`
+			Unchanged struct {
+				SnapshotVersion   int64  `json:"snapshotVersion"`
+				RefreshAfter      string `json:"refreshAfter"`
+				ValidUntil        string `json:"validUntil"`
+				StaleGraceSeconds *int   `json:"staleGraceSeconds"`
+			} `json:"unchanged"`
 		} `json:"payload"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode unchanged record: %v (%s)", err, recorder.Body.String())
 	}
 	if envelope.RecordType != "snapshotUnchanged" {
-		t.Fatalf("recordType %q, want snapshotUnchanged", envelope.RecordType)
+		t.Fatalf("recordType %q, want snapshotUnchanged (%s)", envelope.RecordType, recorder.Body.String())
 	}
 	if envelope.ContractVersion != billingaccess.ContractVersion {
 		t.Fatalf("contract version %q, want %q", envelope.ContractVersion, billingaccess.ContractVersion)
 	}
-	if envelope.Payload.SnapshotVersion != testVersion {
-		t.Fatalf("snapshotVersion %d, want %d", envelope.Payload.SnapshotVersion, testVersion)
+	if envelope.Payload.Unchanged.SnapshotVersion != testVersion {
+		t.Fatalf("snapshotVersion %d, want %d", envelope.Payload.Unchanged.SnapshotVersion, testVersion)
 	}
 
 	// The whole reason the negotiated form does not use 304: the freshness
 	// window has to be in the body, under the frozen schema, not only in
 	// headers no contract defines.
-	if envelope.Payload.RefreshAfter == "" || envelope.Payload.ValidUntil == "" ||
-		envelope.Payload.StaleGraceSeconds == nil {
+	if envelope.Payload.Unchanged.RefreshAfter == "" || envelope.Payload.Unchanged.ValidUntil == "" ||
+		envelope.Payload.Unchanged.StaleGraceSeconds == nil {
 		t.Fatalf("unchanged record must carry refreshed freshness windows: %s", recorder.Body.String())
 	}
-	refreshAfter, err := time.Parse(time.RFC3339, envelope.Payload.RefreshAfter)
+	refreshAfter, err := time.Parse(time.RFC3339, envelope.Payload.Unchanged.RefreshAfter)
 	if err != nil {
 		t.Fatalf("parse refreshAfter: %v", err)
 	}
-	validUntil, err := time.Parse(time.RFC3339, envelope.Payload.ValidUntil)
+	validUntil, err := time.Parse(time.RFC3339, envelope.Payload.Unchanged.ValidUntil)
 	if err != nil {
 		t.Fatalf("parse validUntil: %v", err)
 	}
@@ -287,7 +329,7 @@ func TestConditionalGetAnswersFullSnapshotWithFreshnessHeaders(t *testing.T) {
 
 func TestPostStrictlyDiscriminatesAuthorityV2(t *testing.T) {
 	handler := syncRouter()
-	body := `{"authoritativeEntitlementContractVersion":"2","recordType":"entitlementSyncRequest","payload":{"request":{"applicationId":"app_sync_test","platform":"ios","appVersion":"4.2.0","sdkVersion":"2.0.0","supportedContractVersions":["1","2"],"capabilities":["authority_epoch"]}}}`
+	body := `{"authoritativeEntitlementContractVersion":"2","recordType":"entitlementSyncRequest","payload":{"request":{"applicationId":"app_sync_test","platform":"ios","appVersion":"4.2.0","sdkVersion":"2.0.0","supportedContractVersions":["2"],"capabilities":["authority_epoch"]}}}`
 	request := httptest.NewRequest(http.MethodPost, "/sdk/billing/entitlements", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer "+testToken)
 	request.Header.Set(billingaccesshttp.SDKKeyHeader, testSDKKey)
@@ -307,6 +349,14 @@ func TestPostStrictlyDiscriminatesAuthorityV2(t *testing.T) {
 	}
 	if envelope["authoritativeEntitlementContractVersion"] != "2" || envelope["recordType"] != "customerEntitlementSnapshot" {
 		t.Fatalf("POST did not select v2: %s", recorder.Body.String())
+	}
+
+	// The deleted v1 request envelope must be refused as an unsupported exact
+	// version, not silently decoded (ADR-0028).
+	v1Body := strings.Replace(body, `"authoritativeEntitlementContractVersion":"2"`, `"authoritativeEntitlementContractVersion":"1"`, 1)
+	v1Recorder := postSync(t, handler, v1Body, "")
+	if v1Recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("deleted v1 envelope status %d, want 422: %s", v1Recorder.Code, v1Recorder.Body.String())
 	}
 
 	unknown := strings.Replace(body, `"request":{`, `"unknown":true,"request":{`, 1)

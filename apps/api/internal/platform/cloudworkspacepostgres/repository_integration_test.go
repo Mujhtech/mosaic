@@ -872,17 +872,12 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	}
 
 	publishingRepository := hostedpublishingpostgres.New(pool)
-	protocolSchema, err := os.Open(filepath.Join("../../../../../protocol/schema/v0.3/paywall.schema.json"))
-	if err != nil {
-		t.Fatalf("open Protocol 0.3 schema: %v", err)
-	}
-	protocolSchema04, err := os.Open(filepath.Join("../../../../../protocol/schema/v0.4/paywall.schema.json"))
+	protocolSchema, err := os.Open(filepath.Join("../../../../../protocol/schema/v0.4/paywall.schema.json"))
 	if err != nil {
 		t.Fatalf("open Protocol 0.4 schema: %v", err)
 	}
-	protocolValidator, err := hostedpublishing.CompileProtocolValidator(protocolSchema, protocolSchema04)
+	protocolValidator, err := hostedpublishing.CompileProtocolValidator(protocolSchema)
 	_ = protocolSchema.Close()
-	_ = protocolSchema04.Close()
 	if err != nil {
 		t.Fatalf("compile Paywall Protocol validator: %v", err)
 	}
@@ -911,7 +906,7 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create paywall: %v", err)
 	}
-	document, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/v0.3/navigation-only.json"))
+	document, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/v0.4/navigation-only.json"))
 	if err != nil {
 		t.Fatalf("read canonical Protocol fixture: %v", err)
 	}
@@ -973,14 +968,14 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	if err != nil || retried.Release.ID != published.Release.ID {
 		t.Fatalf("publish retry release=%#v err=%v", retried.Release, err)
 	}
-	configuration, err := publishing.AuthenticateSDKKey(ctx, publicKey.Secret)
+	configuration, err := publishing.AuthenticateSDKKeyVersions(ctx, publicKey.Secret, []string{hostedpublishing.DeliveryVersion})
 	if err != nil || configuration.Release.ID != published.Release.ID || configuration.Environment.ID != environment.ID {
 		t.Fatalf("SDK delivery configuration=%#v err=%v", configuration, err)
 	}
 	if !bytes.Contains(configuration.Release.Payload, []byte("View final details")) || !bytes.Contains(configuration.Release.Payload, []byte(asset.ID)) {
 		t.Fatalf("published payload omitted immutable Draft snapshot: %s", configuration.Release.Payload)
 	}
-	if _, err := publishing.AuthenticateSDKKey(ctx, otherPublicKey.Secret); !errors.Is(err, hostedpublishing.ErrNoCurrentRelease) {
+	if _, err := publishing.AuthenticateSDKKeyVersions(ctx, otherPublicKey.Secret, []string{hostedpublishing.DeliveryVersion}); !errors.Is(err, hostedpublishing.ErrNoCurrentRelease) {
 		t.Fatalf("unpublished second Environment key observed another Environment release: %v", err)
 	}
 	otherDocument := bytes.ReplaceAll(advancedDocument, []byte("View final details"), []byte("View other Environment details"))
@@ -998,8 +993,8 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("publish second Environment: %v", err)
 	}
-	firstConfiguration, firstErr := publishing.AuthenticateSDKKey(ctx, publicKey.Secret)
-	otherConfiguration, otherErr := publishing.AuthenticateSDKKey(ctx, otherPublicKey.Secret)
+	firstConfiguration, firstErr := publishing.AuthenticateSDKKeyVersions(ctx, publicKey.Secret, []string{hostedpublishing.DeliveryVersion})
+	otherConfiguration, otherErr := publishing.AuthenticateSDKKeyVersions(ctx, otherPublicKey.Secret, []string{hostedpublishing.DeliveryVersion})
 	if firstErr != nil || otherErr != nil || firstConfiguration.Environment.ID != environment.ID || otherConfiguration.Environment.ID != otherEnvironment.ID ||
 		firstConfiguration.Release.ID != published.Release.ID || otherConfiguration.Release.ID != otherPublished.Release.ID ||
 		bytes.Contains(firstConfiguration.Release.Payload, []byte("other Environment")) || !bytes.Contains(otherConfiguration.Release.Payload, []byte("other Environment")) {
@@ -1009,7 +1004,7 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create second production Product: %v", err)
 	}
-	productionDocument, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/v0.3/hidden-purchase-target.json"))
+	productionDocument, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/v0.4/hidden-purchase-target.json"))
 	if err != nil {
 		t.Fatalf("read production Protocol fixture: %v", err)
 	}
@@ -1107,7 +1102,7 @@ func bindHostedImage(t *testing.T, document map[string]any, assetURL string) {
 	compatibility := document["compatibility"].(map[string]any)
 	required := compatibility["requiredCapabilities"].([]any)
 	for _, name := range []string{"component.image", "asset.remoteImage", "fallback.asset"} {
-		required = append(required, map[string]any{"name": name, "version": "0.3"})
+		required = append(required, map[string]any{"name": name, "version": "0.4"})
 	}
 	compatibility["requiredCapabilities"] = required
 	document["assets"] = []any{map[string]any{

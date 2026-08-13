@@ -244,25 +244,10 @@ func tokenMetadata(token billingaccess.Token, now time.Time) map[string]any {
 // public key alone can never select a customer.
 const SDKKeyHeader = "Mosaic-SDK-Key"
 
-type syncEnvelope struct {
-	AuthoritativeEntitlementContractVersion string      `json:"authoritativeEntitlementContractVersion"`
-	RecordType                              string      `json:"recordType"`
-	Payload                                 syncPayload `json:"payload"`
-}
-
 type syncDiscriminator struct {
 	AuthoritativeEntitlementContractVersion string          `json:"authoritativeEntitlementContractVersion"`
 	RecordType                              string          `json:"recordType"`
 	Payload                                 json.RawMessage `json:"payload"`
-}
-
-type syncPayload struct {
-	BillingCustomerID                          string   `json:"billingCustomerId,omitempty"`
-	KnownSnapshotVersion                       int64    `json:"knownSnapshotVersion,omitempty"`
-	EntityTag                                  string   `json:"entityTag,omitempty"`
-	SupportedAuthoritativeEntitlementContracts []string `json:"supportedAuthoritativeEntitlementContracts"`
-	RequestedEntitlementKeys                   []string `json:"requestedEntitlementKeys,omitempty"`
-	CorrelationID                              string   `json:"correlationId"`
 }
 
 type authoritySyncPayload struct {
@@ -295,7 +280,7 @@ func (p authoritySyncPayload) Validate() error {
 				validation.Field(&request.Platform, validation.Required, validation.In("ios", "android")),
 				validation.Field(&request.AppVersion, validation.Required, validation.Length(1, 64)),
 				validation.Field(&request.SDKVersion, validation.Required, validation.Length(1, 64)),
-				validation.Field(&request.SupportedContractVersions, validation.Required, validation.Length(1, 8), validation.Each(validation.In("1", "2"))),
+				validation.Field(&request.SupportedContractVersions, validation.Required, validation.Length(1, 8), validation.Each(validation.In("2"))),
 				validation.Field(&request.Capabilities, validation.Required, validation.Length(1, 16), validation.Each(validation.In(
 					"authority_epoch", "authority_scope", "urgent_authority_sync", "mosaic_authoritative_targeting"))),
 			); err != nil {
@@ -330,48 +315,29 @@ func (h *Handler) syncEntitlements(w http.ResponseWriter, r *http.Request) {
 				"recordType": {"The record is not an Authoritative Entitlement sync request."}})
 			return
 		}
-		switch envelope.AuthoritativeEntitlementContractVersion {
-		case billingaccess.ContractVersion:
-			var payload syncPayload
-			if !decodePayload(w, r, envelope.Payload, &payload) {
-				return
-			}
-			if !supportsContract(payload.SupportedAuthoritativeEntitlementContracts) {
-				// The caller cannot read anything Mosaic can produce. This is a
-				// negotiation failure, not an authentication or state problem.
-				response.Error(w, r, response.NewAPIError(http.StatusNotAcceptable,
-					"contract_version_unsupported",
-					"No supported Authoritative Entitlement Contract version was offered."))
-				return
-			}
-			request.CustomerIDHint = payload.BillingCustomerID
-			request.KnownSnapshotVersion = payload.KnownSnapshotVersion
-			request.EntityTag = payload.EntityTag
-			request.RequestedKeys = payload.RequestedEntitlementKeys
-			if payload.CorrelationID != "" {
-				request.CorrelationID = payload.CorrelationID
-			}
-		case billingaccess.AuthorityContractVersion:
-			var payload authoritySyncPayload
-			if !decodePayload(w, r, envelope.Payload, &payload) {
-				return
-			}
-			if err := payload.Validate(); err != nil {
-				writeValidation(w, r, validationFields(err))
-				return
-			}
-			authorityRequest = &billingaccess.AuthoritySyncRequest{
-				KnownAuthorityEpoch:          payload.KnownAuthorityEpoch,
-				KnownSnapshotVersion:         payload.KnownSnapshotVersion,
-				KnownSnapshotAuthorityDigest: payload.KnownSnapshotAuthorityDigest,
-				ApplicationID:                payload.Request.ApplicationID, Platform: payload.Request.Platform,
-				AppVersion: payload.Request.AppVersion, SDKVersion: payload.Request.SDKVersion,
-				SupportedContractVersions: payload.Request.SupportedContractVersions,
-				Capabilities:              payload.Request.Capabilities,
-			}
-		default:
-			writeValidation(w, r, map[string][]string{"authoritativeEntitlementContractVersion": {"Only exact contract versions 1 and 2 are supported."}})
+		// Versions are exact identifiers and exactly one contract version
+		// exists (ADR-0028); a request claiming any other version — including
+		// the deleted v1 — is refused whole.
+		if envelope.AuthoritativeEntitlementContractVersion != billingaccess.AuthorityContractVersion {
+			writeValidation(w, r, map[string][]string{"authoritativeEntitlementContractVersion": {"Only exact contract version 2 is supported."}})
 			return
+		}
+		var payload authoritySyncPayload
+		if !decodePayload(w, r, envelope.Payload, &payload) {
+			return
+		}
+		if err := payload.Validate(); err != nil {
+			writeValidation(w, r, validationFields(err))
+			return
+		}
+		authorityRequest = &billingaccess.AuthoritySyncRequest{
+			KnownAuthorityEpoch:          payload.KnownAuthorityEpoch,
+			KnownSnapshotVersion:         payload.KnownSnapshotVersion,
+			KnownSnapshotAuthorityDigest: payload.KnownSnapshotAuthorityDigest,
+			ApplicationID:                payload.Request.ApplicationID, Platform: payload.Request.Platform,
+			AppVersion: payload.Request.AppVersion, SDKVersion: payload.Request.SDKVersion,
+			SupportedContractVersions: payload.Request.SupportedContractVersions,
+			Capabilities:              payload.Request.Capabilities,
 		}
 	}
 
@@ -518,7 +484,7 @@ func (h *Handler) check(w http.ResponseWriter, r *http.Request) {
 	if envelope.AuthoritativeEntitlementContractVersion != billingaccess.ContractVersion ||
 		envelope.RecordType != "entitlementCheckRequest" {
 		writeValidation(w, r, map[string][]string{
-			"recordType": {"The record is not an Authoritative Entitlement Contract v1 check request."}})
+			"recordType": {"The record is not an Authoritative Entitlement Contract v2 check request."}})
 		return
 	}
 	if err := envelope.Payload.Validate(); err != nil {

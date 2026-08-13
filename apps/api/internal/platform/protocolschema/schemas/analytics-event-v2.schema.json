@@ -293,14 +293,11 @@
         },
         "configurationDeliveryVersion": {
           "enum": [
-            "1",
-            "2",
             "3"
           ]
         },
         "commerceProviderContractVersion": {
           "enum": [
-            "1",
             "2"
           ]
         }

@@ -142,7 +142,6 @@ func (cfg Config) ProductionLike() bool {
 }
 
 type AnalyticsConfig struct {
-	EventSchemaPath     string        `envconfig:"MOSAIC_ANALYTICS_EVENT_SCHEMA_PATH"`
 	EventV2SchemaPath   string        `envconfig:"MOSAIC_ANALYTICS_EVENT_V2_SCHEMA_PATH"`
 	IPRequestsPerMinute int           `envconfig:"MOSAIC_ANALYTICS_IP_REQUESTS_PER_MINUTE" default:"30"`
 	IPBurst             int           `envconfig:"MOSAIC_ANALYTICS_IP_BURST" default:"10"`
@@ -167,10 +166,7 @@ type BrowserAuthConfig struct {
 // schemas. Every value defaults to empty, meaning "use the schema embedded in
 // the binary"; an override is only for operators pinning a local file.
 type ProtocolConfig struct {
-	V03SchemaPath                     string `envconfig:"MOSAIC_PROTOCOL_V03_SCHEMA_PATH"`
 	V04SchemaPath                     string `envconfig:"MOSAIC_PROTOCOL_V04_SCHEMA_PATH"`
-	CommerceProviderSchemaPath        string `envconfig:"MOSAIC_COMMERCE_PROVIDER_SCHEMA_PATH"`
-	CommerceConfigurationSchemaPath   string `envconfig:"MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH"`
 	CommerceProviderV2SchemaPath      string `envconfig:"MOSAIC_COMMERCE_PROVIDER_V2_SCHEMA_PATH"`
 	CommerceConfigurationV2SchemaPath string `envconfig:"MOSAIC_COMMERCE_CONFIGURATION_V2_SCHEMA_PATH"`
 }
@@ -339,13 +335,9 @@ func load() (Config, error) {
 	cfg.Telemetry.OTLPProtocol = strings.ToLower(strings.TrimSpace(cfg.Telemetry.OTLPProtocol))
 	cfg.Telemetry.OTLPHeaders = strings.TrimSpace(cfg.Telemetry.OTLPHeaders)
 	cfg.BrowserAuth.CookieDomain = strings.TrimSpace(cfg.BrowserAuth.CookieDomain)
-	cfg.Protocol.V03SchemaPath = strings.TrimSpace(cfg.Protocol.V03SchemaPath)
 	cfg.Protocol.V04SchemaPath = strings.TrimSpace(cfg.Protocol.V04SchemaPath)
-	cfg.Protocol.CommerceProviderSchemaPath = strings.TrimSpace(cfg.Protocol.CommerceProviderSchemaPath)
-	cfg.Protocol.CommerceConfigurationSchemaPath = strings.TrimSpace(cfg.Protocol.CommerceConfigurationSchemaPath)
 	cfg.Protocol.CommerceProviderV2SchemaPath = strings.TrimSpace(cfg.Protocol.CommerceProviderV2SchemaPath)
 	cfg.Protocol.CommerceConfigurationV2SchemaPath = strings.TrimSpace(cfg.Protocol.CommerceConfigurationV2SchemaPath)
-	cfg.Analytics.EventSchemaPath = strings.TrimSpace(cfg.Analytics.EventSchemaPath)
 	cfg.Analytics.EventV2SchemaPath = strings.TrimSpace(cfg.Analytics.EventV2SchemaPath)
 	cfg.Providers.CredentialKeyring = strings.TrimSpace(cfg.Providers.CredentialKeyring)
 	cfg.Migration.SourceObjectKeyring = strings.TrimSpace(cfg.Migration.SourceObjectKeyring)
