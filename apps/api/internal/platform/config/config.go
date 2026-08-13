@@ -168,6 +168,7 @@ type BrowserAuthConfig struct {
 // the binary"; an override is only for operators pinning a local file.
 type ProtocolConfig struct {
 	V03SchemaPath                     string `envconfig:"MOSAIC_PROTOCOL_V03_SCHEMA_PATH"`
+	V04SchemaPath                     string `envconfig:"MOSAIC_PROTOCOL_V04_SCHEMA_PATH"`
 	CommerceProviderSchemaPath        string `envconfig:"MOSAIC_COMMERCE_PROVIDER_SCHEMA_PATH"`
 	CommerceConfigurationSchemaPath   string `envconfig:"MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH"`
 	CommerceProviderV2SchemaPath      string `envconfig:"MOSAIC_COMMERCE_PROVIDER_V2_SCHEMA_PATH"`
@@ -339,6 +340,7 @@ func load() (Config, error) {
 	cfg.Telemetry.OTLPHeaders = strings.TrimSpace(cfg.Telemetry.OTLPHeaders)
 	cfg.BrowserAuth.CookieDomain = strings.TrimSpace(cfg.BrowserAuth.CookieDomain)
 	cfg.Protocol.V03SchemaPath = strings.TrimSpace(cfg.Protocol.V03SchemaPath)
+	cfg.Protocol.V04SchemaPath = strings.TrimSpace(cfg.Protocol.V04SchemaPath)
 	cfg.Protocol.CommerceProviderSchemaPath = strings.TrimSpace(cfg.Protocol.CommerceProviderSchemaPath)
 	cfg.Protocol.CommerceConfigurationSchemaPath = strings.TrimSpace(cfg.Protocol.CommerceConfigurationSchemaPath)
 	cfg.Protocol.CommerceProviderV2SchemaPath = strings.TrimSpace(cfg.Protocol.CommerceProviderV2SchemaPath)

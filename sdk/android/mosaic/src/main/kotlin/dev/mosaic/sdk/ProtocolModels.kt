@@ -1,8 +1,24 @@
 package dev.mosaic.sdk
 
-/** The single protocol contract supported during pre-release iteration. */
+/**
+ * The release-candidate protocol contract. It remains the bundled fallback's version and the one a
+ * `0.3` reader accepts; `0.4` is a draft and does not displace it.
+ */
 const val MOSAIC_PROTOCOL_VERSION: String = "0.3"
-const val MOSAIC_LATEST_PROTOCOL_VERSION: String = MOSAIC_PROTOCOL_VERSION
+
+/**
+ * Protocol `0.4` "Motion": a pure superset of `0.3` apart from the two cleanups `0.3` named for
+ * this version — `style.productCardStates` is removed, and Feature List and Timeline share one
+ * marker vocabulary.
+ *
+ * Versions are exact identifiers. A `0.3` document is read by the `0.3` path and a `0.4` document
+ * by the `0.4` path; neither reads the other, and the decoder dispatches on `schemaVersion` rather
+ * than accepting one shape for both.
+ */
+const val MOSAIC_PROTOCOL_V04_VERSION: String = "0.4"
+
+const val MOSAIC_LATEST_PROTOCOL_VERSION: String = MOSAIC_PROTOCOL_V04_VERSION
+
 /**
  * The exact published artifact version of `dev.mosaic.sdk:mosaic`. It is sent as
  * `Mosaic-SDK-Version` on every request and must be bumped with the Gradle module versions in the
@@ -12,6 +28,7 @@ const val MOSAIC_ANDROID_SDK_VERSION: String = "0.1.0-dev.7"
 
 val MOSAIC_SUPPORTED_PROTOCOL_VERSIONS: Set<String> = setOf(
     MOSAIC_PROTOCOL_VERSION,
+    MOSAIC_PROTOCOL_V04_VERSION,
 )
 
 enum class MosaicCapabilityName(val wireName: String) {
@@ -68,7 +85,25 @@ enum class MosaicCapabilityName(val wireName: String) {
     STATIC_VISIBILITY("visibility.static"),
     SWITCH_VISIBILITY("condition.switchVisibility"),
     TAB_VISIBILITY("condition.tabVisibility"),
+    MOTION_APPEAR("motion.appear"),
+    MOTION_SELECTION("motion.selection"),
+    MOTION_LOOP("motion.loop"),
 }
+
+/**
+ * The three enhancement-tier capabilities.
+ *
+ * Every other capability in every Mosaic contract carries `rejectDocument`. These three carry
+ * `renderWithoutMotion`: a reader missing one renders the document statically and completely, which
+ * the terminal-state rule guarantees is the full authored design. The value is named for motion
+ * specifically so it cannot spread by imitation into a general licence to strip features a reader
+ * does not understand.
+ */
+val MOSAIC_MOTION_CAPABILITIES: Set<MosaicCapabilityName> = setOf(
+    MosaicCapabilityName.MOTION_APPEAR,
+    MosaicCapabilityName.MOTION_SELECTION,
+    MosaicCapabilityName.MOTION_LOOP,
+)
 
 object MosaicCapabilityCatalog {
     val v03: Set<MosaicCapabilityName> = setOf(
@@ -126,6 +161,18 @@ object MosaicCapabilityCatalog {
         MosaicCapabilityName.SWITCH_VISIBILITY,
         MosaicCapabilityName.TAB_VISIBILITY,
     )
+
+    /**
+     * `0.4` expressed as a delta over `0.3` rather than as a second copy of it.
+     *
+     * "`0.4` is `0.3` plus motion minus one co-derived capability" is the whole compatibility claim,
+     * and a hand-maintained copy would let the two answers drift while each stayed internally
+     * consistent. `style.productCardStates` is gone because it could never vary independently of
+     * `component.productSelector`, `component.productCard`, or `component.productBadge`, and a
+     * capability that cannot vary independently of another carries no information.
+     */
+    val v04: Set<MosaicCapabilityName> =
+        v03 - MosaicCapabilityName.PRODUCT_CARD_STATES + MOSAIC_MOTION_CAPABILITIES
 }
 
 data class MosaicCapabilityReport(
@@ -142,11 +189,26 @@ data class MosaicCapabilityReport(
 }
 
 object MosaicProtocolCapabilities {
+    /**
+     * What this SDK can render, per contract version.
+     *
+     * Reported as exact name/version pairs rather than as a set of names: `style.productCardStates`
+     * is supported at `0.3` and does not exist at `0.4`, and the three `motion.*` capabilities exist
+     * only at `0.4`. A single flattened name set could not say either, so a `0.4`-only capability
+     * would look supported on a `0.3` document.
+     */
     fun report(sdkVersion: String = MOSAIC_ANDROID_SDK_VERSION): MosaicCapabilityReport {
-        val exact = MosaicCapabilityCatalog.v03.mapTo(mutableSetOf()) {
-            MosaicRequiredCapability(it, MOSAIC_PROTOCOL_VERSION)
+        val exact = buildSet {
+            MosaicCapabilityCatalog.v03.forEach {
+                add(MosaicRequiredCapability(it, MOSAIC_PROTOCOL_VERSION))
+            }
+            MosaicCapabilityCatalog.v04.forEach {
+                add(MosaicRequiredCapability(it, MOSAIC_PROTOCOL_V04_VERSION))
+            }
         }
-        val highest = MosaicCapabilityCatalog.v03.associateWith { MOSAIC_PROTOCOL_VERSION }
+        // Retained for source compatibility; the exact pairs above are the contract.
+        val highest = exact.groupBy(MosaicRequiredCapability::name)
+            .mapValues { (_, entries) -> entries.maxOf(MosaicRequiredCapability::version) }
         return MosaicCapabilityReport(
             sdkVersion = sdkVersion,
             supportedSchemaVersions = MOSAIC_SUPPORTED_PROTOCOL_VERSIONS,
@@ -283,6 +345,15 @@ enum class MosaicTextAlignment { START, CENTER, END }
 sealed interface MosaicNode {
     val id: String
     val type: String
+
+    /**
+     * Authored `0.4` motion, or null.
+     *
+     * Null on every node of a `0.3` document and on any `0.4` node that authors none. Motion never
+     * reaches the accessibility tree: a node mid-entrance is already present, focusable, and
+     * announceable, and a pulsing button announces exactly what a static one announces.
+     */
+    val motion: MosaicNodeMotion? get() = null
 }
 
 data class MosaicStack(
@@ -297,6 +368,7 @@ data class MosaicStack(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
     override val type: String = "stack",
 ) : MosaicNode {
     val spacing: Double get() = gap
@@ -373,9 +445,14 @@ data class MosaicDesignSystem(
     val colors: List<MosaicColorToken>,
     val backgrounds: List<MosaicBackgroundToken>,
     val shadows: List<MosaicShadowToken>,
+    /**
+     * The fourth catalog, added by `0.4`. Required and possibly empty on a `0.4` document, and
+     * absent on a `0.3` one, which the decoder enforces in both directions.
+     */
+    val motions: List<MosaicMotionToken> = emptyList(),
 ) {
     companion object {
-        val Empty = MosaicDesignSystem(emptyList(), emptyList(), emptyList())
+        val Empty = MosaicDesignSystem(emptyList(), emptyList(), emptyList(), emptyList())
     }
 }
 
@@ -531,6 +608,7 @@ data class MosaicTextComponent(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode {
     override val type: String = "text"
     val style: MosaicTextStyle get() = typography.style
@@ -551,6 +629,7 @@ data class MosaicImageComponent(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode {
     override val type: String = "image"
 }
@@ -558,25 +637,52 @@ data class MosaicImageComponent(
 data class MosaicFeatureListItem(
     val id: String,
     val text: MosaicLocalizedText,
+    /**
+     * Overrides the list's marker for this item only. Absent means the item carries the list's
+     * marker; it is never a request for no glyph. A `0.3` document has no item-level marker, so
+     * this is always null there.
+     */
+    val marker: MosaicMarker? = null,
 )
-
-enum class MosaicFeatureMarker { CHECKMARK }
 
 data class MosaicFeatureListComponent(
     override val id: String,
-    val marker: MosaicFeatureMarker,
+    /** The glyph every item carries unless the item overrides it. */
+    val marker: MosaicMarker,
     val gap: Double,
     val markerColor: MosaicColor,
     val items: List<MosaicFeatureListItem>,
     val typography: MosaicTypography,
     val accessibility: MosaicControlAccessibility,
+    /**
+     * The authored extent of every marker glyph, mirroring Timeline's field of the same name.
+     *
+     * Component-level rather than per item, exactly as marker *colour* is: an item overrides which
+     * glyph it draws, never how large it is, so a list cannot end up with a ragged glyph column.
+     * A `0.3` document has no such field, so this is always null there.
+     */
+    val markerSize: Double? = null,
     val appearance: MosaicBoxAppearance? = null,
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode {
     override val type: String = "featureList"
     val itemSpacing: Double get() = gap
+
+    /**
+     * The extent every marker is actually drawn at.
+     *
+     * Unlike Timeline, where a marker is optional and `markerSize` is therefore required exactly
+     * when one is declared, a Feature List always draws a glyph — `marker` is required on the
+     * component — so the field is optional and the schema documents a default instead. That default
+     * is the list's own `typography.fontSize`, following Timeline's precedent of falling back to
+     * another authored value on the same component rather than to a constant, and **renderers must
+     * not substitute a value of their own**. It is also what this renderer derived before the field
+     * existed, so a list that declares no size renders exactly as it did.
+     */
+    val resolvedMarkerSize: Double get() = markerSize ?: typography.fontSize
 }
 
 enum class MosaicUnavailableProductSelection { FIRST_AVAILABLE }
@@ -659,6 +765,7 @@ data class MosaicProductBadgeComponent(
     val children: List<MosaicNode>,
     val styles: MosaicProductCardBoxStyles,
     val sizing: MosaicBoxSizing? = null,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode {
     override val type: String = "productBadge"
 }
@@ -675,6 +782,7 @@ data class MosaicProductCardComponent(
     val clipContent: Boolean = false,
     val accessibilityLabel: MosaicLocalizedText? = null,
     val sizing: MosaicBoxSizing? = null,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode {
     override val type: String = "productCard"
 }
@@ -695,6 +803,7 @@ data class MosaicProductSelectorComponent(
     val cards: List<MosaicProductCardComponent> = emptyList(),
     val initialProductCardId: String = initiallySelectedProductReferenceId,
     val crossAxisAlignment: MosaicHorizontalAlignment = MosaicHorizontalAlignment.STRETCH,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode {
     override val type: String = "productSelector"
     val itemSpacing: Double get() = gap
@@ -738,6 +847,7 @@ data class MosaicIconComponent(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode { override val type: String = "icon" }
 
 data class MosaicButtonComponent(
@@ -754,6 +864,7 @@ data class MosaicButtonComponent(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode { override val type: String = "button" }
 
 data class MosaicCarouselPage(
@@ -772,6 +883,7 @@ data class MosaicCarouselComponent(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode { override val type: String = "carousel" }
 
 data class MosaicSwitchComponent(
@@ -787,6 +899,7 @@ data class MosaicSwitchComponent(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode { override val type: String = "switch" }
 
 enum class MosaicCountdownUnit(val rank: Int) {
@@ -806,6 +919,7 @@ data class MosaicCountdownComponent(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode { override val type: String = "countdown" }
 
 
@@ -842,6 +956,7 @@ data class MosaicTabsComponent(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode { override val type: String = "tabs" }
 
 enum class MosaicTimelineConnectorStyle { SOLID, DASHED }
@@ -852,14 +967,24 @@ data class MosaicTimelineConnector(
     val style: MosaicTimelineConnectorStyle,
 )
 
-/** Closed three-arm marker union; an unrecognised arm rejects the document. */
-sealed interface MosaicTimelineMarker {
-    data object Dot : MosaicTimelineMarker
+/**
+ * Closed three-arm marker union; an unrecognised arm rejects the document.
+ *
+ * `0.3` carried two marker idioms: Timeline's three-arm union and Feature List's single constant
+ * `"checkmark"`, which meant a list could not express a *negated* item — "not included" on a
+ * comparison paywall. `0.4` consolidates them onto this one vocabulary. Marker colour and size stay
+ * component-level on both components; a per-item colour is a second axis and a deliberate deferral.
+ */
+sealed interface MosaicMarker {
+    data object Dot : MosaicMarker
 
-    /** The entry's 1-based position, formatted by the platform's locale number formatting. */
-    data object Ordinal : MosaicTimelineMarker
-    data class Icon(val name: MosaicIconName) : MosaicTimelineMarker
+    /** The item's or entry's 1-based position, formatted by the platform's locale formatting. */
+    data object Ordinal : MosaicMarker
+    data class Icon(val name: MosaicIconName) : MosaicMarker
 }
+
+/** Source-compatible alias for callers written against the Timeline-specific name. */
+typealias MosaicTimelineMarker = MosaicMarker
 
 data class MosaicTimelineEntry(
     val id: String,
@@ -890,6 +1015,7 @@ data class MosaicTimelineComponent(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode { override val type: String = "timeline" }
 
 /** Closed two-arm union over the existing image-asset and icon vocabularies. */
@@ -921,6 +1047,7 @@ data class MosaicAwardComponent(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode { override val type: String = "award" }
 
 /**
@@ -1035,6 +1162,7 @@ data class MosaicSocialProofComponent(
     val sizing: MosaicBoxSizing? = null,
     val outerInsets: MosaicEdgeInsets? = null,
     val visibility: MosaicVisibility = MosaicVisibility.Always,
+    override val motion: MosaicNodeMotion? = null,
 ) : MosaicNode { override val type: String = "socialProof" }
 
 internal fun MosaicStack.walkDepthFirst(): Sequence<MosaicNode> = sequence {

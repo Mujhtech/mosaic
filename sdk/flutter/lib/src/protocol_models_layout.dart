@@ -1,9 +1,18 @@
 part of 'protocol.dart';
 
 sealed class MosaicNode {
-  const MosaicNode({required this.id});
+  const MosaicNode({required this.id, this.motion});
 
   final String id;
+
+  /// Authored Protocol 0.4 motion, or `null` for a node that declares none and
+  /// for every node of a 0.3 document.
+  ///
+  /// Motion never reaches the accessibility tree: a node mid-entrance is
+  /// already present, focusable, and announceable, and a pulsing button
+  /// announces exactly what a static one announces.
+  final MosaicNodeMotion? motion;
+
   String get type;
 }
 
@@ -24,7 +33,7 @@ final class MosaicScrollContainer extends MosaicNode {
 }
 
 sealed class MosaicStackNode extends MosaicNode {
-  const MosaicStackNode({required super.id});
+  const MosaicStackNode({required super.id, super.motion});
 
   List<MosaicNode> get children;
   MosaicEdgeInsets get padding;
@@ -45,6 +54,7 @@ final class MosaicStackComponent extends MosaicStackNode {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   }) : children = List.unmodifiable(children);
 
   final MosaicStackDirection direction;
@@ -66,7 +76,7 @@ final class MosaicStackComponent extends MosaicStackNode {
 }
 
 sealed class MosaicComponent extends MosaicNode {
-  const MosaicComponent({required super.id});
+  const MosaicComponent({required super.id, super.motion});
 }
 
 final class MosaicTextAccessibility {
@@ -103,6 +113,7 @@ final class MosaicTextComponent extends MosaicComponent {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   });
 
   final MosaicLocalizedText value;
@@ -132,6 +143,7 @@ final class MosaicImageComponent extends MosaicComponent {
     this.appearance,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   });
 
   final String assetId;
@@ -150,10 +162,24 @@ final class MosaicImageComponent extends MosaicComponent {
 }
 
 final class MosaicFeatureListItem {
-  const MosaicFeatureListItem({required this.id, required this.text});
+  const MosaicFeatureListItem({
+    required this.id,
+    required this.text,
+    this.marker,
+  });
 
   final String id;
   final MosaicLocalizedText text;
+
+  /// Overrides the list's marker for this item only, from Protocol 0.4.
+  ///
+  /// Absent means the item carries the list's marker. It is never a request
+  /// for no glyph — a negated item is authored as an item-level icon marker,
+  /// not as an absent one.
+  final MosaicMarker? marker;
+
+  /// The glyph this item draws, given its list's default.
+  MosaicMarker resolveMarker(MosaicMarker listMarker) => marker ?? listMarker;
 }
 
 final class MosaicFeatureListComponent extends MosaicComponent {
@@ -162,23 +188,58 @@ final class MosaicFeatureListComponent extends MosaicComponent {
     required this.itemSpacing,
     required Iterable<MosaicFeatureListItem> items,
     required this.accessibility,
+    required this.typography,
+    this.marker = const MosaicIconMarker(MosaicIconName.checkmark),
     this.markerColor,
-    this.typography,
+    this.markerSize,
     this.appearance,
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   }) : items = List.unmodifiable(items);
 
   final double itemSpacing;
   final List<MosaicFeatureListItem> items;
   final MosaicControlAccessibility accessibility;
+
+  /// The glyph every item carries unless the item overrides it.
+  ///
+  /// Protocol 0.3 authors this as the single constant `"checkmark"`, which is
+  /// exactly this default, so both versions read through one field. Marker
+  /// colour and size stay component-level, as they are on Timeline.
+  final MosaicMarker marker;
   final MosaicColorValue? markerColor;
-  final MosaicTypography? typography;
+
+  /// The authored glyph extent, from Protocol 0.4, or `null` when the list
+  /// leaves it to the default.
+  ///
+  /// Mirrors Timeline's `markerSize` — the same positive logical size, bounded
+  /// the same way — but is optional rather than conditionally required,
+  /// because a Feature List always declares a marker and so always has a size
+  /// to fall back on. Read [resolvedMarkerSize] to draw; this field stays
+  /// nullable so an authored size remains distinguishable from a defaulted
+  /// one.
+  final double? markerSize;
+
+  /// Required by the protocol on every Feature List, and so non-null here.
+  ///
+  /// [resolvedMarkerSize] reads its `fontSize`, which is what makes the
+  /// default an authored value on this same component rather than a constant
+  /// each renderer picks for itself.
+  final MosaicTypography typography;
   final MosaicBoxAppearance? appearance;
   final MosaicSizing? sizing;
   final MosaicEdgeInsets? outerInsets;
   final MosaicVisibility visibility;
+
+  /// The glyph extent to draw: the authored [markerSize], or the schema's
+  /// documented default of the list's own `typography.fontSize`.
+  ///
+  /// The fallback is deliberately not a renderer constant. Flutter drew a
+  /// hardcoded 20 before `0.4` made the field authorable, which is exactly the
+  /// per-platform divergence naming a default on the same component removes.
+  double get resolvedMarkerSize => markerSize ?? typography.fontSize;
 
   @override
   String get type => 'featureList';
@@ -303,6 +364,7 @@ final class MosaicProductBadgeComponent extends MosaicComponent {
     required Iterable<MosaicNode> children,
     required this.styles,
     this.sizing,
+    super.motion,
   }) : children = List.unmodifiable(children);
 
   final MosaicProductBadgePlacement placement;
@@ -331,6 +393,7 @@ final class MosaicProductCardComponent extends MosaicComponent {
     required this.styles,
     this.accessibilityLabel,
     this.sizing,
+    super.motion,
   }) : children = List.unmodifiable(children);
 
   final String productReferenceId;
@@ -369,6 +432,7 @@ final class MosaicProductSelectorComponent extends MosaicComponent {
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
+    super.motion,
   }) : cards = List.unmodifiable(cards);
 
   final List<MosaicProductCardComponent> cards;

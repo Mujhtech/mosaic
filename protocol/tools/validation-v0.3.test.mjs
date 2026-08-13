@@ -1208,12 +1208,14 @@ test("navigation history is runtime-only and root Navigate Back is a safe no-op"
   );
 });
 
-test("Local Preview negotiates only 0.3 and withholds from an incompatible client", () => {
+test("Local Preview still lands on 0.3 for a 0.3 client and withholds from an incompatible one", () => {
   const preview = loadPreviewV03Artifacts();
   assert.deepEqual(validatePreviewV03Artifacts(preview), []);
   assert.deepEqual(validatePreviewV03JsonFormatting(), []);
-  assert.deepEqual(localPreviewContractVersions, ["0.3"]);
-  assert.deepEqual(localPreviewVersionPreference, ["0.3"]);
+  // 0.4 is offered first, but a peer that speaks only 0.3 must still be served
+  // 0.3 rather than refused: adding a draft version may not strand a client.
+  assert.deepEqual(localPreviewContractVersions, ["0.3", "0.4"]);
+  assert.deepEqual(localPreviewVersionPreference, ["0.4", "0.3"]);
   assert.equal(
     localPreviewWebSocketProtocols["0.3"],
     "mosaic.local-preview.v0.3",

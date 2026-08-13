@@ -2,13 +2,35 @@ import 'dart:convert';
 
 part 'protocol_models_layout.dart';
 part 'protocol_models_components.dart';
+part 'protocol_motion.dart';
 part 'protocol_decoder_core.dart';
 part 'protocol_decoder_components.dart';
 part 'protocol_decoder_values.dart';
 part 'protocol_validation.dart';
 part 'protocol_validation_support.dart';
 
+/// The release-candidate Paywall Protocol version.
+///
+/// Everything that negotiates on the wire — Configuration Delivery and Local
+/// Preview — stays pinned to this version. Local Preview `0.3` `$ref`s the
+/// `0.3` paywall schema directly, and Configuration Delivery `v3` carries
+/// exactly one paywall protocol, so advertising `0.4` there would claim a
+/// contract neither of them has been bumped to.
 const String mosaicProtocolVersion = '0.3';
+
+/// The draft Paywall Protocol version this SDK can additionally read.
+///
+/// `0.4` is a pure superset of `0.3` apart from two removals `0.3` itself named
+/// for it, plus the three motion primitives. It carries no compatibility
+/// guarantee; nothing produces it in production yet.
+const String mosaicProtocolVersionV04 = '0.4';
+
+/// Every paywall schema version [MosaicProtocolDecoder] accepts.
+const Set<String> mosaicSupportedProtocolVersions = <String>{
+  mosaicProtocolVersion,
+  mosaicProtocolVersionV04,
+};
+
 const String mosaicFlutterSdkVersion = '0.3.0-dev.1';
 
 /// Localization keys the protocol itself consumes.
@@ -87,27 +109,67 @@ const Set<String> mosaicProtocolV03Capabilities = <String>{
   'condition.tabVisibility',
 };
 
+/// Every Protocol 0.4 capability implemented by this Flutter SDK.
+///
+/// `0.4` is `0.3` plus the three motion primitives, minus
+/// `style.productCardStates`. That capability was derived exactly when
+/// `component.productSelector`, `component.productCard`, or
+/// `component.productBadge` was derived — `styles` is required on all three —
+/// so it could never vary independently and carried no information. `0.3`
+/// named it for removal here and `0.4` removes it: a `0.4` document that
+/// declares it is rejected as an unknown capability.
+final Set<String> mosaicProtocolV04Capabilities = Set<String>.unmodifiable(
+  <String>{
+    ...mosaicProtocolV03Capabilities,
+    ...mosaicMotionCapabilities,
+  }..remove('style.productCardStates'),
+);
+
+/// The three enhancement-tier capabilities `0.4` introduces.
+///
+/// Granularity is three rather than one by the `0.3` distinguishability test: a
+/// renderer that can cross-fade a selection but has no per-node entrance driver
+/// is a real renderer, and one capability could not say so.
+const Set<String> mosaicMotionCapabilities = <String>{
+  'motion.appear',
+  'motion.selection',
+  'motion.loop',
+};
+
 /// Machine-readable compatibility information for host diagnostics and Studio.
 final class MosaicCapabilityReport {
   MosaicCapabilityReport({
     required this.sdkVersion,
-    required Iterable<String> supportedSchemaVersions,
-    required Map<String, String> supportedCapabilities,
-  })  : supportedSchemaVersions = Set.unmodifiable(supportedSchemaVersions),
-        supportedCapabilities = Map.unmodifiable(supportedCapabilities);
+    required Map<String, Set<String>> capabilitiesBySchemaVersion,
+  }) : capabilitiesBySchemaVersion = Map.unmodifiable(<String, Set<String>>{
+          for (final entry in capabilitiesBySchemaVersion.entries)
+            entry.key: Set<String>.unmodifiable(entry.value),
+        });
 
   final String sdkVersion;
-  final Set<String> supportedSchemaVersions;
-  final Map<String, String> supportedCapabilities;
+
+  /// Schema version to the capabilities this SDK implements at that version.
+  ///
+  /// Keyed by version rather than flattened to one capability-to-version map
+  /// because most capabilities exist at both versions, and a flattened map
+  /// would have to pick one and silently under-report the other.
+  final Map<String, Set<String>> capabilitiesBySchemaVersion;
+
+  Set<String> get supportedSchemaVersions =>
+      Set<String>.unmodifiable(capabilitiesBySchemaVersion.keys);
+
+  /// The capabilities implemented at [schemaVersion], or an empty set when this
+  /// SDK does not implement that version at all.
+  Set<String> capabilitiesFor(String schemaVersion) =>
+      capabilitiesBySchemaVersion[schemaVersion] ?? const <String>{};
 }
 
 final MosaicCapabilityReport mosaicFlutterCapabilityReport =
     MosaicCapabilityReport(
   sdkVersion: mosaicFlutterSdkVersion,
-  supportedSchemaVersions: const <String>{mosaicProtocolVersion},
-  supportedCapabilities: <String, String>{
-    for (final capability in mosaicProtocolV03Capabilities)
-      capability: mosaicProtocolVersion,
+  capabilitiesBySchemaVersion: <String, Set<String>>{
+    mosaicProtocolVersion: mosaicProtocolV03Capabilities,
+    mosaicProtocolVersionV04: mosaicProtocolV04Capabilities,
   },
 );
 
@@ -316,13 +378,20 @@ final class MosaicDesignSystem {
     required Iterable<MosaicDesignToken<MosaicColorValue>> colors,
     required Iterable<MosaicDesignToken<MosaicBackground>> backgrounds,
     required Iterable<MosaicDesignToken<MosaicShadow>> shadows,
+    Iterable<MosaicDesignToken<MosaicMotion>> motions =
+        const <MosaicDesignToken<MosaicMotion>>[],
   })  : colors = List.unmodifiable(colors),
         backgrounds = List.unmodifiable(backgrounds),
-        shadows = List.unmodifiable(shadows);
+        shadows = List.unmodifiable(shadows),
+        motions = List.unmodifiable(motions);
 
   final List<MosaicDesignToken<MosaicColorValue>> colors;
   final List<MosaicDesignToken<MosaicBackground>> backgrounds;
   final List<MosaicDesignToken<MosaicShadow>> shadows;
+
+  /// The fourth catalog, added by Protocol 0.4. Required and possibly empty
+  /// there; always empty for a 0.3 document, which has no motion vocabulary.
+  final List<MosaicDesignToken<MosaicMotion>> motions;
 }
 
 final class MosaicBorderStyle {
@@ -727,9 +796,19 @@ final class MosaicPaywallDocument {
       return;
     }
     for (final screen in screens) {
-      yield screen.layout;
-      yield* _walkStack(screen.layout.content);
+      yield* nodesIn(screen);
     }
+  }
+
+  /// Every node on [screen], the screen's own Scroll Container first.
+  ///
+  /// [nodes] flattens the whole document and so cannot answer which screen a
+  /// node belongs to. A renderer needs that: motion is scoped to *screen
+  /// entry*, so a node's clock has to follow the entry count of its own
+  /// screen rather than the document's most recent navigation.
+  Iterable<MosaicNode> nodesIn(MosaicPaywallScreen screen) sync* {
+    yield screen.layout;
+    yield* _walkStack(screen.layout.content);
   }
 
   static Iterable<MosaicNode> _walkStack(MosaicStackNode stack) sync* {
@@ -889,6 +968,41 @@ final class MosaicPaywallDocument {
     return current as MosaicInlineShadow;
   }
 
+  /// Resolves a `motionToken` chain to the inline motion it names.
+  ///
+  /// Token-to-token references are permitted, so this walks the chain the same
+  /// way colours, backgrounds, and shadows do.
+  MosaicInlineMotion resolveMotion(MosaicMotion motion) {
+    var current = motion;
+    final visited = <String>{};
+    while (current is MosaicMotionTokenReference) {
+      final id = current.id;
+      if (!visited.add(id)) {
+        throw const MosaicProtocolException('Cyclic motion token reference.');
+      }
+      final token = designSystem?.motions
+          .where((candidate) => candidate.id == id)
+          .firstOrNull;
+      if (token == null) {
+        throw MosaicProtocolException('Unknown motion token $id.');
+      }
+      current = token.value;
+    }
+    return current as MosaicInlineMotion;
+  }
+
+  /// [motion] with every curve resolved to an inline motion.
+  ///
+  /// The frame resolvers are pure and refuse an unresolved token, so the
+  /// renderer resolves once at the boundary rather than per frame.
+  MosaicNodeMotion resolveNodeMotion(MosaicNodeMotion motion) =>
+      MosaicNodeMotion(
+        appear: motion.appear?._withCurve(resolveMotion(motion.appear!.curve)),
+        selection: motion.selection
+            ?._withCurve(resolveMotion(motion.selection!.curve)),
+        loop: motion.loop?._withCurve(resolveMotion(motion.loop!.curve)),
+      );
+
   MosaicPaywallScreen? screen(String id) {
     for (final screen in screens) {
       if (screen.id == id) return screen;
@@ -1045,12 +1159,15 @@ final class MosaicProtocolDecoder {
 
     final root = _object(value, r'$');
     final schemaVersion = _string(root['schemaVersion'], r'$.schemaVersion');
-    if (schemaVersion != mosaicProtocolVersion) {
+    // Versions are exact identifiers, never ranges: a 0.4 reader accepts only
+    // 0.4 and a 0.3 reader only 0.3. This SDK implements both, so it dispatches
+    // on the declared version rather than widening either reader.
+    if (!mosaicSupportedProtocolVersions.contains(schemaVersion)) {
       throw MosaicProtocolException.unsupportedSchemaVersion(
         'Unsupported schemaVersion "$schemaVersion" at \$.schemaVersion.',
       );
     }
-    return _decodeV03(root);
+    return _DocumentDecoder(schemaVersion)._decodeDocument(root);
   }
 }
 

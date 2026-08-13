@@ -10,6 +10,7 @@ import {
   layerDisplayLabel,
   selectLayerMetadata,
 } from "@/features/paywall-editor/components/property-inspector-core";
+import { MotionSection } from "@/features/paywall-editor/components/property-inspector-motion";
 import { useEditorSelection } from "@/features/paywall-editor/hooks/use-editor-selection";
 import { useEditorStore } from "@/features/paywall-editor/stores/editor-store-context";
 import {
@@ -176,10 +177,21 @@ export function PropertyInspector({
               }
               if (selectedComponent) {
                 return (
-                  <InspectorForNode
-                    key={selectedComponent.id}
-                    node={selectedComponent}
-                  />
+                  <>
+                    <InspectorForNode
+                      key={selectedComponent.id}
+                      node={selectedComponent}
+                    />
+                    {/* Motion is authored per node on any component, so it sits
+                        beside the type-specific inspector rather than inside
+                        each of the seventeen of them. The screen Scroll
+                        Container is excluded by the contract and is handled by
+                        the branch above. */}
+                    <MotionSection
+                      key={`${selectedComponent.id}-motion`}
+                      node={selectedComponent}
+                    />
+                  </>
                 );
               }
               return null;

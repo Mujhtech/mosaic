@@ -19,6 +19,17 @@ val protocolV03Fixture = layout.projectDirectory.file(
 val generatedProtocolV03TestAssets = layout.buildDirectory.dir(
     "generated/mosaic/protocol-v03-test-assets",
 )
+val protocolV04Fixture = layout.projectDirectory.file(
+    "../../../protocol/fixtures/v0.4/complete-paywall.json",
+)
+// The two-Screen round trip. A sheet is explicitly not a screen entry, and the complete paywall
+// declares exactly one Screen, so screen-to-screen re-entry is only reachable through this fixture.
+val protocolV04RoundTripFixture = layout.projectDirectory.file(
+    "../../../protocol/fixtures/v0.4/screen-round-trip.json",
+)
+val generatedProtocolV04TestAssets = layout.buildDirectory.dir(
+    "generated/mosaic/protocol-v04-test-assets",
+)
 
 // A Gradle `Copy` whose source does not exist succeeds and produces nothing, so a renamed or
 // deleted canonical fixture would ship a library with no bundled fallback and no build failure.
@@ -28,6 +39,13 @@ check(canonicalFixture.asFile.isFile) {
 }
 check(protocolV03Fixture.asFile.isFile) {
     "The canonical Protocol 0.3 fixture is missing at ${protocolV03Fixture.asFile.path}."
+}
+check(protocolV04Fixture.asFile.isFile) {
+    "The canonical Protocol 0.4 fixture is missing at ${protocolV04Fixture.asFile.path}."
+}
+check(protocolV04RoundTripFixture.asFile.isFile) {
+    "The canonical Protocol 0.4 round-trip fixture is missing at " +
+        "${protocolV04RoundTripFixture.asFile.path}."
 }
 
 val generateCanonicalPaywallAsset by tasks.registering(Copy::class) {
@@ -39,6 +57,13 @@ val generateProtocolV03TestAsset by tasks.registering(Copy::class) {
     from(protocolV03Fixture)
     into(generatedProtocolV03TestAssets.map { it.dir("mosaic/v0.3") })
     rename { "complete-paywall.json" }
+}
+// Both fixtures keep their canonical names, so no rename is applied: a rename here would apply to
+// every source and silently collapse the two onto one asset.
+val generateProtocolV04TestAsset by tasks.registering(Copy::class) {
+    from(protocolV04Fixture)
+    from(protocolV04RoundTripFixture)
+    into(generatedProtocolV04TestAssets.map { it.dir("mosaic/v0.4") })
 }
 
 android {
@@ -81,6 +106,7 @@ android {
     }
     sourceSets.named("androidTest") {
         assets.srcDir(generatedProtocolV03TestAssets.get().asFile)
+        assets.srcDir(generatedProtocolV04TestAssets.get().asFile)
     }
 }
 
@@ -102,6 +128,7 @@ afterEvaluate {
 tasks.named("preBuild") {
     dependsOn(generateCanonicalPaywallAsset)
     dependsOn(generateProtocolV03TestAsset)
+    dependsOn(generateProtocolV04TestAsset)
 }
 
 dependencies {

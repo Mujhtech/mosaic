@@ -2,6 +2,106 @@
 
 ## Unreleased
 
+- Read Paywall Protocol `0.4`, "Motion", alongside `0.3`. Versions stay exact
+  identifiers: the decoder dispatches on `schemaVersion`, a `0.3` document is
+  held to the `0.3` rules and a `0.4` document to the `0.4` rules, and neither
+  reads the other. `0.4` is validated by the same shape and semantic validators
+  parameterized by version rather than by a forked copy, because "0.4 is 0.3 plus
+  motion minus one capability" is the whole compatibility claim and two copies
+  could drift while each stayed internally consistent.
+- Add the `designSystem.motions` catalog, `motionToken` references and inline
+  motions, and per-node `appear`, `selection`, and `loop` blocks, with the `0.4`
+  semantic rules enforced: nested `appear` rejects the document, at most one
+  `loop` per screen, a `loop` curve resolving below the 500 ms flash-safety floor
+  rejects, every reference must resolve and the graph must be acyclic, and an
+  **unused** motion token rejects — deliberately unlike the colour, background,
+  and shadow catalogs, because a motion nothing references has never been checked
+  against the safety rule that lives at its reference site.
+- Add `MosaicMotionDriver`, an injected enabled flag and elapsed-time source that
+  mirrors the existing clock injection. The Countdown's one-second repaint moved
+  off `TimelineView(.periodic(from: .now, by: 1))` onto the driver's tick, so its
+  cadence is now testable; its remaining-time rounding is deliberately unchanged,
+  as that divergence is a separately tracked `0.3` defect. A disabled driver
+  renders every node's terminal state, which is its static rendering, so existing
+  goldens are unaffected.
+- Render the three primitives from `MosaicMotionResolver`, the same code the
+  published frame vectors are checked against: SwiftUI supplies a timeline —
+  `Animation.timingCurve` with the contract's normative control points for the
+  two one-shot primitives, a frame clock for the bounded pulse — and never
+  supplies a value. Every animation's terminal state is byte-identical to the
+  static rendering by construction: a terminal frame applies no modifier at all.
+- Honour reduced motion as a signal injected at the renderer boundary, defaulting
+  to `accessibilityReduceMotion`. `appear` becomes opacity-only with the
+  transform dropped at every instant, `selection` applies instantly, `loop` is
+  disabled at rest, and on a **`0.4` document a video background does not play**
+  — the declared poster is drawn, and otherwise the declared fallback colour,
+  with no frame shown, no control offered, and no player constructed at all.
+  This is specified `0.4` behaviour rather than a `0.3` defect patch (ADR-0027,
+  ruling 3), so a `0.3` document keeps `0.3`'s behaviour and the live exposure
+  stays open until `0.4` is accepted. `UIAccessibility.isVideoAutoplayEnabled`
+  is Apple's own, narrower switch rather than a protocol rule, and is honoured
+  on every document version: a customer who turned it off meant it.
+- A declared video source the host cannot resolve is reported whether or not it
+  would have been allowed to play. Unavailability is a fact about the media, not
+  about the viewer's preferences, and an operator must be able to see a broken
+  asset without first ruling out every viewer's accessibility settings. The line
+  is drawn at what is knowable without playing: a missing asset or a bundled key
+  the host does not map is settled by lookup and reported on both paths, while a
+  remote URL that would have failed to load is reported only by the player that
+  actually tried — determining that under suppression would mean fetching, which
+  is the playback the ruling forbids. Both paths record the same diagnostic code,
+  so the wording never discloses which one ran.
+- **`appear` and `loop` replay on genuine screen re-entry, and the pulse's
+  authored cycle bound is spent per entry.** Navigating to another Paywall Screen
+  and back re-enters the screen left behind, so both clocks restart from node
+  entry. A Sheet is deliberately not an entry for the screen *underneath* it:
+  this renderer builds that screen from one unconditional call site and presents
+  the Sheet beside it, so it stays mounted and keeps its scroll position,
+  selection, and Carousel page — replaying its entrances when the Sheet closed
+  would animate content that never left. A Sheet's **own** content does enter on
+  every presentation, including the second time the same Sheet is opened.
+  Entry is recorded by `MosaicPaywallModel`, which owns navigation, and carried
+  per presentation surface, so the Sheet and the screen beneath it measure from
+  their own origins rather than sharing one.
+- **Behaviour change on `0.3` documents:** a Feature List marker is now drawn at
+  the component's `markerSize`, falling back to the list's own
+  `typography.fontSize`, where it previously used the SF Symbol's inherited body
+  font. A `0.3` paywall's checkmarks therefore render at the authored text size
+  rather than the platform default — usually a small difference, and a visible
+  one where the list's typography is far from 17 pt. The marker is also now the
+  one the item actually declares: the Feature List had been drawing a hardcoded
+  checkmark for every row, so a `0.4` ordinal came out as a tick and a "not
+  included" row authored as `icon: close` came out claiming the opposite of what
+  it said. Feature List and Timeline now share one glyph renderer.
+- Add `markerSize` to Feature List, matching Timeline's field of the same name
+  and bounded identically. It is optional, because a Feature List always declares
+  a marker and so always has a size to fall back on; absent, the glyph is sized
+  from the list's own `typography.fontSize` rather than from a renderer constant.
+- **Breaking (pre-release):** `MosaicMotionAccessibility.permitsVideoPlayback` is
+  removed. Whether a video may play now depends on the document's
+  `schemaVersion` as well as the two accessibility signals, and a public helper
+  answering that question without asking which contract it answers for is one a
+  caller would reasonably believe.
+  `MosaicMotionAccessibility.systemAllowsVideoAutoplay` is now main-actor
+  isolated, matching `UIAccessibility`.
+- **Breaking (pre-release):** `MosaicPaywall.init(model:…)` no longer takes a
+  `motionDriver`; the driver belongs to `MosaicPaywallModel`, which now accepts
+  one and exposes it. Entry origins are recorded as navigation happens, and
+  navigation is the model's, so a driver held separately by the view could only
+  disagree with it. `MosaicPaywall.init(document:…)` is unchanged and forwards
+  its `motionDriver` into the model it builds.
+- Report capabilities per contract: `MosaicSDKCapabilityReport.current` now
+  advertises `0.3` and `0.4` with each version's own capability set, including
+  `motion.appear`, `motion.selection`, and `motion.loop`. Configuration Delivery
+  and Local Preview still negotiate `0.3` alone — `0.4` is a draft, and the
+  backend capability partitioning and the Local Preview version bump it needs are
+  separate, named work.
+- **Breaking (pre-release):** `MosaicFeatureMarker` is removed. `0.4` consolidates
+  Feature List and Timeline onto one `MosaicMarker` union of `dot`, `ordinal`, and
+  `icon`, so a list can express a negated item, and an item may override the
+  list's glyph. `MosaicTimelineMarker` is now an alias of it. A `0.3` document's
+  bare `"checkmark"` string still decodes, to the same glyph it always drew.
+
 - Adopt Paywall Protocol `0.3`, which replaces `0.2` outright. There is no `0.2`
   support, no migration, and no dual-version code: a `0.2` document is an
   unknown version to this reader and is rejected atomically, resolving through

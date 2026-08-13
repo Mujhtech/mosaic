@@ -28,6 +28,13 @@ export const paywallKeys = {
     adapter
       ? (["hosted-paywalls", "draft", input, adapter] as const)
       : (["hosted-paywalls", "draft", input] as const),
+  previewDocument: (
+    input: { environmentId: string; paywallId: string; projectId: string },
+    adapter?: HostedPublishingAdapter
+  ) =>
+    adapter
+      ? (["hosted-paywalls", "preview-document", input, adapter] as const)
+      : (["hosted-paywalls", "preview-document", input] as const),
 };
 
 export function paywallsQueryOptions(
@@ -57,6 +64,32 @@ export function activeHostedDraftQueryOptions(
   return queryOptions({
     queryKey: paywallKeys.activeDraft(input, adapter),
     queryFn: () => adapter.getActiveDraft(input),
+  });
+}
+
+/** How long a gallery thumbnail may keep drawing an already-fetched document. */
+const PREVIEW_DOCUMENT_STALE_TIME_MS = 5 * 60 * 1000;
+
+/**
+ * The document behind one Paywall card's thumbnail.
+ *
+ * Cached far longer than the list itself: a published Version is immutable, and
+ * a thumbnail that silently refetched on every hover or remount would turn a
+ * gallery of twenty cards into twenty repeated document downloads.
+ */
+export function paywallPreviewDocumentQueryOptions(
+  input: { environmentId: string; paywallId: string; projectId: string },
+  adapter: HostedPublishingAdapter
+) {
+  return queryOptions({
+    gcTime: PREVIEW_DOCUMENT_STALE_TIME_MS,
+    queryKey: paywallKeys.previewDocument(input, adapter),
+    queryFn: () => adapter.getPaywallPreviewDocument(input),
+    // A thumbnail is decorative. Retrying a failed document read would spend
+    // the list page's request budget on a picture rather than on the Paywall
+    // data the page exists to show.
+    retry: false,
+    staleTime: PREVIEW_DOCUMENT_STALE_TIME_MS,
   });
 }
 

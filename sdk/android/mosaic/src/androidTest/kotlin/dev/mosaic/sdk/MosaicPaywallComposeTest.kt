@@ -198,7 +198,7 @@ class MosaicPaywallComposeTest {
             .assert(
                 SemanticsMatcher.expectValue(
                     SemanticsProperties.StateDescription,
-                    "Processing purchase…",
+                    "In progress",
                 ),
             )
         gate.complete(Unit)

@@ -383,29 +383,29 @@ extension on _MosaicPaywallState {
           key: ValueKey<String>('mosaic-${component.id}-${item.id}'),
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            // An absent item marker means the item carries the list's marker.
+            // It is never a request for no glyph, so there is no empty arm
+            // here: a negated item is authored as its own icon marker.
             ExcludeSemantics(
-              child: Icon(
-                Icons.check,
-                size: 20,
+              child: _markerGlyph(
+                item.resolveMarker(component.marker),
+                ordinal: index + 1,
                 color: component.markerColor == null
                     ? Theme.of(context).colorScheme.primary
                     : _color(context, component.markerColor!),
+                size: component.resolvedMarkerSize,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 _localization.text(item.text),
-                style: component.typography == null
-                    ? null
-                    : _textStyle(
-                        context,
-                        component.typography,
-                        component.typography!.style,
-                      ),
-                textAlign: component.typography == null
-                    ? null
-                    : _textAlign(component.typography!.alignment),
+                style: _textStyle(
+                  context,
+                  component.typography,
+                  component.typography.style,
+                ),
+                textAlign: _textAlign(component.typography.alignment),
               ),
             ),
           ],
@@ -534,8 +534,42 @@ extension on _MosaicPaywallState {
   }) {
     final card = option.card;
     final selected = _selectedProductCardIds[selector.id] == option.selectionId;
+    final selectionMotion = _selectionMotionFor(selector);
+    Widget surface(BuildContext context, MosaicSelectionStateStyle style) =>
+        _buildProductCardSurface(
+          context,
+          selector,
+          option,
+          style: style,
+          selected: selected,
+          selectionMotion: selectionMotion,
+          shrinkWrap: shrinkWrap,
+        );
+    final rendered = selectionMotion == null
+        ? surface(context, card.styles.resolve(selected: selected))
+        : MosaicSelectionMotionScope(
+            key: ValueKey<String>('mosaic-selection-${card.id}'),
+            driver: widget.motionDriver,
+            motion: selectionMotion,
+            reducedMotion: _reducedMotion,
+            selected: selected,
+            styles: card.styles,
+            builder: surface,
+          );
+    return _applyNodeMotion(card, _applySizing(card, rendered, card.sizing));
+  }
+
+  Widget _buildProductCardSurface(
+    BuildContext context,
+    MosaicProductSelectorComponent selector,
+    _AvailableProductOption option, {
+    required MosaicSelectionStateStyle style,
+    required bool selected,
+    required MosaicSelectionMotion? selectionMotion,
+    required bool shrinkWrap,
+  }) {
+    final card = option.card;
     final enabled = _busyActionId == null;
-    final style = card.styles.resolve(selected: selected);
     final nestedChildren = card.children.where(
       (child) =>
           child is! MosaicProductBadgeComponent ||
@@ -571,44 +605,50 @@ extension on _MosaicPaywallState {
               badge,
               option: option,
               selected: selected,
+              selectionMotion: selectionMotion,
             ),
           ),
       ],
     );
-    final label = _productCardSemanticLabel(card, option);
-    final result = Semantics(
-      key: ValueKey<String>('mosaic-${card.id}'),
-      button: true,
-      selected: selected,
-      checked: selected,
-      inMutuallyExclusiveGroup: true,
-      enabled: enabled,
-      label: label,
-      child: ExcludeSemantics(
-        child: Opacity(
-          opacity: style.opacity,
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(style.cornerRadius),
-            clipBehavior: Clip.none,
-            child: InkWell(
+    // A Countdown quoted inside the card contributes to this label, so the
+    // label follows the Countdown's tick rather than freezing at the second
+    // the card was first built.
+    final result = MosaicTickBuilder(
+      ticks: card.children.any(_containsCountdown) ? _countdownTicks : null,
+      builder: (context) => Semantics(
+        key: ValueKey<String>('mosaic-${card.id}'),
+        button: true,
+        selected: selected,
+        checked: selected,
+        inMutuallyExclusiveGroup: true,
+        enabled: enabled,
+        label: _productCardSemanticLabel(card, option),
+        child: ExcludeSemantics(
+          child: Opacity(
+            opacity: style.opacity,
+            child: Material(
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(style.cornerRadius),
-              onTap: enabled
-                  ? () => _selectProduct(
-                        selector.id,
-                        option.selectionId,
-                        option.reference.id,
-                      )
-                  : null,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 48),
-                child: _decorateSurface(
-                  context,
-                  background: style.background,
-                  border: style.border,
-                  cornerRadius: style.cornerRadius,
-                  shadow: style.shadow,
-                  child: cardContent,
+              clipBehavior: Clip.none,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(style.cornerRadius),
+                onTap: enabled
+                    ? () => _selectProduct(
+                          selector.id,
+                          option.selectionId,
+                          option.reference.id,
+                        )
+                    : null,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: _decorateSurface(
+                    context,
+                    background: style.background,
+                    border: style.border,
+                    cornerRadius: style.cornerRadius,
+                    shadow: style.shadow,
+                    child: cardContent,
+                  ),
                 ),
               ),
             ),
@@ -616,7 +656,7 @@ extension on _MosaicPaywallState {
         ),
       ),
     );
-    return _applySizing(card, result, card.sizing);
+    return result;
   }
 
   String _productCardSemanticLabel(

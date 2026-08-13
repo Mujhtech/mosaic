@@ -13,6 +13,7 @@ import type {
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { isValidCountdownInstant } from "@/features/paywall-editor/utils/countdown";
+import { withNodeParts } from "@/features/paywall-editor/utils/document-version";
 import { createBlock } from "./document-tree-creation";
 import {
   allocateIdentifier,
@@ -458,32 +459,23 @@ export function duplicateSubtree(
     nodeIdMap.set(node.id, id);
     switch (node.type) {
       case "stack":
-        return {
-          ...cloneValue(node),
+        return withNodeParts(cloneValue(node), {
           id,
-          children: node.children.map(
-            duplicateTreeNode
-          ) as typeof node.children,
-        };
+          children: node.children.map(duplicateTreeNode),
+        });
       case "productCard":
-        return {
-          ...cloneValue(node),
+        return withNodeParts(cloneValue(node), {
           id,
-          children: node.children.map(
-            duplicateTreeNode
-          ) as typeof node.children,
+          children: node.children.map(duplicateTreeNode),
           accessibility: node.accessibility
             ? { label: duplicateText(node.accessibility.label) }
             : undefined,
-        };
+        });
       case "productBadge":
-        return {
-          ...cloneValue(node),
+        return withNodeParts(cloneValue(node), {
           id,
-          children: node.children.map(
-            duplicateTreeNode
-          ) as typeof node.children,
-        };
+          children: node.children.map(duplicateTreeNode),
+        });
       case "tabs": {
         const tabs = node.tabs.map((tab) => {
           const tabId = allocateIdentifier(identifiers, `${tab.id}-copy`);
@@ -502,17 +494,15 @@ export function duplicateSubtree(
             `Tabs ${node.id} initialTabId ${node.initialTabId} names no declared tab.`
           );
         }
-        return {
-          ...cloneValue(node),
+        return withNodeParts(cloneValue(node), {
           id,
           tabs,
           initialTabId,
           accessibility: duplicateControl(node.accessibility),
-        };
+        });
       }
       case "carousel":
-        return {
-          ...cloneValue(node),
+        return withNodeParts(cloneValue(node), {
           id,
           pages: node.pages.map((page) => {
             const content = duplicateTreeNode(page.content);
@@ -524,7 +514,7 @@ export function duplicateSubtree(
             };
           }),
           accessibility: duplicateControl(node.accessibility),
-        };
+        });
       case "text":
         return {
           ...cloneValue(node),
@@ -584,8 +574,7 @@ export function duplicateSubtree(
               { type: "productCard" }
             >
         );
-        return {
-          ...cloneValue(node),
+        return withNodeParts(cloneValue(node), {
           id,
           cards,
           initialProductCardId:
@@ -597,24 +586,20 @@ export function duplicateSubtree(
             message: duplicateText(node.unavailableFallback.message),
           },
           accessibility: duplicateControl(node.accessibility),
-        };
+        });
       }
       case "button":
-        return {
-          ...cloneValue(node),
+        return withNodeParts(cloneValue(node), {
           id,
-          children: node.children.map(
-            duplicateTreeNode
-          ) as typeof node.children,
+          children: node.children.map(duplicateTreeNode),
           ...(node.inProgressChildren
             ? {
-                inProgressChildren: node.inProgressChildren.map(
-                  duplicateTreeNode
-                ) as typeof node.inProgressChildren,
+                inProgressChildren:
+                  node.inProgressChildren.map(duplicateTreeNode),
               }
             : {}),
           accessibility: duplicateControl(node.accessibility),
-        };
+        });
       case "switch":
         return {
           ...cloneValue(node),
@@ -662,43 +647,30 @@ export function duplicateSubtree(
   function repairInternalReferences(node: ProtocolNode): ProtocolNode {
     let repaired = node;
     if (node.type === "stack") {
-      repaired = {
-        ...node,
-        children: node.children.map(
-          repairInternalReferences
-        ) as typeof node.children,
-      };
+      repaired = withNodeParts(node, {
+        children: node.children.map(repairInternalReferences),
+      });
     } else if (node.type === "productCard") {
-      repaired = {
-        ...node,
-        children: node.children.map(
-          repairInternalReferences
-        ) as typeof node.children,
-      };
+      repaired = withNodeParts(node, {
+        children: node.children.map(repairInternalReferences),
+      });
     } else if (node.type === "productBadge") {
-      repaired = {
-        ...node,
-        children: node.children.map(
-          repairInternalReferences
-        ) as typeof node.children,
-      };
+      repaired = withNodeParts(node, {
+        children: node.children.map(repairInternalReferences),
+      });
     } else if (node.type === "button") {
-      repaired = {
-        ...node,
-        children: node.children.map(
-          repairInternalReferences
-        ) as typeof node.children,
+      repaired = withNodeParts(node, {
+        children: node.children.map(repairInternalReferences),
         ...(node.inProgressChildren
           ? {
               inProgressChildren: node.inProgressChildren.map(
                 repairInternalReferences
-              ) as typeof node.inProgressChildren,
+              ),
             }
           : {}),
-      };
+      });
     } else if (node.type === "carousel") {
-      repaired = {
-        ...node,
+      repaired = withNodeParts(node, {
         pages: node.pages.map((page) => {
           const content = repairInternalReferences(page.content);
           return {
@@ -706,10 +678,9 @@ export function duplicateSubtree(
             content: content.type === "stack" ? content : page.content,
           };
         }),
-      };
+      });
     } else if (node.type === "tabs") {
-      repaired = {
-        ...node,
+      repaired = withNodeParts(node, {
         tabs: node.tabs.map((tab) => {
           const content = repairInternalReferences(tab.content);
           return {
@@ -717,20 +688,16 @@ export function duplicateSubtree(
             content: content.type === "stack" ? content : tab.content,
           };
         }),
-      };
+      });
     } else if (node.type === "productSelector") {
-      repaired = {
-        ...node,
-        cards: node.cards.map(
-          (card) =>
-            repairInternalReferences(card) as Extract<
-              ProtocolNode,
-              { type: "productCard" }
-            >
-        ),
+      repaired = withNodeParts(node, {
+        cards: node.cards.map((card) => {
+          const mapped = repairInternalReferences(card);
+          return mapped.type === "productCard" ? mapped : card;
+        }),
         initialProductCardId:
           nodeIdMap.get(node.initialProductCardId) ?? node.initialProductCardId,
-      };
+      });
     }
     if (repaired.type === "button" && repaired.action.type === "purchase") {
       const selectorId = nodeIdMap.get(repaired.action.productSelectorId);

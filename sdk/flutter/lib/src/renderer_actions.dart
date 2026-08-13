@@ -830,7 +830,7 @@ extension on _MosaicPaywallState {
     _rememberCurrentScrollOffset();
     _setPaywallState(() {
       _navigationHistory.add(action.screenId);
-      _currentScreenId = action.screenId;
+      _enterScreen(action.screenId);
     });
     _presentDestination(destination, offset: 0);
   }
@@ -850,11 +850,18 @@ extension on _MosaicPaywallState {
     _analytics(MosaicAnalyticsEventName.paywallActionSelected,
         payload: const <String, Object?>{'action': 'navigate_back'});
     _rememberCurrentScrollOffset();
+    // Whether the destination was covered by a Sheet or genuinely replaced by
+    // a Screen decides whether arriving back at it is an entry at all.
+    final leaving = widget.document.screen(_navigationHistory.last);
     _navigationHistory.removeLast();
     final destinationId = _navigationHistory.last;
     final destination = widget.document.screen(destinationId)!;
     _setPaywallState(() {
-      _currentScreenId = destinationId;
+      if (leaving?.presentation == MosaicScreenPresentation.sheet) {
+        _returnToMountedScreen(destinationId);
+      } else {
+        _enterScreen(destinationId);
+      }
     });
     _presentDestination(
       destination,
@@ -1011,7 +1018,11 @@ extension on _MosaicPaywallState {
       _rememberCurrentScrollOffset();
       _setPaywallState(() {
         if (_navigationHistory.isNotEmpty) _navigationHistory.removeLast();
-        _currentScreenId = _navigationHistory.lastOrNull;
+        // A customer-dragged dismissal returns to the same screen a
+        // navigateBack Button returns to, and by the same rule: the thing
+        // being dismissed is always a Sheet, so the screen underneath was
+        // never left and this is not an entry.
+        _returnToMountedScreen(_navigationHistory.lastOrNull);
       });
       final destinationId = _currentScreenId;
       if (destinationId == null) return;

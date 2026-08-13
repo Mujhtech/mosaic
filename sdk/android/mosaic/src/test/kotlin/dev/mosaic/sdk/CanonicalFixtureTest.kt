@@ -44,17 +44,30 @@ class CanonicalFixtureTest {
         assertEquals("yearly-plan", selector.initiallySelectedProductReferenceId)
     }
 
+    /**
+     * The report is per contract version, not a flattened set of names.
+     *
+     * `style.productCardStates` exists at `0.3` and not at `0.4`, and the three `motion.*`
+     * capabilities exist at `0.4` and not at `0.3`. Reporting only names would make a `0.4`-only
+     * capability look supported on a `0.3` document and vice versa.
+     */
     @Test
-    fun capabilityReportDeclaresExactProtocol02Capabilities() {
+    fun capabilityReportDeclaresExactCapabilitiesPerSupportedContract() {
         val report = MosaicProtocolCapabilities.report("test-sdk")
 
         assertEquals("test-sdk", report.sdkVersion)
-        assertEquals(setOf(MOSAIC_PROTOCOL_VERSION), report.supportedSchemaVersions)
-        assertEquals(MosaicCapabilityCatalog.v03, report.supportedCapabilities.keys)
+        assertEquals(MOSAIC_SUPPORTED_PROTOCOL_VERSIONS, report.supportedSchemaVersions)
+        assertEquals(
+            MosaicCapabilityCatalog.v03 + MosaicCapabilityCatalog.v04,
+            report.supportedCapabilities.keys,
+        )
         assertEquals(
             MosaicCapabilityCatalog.v03.map {
                 MosaicRequiredCapability(it, MOSAIC_PROTOCOL_VERSION)
-            }.toSet(),
+            }.toSet() +
+                MosaicCapabilityCatalog.v04.map {
+                    MosaicRequiredCapability(it, MOSAIC_PROTOCOL_V04_VERSION)
+                }.toSet(),
             report.supportedCapabilityVersions,
         )
     }

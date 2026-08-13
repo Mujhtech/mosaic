@@ -11,6 +11,7 @@ import { PreviewCanvas } from "@/features/paywall-editor/components/preview-canv
 import { DEFAULT_MOCK_PRODUCTS } from "@/features/paywall-editor/constants/editor-constants";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { useWorkspacePreviewContext } from "@/features/paywall-editor/hooks/use-workspace-preview-context";
+import { upgradeDocumentToV04 } from "@/features/paywall-editor/mutations/upgrade-to-v04";
 import {
   EditorStoreProvider,
   useEditorActions,
@@ -21,6 +22,7 @@ import {
   useStudioWorkspaceActions,
 } from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { withNodeParts } from "@/features/paywall-editor/utils/document-version";
 import { required } from "@/test/required";
 import { chooseSelectOption } from "@/test/select";
 
@@ -30,6 +32,7 @@ type MetadataMode =
   | "hide-headline"
   | "hide-root"
   | "semantic-elements"
+  | "authored-marker-size"
   | "countdown"
   | "rtl-icon"
   | "name-only-missing-price"
@@ -47,10 +50,23 @@ function InitializePreview({ mode }: { mode: MetadataMode }) {
       return;
     }
     const { document } = required(
-      EDITOR_TEMPLATES[mode === "semantic-elements" ? 1 : 0],
+      EDITOR_TEMPLATES[
+        mode === "semantic-elements" || mode === "authored-marker-size" ? 1 : 0
+      ],
       'EDITOR_TEMPLATES[mode === "semantic-elements" ? 1 : 0]'
     );
-    editor.loadTemplate(document);
+    editor.loadTemplate(
+      mode === "authored-marker-size"
+        ? upgradeDocumentToV04(document)
+        : document
+    );
+    if (mode === "authored-marker-size") {
+      editor.updateComponent("features", (node) =>
+        node.type === "featureList"
+          ? ({ ...node, markerSize: 18 } as typeof node)
+          : node
+      );
+    }
     if (mode === "fixed-product-card") {
       editor.updateComponent("monthly-card", (node) =>
         node.type === "productCard"
@@ -77,12 +93,11 @@ function InitializePreview({ mode }: { mode: MetadataMode }) {
     if (mode === "name-only-missing-price") {
       editor.updateComponent("monthly-card", (node) =>
         node.type === "productCard"
-          ? {
-              ...node,
+          ? withNodeParts(node, {
               children: node.children.filter(
                 (child) => child.id !== "monthly-price"
               ),
-            }
+            })
           : node
       );
     }
@@ -807,5 +822,37 @@ describe("Canvas geometry", () => {
     });
     expect(screen.getByText("Panel 2 body")).toBeInTheDocument();
     expect(screen.queryByText("Panel 1 body")).not.toBeInTheDocument();
+  });
+});
+
+describe("Feature list marker size", () => {
+  // The 0.4 contract makes the marker size normative: authored `markerSize`
+  // draws at that size, and absent it draws at the list's own
+  // `typography.fontSize` -- never at a canvas constant. The canvas is the
+  // author's WYSIWYG surface, so a divergence here ships a size the author
+  // never previewed.
+  it("draws the authored marker size on a 0.4 document", async () => {
+    renderPreview("authored-marker-size");
+    const featureList = await screen.findByRole("list", {
+      name: "What is included",
+    });
+    const glyph = required(
+      featureList.querySelector("svg"),
+      "feature list marker glyph"
+    );
+    expect(glyph).toHaveAttribute("width", "18");
+  });
+
+  it("falls back to the list's font size when markerSize is unauthored", async () => {
+    renderPreview("semantic-elements");
+    const featureList = await screen.findByRole("list", {
+      name: "What is included",
+    });
+    const glyph = required(
+      featureList.querySelector("svg"),
+      "feature list marker glyph"
+    );
+    // The template's feature list authors typography.fontSize 16.
+    expect(glyph).toHaveAttribute("width", "16");
   });
 });

@@ -57,6 +57,7 @@ function pureSchemaValidator(target, supporting = []) {
 }
 
 const PAYWALL = "schema/v0.3/paywall.schema.json";
+const PAYWALL_V04 = "schema/v0.4/paywall.schema.json";
 const DECISION = "schema/placement-decision/v1/decision.schema.json";
 const EXPERIMENT = "schema/experiment-assignment/v1/assignment.schema.json";
 const DELIVERY_V1 = [
@@ -150,6 +151,19 @@ export const rejectionLayerTargets = Object.freeze([
     // no entry uses, and a rating above what its own scale can express. Raise
     // this when a corpus grows; never lower it to make a check pass.
     minimumCases: 12,
+  },
+  {
+    contract: "Paywall Protocol 0.4",
+    directory: "fixtures/v0.4/invalid",
+    validator: () => pureSchemaValidator(PAYWALL_V04),
+    // The 12 carried forward from 0.3 plus one per rejection motion introduces:
+    // an entrance inside an entrance, two pulsing buttons on one screen, a loop
+    // on something that is not a Button, a pulse under the flash-safety floor,
+    // a curve naming no declared token, a token nothing references, a token
+    // referenced only by another unreferenced token, and a rise distance on an
+    // effect that does not rise. Raise this when the corpus grows; never lower
+    // it to make a check pass.
+    minimumCases: 20,
   },
   {
     contract: "Configuration Delivery v1",

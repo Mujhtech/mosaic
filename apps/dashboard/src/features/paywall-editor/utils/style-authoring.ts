@@ -4,8 +4,14 @@ import type {
   ProtocolBackground,
   ProtocolColor,
 } from "@/features/paywall-editor/types/editor";
+import type { MosaicPaywallV04DesignSystem } from "@/lib/mosaic-protocol";
 
-export type DesignCategory = keyof PaywallDesignSystem;
+/**
+ * Every design-system catalog. Keyed off the 0.4 design system because
+ * `PaywallDesignSystem` is a union and `keyof` a union yields only the keys the
+ * two versions share -- which would silently drop `motions`.
+ */
+export type DesignCategory = keyof MosaicPaywallV04DesignSystem;
 
 type GradientBackground = Extract<
   ProtocolBackground,
@@ -98,6 +104,9 @@ export function tokenReferenceType(category: DesignCategory) {
   }
   if (category === "backgrounds") {
     return "backgroundToken" as const;
+  }
+  if (category === "motions") {
+    return "motionToken" as const;
   }
   return "shadowToken" as const;
 }

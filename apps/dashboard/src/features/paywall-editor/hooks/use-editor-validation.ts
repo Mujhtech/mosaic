@@ -7,6 +7,7 @@ import type {
   ValidationIssue,
 } from "@/features/paywall-editor/types/editor";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { isMotionCapableDocument } from "@/features/paywall-editor/utils/document-version";
 import { resolveInspectorValidationIssue } from "@/features/paywall-editor/utils/property-inspector-navigation";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
 
@@ -30,11 +31,16 @@ function canonicalIssue(
   };
 }
 
-function isSupportedAddress(document: MosaicDocument, issue: ValidationIssue) {
-  const target =
+function issueTargetNode(document: MosaicDocument, issue: ValidationIssue) {
+  return (
     document.screens.find((screen) => issue.componentId === screen.layout.id)
       ?.layout ??
-    (issue.componentId ? findNode(document, issue.componentId) : null);
+    (issue.componentId ? findNode(document, issue.componentId) : null)
+  );
+}
+
+function isSupportedAddress(document: MosaicDocument, issue: ValidationIssue) {
+  const target = issueTargetNode(document, issue);
   if (!target) {
     return false;
   }
@@ -42,9 +48,18 @@ function isSupportedAddress(document: MosaicDocument, issue: ValidationIssue) {
   if (!root) {
     return false;
   }
+  // Every 0.4 node except the scroll container carries a `motion` block:
+  // `appear` on any node, plus `selection` on Product Selector and Tabs and
+  // `loop` on Button. Which subkeys a node accepts is the schema's business;
+  // here the root only has to be recognised so its diagnostics are not
+  // discarded as branch noise.
+  const motionRoot: readonly string[] = isMotionCapableDocument(document)
+    ? ["motion"]
+    : [];
   const shared = new Set(["id", "type"]);
   const nodeShared = new Set([
     ...shared,
+    ...motionRoot,
     "appearance",
     "outerInsets",
     "visibility",
@@ -108,6 +123,7 @@ function isSupportedAddress(document: MosaicDocument, issue: ValidationIssue) {
     ]),
     productCard: new Set([
       ...shared,
+      ...motionRoot,
       "productReferenceId",
       "direction",
       "gap",
@@ -120,6 +136,7 @@ function isSupportedAddress(document: MosaicDocument, issue: ValidationIssue) {
     ]),
     productBadge: new Set([
       ...shared,
+      ...motionRoot,
       "placement",
       "direction",
       "gap",
@@ -228,10 +245,7 @@ function conditionalAccessibilityBranchDecision(
   document: MosaicDocument,
   issue: ValidationIssue
 ): boolean | null {
-  const target =
-    document.screens.find((screen) => issue.componentId === screen.layout.id)
-      ?.layout ??
-    (issue.componentId ? findNode(document, issue.componentId) : null);
+  const target = issueTargetNode(document, issue);
   if (!target) {
     return null;
   }
@@ -291,6 +305,109 @@ function conditionalAccessibilityBranchDecision(
   return null;
 }
 
+function authoredValueAt(target: unknown, segments: readonly string[]) {
+  let current: unknown = target;
+  for (const segment of segments) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      return;
+    }
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+/**
+ * Branch decisions for the two `oneOf`s inside a node's `motion` block.
+ *
+ * The generic heuristics below were written for the accessibility branches and
+ * are wrong for motion: they drop every `schema.oneOf` and every
+ * `schema.additionalProperties` at a supported address, which left an invalid
+ * motion block blocking publish with an empty Validation panel. Motion's
+ * `oneOf`s are cleanly discriminated -- `appear` on `effect` ("fade" |
+ * "fadeRise") and every `curve` on `type` ("motion" | "motionToken") -- so the
+ * authored discriminator selects the branch: the chosen branch's diagnostics
+ * are actionable and survive, the other branch's are noise and are dropped.
+ * When the discriminator itself is missing or unknown no branch can be chosen,
+ * and everything is kept rather than guessed away.
+ *
+ * Returns true for noise, false for an actionable diagnostic, and null when
+ * the issue is not a node-motion address.
+ */
+function motionSchemaBranchDecision(
+  document: MosaicDocument,
+  issue: ValidationIssue
+): boolean | null {
+  const address = issue.property ?? "";
+  if (address !== "motion" && !address.startsWith("motion.")) {
+    return null;
+  }
+  const target = issueTargetNode(document, issue);
+  if (!target) {
+    return null;
+  }
+  const segments = address.split(".");
+
+  // The appear oneOf, discriminated on `effect`.
+  const appearEffect = authoredValueAt(target, ["motion", "appear", "effect"]);
+  const appearBranchChosen =
+    appearEffect === "fade" || appearEffect === "fadeRise";
+  if (address === "motion.appear" && issue.code === "schema.oneOf") {
+    return appearBranchChosen;
+  }
+  if (address === "motion.appear.effect" && issue.code === "schema.const") {
+    return appearBranchChosen;
+  }
+  if (address === "motion.appear.riseLogicalSize") {
+    if (issue.code === "schema.required") {
+      return appearEffect === "fade";
+    }
+    if (issue.code === "schema.additionalProperties") {
+      return appearEffect === "fadeRise";
+    }
+  }
+
+  // The curve oneOf (inline motion vs token reference), discriminated on
+  // `type`. A curve sits under appear, selection, and loop alike.
+  const curveIndex = segments.indexOf("curve");
+  if (curveIndex >= 0) {
+    const curve = authoredValueAt(target, segments.slice(0, curveIndex + 1));
+    const curveType =
+      curve && typeof curve === "object" && !Array.isArray(curve)
+        ? (curve as Record<string, unknown>).type
+        : undefined;
+    const inline = curveType === "motion";
+    const token = curveType === "motionToken";
+    const leaf = segments.slice(curveIndex + 1).join(".");
+    if (leaf === "" && issue.code === "schema.oneOf") {
+      return inline || token;
+    }
+    if (leaf === "type" && issue.code === "schema.const") {
+      return inline || token;
+    }
+    if (leaf === "id") {
+      if (issue.code === "schema.required") {
+        return inline;
+      }
+      if (issue.code === "schema.additionalProperties") {
+        return token;
+      }
+    }
+    if (leaf === "durationMilliseconds" || leaf === "easing") {
+      if (issue.code === "schema.required") {
+        return token;
+      }
+      if (issue.code === "schema.additionalProperties") {
+        return inline;
+      }
+    }
+  }
+
+  // Everything else under `motion` is a real, actionable diagnostic -- a
+  // missing selection curve, a loop on a node that cannot carry one, a motion
+  // block on a 0.3 document. Never let the generic rules swallow it.
+  return false;
+}
+
 function isSchemaBranchNoise(document: MosaicDocument, issue: ValidationIssue) {
   if (!issue.code.startsWith("schema.")) {
     return false;
@@ -301,6 +418,10 @@ function isSchemaBranchNoise(document: MosaicDocument, issue: ValidationIssue) {
   );
   if (conditionalAccessibility !== null) {
     return conditionalAccessibility;
+  }
+  const motionDecision = motionSchemaBranchDecision(document, issue);
+  if (motionDecision !== null) {
+    return motionDecision;
   }
   const supportedAddress = isSupportedAddress(document, issue);
   if (issue.code === "schema.oneOf") {

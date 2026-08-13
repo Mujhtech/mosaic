@@ -16,6 +16,14 @@ public final class MosaicPaywallModel: ObservableObject {
   public let document: MosaicPaywallDocument
   public let localization: MosaicLocalizationResolver
 
+  /// The time authority for everything that moves.
+  ///
+  /// Held here rather than beside the model in the view because entry origins are
+  /// recorded when navigation happens, and navigation happens here. A renderer
+  /// that owned the driver separately would have to notice each navigation and
+  /// tell it, which is wiring that can be deleted without any test noticing.
+  public let motionDriver: MosaicMotionDriver
+
   @Published public private(set) var productsByReferenceID: [String: MosaicProduct] = [:]
   @Published public private(set) var selectedProductCardIDs: [String: String] = [:]
   @Published public private(set) var selectedProductReferenceIDs: [String: String] = [:]
@@ -24,6 +32,12 @@ public final class MosaicPaywallModel: ObservableObject {
   @Published public private(set) var selectedTabIDs: [String: String] = [:]
   @Published public private(set) var carouselPageIndices: [String: Int] = [:]
   @Published public private(set) var navigationHistory: [String] = []
+  /// The entry of the screen the customer is on, beneath any presented Sheet.
+  @Published public private(set) var baseScreenEntry: MosaicScreenEntry?
+  /// The entry of the presented Sheet's own content, `nil` when none is
+  /// presented. A Sheet enters on every presentation, so this carries a new
+  /// generation each time one opens.
+  @Published public private(set) var sheetScreenEntry: MosaicScreenEntry?
   @Published public private(set) var busyButtonIDs: Set<String> = []
   @Published public private(set) var isLoadingProducts = false
   @Published public private(set) var diagnostics: [MosaicDiagnostic] = []
@@ -37,12 +51,16 @@ public final class MosaicPaywallModel: ObservableObject {
   private var hasPrepared = false
   private var diagnosedHiddenPurchaseButtonIDs = Set<String>()
   private var diagnosedRenderingSubjects = Set<String>()
+  /// Monotonic across both surfaces, so no two entries anywhere in a session
+  /// compare equal.
+  private var lastEntryGeneration = 0
 
   public init(
     document: MosaicPaywallDocument,
     requestedLocale: String? = nil,
     purchaseProvider: any MosaicPurchaseProvider,
     clock: @escaping @Sendable () -> Date = { Date() },
+    motionDriver: MosaicMotionDriver = .platform(),
     analytics: MosaicAnalyticsPresentationInstrumentation? = nil,
     /// Diagnostic codes raised before rendering started, such as a presentation
     /// that resolved without analytics metadata.
@@ -57,6 +75,7 @@ public final class MosaicPaywallModel: ObservableObject {
     )
     self.purchaseProvider = purchaseProvider
     self.clock = clock
+    self.motionDriver = motionDriver
     self.analytics = analytics
     interactionHandler = onInteraction
     resultHandler = onResult
@@ -78,6 +97,7 @@ public final class MosaicPaywallModel: ObservableObject {
     if let initialScreenID = document.initialScreenId {
       navigationHistory = [initialScreenID]
     }
+    refreshScreenEntries()
     refreshHiddenPurchaseDiagnostics()
     for code in presentationDiagnostics {
       recordRenderingDiagnosticOnce(code, subjectID: document.id)
@@ -370,6 +390,7 @@ public final class MosaicPaywallModel: ObservableObject {
       return
     }
     navigationHistory.append(screenID)
+    refreshScreenEntries()
     refreshHiddenPurchaseDiagnostics()
   }
 
@@ -379,7 +400,52 @@ public final class MosaicPaywallModel: ObservableObject {
       return
     }
     navigationHistory.removeLast()
+    refreshScreenEntries()
     refreshHiddenPurchaseDiagnostics()
+  }
+
+  /// Recomputes both surfaces' entries after a navigation.
+  ///
+  /// Two different rules, because the two surfaces behave differently:
+  ///
+  /// - The **base screen** enters when it *changes*. Returning to a screen you
+  ///   left is an entry, so its entrances replay and its bounded pulse gets a
+  ///   fresh budget. Presenting a Sheet over it is not: the screen underneath
+  ///   stays mounted and keeps its scroll position, selection, and Carousel page,
+  ///   so replaying its entrances when the Sheet closed would animate content
+  ///   that never left.
+  /// - A **Sheet's own content** enters on *every presentation*. The same Sheet
+  ///   opened a second time is a new entry, because its content was taken off
+  ///   screen and put back — otherwise its entrance renders already finished and
+  ///   re-presenting never plays it again.
+  private func refreshScreenEntries() {
+    let now = motionDriver.elapsedMilliseconds ?? 0
+
+    func entered(_ screenID: String) -> MosaicScreenEntry {
+      lastEntryGeneration += 1
+      return MosaicScreenEntry(
+        screenID: screenID,
+        generation: lastEntryGeneration,
+        elapsedMillisecondsAtEntry: now
+      )
+    }
+
+    if let base = baseScreen, base.id != baseScreenEntry?.screenID {
+      baseScreenEntry = entered(base.id)
+    } else if baseScreen == nil {
+      baseScreenEntry = nil
+    }
+
+    if let sheet = presentedSheet {
+      // Dismissal clears this below, so the same Sheet opened again finds no
+      // entry here and takes a new one. That is the point: it is a new entry
+      // even though it is the same screen.
+      if sheetScreenEntry?.screenID != sheet.id {
+        sheetScreenEntry = entered(sheet.id)
+      }
+    } else {
+      sheetScreenEntry = nil
+    }
   }
 
   public func dismissPresentedSheet() {
@@ -747,7 +813,7 @@ extension MosaicPaywallDocument {
   }
 
   public var allNodes: [MosaicNode] {
-    if schemaVersion == mosaicProtocolVersion {
+    if mosaicSupportedProtocolVersions.contains(schemaVersion) {
       return screens.flatMap { $0.layout.content.descendants }
     }
     return layout.content.descendants
@@ -903,6 +969,29 @@ extension MosaicNode {
     case .productSelector(let selector):
       [self] + selector.cards.flatMap(\.descendantNodes)
     default: [self]
+    }
+  }
+
+  /// The authored `motion` block, if this node carries one.
+  ///
+  /// Reading it through the node rather than at each call site is what lets the
+  /// renderer apply `appear` in exactly one place for every component kind.
+  public var motion: MosaicMotion? {
+    switch self {
+    case .stack(let value): value.motion
+    case .text(let value): value.motion
+    case .image(let value): value.motion
+    case .icon(let value): value.motion
+    case .featureList(let value): value.motion
+    case .productSelector(let value): value.motion
+    case .button(let value): value.motion
+    case .carousel(let value): value.motion
+    case .switchControl(let value): value.motion
+    case .countdown(let value): value.motion
+    case .tabs(let value): value.motion
+    case .timeline(let value): value.motion
+    case .award(let value): value.motion
+    case .socialProof(let value): value.motion
     }
   }
 

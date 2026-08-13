@@ -1,7 +1,7 @@
 part of 'protocol.dart';
 
-extension on MosaicProtocolDecoder {
-  MosaicTypography _v03Typography(
+extension on _DocumentDecoder {
+  MosaicTypography _docTypography(
     Object? value,
     String path, {
     required bool allowMaximumLines,
@@ -30,7 +30,7 @@ extension on MosaicProtocolDecoder {
       );
     }
     return MosaicTypography(
-      style: _v03TextStyle(object['style'], '$path.style'),
+      style: _docTextStyle(object['style'], '$path.style'),
       fontSize: _boundedNumber(
         object['fontSize'],
         '$path.fontSize',
@@ -43,8 +43,8 @@ extension on MosaicProtocolDecoder {
         minimum: 0.8,
         maximum: 3,
       ),
-      weight: _v03FontWeight(object['weight'], '$path.weight'),
-      color: _v03Color(object['color'], '$path.color'),
+      weight: _docFontWeight(object['weight'], '$path.weight'),
+      color: _docColor(object['color'], '$path.color'),
       alignment: _textAlignment(object['alignment'], '$path.alignment'),
       maxLines: hasMaximum
           ? _integerInRange(
@@ -69,7 +69,7 @@ extension on MosaicProtocolDecoder {
     );
   }
 
-  MosaicTextAccessibility _v03TextAccessibility(
+  MosaicTextAccessibility _docTextAccessibility(
     Object? value,
     String path, {
     required bool allowHeading,
@@ -114,25 +114,25 @@ extension on MosaicProtocolDecoder {
     throw MosaicProtocolException('Invalid text accessibility role at $path.');
   }
 
-  MosaicSelectionStyles _v03SelectionStyles(
+  MosaicSelectionStyles _docSelectionStyles(
     Object? value,
     String path,
   ) {
     final object = _object(value, path);
     _expectKeys(object, const <String>{'default', 'selected'}, path);
     return MosaicSelectionStyles(
-      defaultStyle: _v03SelectionStateStyle(
+      defaultStyle: _docSelectionStateStyle(
         object['default'],
         '$path.default',
       ),
-      selectedOverride: _v03SelectionStateStyleOverride(
+      selectedOverride: _docSelectionStateStyleOverride(
         object['selected'],
         '$path.selected',
       ),
     );
   }
 
-  MosaicSelectionStateStyle _v03SelectionStateStyle(
+  MosaicSelectionStateStyle _docSelectionStateStyle(
     Object? value,
     String path,
   ) {
@@ -150,8 +150,8 @@ extension on MosaicProtocolDecoder {
       optional: const <String>{'shadow'},
     );
     return MosaicSelectionStateStyle(
-      background: _v03Background(object['background'], '$path.background'),
-      border: _v03Border(object['border'], '$path.border'),
+      background: _docBackground(object['background'], '$path.background'),
+      border: _docBorder(object['border'], '$path.border'),
       cornerRadius: _logicalSize(
         object['cornerRadius'],
         '$path.cornerRadius',
@@ -164,12 +164,12 @@ extension on MosaicProtocolDecoder {
         maximum: 1,
       ),
       shadow: object.containsKey('shadow')
-          ? _v03Shadow(object['shadow'], '$path.shadow')
+          ? _docShadow(object['shadow'], '$path.shadow')
           : null,
     );
   }
 
-  MosaicSelectionStateStyleOverride _v03SelectionStateStyleOverride(
+  MosaicSelectionStateStyleOverride _docSelectionStateStyleOverride(
     Object? value,
     String path,
   ) {
@@ -199,14 +199,14 @@ extension on MosaicProtocolDecoder {
       );
     }
     final padding = object.containsKey('padding')
-        ? _v03InsetsOverride(object['padding'], '$path.padding')
+        ? _docInsetsOverride(object['padding'], '$path.padding')
         : null;
     return MosaicSelectionStateStyleOverride(
       background: object.containsKey('background')
-          ? _v03Background(object['background'], '$path.background')
+          ? _docBackground(object['background'], '$path.background')
           : null,
       borderColor: border?.containsKey('color') ?? false
-          ? _v03Color(border!['color'], '$path.border.color')
+          ? _docColor(border!['color'], '$path.border.color')
           : null,
       borderWidth: border?.containsKey('width') ?? false
           ? _logicalSize(border!['width'], '$path.border.width')
@@ -227,12 +227,12 @@ extension on MosaicProtocolDecoder {
             )
           : null,
       shadow: object.containsKey('shadow')
-          ? _v03Shadow(object['shadow'], '$path.shadow')
+          ? _docShadow(object['shadow'], '$path.shadow')
           : null,
     );
   }
 
-  Map<String, double> _v03InsetsOverride(Object? value, String path) {
+  Map<String, double> _docInsetsOverride(Object? value, String path) {
     final object = _object(value, path);
     _expectKeys(
       object,
@@ -247,7 +247,7 @@ extension on MosaicProtocolDecoder {
     };
   }
 
-  MosaicMainAxisDistribution _v03Distribution(Object? value, String path) {
+  MosaicMainAxisDistribution _docDistribution(Object? value, String path) {
     final source = _enumValue(
       value,
       const <String>{'start', 'center', 'end', 'spaceBetween'},
@@ -266,7 +266,7 @@ extension on MosaicProtocolDecoder {
     };
   }
 
-  MosaicTextStyle _v03TextStyle(Object? value, String path) {
+  MosaicTextStyle _docTextStyle(Object? value, String path) {
     final source = _enumValue(
       value,
       const <String>{'display', 'title', 'heading', 'body', 'label', 'caption'},
@@ -275,7 +275,7 @@ extension on MosaicProtocolDecoder {
     return MosaicTextStyle.values.byName(source);
   }
 
-  MosaicFontWeight _v03FontWeight(Object? value, String path) {
+  MosaicFontWeight _docFontWeight(Object? value, String path) {
     final source = _enumValue(
       value,
       const <String>{'regular', 'medium', 'semibold', 'bold'},
@@ -284,7 +284,7 @@ extension on MosaicProtocolDecoder {
     return MosaicFontWeight.values.byName(source);
   }
 
-  MosaicCountdownUnit _v03CountdownUnit(Object? value, String path) {
+  MosaicCountdownUnit _docCountdownUnit(Object? value, String path) {
     final source = _enumValue(
       value,
       const <String>{'day', 'hour', 'minute', 'second'},
@@ -359,12 +359,16 @@ extension on MosaicProtocolDecoder {
     );
   }
 
-  MosaicDesignSystem _v03DesignSystem(Object? value) {
+  MosaicDesignSystem _docDesignSystem(Object? value) {
     const path = r'$.designSystem';
     final object = _object(value, path);
     _expectKeys(
       object,
-      const <String>{'colors', 'backgrounds', 'shadows'},
+      // The fourth catalog is required in 0.4 and may be empty. It does not
+      // exist in 0.3, where declaring it is an unknown property.
+      isV04
+          ? const <String>{'colors', 'backgrounds', 'shadows', 'motions'}
+          : const <String>{'colors', 'backgrounds', 'shadows'},
       path,
     );
     List<MosaicDesignToken<T>> decode<T>(
@@ -402,22 +406,25 @@ extension on MosaicProtocolDecoder {
     }
 
     return MosaicDesignSystem(
-      colors: decode<MosaicColorValue>('colors', _v03Color),
-      backgrounds: decode<MosaicBackground>('backgrounds', _v03Background),
-      shadows: decode<MosaicShadow>('shadows', _v03Shadow),
+      colors: decode<MosaicColorValue>('colors', _docColor),
+      backgrounds: decode<MosaicBackground>('backgrounds', _docBackground),
+      shadows: decode<MosaicShadow>('shadows', _docShadow),
+      motions: isV04
+          ? decode<MosaicMotion>('motions', _motion)
+          : const <MosaicDesignToken<MosaicMotion>>[],
     );
   }
 
-  List<MosaicAsset> _v03Assets(Object? value) {
+  List<MosaicAsset> _docAssets(Object? value) {
     const path = r'$.assets';
     final values = _list(value, path);
     return <MosaicAsset>[
       for (var index = 0; index < values.length; index += 1)
-        _v03Asset(values[index], '$path[$index]'),
+        _docAsset(values[index], '$path[$index]'),
     ];
   }
 
-  MosaicAsset _v03Asset(Object? value, String path) {
+  MosaicAsset _docAsset(Object? value, String path) {
     final object = _object(value, path);
     final type = _enumValue(
       object['type'],
@@ -431,7 +438,7 @@ extension on MosaicProtocolDecoder {
           : const <String>{'type', 'id', 'source'},
       path,
     );
-    final source = _v03AssetSource(object['source'], '$path.source');
+    final source = _docAssetSource(object['source'], '$path.source');
     final id = _identifier(object['id'], '$path.id');
     if (type == 'video') return MosaicVideoAsset(id: id, source: source);
     final fallback = _object(object['fallback'], '$path.fallback');
@@ -451,7 +458,7 @@ extension on MosaicProtocolDecoder {
     );
   }
 
-  MosaicAssetSource _v03AssetSource(Object? value, String path) {
+  MosaicAssetSource _docAssetSource(Object? value, String path) {
     final object = _object(value, path);
     final type = _enumValue(
       object['type'],
@@ -463,19 +470,19 @@ extension on MosaicProtocolDecoder {
       return MosaicBundledAssetSource(_assetKey(object['key'], '$path.key'));
     }
     _expectKeys(object, const <String>{'type', 'url'}, path);
-    return MosaicRemoteAssetSource(_v03ExternalUrl(object['url'], '$path.url'));
+    return MosaicRemoteAssetSource(_docExternalUrl(object['url'], '$path.url'));
   }
 
-  List<MosaicProductReference> _v03Products(Object? value) {
+  List<MosaicProductReference> _docProducts(Object? value) {
     const path = r'$.products';
     final values = _list(value, path);
     return <MosaicProductReference>[
       for (var index = 0; index < values.length; index += 1)
-        _v03ProductReference(values[index], '$path[$index]'),
+        _docProductReference(values[index], '$path[$index]'),
     ];
   }
 
-  MosaicProductReference _v03ProductReference(Object? value, String path) {
+  MosaicProductReference _docProductReference(Object? value, String path) {
     final object = _object(value, path);
     _expectKeys(
       object,
@@ -506,10 +513,229 @@ extension on MosaicProtocolDecoder {
 
   MosaicFeatureListItem _featureListItem(Object? value, String path) {
     final object = _object(value, path);
-    _expectKeys(object, const <String>{'id', 'text'}, path);
+    _expectKeys(
+      object,
+      const <String>{'id', 'text'},
+      path,
+      // A per-item override is a 0.4 addition. In 0.3 the list's single
+      // "checkmark" constant is the only glyph a list can express, so an item
+      // marker there is an unknown property rather than a silent no-op.
+      optional: isV04 ? const <String>{'marker'} : const <String>{},
+    );
     return MosaicFeatureListItem(
       id: _identifier(object['id'], '$path.id'),
       text: _localizedText(object['text'], '$path.text'),
+      marker: object.containsKey('marker')
+          ? _marker(object['marker'], '$path.marker')
+          : null,
+    );
+  }
+
+  /// The shared Protocol 0.4 marker union, used by Feature List and Timeline.
+  MosaicMarker _marker(Object? value, String path) {
+    final object = _object(value, path);
+    final kind = _enumValue(
+      object['kind'],
+      const <String>{'dot', 'ordinal', 'icon'},
+      '$path.kind',
+    );
+    switch (kind) {
+      case 'dot':
+        _expectKeys(object, const <String>{'kind'}, path);
+        return const MosaicDotMarker();
+      case 'ordinal':
+        _expectKeys(object, const <String>{'kind'}, path);
+        return const MosaicOrdinalMarker();
+      case 'icon':
+        _expectKeys(object, const <String>{'kind', 'name'}, path);
+        return MosaicIconMarker(_docIconName(object['name'], '$path.name'));
+      // `_enumValue` already rejected every other string, so a value here means
+      // the accepted set and this mapping disagree. That is an SDK bug, and it
+      // must never be absorbed as a plausible-looking glyph.
+      default:
+        throw StateError('Unhandled marker kind "$kind".');
+    }
+  }
+
+  /// A `motionToken` reference or an inline motion.
+  MosaicMotion _motion(Object? value, String path) {
+    final object = _object(value, path);
+    final type = _enumValue(
+      object['type'],
+      const <String>{'motion', 'motionToken'},
+      '$path.type',
+    );
+    if (type == 'motionToken') {
+      _expectKeys(object, const <String>{'type', 'id'}, path);
+      return MosaicMotionTokenReference(_identifier(object['id'], '$path.id'));
+    }
+    _expectKeys(
+      object,
+      const <String>{'type', 'durationMilliseconds', 'easing'},
+      path,
+    );
+    return MosaicInlineMotion(
+      // Integers throughout, per the 0.3 doctrine that Dart, Swift, Kotlin,
+      // and JavaScript must not disagree about a rounded fraction.
+      durationMilliseconds: _integerInRange(
+        object['durationMilliseconds'],
+        '$path.durationMilliseconds',
+        minimum: 0,
+        maximum: 2000,
+      ),
+      easing: MosaicMotionEasing.values.byName(
+        _enumValue(
+          object['easing'],
+          const <String>{'linear', 'standard', 'decelerate', 'accelerate'},
+          '$path.easing',
+        ),
+      ),
+    );
+  }
+
+  /// The authored motion block on one node, constrained by what the node is.
+  MosaicNodeMotion? _nodeMotion(
+    Map<String, Object?> object,
+    String path,
+    _MotionSlot slot,
+  ) {
+    if (!object.containsKey('motion')) return null;
+    if (!isV04 || slot == _MotionSlot.none) {
+      throw MosaicProtocolException(
+        'Unknown properties motion at $path.',
+      );
+    }
+    final motionPath = '$path.motion';
+    final motion = _object(object['motion'], motionPath);
+    _expectKeys(
+      motion,
+      const <String>{},
+      motionPath,
+      optional: switch (slot) {
+        _MotionSlot.node => const <String>{'appear'},
+        _MotionSlot.selectable => const <String>{'appear', 'selection'},
+        _MotionSlot.button => const <String>{'appear', 'loop'},
+        _MotionSlot.none => const <String>{},
+      },
+    );
+    if (motion.isEmpty) {
+      throw MosaicProtocolException(
+        'A motion block must declare at least one trigger at $motionPath.',
+      );
+    }
+    return MosaicNodeMotion(
+      appear: motion.containsKey('appear')
+          ? _appearMotion(motion['appear'], '$motionPath.appear')
+          : null,
+      selection: motion.containsKey('selection')
+          ? _selectionMotion(motion['selection'], '$motionPath.selection')
+          : null,
+      loop: motion.containsKey('loop')
+          ? _loopMotion(motion['loop'], '$motionPath.loop')
+          : null,
+    );
+  }
+
+  MosaicAppearMotion _appearMotion(Object? value, String path) {
+    final object = _object(value, path);
+    final effect = _enumValue(
+      object['effect'],
+      const <String>{'fade', 'fadeRise'},
+      '$path.effect',
+    );
+    // `riseLogicalSize` is required with fadeRise and forbidden with fade. Two
+    // key sets rather than one optional key, so "a fade that authored a rise"
+    // is rejected rather than silently ignored.
+    _expectKeys(
+      object,
+      effect == 'fadeRise'
+          ? const <String>{
+              'effect',
+              'riseLogicalSize',
+              'curve',
+              'delayMilliseconds',
+            }
+          : const <String>{'effect', 'curve', 'delayMilliseconds'},
+      path,
+    );
+    return MosaicAppearMotion(
+      effect: effect == 'fadeRise'
+          ? MosaicAppearEffect.fadeRise
+          : MosaicAppearEffect.fade,
+      // Bounded at 64: a rise longer than the component it moves reads as a
+      // fly-in, and a large authored translation is where transform-versus-
+      // layout divergence between three renderers becomes visible.
+      riseLogicalSize: effect == 'fadeRise'
+          ? _boundedNumber(
+              object['riseLogicalSize'],
+              '$path.riseLogicalSize',
+              minimumExclusive: 0,
+              maximum: 64,
+            )
+          : null,
+      curve: _motion(object['curve'], '$path.curve'),
+      delayMilliseconds: _integerInRange(
+        object['delayMilliseconds'],
+        '$path.delayMilliseconds',
+        minimum: 0,
+        maximum: 2000,
+      ),
+    );
+  }
+
+  MosaicSelectionMotion _selectionMotion(Object? value, String path) {
+    final object = _object(value, path);
+    _expectKeys(object, const <String>{'curve'}, path);
+    return MosaicSelectionMotion(
+      curve: _motion(object['curve'], '$path.curve'),
+    );
+  }
+
+  MosaicLoopMotion _loopMotion(Object? value, String path) {
+    final object = _object(value, path);
+    _expectKeys(
+      object,
+      const <String>{
+        'effect',
+        'scaleAmplitude',
+        'opacityAmplitude',
+        'curve',
+        'repeat',
+      },
+      path,
+    );
+    _expectConst(object['effect'], 'pulse', '$path.effect');
+    final repeat = _object(object['repeat'], '$path.repeat');
+    _expectKeys(repeat, const <String>{'count'}, '$path.repeat');
+    return MosaicLoopMotion(
+      effect: MosaicLoopEffect.pulse,
+      // A pulse that does not scale is not a pulse, so the lower bound is
+      // exclusive. The 0.06 ceiling keeps the excursion noticeable without
+      // overlapping neighbours or changing perceived hit targets.
+      scaleAmplitude: _boundedNumber(
+        object['scaleAmplitude'],
+        '$path.scaleAmplitude',
+        minimumExclusive: 0,
+        maximum: 0.06,
+      ),
+      // 0 is a pulse that scales without dimming. The 0.2 ceiling keeps the
+      // floor at no less than 80% of whatever the static rendering already was.
+      opacityAmplitude: _boundedNumber(
+        object['opacityAmplitude'],
+        '$path.opacityAmplitude',
+        minimum: 0,
+        maximum: 0.2,
+      ),
+      curve: _motion(object['curve'], '$path.curve'),
+      // Bounded 1..5 by owner ruling: an unbounded pulse would rely on the
+      // operating system's reduce-motion switch as its WCAG 2.2.2 stop
+      // mechanism, leaving a user who has not enabled it with no stop at all.
+      repeatCount: _integerInRange(
+        repeat['count'],
+        '$path.repeat.count',
+        minimum: 1,
+        maximum: 5,
+      ),
     );
   }
 

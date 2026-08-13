@@ -298,6 +298,7 @@ void _validateCapabilities(
   MosaicPaywallDocument document,
   List<MosaicNode> nodes,
 ) {
+  final isV04 = document.schemaVersion == mosaicProtocolVersionV04;
   final expected = <String>{
     'localization.catalogs',
     'navigation.screens',
@@ -322,6 +323,13 @@ void _validateCapabilities(
   }
   if (document.products.isNotEmpty) expected.add('product.references');
   final designSystem = document.designSystem!;
+  // Deliberately blind to `motions`. 0.4 inherits this derivation from 0.3
+  // unchanged, and a motion catalog already derives its own capabilities at the
+  // reference site — `motion.appear`, `motion.selection`, `motion.loop` — while
+  // the unused-token rule guarantees the catalog is non-empty only when a node
+  // reaches it. Adding `motions` here would make a motion-only document declare
+  // a style capability the protocol never derives for it, and reject a valid
+  // canonical fixture as configuration-unavailable.
   if (designSystem.colors.isNotEmpty ||
       designSystem.backgrounds.isNotEmpty ||
       designSystem.shadows.isNotEmpty) {
@@ -395,13 +403,27 @@ void _validateCapabilities(
     if (node is MosaicProductSelectorComponent) {
       expected
         ..add('fallback.product')
-        ..add('outcome.normalized')
-        ..add('style.productCardStates');
+        ..add('outcome.normalized');
     }
-    if (node is MosaicProductCardComponent ||
-        node is MosaicProductBadgeComponent ||
-        node is MosaicTabsComponent) {
+    // `style.productCardStates` was derived exactly when one of the three
+    // components that require `styles` was derived, so it could never vary
+    // independently and carried no information. 0.3 named it for removal and
+    // 0.4 removes it; deriving it there would demand a capability the 0.4
+    // vocabulary no longer contains.
+    if (!isV04 &&
+        (node is MosaicProductSelectorComponent ||
+            node is MosaicProductCardComponent ||
+            node is MosaicProductBadgeComponent ||
+            node is MosaicTabsComponent)) {
       expected.add('style.productCardStates');
+    }
+    // A motion capability is derived exactly when that motion is authored. The
+    // unused-capability check below then actively protects the enhancement
+    // tier: a document that claims motion it does not author is rejected.
+    if (node.motion case final motion?) {
+      if (motion.appear != null) expected.add('motion.appear');
+      if (motion.selection != null) expected.add('motion.selection');
+      if (motion.loop != null) expected.add('motion.loop');
     }
     switch (node) {
       case MosaicButtonComponent():
@@ -431,7 +453,8 @@ void _validateCapabilities(
   final unused = declared.difference(expected);
   if (missing.isNotEmpty || unused.isNotEmpty) {
     throw MosaicProtocolException(
-      'Capability declarations do not match Protocol 0.3 document content. '
+      'Capability declarations do not match Protocol '
+      '${document.schemaVersion} document content. '
       'Missing: ${missing.join(', ')}; unused: ${unused.join(', ')}.',
     );
   }
@@ -472,7 +495,7 @@ Iterable<MosaicTypography> _nodeTypographies(MosaicNode node) sync* {
     case MosaicTextComponent():
       if (node.typography case final typography?) yield typography;
     case MosaicFeatureListComponent():
-      if (node.typography case final typography?) yield typography;
+      yield node.typography;
     case MosaicSwitchComponent():
       yield node.typography;
     case MosaicCountdownComponent():

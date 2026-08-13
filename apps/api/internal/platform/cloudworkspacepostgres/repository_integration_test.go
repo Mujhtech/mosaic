@@ -876,10 +876,15 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open Protocol 0.3 schema: %v", err)
 	}
-	protocolValidator, err := hostedpublishing.CompileProtocolValidator(protocolSchema)
-	_ = protocolSchema.Close()
+	protocolSchema04, err := os.Open(filepath.Join("../../../../../protocol/schema/v0.4/paywall.schema.json"))
 	if err != nil {
-		t.Fatalf("compile Protocol 0.3 validator: %v", err)
+		t.Fatalf("open Protocol 0.4 schema: %v", err)
+	}
+	protocolValidator, err := hostedpublishing.CompileProtocolValidator(protocolSchema, protocolSchema04)
+	_ = protocolSchema.Close()
+	_ = protocolSchema04.Close()
+	if err != nil {
+		t.Fatalf("compile Paywall Protocol validator: %v", err)
 	}
 	objects := &testObjectStore{objects: make(map[string][]byte)}
 	publishingOptions := []hostedpublishing.ServiceOption{

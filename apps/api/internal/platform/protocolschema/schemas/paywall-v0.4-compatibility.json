@@ -1,0 +1,340 @@
+{
+  "schemaVersion": "0.4",
+  "status": "draft",
+  "schema": "../schema/v0.4/paywall.schema.json",
+  "canonicalFixture": "../fixtures/v0.4/complete-paywall.json",
+  "capabilities": [
+    {
+      "name": "layout.scrollContainer",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "layout.stack",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "layout.sizing",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "layout.heightSizing",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "layout.outerInsets",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "navigation.screens",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "navigation.sheets",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.text",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.image",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.icon",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.featureList",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.productSelector",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.productCard",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.productBadge",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.button",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.carousel",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.switch",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.countdown",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.tabs",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.timeline",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.award",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.socialProof",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "localization.catalogs",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "localization.rtl",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "localization.productTemplate",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "product.references",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "asset.bundledImage",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "asset.remoteImage",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "asset.bundledVideo",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "asset.remoteVideo",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "action.purchase",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "action.restore",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "action.close",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "action.navigateTo",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "action.navigateBack",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "action.openExternalUrl",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "accessibility.metadata",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "accessibility.reservedStrings",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "fallback.asset",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "fallback.product",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "outcome.normalized",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.colors",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.designTokens",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.gradientBackground",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.mediaBackground",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.shadow",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.box",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.clipping",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.typography",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "visibility.static",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "condition.switchVisibility",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "condition.tabVisibility",
+      "version": "0.4",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "motion.appear",
+      "version": "0.4",
+      "fallback": "renderWithoutMotion"
+    },
+    {
+      "name": "motion.selection",
+      "version": "0.4",
+      "fallback": "renderWithoutMotion"
+    },
+    {
+      "name": "motion.loop",
+      "version": "0.4",
+      "fallback": "renderWithoutMotion"
+    }
+  ],
+  "readerPolicy": {
+    "unknownSchemaVersion": "rejectDocument",
+    "unknownComponent": "rejectDocument",
+    "unknownProperty": "rejectDocument",
+    "unsupportedRequiredCapability": "rejectDocument",
+    "unsupportedEnhancementCapability": "renderStaticDocument",
+    "invalidReference": "rejectDocument",
+    "primaryDocumentRejected": "loadBundledFallback",
+    "bundledFallbackRejected": "configurationUnavailable",
+    "missingAsset": "useDeclaredAssetFallback",
+    "missingMediaBackground": "usePosterThenFallbackColorAndDiagnose",
+    "fillInUnboundedAxis": "useFitAndDiagnose",
+    "unavailableProduct": "useSelectorFallback",
+    "missingProductPrice": "markCardUnavailable",
+    "noAvailableProductCards": "showSelectorFallbackAndDisablePurchase",
+    "invalidProductTemplate": "rejectDocument",
+    "falseVisibilityCondition": "removeFromLayoutAccessibilityAndFocus",
+    "completedCountdown": "showLocalizedCompletedText",
+    "navigateBackWithoutHistory": "noOpAndDiagnose",
+    "externalUrlOpenFailure": "remainAndDiagnose",
+    "reducedMotionAppear": "applyOpacityOnly",
+    "reducedMotionSelection": "applyInstantly",
+    "reducedMotionLoop": "renderRestState",
+    "reducedMotionVideoBackground": "renderPosterThenFallbackColorWithoutPlayback"
+  },
+  "normalizedOutcomes": {
+    "selectProduct": [
+      "productSelected"
+    ],
+    "purchase": [
+      "purchased",
+      "alreadyEntitled",
+      "cancelled",
+      "productUnavailable",
+      "purchaseFailed"
+    ],
+    "restore": [
+      "restored",
+      "alreadyEntitled",
+      "restoreNoPurchases",
+      "restoreFailed"
+    ],
+    "close": [
+      "dismissed"
+    ],
+    "presentation": [
+      "purchased",
+      "restored",
+      "alreadyEntitled",
+      "dismissed",
+      "cancelled",
+      "productUnavailable",
+      "configurationUnavailable",
+      "purchaseFailed",
+      "renderingFailed"
+    ]
+  }
+}

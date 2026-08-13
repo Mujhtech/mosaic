@@ -114,7 +114,7 @@ final class ProtocolV03Tests: XCTestCase {
 
     XCTAssertEqual(
       MosaicSDKCapabilityReport.current.supportedSchemaVersions,
-      ["0.3"]
+      ["0.3", "0.4"]
     )
     XCTAssertEqual(
       Set(

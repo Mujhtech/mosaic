@@ -834,6 +834,7 @@ internal fun deriveCapabilities(
     document: MosaicPaywallDocument,
     root: JsonObject,
 ): Set<MosaicCapabilityName> = buildSet {
+    val isV04Document = document.schemaVersion == MOSAIC_PROTOCOL_V04_VERSION
     add(MosaicCapabilityName.LOCALIZATION_CATALOGS)
     add(MosaicCapabilityName.SCREENS)
     if (document.screens.any { it.presentation == MosaicScreenPresentation.SHEET }) {
@@ -865,7 +866,17 @@ internal fun deriveCapabilities(
         }
     }
     val designSystem = root.getAsJsonObject("designSystem")
-    if (designSystem.entrySet().any { (_, value) -> value.asJsonArray.size() > 0 }) {
+    // The three *style* catalogs only. `motions` is the fourth catalog in the same object but it is
+    // not a style token: motion is covered by `motion.appear`, `motion.selection`, and `motion.loop`,
+    // which are derived from the nodes that author it. Deriving `style.designTokens` from a
+    // motions-only design system would demand a capability for a catalog that renders nothing, and
+    // would reject a document the reference validator accepts. Every fixture before the two-Screen
+    // round trip also declared colours, so a catalog-agnostic check agreed with the contract by
+    // coincidence rather than by construction.
+    if (
+        setOf("colors", "backgrounds", "shadows")
+            .any { name -> (designSystem.getAsJsonArray(name)?.size() ?: 0) > 0 }
+    ) {
         add(MosaicCapabilityName.DESIGN_TOKENS)
     }
     if (objectContainsType(root, setOf("linearGradient", "radialGradient"))) {
@@ -941,9 +952,17 @@ internal fun deriveCapabilities(
         if (type == "productSelector") {
             add(MosaicCapabilityName.PRODUCT_FALLBACK)
             add(MosaicCapabilityName.NORMALIZED_OUTCOME)
-            add(MosaicCapabilityName.PRODUCT_CARD_STATES)
         }
-        if (type == "productCard" || type == "productBadge") {
+        // Derived exactly when `component.productSelector`, `component.productCard`, or
+        // `component.productBadge` is derived, which is why `0.4` removes it: a capability that
+        // cannot vary independently of another carries no information.
+        if (isV04Document) {
+            node.getAsJsonObjectOrNull("motion")?.let { motion ->
+                if (motion.hasNonNull("appear")) add(MosaicCapabilityName.MOTION_APPEAR)
+                if (motion.hasNonNull("selection")) add(MosaicCapabilityName.MOTION_SELECTION)
+                if (motion.hasNonNull("loop")) add(MosaicCapabilityName.MOTION_LOOP)
+            }
+        } else if (type == "productSelector" || type == "productCard" || type == "productBadge") {
             add(MosaicCapabilityName.PRODUCT_CARD_STATES)
         }
         node.getAsJsonObjectOrNull("action")?.get("type")?.asString?.let { action ->

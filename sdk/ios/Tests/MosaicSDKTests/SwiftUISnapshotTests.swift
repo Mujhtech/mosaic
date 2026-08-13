@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+  import AVFoundation
   import SwiftUI
   import UIKit
   import XCTest
@@ -245,6 +246,116 @@
       window.isHidden = true
     }
 
+    /// The terminal frame of every authored motion renders exactly the static
+    /// rendering.
+    ///
+    /// This is the pixel-level half of the rule the whole `renderWithoutMotion`
+    /// enhancement tier rests on: a reader that cannot animate draws what an
+    /// animating reader ends at. It compares two renders of the same `0.4`
+    /// document in-process — the driver disabled, which is how every static
+    /// golden is captured, against a controlled driver wound past the end of the
+    /// longest authored motion — so it needs no new baseline file and cannot go
+    /// stale against one.
+    func testProtocolV04MotionAtItsEndRendersTheStaticDocument() async throws {
+      let size = CGSize(width: 390, height: 844)
+      let document = try v04Document()
+      func image(driver: @escaping @autoclosure () -> MosaicMotionDriver) async -> UIImage {
+        let model = MosaicPaywallModel(
+          document: document,
+          requestedLocale: "en",
+          purchaseProvider: MockMosaicPurchaseProvider(
+            products: MosaicProduct.phase1MockProducts
+          ),
+          clock: { Date(timeIntervalSince1970: 1_893_455_998) },
+          motionDriver: driver(),
+          onResult: { _ in }
+        )
+        await model.prepare()
+        return render(
+          MosaicPaywall(
+            model: model,
+            imageResolver: .missing,
+            motionAccessibility: .unrestricted
+          )
+          .environment(\.colorScheme, .light)
+          .environment(\.sizeCategory, .large)
+          .background(Color.white),
+          size: size
+        )
+      }
+
+      let staticRendering = await image(driver: .disabled())
+      // Past the last delay plus the longest curve, and past three 900 ms pulse
+      // cycles, so nothing authored is still running.
+      let ended = await image(driver: .controlled(elapsedMilliseconds: 60_000))
+      let comparison = try compare(actual: ended, expected: staticRendering)
+      XCTAssertEqual(
+        comparison.differentPixelRatio, 0,
+        "A finished animation must be byte-identical to the static rendering."
+      )
+    }
+
+    /// Under reduced motion a `0.4` video background does not play: the declared
+    /// poster is drawn and no player is built at all.
+    ///
+    /// Protects the `0.4` accessibility ruling (ADR-0027, ruling 3) that closes a
+    /// live `0.3` exposure — an autoplaying paywall video can invalidate a
+    /// customer's App Store Reduced Motion declaration.
+    ///
+    /// The hierarchy walk is the load-bearing assertion. This test previously
+    /// checked only that no unavailable-video diagnostic was recorded, which is
+    /// equally true of a video that plays perfectly, so it passed with the guard
+    /// deleted. `AVPlayerLayer` is the layer class the renderer's player view
+    /// installs, so its absence is the SwiftUI equivalent of Flutter's
+    /// `findsNothing`: nothing was constructed, rather than constructed and
+    /// paused. The version gate itself is pinned in `MotionDriverTests`, which
+    /// runs on the development host as well as the Simulator.
+    func testReducedMotionRendersVideoBackgroundPosterWithoutPlayback() async throws {
+      let document = try v04DocumentWithVideoBackgroundOnTheOfferScreen()
+      let model = MosaicPaywallModel(
+        document: document,
+        requestedLocale: "en",
+        purchaseProvider: MockMosaicPurchaseProvider(
+          products: MosaicProduct.phase1MockProducts
+        ),
+        onResult: { _ in }
+      )
+      await model.prepare()
+
+      // The decision the background view consumes, for the exact document and
+      // preference rendered below: the poster, and not because anything failed.
+      XCTAssertEqual(document.schemaVersion, mosaicMotionProtocolVersion)
+      XCTAssertEqual(
+        MosaicVideoBackgroundPresentation.resolve(
+          resolvedSource: URL(string: "https://cdn.mosaic.dev/video/sheet.mp4"),
+          posterID: "remote-texture",
+          schemaVersion: document.schemaVersion,
+          accessibility: .reduced
+        ),
+        .still(posterID: "remote-texture", recordsUnavailable: false)
+      )
+
+      let views = hostedViews(
+        MosaicPaywall(
+          model: model,
+          imageResolver: .missing,
+          motionAccessibility: .reduced
+        )
+        .environment(\.colorScheme, .light)
+        .background(Color.white),
+        size: CGSize(width: 390, height: 844)
+      )
+
+      XCTAssertFalse(
+        views.contains { $0.layer is AVPlayerLayer },
+        "Reduced motion must build no player, not build one and pause it."
+      )
+      XCTAssertFalse(
+        model.diagnostics.contains { $0.code == "media_video_background_unavailable" },
+        "A video suppressed by reduced motion has not failed and must not diagnose."
+      )
+    }
+
     func testLongGermanAtAccessibilityTextSizeRendersWithoutFailure() async throws {
       let document = try canonicalDocument()
       let model = MosaicPaywallModel(
@@ -298,6 +409,33 @@
         try rgbaPixels(image).contains { $0 < 240 },
         "The Protocol 0.3 RTL accessibility-size renderer should produce visible content."
       )
+    }
+
+    /// Hosts `view` and returns every `UIView` built underneath it.
+    ///
+    /// For assertions about what the renderer constructed rather than what it
+    /// looks like. Pixels cannot distinguish a video paused on its first frame
+    /// from a poster, and a diagnostic cannot distinguish either from a video
+    /// that played.
+    private func hostedViews<V: View>(_ view: V, size: CGSize) -> [UIView] {
+      let controller = UIHostingController(
+        rootView: view.frame(width: size.width, height: size.height))
+      let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+      window.rootViewController = controller
+      window.isHidden = false
+      controller.view.frame = window.bounds
+      controller.view.setNeedsLayout()
+      controller.view.layoutIfNeeded()
+      RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+
+      var views: [UIView] = []
+      var pending = [controller.view!]
+      while let next = pending.popLast() {
+        views.append(next)
+        pending.append(contentsOf: next.subviews)
+      }
+      window.isHidden = true
+      return views
     }
 
     private func render<V: View>(_ view: V, size: CGSize) -> UIImage {
@@ -472,21 +610,25 @@
       )
     }
 
-    private func v03DocumentWithBundledSheetVideo() throws -> MosaicPaywallDocument {
+    /// The canonical `0.4` document with the poster-carrying video background
+    /// moved onto the base screen.
+    ///
+    /// The fixture declares it on the `details` sheet, which is presented into a
+    /// separate hierarchy; the base screen is what a hosting controller can be
+    /// walked from.
+    private func v04DocumentWithVideoBackgroundOnTheOfferScreen() throws
+      -> MosaicPaywallDocument
+    {
       var object = try XCTUnwrap(
-        JSONSerialization.jsonObject(with: v03FixtureData()) as? [String: Any]
+        JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any]
       )
       var screens = try XCTUnwrap(object["screens"] as? [[String: Any]])
-      let sheetIndex = try XCTUnwrap(
-        screens.firstIndex { screen in
-          (screen["presentation"] as? [String: Any])?["type"] as? String == "sheet"
-        }
-      )
-      var sheet = screens[sheetIndex]
-      var layout = try XCTUnwrap(sheet["layout"] as? [String: Any])
-      layout["background"] = ["type": "backgroundToken", "id": "ambient-video"]
-      sheet["layout"] = layout
-      screens[sheetIndex] = sheet
+      let index = try XCTUnwrap(screens.firstIndex { $0["id"] as? String == "offer" })
+      var screen = screens[index]
+      var layout = try XCTUnwrap(screen["layout"] as? [String: Any])
+      layout["background"] = ["type": "backgroundToken", "id": "sheet-video"]
+      screen["layout"] = layout
+      screens[index] = screen
       object["screens"] = screens
       return try MosaicProtocolDecoder.decode(
         JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])

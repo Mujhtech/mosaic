@@ -2,6 +2,106 @@
 
 ## Unreleased
 
+- **Read Paywall Protocol 0.4 "Motion" alongside 0.3.** The decoder dispatches
+  on `schemaVersion`; versions stay exact identifiers, so a 0.3 document is
+  still read as 0.3 and gains no motion vocabulary. `0.4` adds the
+  `designSystem.motions` catalog, `motionToken`/inline motion references, and
+  per-node `motion` blocks, and applies the two cleanups `0.3` named for it:
+  `style.productCardStates` is gone from the capability vocabulary, and Feature
+  List and Timeline share one `dot`/`ordinal`/`icon` marker union with an
+  optional per-item override, so a list can finally express a negated item.
+- Add the three motion primitives, rendered with native Flutter widgets.
+  **appear** fades or fade-rises a node once when it enters a screen, travelling
+  *to* its laid-out position; **selection** interpolates the closed field list
+  between a selectable box's Default and Selected styles, switching semantic
+  colours, background kind, and padding discretely at the half-way point; and
+  **loop** pulses one Button per screen a bounded 1–5 cycles, then rests
+  permanently. Every animation's terminal frame is the static rendering, which
+  a golden asserts by comparing the finished frame against the motion-disabled
+  capture of the same document. A Button carrying both `appear` and `loop`
+  starts both clocks at node entry, in one `initState` pass — the pulse does not
+  wait for the entrance — and the two compose on the node's own values as
+  `opacity = static × appearProgress × loopOpacityMultiplier`, `scale =
+  loopScale`.
+- **A Sheet over a screen is not a re-entry for that screen.** `appear` and
+  `loop` replay on genuine screen re-entry, and `repeat.count` is a bound per
+  entry — but this renderer keeps the screen beneath a Sheet mounted, which is
+  why its scroll position, selection, and Carousel page survive the round trip.
+  Closing a Sheet previously counted as an entry for the screen underneath,
+  replaying an entrance the customer had already watched and handing the pulse
+  a second budget the author never authorised. Both Sheet-dismissal paths — the
+  `navigateBack` Button and a customer-dragged dismissal — now return to the
+  mounted screen without recording an entry.
+- **Fix: a motion-only design system no longer derives `style.designTokens`.**
+  0.4 inherits that derivation from 0.3 unchanged, and 0.3 knows nothing about
+  the `motions` catalog — motion derives `motion.appear`, `motion.selection`,
+  and `motion.loop` at the reference site instead. Deriving it from a non-empty
+  `motions` catalog rejected a well-formed document as configuration-
+  unavailable, which is the worst failure mode a reader has: the paywall is
+  valid and the customer sees nothing.
+- **Fix: a missing video is still diagnosed when reduced motion suppressed it.**
+  Availability and playability are decided independently — whether the media
+  exists is a fact about the document and the host's asset resolution, whether
+  it plays is a fact about the customer's settings — so the suppressed path now
+  assesses the video's source and raises the same
+  `background.videoUnavailable` diagnostic, with the same wording, that the
+  playing path would. The converse holds and is asserted too: a resolvable
+  video that is deliberately not played is not a broken paywall and diagnoses
+  nothing. A remote source is treated as resolvable on this path, because its
+  reachability is only knowable by fetching it and fetching is the playback the
+  ruling forbids.
+- **`appear` and `loop` replay on genuine screen re-entry, and the pulse's
+  authored cycle bound is spent per screen entry.** Navigating to a Paywall
+  Screen and back re-enters the screen left behind, so both clocks restart from
+  node entry. Mounting could not be the signal here: this renderer keeps the
+  screen beneath a Sheet mounted so its scroll position, selection, and
+  Carousel page survive the round trip. Entry is tracked as navigation state
+  and delivered to the two motion scopes, which restart their timelines rather
+  than being re-keyed — re-keying would rebuild the subtree and reset exactly
+  the state the round trip is supposed to preserve. Leaving a screen is not
+  entering it, so the screen being navigated away from does not replay, and an
+  accepted revision carries entry counts forward rather than resetting them, so
+  a designer nudging padding in Local Preview is not strobed once per keystroke.
+- Add `MosaicMotionDriver`, an injectable enabled flag plus a per-animation
+  elapsed-time source, alongside the existing `MosaicClock`. Tests pin frames
+  with `tester.pump(duration)` and static goldens are captured with
+  `MosaicMotionDriver.disabled()`.
+- **Honour `featureListComponent.markerSize`, and drop Flutter's hardcoded
+  `20`.** The field is a `positiveLogicalSize` bounded exactly as Timeline's,
+  optional, and its absence means the list's own `typography.fontSize` — the
+  protocol's normative default, not a renderer's choice.
+  `MosaicFeatureListComponent.resolvedMarkerSize` applies it, and `typography`
+  becomes non-nullable on that component because the protocol requires it and
+  the default reads its `fontSize`. This changes what a `0.3` document draws as
+  well as a `0.4` one, which is deliberate: the migration's claim that a
+  migrated `0.3` document renders identically only holds if both versions
+  resolve the absent size the same way. Both canonical goldens are recaptured.
+- **A motion token is used when a *node* reaches it, transitively.** The
+  unused-token rule previously counted a token as referenced if any
+  `designSystem` value named it, including another unused token, so a pair of
+  orphaned aliases could vouch for each other. Reachability is now rooted at
+  node reference sites only and expands through token values, matching the
+  reference validator.
+- **The Countdown tick no longer rebuilds the whole document.** It moves onto
+  the motion driver as a scoped `Listenable`, so one second advancing one line
+  of text rebuilds the Countdown — and the Product Card labels that quote one —
+  rather than every node on the screen.
+- Add an injectable reduced-motion signal defaulting to
+  `MediaQuery.disableAnimationsOf`, read once per frame at the renderer
+  boundary. Under reduced motion `appear` becomes opacity-only with no
+  transform at any instant, `selection` applies instantly, `loop` is fully
+  disabled at rest, and — the 0.4 ruling — a video background does not play at
+  all: the declared poster is rendered, and its fallback colour when there is
+  none.
+- Report capabilities per schema version. `MosaicCapabilityReport` now exposes
+  `capabilitiesBySchemaVersion` and `capabilitiesFor(version)` in place of a
+  single flattened `supportedCapabilities` map, which could only have named one
+  version for a capability that exists at both. Configuration Delivery and
+  Local Preview negotiation stay pinned to `0.3`: Local Preview `0.3` `$ref`s
+  the `0.3` paywall schema directly and Delivery v3 carries exactly one paywall
+  protocol, so advertising `0.4` there would claim a contract neither has been
+  bumped to.
+
 - **Adopt Paywall Protocol 0.3, which replaces 0.2 outright.** There is no
   migration path, no dual-version code, and no compatibility shim: a 0.2
   document is an unknown version to this reader and is rejected atomically,

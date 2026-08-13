@@ -4,8 +4,11 @@ import type {
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { flattenDocument } from "@/features/paywall-editor/utils/document-tree-traversal";
+import {
+  documentRequiredCapabilities,
+  withDocumentParts,
+} from "@/features/paywall-editor/utils/document-version";
 import { reconcileReservedAccessibilityStrings } from "@/features/paywall-editor/utils/protocol-component-rules";
-import { requiredCapabilitiesFor } from "@/lib/mosaic-protocol";
 
 function collectLocalizedText(value: unknown, entries: LocalizedText[]) {
   if (Array.isArray(value)) {
@@ -33,9 +36,9 @@ function collectLocalizedText(value: unknown, entries: LocalizedText[]) {
   }
 }
 
-export function synchronizeProtocolMetadata(
-  document: MosaicDocument
-): MosaicDocument {
+export function synchronizeProtocolMetadata<TDocument extends MosaicDocument>(
+  document: TDocument
+): TDocument {
   const next = cloneValue(reconcileReservedAccessibilityStrings(document));
   const entries = flattenDocument(next);
 
@@ -78,7 +81,12 @@ export function synchronizeProtocolMetadata(
 
   // Derivation and serialisation both come from the protocol reference, so a
   // document's declared capabilities cannot drift from the ones its content
-  // actually requires.
-  next.compatibility.requiredCapabilities = [...requiredCapabilitiesFor(next)];
-  return next;
+  // actually requires. The derivation is version-aware: 0.4 drops the removed
+  // style.productCardStates capability and adds the motion.* triggers.
+  return withDocumentParts(next, {
+    compatibility: {
+      ...next.compatibility,
+      requiredCapabilities: documentRequiredCapabilities(next),
+    },
+  });
 }

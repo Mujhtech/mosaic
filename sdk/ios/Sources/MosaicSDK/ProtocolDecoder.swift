@@ -39,11 +39,14 @@ public enum MosaicProtocolDecoder {
         reason: "expected_string"
       )
     }
-    guard schemaVersion == mosaicProtocolVersion else {
+    // Versions are exact identifiers. A reader declaring `0.4` accepts only
+    // `0.4`, and the rules each document is held to are chosen here, once,
+    // rather than inferred later from the shape of what decoded.
+    guard let version = MosaicSchemaVersion(rawValue: schemaVersion) else {
       throw MosaicProtocolError.unsupportedSchemaVersion(schemaVersion)
     }
 
-    try MosaicProtocolV03Shape.validate(root)
+    try MosaicProtocolShape.validate(root, version: version)
 
     let document: MosaicPaywallDocument
     do {
@@ -57,7 +60,7 @@ public enum MosaicProtocolDecoder {
       throw MosaicProtocolError.invalidShape(path: "$", reason: "type_or_enum_mismatch")
     }
 
-    try MosaicProtocolV03Semantics.validate(document)
+    try MosaicProtocolV03Semantics.validate(document, version: version)
     return document
   }
 

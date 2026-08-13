@@ -172,6 +172,9 @@ struct MosaicButtonView: View {
       outerInsets: component.outerInsets
     )
     .frame(minWidth: 44, minHeight: 44)
+    // Button is the only component that may pulse, and at most one per screen
+    // may do so. A pulsing button announces exactly what a static one does.
+    .mosaicLoopMotion(component.motion, in: document)
   }
 
   private func handleAction() {
@@ -426,27 +429,37 @@ struct MosaicCarouselView: View {
 
 @MainActor
 struct MosaicCountdownView: View {
+  @EnvironmentObject private var driver: MosaicMotionDriver
   let component: MosaicCountdownComponent
   let localization: MosaicLocalizationResolver
   @ObservedObject var model: MosaicPaywallModel
 
+  /// The redraw cadence comes from the injected driver rather than from
+  /// `TimelineView(.periodic(from: .now, by: 1))`.
+  ///
+  /// The countdown's *value* has always come from the injected clock; only its
+  /// repaint schedule was wall-clock, and that made "what does it show one tick
+  /// later" untestable. Observing the driver's tick count makes the cadence an
+  /// injected input like everything else. The rounding of the remaining time is
+  /// deliberately untouched here: that divergence is a separately tracked 0.3
+  /// defect, and fixing it inside a 0.4 change would hide it.
   var body: some View {
-    TimelineView(.periodic(from: .now, by: 1)) { _ in
-      let resolution = MosaicCountdownText.resolution(
-        component: component,
-        now: model.currentDate(),
-        completedText: localization.resolve(component.completedText)
-      )
-      MosaicStyledText(value: resolution.text, typography: component.typography)
-        .mosaicHeading(component.accessibility)
-        .mosaicTextAccessibilityLabel(component.accessibility, localization: localization)
-        .mosaicCountdownDiagnostic(resolution, componentID: component.id)
-    }
-    .mosaicPresentation(
-      appearance: component.appearance,
-      sizing: component.sizing,
-      outerInsets: component.outerInsets
+    let resolution = MosaicCountdownText.resolution(
+      component: component,
+      now: model.currentDate(),
+      completedText: localization.resolve(component.completedText)
     )
+    return MosaicStyledText(value: resolution.text, typography: component.typography)
+      .mosaicHeading(component.accessibility)
+      .mosaicTextAccessibilityLabel(component.accessibility, localization: localization)
+      .mosaicCountdownDiagnostic(resolution, componentID: component.id)
+      .id(driver.tickCount)
+      .mosaicPresentation(
+        appearance: component.appearance,
+        sizing: component.sizing,
+        outerInsets: component.outerInsets
+      )
+      .task { await driver.runCadence() }
   }
 }
 
@@ -605,11 +618,79 @@ extension EnvironmentValues {
   }
 }
 
+/// What a declared video background resolves to, decided before any view exists.
+///
+/// Extracted from the view because "no player is constructed" is a claim about
+/// this decision and nothing else can state it: the absence of a diagnostic is
+/// equally true of a video that plays, so a test asserting only that passes with
+/// the reduced-motion guard deleted.
+enum MosaicVideoBackgroundPresentation: Equatable {
+  /// A player is constructed and plays `url`.
+  case play(url: URL)
+  /// No player is constructed. The declared poster is drawn when one is
+  /// declared, and the declared fallback colour otherwise.
+  ///
+  /// `recordsUnavailable` separates the two reasons for arriving here: media the
+  /// host could not resolve, which diagnoses, and a user preference, which does
+  /// not.
+  case still(posterID: String?, recordsUnavailable: Bool)
+
+  /// The one code both paths record, so an operator reading diagnostics cannot
+  /// infer from the wording whether the video was suppressed or attempted. The
+  /// customer's accessibility settings are not something a diagnostic feed should
+  /// disclose, and "this asset is broken" is the same fact either way.
+  static let unavailableDiagnosticCode = "media_video_background_unavailable"
+
+  /// - Parameter resolvedSource: the asset's playable URL, or `nil` when the host
+  ///   could not resolve one. `nil` means the document declares no such asset, or
+  ///   declares a *bundled* one whose key the host's resolver does not map —
+  ///   both knowable by lookup alone. A *remote* asset always resolves to its
+  ///   URL here, because whether that URL actually loads is knowable only by
+  ///   fetching it, and fetching is the playback a suppressed video must not do.
+  static func resolve(
+    resolvedSource: URL?,
+    posterID: String?,
+    schemaVersion: String?,
+    accessibility: MosaicMotionAccessibility
+  ) -> MosaicVideoBackgroundPresentation {
+    // ADR-0027 ruling 3: the reduced-motion fix ships as specified `0.4`
+    // behaviour, not as a `0.3` defect patch. A `0.3` document therefore keeps
+    // `0.3`'s behaviour — the live exposure stays open until `0.4` lands and is
+    // accepted, and is tracked as such rather than closed here. Flutter draws
+    // the same version gate.
+    let reducedMotionStops =
+      accessibility.prefersReducedMotion && schemaVersion == mosaicMotionProtocolVersion
+    // Video Autoplay is Apple's own, narrower switch rather than a protocol
+    // rule, so it is honoured on every document version: a user who turned it
+    // off meant it, and a `0.3` document is not a licence to ignore it.
+    let autoplayStops = !accessibility.allowsVideoAutoplay
+    // The poster-then-fallback order is the one the existing missing-media
+    // policy already uses, reused deliberately rather than introducing a fourth
+    // outcome.
+    //
+    // Unavailability is a fact about the media rather than about the preference,
+    // so a source the host cannot resolve is reported whether or not it would
+    // have been allowed to play: an operator must be able to see a broken asset
+    // without first ruling out every viewer's accessibility settings, and
+    // Compose has always recorded it here. The converse holds too — a suppressed
+    // video whose source resolves diagnoses nothing, because nothing is wrong.
+    //
+    // The line sits exactly where knowability does. Everything diagnosed on this
+    // path is settled by lookup; a remote URL that would have 404'd is diagnosed
+    // on the playing path alone, by the player that actually tried.
+    guard !reducedMotionStops, !autoplayStops, let resolvedSource else {
+      return .still(posterID: posterID, recordsUnavailable: resolvedSource == nil)
+    }
+    return .play(url: resolvedSource)
+  }
+}
+
 @MainActor
 struct MosaicBackgroundView: View {
   @Environment(\.mosaicDocument) private var document
   @Environment(\.mosaicImageResolver) private var imageResolver
   @Environment(\.mosaicVideoResolver) private var videoResolver
+  @Environment(\.mosaicMotionAccessibility) private var motionAccessibility
   @EnvironmentObject private var model: MosaicPaywallModel
 
   let background: MosaicBackground
@@ -729,24 +810,37 @@ struct MosaicBackgroundView: View {
     mode: MosaicImageContentMode,
     fallback: Color
   ) -> some View {
-    let url = document?.assets.first(where: { $0.id == assetID }).flatMap { asset -> URL? in
-      switch asset.source {
-      case .bundled(let key): videoResolver.url(for: key)
-      case .remote(let url): url
+    // Resolvable by lookup alone: a bundled key the host does not map yields
+    // nothing, while a remote asset always yields its URL — whether that URL
+    // loads is the player's question, not this one's.
+    let resolvedSource = document?.assets.first(where: { $0.id == assetID })
+      .flatMap { asset -> URL? in
+        switch asset.source {
+        case .bundled(let key): videoResolver.url(for: key)
+        case .remote(let url): url
+        }
       }
-    }
-    if let url {
+    // No frame of a stopped video is shown, playback is not started and paused,
+    // and no control is offered: the `still` arm constructs no player at all.
+    switch MosaicVideoBackgroundPresentation.resolve(
+      resolvedSource: resolvedSource,
+      posterID: posterID,
+      schemaVersion: document?.schemaVersion,
+      accessibility: motionAccessibility
+    ) {
+    case .play(let url):
       MosaicDecorativeVideoView(url: url, contentMode: mode) {
         model.recordRenderingDiagnosticOnce(
-          "media_video_background_unavailable", subjectID: assetID)
+          MosaicVideoBackgroundPresentation.unavailableDiagnosticCode, subjectID: assetID)
       } fallback: {
         posterOrFallback(posterID: posterID, mode: mode, fallback: fallback)
       }
-    } else {
+    case .still(let posterID, let recordsUnavailable):
       posterOrFallback(posterID: posterID, mode: mode, fallback: fallback)
         .task {
+          guard recordsUnavailable else { return }
           model.recordRenderingDiagnosticOnce(
-            "media_video_background_unavailable", subjectID: assetID)
+            MosaicVideoBackgroundPresentation.unavailableDiagnosticCode, subjectID: assetID)
         }
     }
   }

@@ -90,6 +90,7 @@ func main() {
 func openSchemas(cfg config.Config) (map[protocolschema.Schema]io.ReadCloser, error) {
 	overrides := map[protocolschema.Schema]string{
 		protocolschema.PaywallV03:              cfg.Protocol.V03SchemaPath,
+		protocolschema.PaywallV04:              cfg.Protocol.V04SchemaPath,
 		protocolschema.CommerceProviderV1:      cfg.Protocol.CommerceProviderSchemaPath,
 		protocolschema.CommerceProviderV2:      cfg.Protocol.CommerceProviderV2SchemaPath,
 		protocolschema.CommerceConfigurationV1: cfg.Protocol.CommerceConfigurationSchemaPath,
@@ -231,7 +232,7 @@ func run() (runErr error) {
 	if err != nil {
 		return err
 	}
-	protocolValidator, err := hostedpublishing.CompileProtocolValidator(schemas[protocolschema.PaywallV03])
+	protocolValidator, err := hostedpublishing.CompileProtocolValidator(schemas[protocolschema.PaywallV03], schemas[protocolschema.PaywallV04])
 	if err != nil {
 		closeSchemas(schemas)
 		return err

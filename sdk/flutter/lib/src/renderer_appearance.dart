@@ -44,6 +44,9 @@ extension on _MosaicPaywallState {
     if (outerInsets != null) {
       result = Padding(padding: _edgeInsets(outerInsets), child: result);
     }
+    // Motion sits inside visibility: a hidden node is out of layout, the
+    // accessibility tree, and focus order, and there is nothing to animate.
+    result = _applyNodeMotion(node, result);
     return Visibility(
       key: ValueKey<String>('mosaic-visibility-${node.id}'),
       visible: _visibilityIsVisible(visibility),
@@ -51,6 +54,63 @@ extension on _MosaicPaywallState {
       maintainAnimation: true,
       child: result,
     );
+  }
+
+  /// The selection transition [node] authored, with its curve resolved.
+  ///
+  /// Only Product Selector and Tabs can carry one: they are the two components
+  /// that own runtime selection state.
+  MosaicSelectionMotion? _selectionMotionFor(MosaicNode node) {
+    final selection = node.motion?.selection;
+    if (selection == null) return null;
+    return widget.document.resolveNodeMotion(node.motion!).selection;
+  }
+
+  /// Wraps [child] in the entrance and pulse a node authored, if any.
+  ///
+  /// Both scopes collapse to [child] itself once their terminal frame is
+  /// reached, so a finished animation leaves no residue in the tree to diverge
+  /// from what a motion-less renderer draws.
+  Widget _applyNodeMotion(MosaicNode node, Widget child) {
+    final motion = node.motion;
+    if (motion == null) return child;
+    final resolved = widget.document.resolveNodeMotion(motion);
+    var result = child;
+    final screenEntryCount = _screenEntryCountFor(node);
+    if (resolved.loop case final loop?) {
+      result = MosaicLoopMotionScope(
+        key: ValueKey<String>('mosaic-loop-${node.id}'),
+        driver: widget.motionDriver,
+        motion: loop,
+        reducedMotion: _reducedMotion,
+        screenEntryCount: screenEntryCount,
+        child: result,
+      );
+    }
+    // The entrance wraps the pulse: a node fades in as a whole, pulse included,
+    // rather than the pulse compounding a second entrance opacity.
+    if (resolved.appear case final appear?) {
+      result = MosaicAppearMotionScope(
+        key: ValueKey<String>('mosaic-appear-${node.id}'),
+        driver: widget.motionDriver,
+        motion: appear,
+        reducedMotion: _reducedMotion,
+        screenEntryCount: screenEntryCount,
+        child: result,
+      );
+    }
+    return result;
+  }
+
+  /// How many times the screen holding [node] has been entered.
+  ///
+  /// A node outside every screen — the legacy single-layout projection — has no
+  /// screen to be entered, so it holds the paywall's own presentation as its
+  /// one entry.
+  int _screenEntryCountFor(MosaicNode node) {
+    final screenId = _screenIdByNodeId[node.id];
+    if (screenId == null) return 1;
+    return _screenEntryCounts[screenId] ?? 0;
   }
 
   Widget _applySizing(
@@ -230,9 +290,37 @@ extension on _MosaicPaywallState {
         'Video poster is unavailable; the fallback colour is used.',
       );
     }
+    // Protocol 0.4 ruling: under reduced motion a video background does not
+    // play. The declared poster is rendered if it is available and the declared
+    // fallback colour otherwise — the same resolution order the existing
+    // missing-media policy already uses, deliberately, so this reuses a path
+    // three renderers have implemented rather than adding a fourth outcome.
+    // No frame of the video is shown, playback is never started and paused,
+    // and no control is offered. 0.3 documents keep 0.3's behaviour: the
+    // ruling ships as specified 0.4 behaviour, not as a 0.3 defect patch.
+    final videoAsset = widget.document.videoAsset(video.assetId)!;
+    if (_reducedMotion &&
+        widget.document.schemaVersion == mosaicProtocolVersionV04) {
+      // Availability and playability are decided independently. Whether the
+      // media exists is a fact about the document and the host's asset
+      // resolution; whether it plays is a fact about the customer's settings.
+      // An operator debugging a 0.4 paywall on a reduced-motion device must
+      // still be told the video could not be resolved, so the same diagnostic
+      // the playing path would raise is raised here — and the converse holds
+      // too: a resolvable video that is deliberately not played is not a broken
+      // paywall and diagnoses nothing.
+      if (!_videoSourceIsResolvable(videoAsset)) {
+        _notifyMediaFailure(
+          video.assetId,
+          'background.videoUnavailable',
+          _videoUnavailableMessage(hasPoster: poster != null),
+        );
+      }
+      return _staticVideoSubstitute(context, video, poster);
+    }
     return MosaicDecorativeVideo(
       key: ValueKey<String>('mosaic-background-video-${video.assetId}'),
-      asset: widget.document.videoAsset(video.assetId)!,
+      asset: videoAsset,
       bundledResolver: widget.videoResolver,
       poster: poster,
       fallbackColor: _color(context, video.fallbackColor),
@@ -242,9 +330,7 @@ extension on _MosaicPaywallState {
       onUnavailable: () => _notifyMediaFailure(
         video.assetId,
         'background.videoUnavailable',
-        poster == null
-            ? 'Video background is unavailable; its fallback colour is used.'
-            : 'Video background is unavailable; its poster is used.',
+        _videoUnavailableMessage(hasPoster: poster != null),
       ),
       onPosterUnavailable: posterAsset == null
           ? null
@@ -253,6 +339,68 @@ extension on _MosaicPaywallState {
                 'background.imageUnavailable',
                 'Video poster is unavailable; the fallback colour is used.',
               ),
+    );
+  }
+
+  /// Whether the video's own source resolves, independently of whether
+  /// anything intends to play it.
+  ///
+  /// A bundled key the host cannot map to an asset path is missing media, and
+  /// that is knowable without constructing a player — which is what lets the
+  /// suppressed path answer it at all. A remote source is reported as
+  /// resolvable because its reachability is only knowable by fetching it, and
+  /// fetching is the playback the reduced-motion ruling forbids. A remote
+  /// video that would have failed to load is therefore diagnosed on the
+  /// playing path and not on the suppressed one, which is the honest answer:
+  /// nothing observed it fail.
+  bool _videoSourceIsResolvable(MosaicVideoAsset asset) =>
+      switch (asset.source) {
+        MosaicBundledAssetSource(:final key) =>
+          widget.videoResolver?.call(key) != null,
+        MosaicRemoteAssetSource() => true,
+      };
+
+  /// The one wording both the playing and the suppressed path report, so an
+  /// operator cannot tell from the diagnostic which decision was taken — only
+  /// that the media could not be resolved.
+  String _videoUnavailableMessage({required bool hasPoster}) => hasPoster
+      ? 'Video background is unavailable; its poster is used.'
+      : 'Video background is unavailable; its fallback colour is used.';
+
+  /// What a video background draws when reduced motion forbids playing it.
+  ///
+  /// A video authored with no poster degrades to its fallback colour. The
+  /// protocol does not make a poster mandatory, because a colour is a
+  /// legitimate answer and a required-but-ignorable field is worse than an
+  /// optional one.
+  Widget _staticVideoSubstitute(
+    BuildContext context,
+    MosaicVideoBackground video,
+    ImageProvider<Object>? poster,
+  ) {
+    final fallbackColor = _color(context, video.fallbackColor);
+    return ExcludeSemantics(
+      key: ValueKey<String>('mosaic-reduced-motion-video-${video.assetId}'),
+      child: ColoredBox(
+        color: fallbackColor,
+        child: poster == null
+            ? const SizedBox.expand()
+            : Image(
+                image: poster,
+                fit: video.contentMode == MosaicImageContentMode.fit
+                    ? BoxFit.contain
+                    : BoxFit.cover,
+                excludeFromSemantics: true,
+                errorBuilder: (context, error, stackTrace) {
+                  _notifyMediaFailure(
+                    video.posterAssetId ?? video.assetId,
+                    'background.imageUnavailable',
+                    'Video poster is unavailable; the fallback colour is used.',
+                  );
+                  return const SizedBox.expand();
+                },
+              ),
+      ),
     );
   }
 

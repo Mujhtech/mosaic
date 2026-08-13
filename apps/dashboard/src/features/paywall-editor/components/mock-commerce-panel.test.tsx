@@ -60,12 +60,12 @@ function Harness() {
     ).strings["paywall.products.monthly"] = "Starter";
     const selector = findNode(imported, "plans");
     if (selector?.type === "productSelector") {
-      selector.cards = [
-        {
-          ...required(selector.cards[0], "selector.cards[0]"),
-          productReferenceId: "starter-plan",
-        },
-      ];
+      // Mutated in place rather than rebuilt: reassigning the array would pair a
+      // union-typed element with a version-specific collection, which is the one
+      // correlation the compiler cannot follow.
+      const firstCard = required(selector.cards[0], "selector.cards[0]");
+      firstCard.productReferenceId = "starter-plan";
+      selector.cards.splice(1);
       selector.initialProductCardId = required(
         selector.cards[0],
         "selector.cards[0]"
@@ -129,12 +129,12 @@ function HostedHarness() {
     ).strings["paywall.products.monthly"] = "Starter";
     const selector = findNode(imported, "plans");
     if (selector?.type === "productSelector") {
-      selector.cards = [
-        {
-          ...required(selector.cards[0], "selector.cards[0]"),
-          productReferenceId: "starter-plan",
-        },
-      ];
+      // Mutated in place rather than rebuilt: reassigning the array would pair a
+      // union-typed element with a version-specific collection, which is the one
+      // correlation the compiler cannot follow.
+      const firstCard = required(selector.cards[0], "selector.cards[0]");
+      firstCard.productReferenceId = "starter-plan";
+      selector.cards.splice(1);
       selector.initialProductCardId = required(
         selector.cards[0],
         "selector.cards[0]"

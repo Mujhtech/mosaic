@@ -11,20 +11,6 @@ const MaxSDKCapabilityCount = 128
 
 var semanticVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:[-+][A-Za-z0-9.-]+)?$`)
 
-var supportedProtocolCapabilities = map[string]struct{}{
-	"layout.scrollContainer": {}, "layout.stack": {}, "layout.sizing": {}, "layout.heightSizing": {}, "layout.outerInsets": {},
-	"navigation.screens": {}, "navigation.sheets": {},
-	"component.text": {}, "component.image": {}, "component.icon": {}, "component.featureList": {}, "component.productSelector": {},
-	"component.productCard": {}, "component.productBadge": {}, "component.button": {}, "component.carousel": {}, "component.switch": {}, "component.countdown": {},
-	"localization.catalogs": {}, "localization.rtl": {}, "localization.productTemplate": {}, "product.references": {},
-	"asset.bundledImage": {}, "asset.remoteImage": {}, "asset.bundledVideo": {}, "asset.remoteVideo": {},
-	"action.purchase": {}, "action.restore": {}, "action.close": {}, "action.navigateTo": {}, "action.navigateBack": {}, "action.openExternalUrl": {},
-	"accessibility.metadata": {}, "fallback.asset": {}, "fallback.product": {}, "outcome.normalized": {},
-	"style.colors": {}, "style.designTokens": {}, "style.gradientBackground": {}, "style.mediaBackground": {}, "style.shadow": {},
-	"style.box": {}, "style.clipping": {}, "style.typography": {}, "style.productCardStates": {},
-	"visibility.static": {}, "condition.switchVisibility": {},
-}
-
 var supportedExperimentFeatures = map[string]struct{}{
 	"allocation.ranges": {}, "assignment.installation": {}, "assignment.identified_user": {},
 	"assignment.identified_user_or_installation": {}, "fallback.normal_placement": {},
@@ -261,7 +247,7 @@ func ValidateSDKCapabilityRequest(request SDKCapabilityRequest, release Release)
 	}
 	protocols := make(map[string]map[string]struct{}, len(request.SupportedPaywallProtocols))
 	for _, protocol := range request.SupportedPaywallProtocols {
-		if protocol.Version != ProtocolVersion {
+		if !knownPaywallProtocolVersion(protocol.Version) {
 			return unsupportedCapability("paywallProtocolVersion", "", protocol.Version, CapabilityUnsupported)
 		}
 		if len(protocol.Capabilities) == 0 || len(protocol.Capabilities) > MaxSDKCapabilityCount {
@@ -275,7 +261,7 @@ func ValidateSDKCapabilityRequest(request SDKCapabilityRequest, release Release)
 			if capability.Version != protocol.Version {
 				return unsupportedCapability("paywallCapability", capability.Name, capability.Version, CapabilityUnsupported)
 			}
-			if _, known := supportedProtocolCapabilities[capability.Name]; !known {
+			if !knownPaywallCapability(protocol.Version, capability.Name) {
 				return unsupportedCapability("paywallCapability", capability.Name, capability.Version, CapabilityUnknown)
 			}
 			key := capability.Name + "@" + capability.Version
@@ -286,10 +272,6 @@ func ValidateSDKCapabilityRequest(request SDKCapabilityRequest, release Release)
 		}
 		protocols[protocol.Version] = capabilities
 	}
-	reported, ok := protocols[ProtocolVersion]
-	if !ok {
-		return unsupportedCapability("paywallProtocolVersion", "", ProtocolVersion, CapabilityMissing)
-	}
 	var envelope deliveryEnvelope
 	if err := json.Unmarshal(release.Payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != DeliveryVersion {
 		return unsupportedCapability("configurationDeliveryVersion", "", DeliveryVersion, CapabilityUnavailable)
@@ -297,14 +279,29 @@ func ValidateSDKCapabilityRequest(request SDKCapabilityRequest, release Release)
 	if len(envelope.Release.Compatibility.PaywallProtocols) == 0 {
 		return unsupportedCapability("paywallProtocolVersion", "", "", CapabilityUnavailable)
 	}
+	// Acceptance stays atomic: the SDK must be able to render every protocol
+	// version the Release carries, so a Release holding a 0.4 document is
+	// refused outright to a 0.3-only reader (the existing rejectDocument flow)
+	// rather than partially served. Within a version, a missing capability
+	// rejects unless the manifest names renderWithoutMotion as its fallback:
+	// those are enhancement capabilities, and a reader without them renders the
+	// document statically and completely.
 	for _, protocol := range envelope.Release.Compatibility.PaywallProtocols {
-		if protocol.Version != ProtocolVersion {
+		if !knownPaywallProtocolVersion(protocol.Version) {
 			return unsupportedCapability("paywallProtocolVersion", "", protocol.Version, CapabilityUnsupported)
 		}
+		reported, ok := protocols[protocol.Version]
+		if !ok {
+			return unsupportedCapability("paywallProtocolVersion", "", protocol.Version, CapabilityMissing)
+		}
 		for _, required := range protocol.RequiredCapabilities {
-			if _, ok := reported[required.Name+"@"+required.Version]; !ok {
-				return unsupportedCapability("paywallCapability", required.Name, required.Version, CapabilityMissing)
+			if _, ok := reported[required.Name+"@"+required.Version]; ok {
+				continue
 			}
+			if paywallCapabilityFallback(protocol.Version, required.Name) == capabilityFallbackRenderWithoutMotion {
+				continue
+			}
+			return unsupportedCapability("paywallCapability", required.Name, required.Version, CapabilityMissing)
 		}
 	}
 	return nil

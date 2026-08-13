@@ -9,11 +9,35 @@ import (
 )
 
 const (
-	// ProtocolVersion is the single Paywall Protocol version this backend
-	// reads and serves. 0.3 replaced 0.2 outright: there is no dual-version
-	// acceptance and no migration, so a 0.2 document is an unknown version.
+	// ProtocolVersion is the baseline Paywall Protocol version this backend
+	// reads and serves. 0.3 replaced 0.2 outright: there is no migration, so a
+	// 0.2 document is an unknown version.
 	ProtocolVersion = "0.3"
-	DeliveryVersion = "1"
+	// ProtocolVersion04 is Paywall Protocol 0.4 "Motion". Unlike the 0.2 to 0.3
+	// replacement, 0.4 is authored and validated alongside 0.3: versions are
+	// exact identifiers and a document validates against exactly the version
+	// it declares. Two publish-time rules bound what a Configuration Release
+	// may carry, both following the v1-projection precedent of refusing rather
+	// than manufacturing a shape the frozen contracts do not define:
+	//
+	//  1. A Release must be protocol-version homogeneous. The frozen Delivery
+	//     contracts (v1, v2, and v3) pin compatibility.paywallProtocols to
+	//     exactly one entry (minItems 1, maxItems 1) and every shipped SDK
+	//     decoder enforces exactly-one, so a mixed Release is refused
+	//     (ErrReleaseProtocolMixed). Widening paywallProtocols to several
+	//     entries requires an ADR and coordinated SDK decoder changes.
+	//
+	//  2. A Release must be deliverable. Delivery v1-v3 also pin Protocol 0.3
+	//     structurally (protocolVersion consts and the embedded document
+	//     $ref), so even a homogeneous 0.4 Release has no hosted delivery
+	//     representation and is refused (ErrReleaseProtocolUndeliverable)
+	//     until the new Delivery version deferred in docs/protocol/v0.4.md
+	//     ("Configuration Delivery cannot yet carry 0.4") ships. Local
+	//     Preview remains the only transport carrying 0.4 end to end.
+	//
+	// See docs/protocol/v0.4.md.
+	ProtocolVersion04 = "0.4"
+	DeliveryVersion   = "1"
 )
 
 type Actor struct{ ID string }

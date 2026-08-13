@@ -218,7 +218,17 @@ internal fun visibility(value: JsonElement, path: String): MosaicVisibility {
 internal fun rawDesignSystem(value: JsonElement): RawDesignSystem {
     val path = "$.designSystem"
     val objectValue = value.objectAt(path)
-    objectValue.expectKeys(setOf("colors", "backgrounds", "shadows"), path)
+    // `motions` is the fourth catalog, required by `0.4` and unknown to `0.3`. Required in both
+    // directions: a `0.3` document declaring one is rejected as an unknown property, and a `0.4`
+    // document omitting it is rejected as a missing one, so "the author has no motions" and "the
+    // author is writing the older contract" cannot share an encoding.
+    val v04 = decodingProtocolV04()
+    objectValue.expectKeys(
+        if (v04) setOf("colors", "backgrounds", "shadows", "motions") else {
+            setOf("colors", "backgrounds", "shadows")
+        },
+        path,
+    )
 
     fun tokens(name: String): LinkedHashMap<String, RawToken> {
         val tokenPath = "$path.$name"
@@ -246,7 +256,12 @@ internal fun rawDesignSystem(value: JsonElement): RawDesignSystem {
         return result
     }
 
-    return RawDesignSystem(tokens("colors"), tokens("backgrounds"), tokens("shadows"))
+    return RawDesignSystem(
+        tokens("colors"),
+        tokens("backgrounds"),
+        tokens("shadows"),
+        if (v04) tokens("motions") else linkedMapOf(),
+    )
 }
 
 internal fun designSystem(raw: RawDesignSystem): MosaicDesignSystem = MosaicDesignSystem(
@@ -262,6 +277,9 @@ internal fun designSystem(raw: RawDesignSystem): MosaicDesignSystem = MosaicDesi
     },
     shadows = raw.shadows.values.map { token ->
         MosaicShadowToken(token.id, token.name, resolveShadowToken(token.id, token.path, linkedSetOf()))
+    },
+    motions = raw.motions.values.map { token ->
+        MosaicMotionToken(token.id, token.name, resolveMotionToken(token.id, token.path, linkedSetOf()))
     },
 )
 

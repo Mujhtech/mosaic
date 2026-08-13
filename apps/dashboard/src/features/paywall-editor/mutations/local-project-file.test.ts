@@ -6,6 +6,7 @@ import {
 } from "@/features/paywall-editor/constants/editor-constants";
 import {
   createLocalProjectFile,
+  isLocalProjectFile,
   mockCommerceState,
   parseImportedJson,
   readLocalMockPurchaseState,
@@ -16,6 +17,7 @@ import {
   unavailableMockProductsForDocument,
   writeLocalProject,
 } from "@/features/paywall-editor/mutations/local-project-file";
+import { upgradeDocumentToV04 } from "@/features/paywall-editor/mutations/upgrade-to-v04";
 import type {
   LocalProjectFile,
   MockProductDefinition,
@@ -23,6 +25,7 @@ import type {
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { validateLocalProject } from "@/lib/mosaic-protocol";
 import { required } from "@/test/required";
 import canonicalFixture from "../../../../../../protocol/fixtures/v0.3/complete-paywall.json";
 
@@ -253,5 +256,27 @@ describe("local project import and export", () => {
     expect(() => parseImportedJson(JSON.stringify(retired))).toThrow(
       /Protocol 0\.2/
     );
+  });
+  /**
+   * A .mosaic file's `fileFormatVersion` is what `validateLocalProject`
+   * dispatches on, so a 0.4 document saved under the 0.3 file version is
+   * validated against the wrong schema and refused on reopen. The realistic
+   * failure is a designer upgrading a paywall, saving, and being unable to open
+   * their own file.
+   */
+  it("saves a 0.4 document as a 0.4 local project and reopens it", () => {
+    const upgraded = upgradeDocumentToV04(cloneValue(canonicalDocument));
+
+    const saved = project(upgraded);
+
+    expect(saved.fileFormatVersion).toBe("0.4");
+    expect(validateLocalProject(saved).diagnostics).toEqual([]);
+    expect(validateLocalProject(saved).ok).toBe(true);
+    expect(isLocalProjectFile(saved)).toBe(true);
+  });
+
+  /** A 0.3 document keeps producing a 0.3 file, unchanged by 0.4 existing. */
+  it("still saves a 0.3 document as a 0.3 local project", () => {
+    expect(project().fileFormatVersion).toBe("0.3");
   });
 });

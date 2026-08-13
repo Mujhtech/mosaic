@@ -12,6 +12,12 @@ import {
   screenContainingNode,
 } from "@/features/paywall-editor/utils/document-tree-traversal";
 import {
+  resolveBadgeStyle,
+  resolveCardStyle,
+  resolveDocumentBackgroundToken,
+  resolveDocumentColorToken,
+} from "@/features/paywall-editor/utils/document-version";
+import {
   eligibleTabControllers,
   ratingMaximumSteps,
   socialProofRatingIsInBounds,
@@ -21,13 +27,7 @@ import {
   timelineStyleFieldIsDeclared,
 } from "@/features/paywall-editor/utils/protocol-component-rules";
 import { fillAxisIsBounded } from "@/features/paywall-editor/utils/sizing";
-import {
-  paywallContractVersion,
-  resolveBackgroundToken,
-  resolveColorToken,
-  resolveProductBadgeStyle,
-  resolveProductCardStyle,
-} from "@/lib/mosaic-protocol";
+import { paywallContractVersions } from "@/lib/mosaic-protocol";
 
 const PRODUCT_TOKEN = /\{\{\s*product\.(?:name|price)\s*\}\}/;
 
@@ -105,7 +105,7 @@ function literalColor(
   document: MosaicDocument,
   color: ProtocolColor
 ): Rgba | null {
-  const resolved = resolveColorToken(document, color);
+  const resolved = resolveDocumentColorToken(document, color);
   if (!resolved) {
     return null;
   }
@@ -127,7 +127,7 @@ function literalBackground(
   document: MosaicDocument,
   background: ProtocolBackground
 ): Rgba | null {
-  const resolved = resolveBackgroundToken(document, background);
+  const resolved = resolveDocumentBackgroundToken(document, background);
   return resolved?.type === "color"
     ? literalColor(document, resolved.value)
     : null;
@@ -175,22 +175,20 @@ function contrastRatio(first: Rgba, second: Rgba) {
 
 function appearanceOptions(node: ProtocolNode): AppearanceOption[] {
   if (node.type === "productCard") {
-    return [
-      resolveProductCardStyle(node, false),
-      resolveProductCardStyle(node, true),
-    ].map((style) => ({
-      background: style.background,
-      opacity: style.opacity,
-    }));
+    return [resolveCardStyle(node, false), resolveCardStyle(node, true)].map(
+      (style) => ({
+        background: style.background,
+        opacity: style.opacity,
+      })
+    );
   }
   if (node.type === "productBadge") {
-    return [
-      resolveProductBadgeStyle(node, false),
-      resolveProductBadgeStyle(node, true),
-    ].map((style) => ({
-      background: style.background,
-      opacity: style.opacity,
-    }));
+    return [resolveBadgeStyle(node, false), resolveBadgeStyle(node, true)].map(
+      (style) => ({
+        background: style.background,
+        opacity: style.opacity,
+      })
+    );
   }
   const appearance = "appearance" in node ? node.appearance : undefined;
   return [
@@ -348,11 +346,11 @@ function boundaryFields(node: ProtocolNode): ContrastField[] {
     return [
       {
         property: "styles.default.border.color",
-        style: resolveProductCardStyle(node, false),
+        style: resolveCardStyle(node, false),
       },
       {
         property: "styles.selected.border.color",
-        style: resolveProductCardStyle(node, true),
+        style: resolveCardStyle(node, true),
       },
     ]
       .filter(({ style }) => style.border.width > 0)
@@ -367,11 +365,11 @@ function boundaryFields(node: ProtocolNode): ContrastField[] {
     return [
       {
         property: "styles.default.border.color",
-        style: resolveProductBadgeStyle(node, false),
+        style: resolveBadgeStyle(node, false),
       },
       {
         property: "styles.selected.border.color",
-        style: resolveProductBadgeStyle(node, true),
+        style: resolveBadgeStyle(node, true),
       },
     ]
       .filter(({ style }) => style.border.width > 0)
@@ -722,8 +720,8 @@ function validateNodeLocalization(
   }
   if (
     node.type === "productCard" &&
-    JSON.stringify(resolveProductCardStyle(node, false)) ===
-      JSON.stringify(resolveProductCardStyle(node, true))
+    JSON.stringify(resolveCardStyle(node, false)) ===
+      JSON.stringify(resolveCardStyle(node, true))
   ) {
     issues.push(
       warning(
@@ -872,13 +870,13 @@ function validateNodeReferences(
   if (node.type === "productSelector") {
     const cardIds = new Set(node.cards.map((card) => card.id));
     const productBindings = new Set<string>();
-    for (const card of node.cards) {
+    for (const [cardIndex, card] of node.cards.entries()) {
       if (!productIds.has(card.productReferenceId)) {
         issues.push(
           issue(
             "product.missingReference",
             `Product reference ${card.productReferenceId} is not defined.`,
-            `${path}/cards/${node.cards.indexOf(card)}/productReferenceId`,
+            `${path}/cards/${cardIndex}/productReferenceId`,
             "Bind the product card to a configured product.",
             card.id,
             "productReferenceId"
@@ -890,7 +888,7 @@ function validateNodeReferences(
           issue(
             "product.duplicateBinding",
             `Product ${card.productReferenceId} is already bound in this selector.`,
-            `${path}/cards/${node.cards.indexOf(card)}/productReferenceId`,
+            `${path}/cards/${cardIndex}/productReferenceId`,
             "Choose a different product for this card.",
             card.id,
             "productReferenceId"
@@ -1097,13 +1095,20 @@ export function validateEditorDocument(
   document: MosaicDocument
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  if (document.schemaVersion !== paywallContractVersion) {
+  // Studio reads both contract generations. The list comes from the protocol
+  // package rather than being spelled out here, so a future version becomes
+  // readable by upgrading the package rather than by editing this check.
+  if (
+    !(paywallContractVersions as readonly string[]).includes(
+      document.schemaVersion
+    )
+  ) {
     issues.push(
       issue(
         "schema.unsupportedVersion",
         `Schema ${String(document.schemaVersion)} is not supported by this Studio.`,
         "/schemaVersion",
-        `Import a Protocol ${paywallContractVersion} document.`,
+        `Import a Protocol ${paywallContractVersions.join(" or ")} document.`,
         undefined,
         "schemaVersion"
       )

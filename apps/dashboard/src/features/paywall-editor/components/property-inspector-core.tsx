@@ -24,6 +24,10 @@ import type {
 } from "@/features/paywall-editor/types/editor";
 import { findNode } from "@/features/paywall-editor/utils/document-tree-traversal";
 import {
+  withDocumentParts,
+  withScreenParts,
+} from "@/features/paywall-editor/utils/document-version";
+import {
   getInspectorFieldId,
   validationPropertyAddress,
 } from "@/features/paywall-editor/utils/property-inspector-navigation";
@@ -116,14 +120,13 @@ export function updateScrollContainer(
   layoutId: string,
   updater: (layout: ScrollContainer) => ScrollContainer
 ) {
-  return {
-    ...document,
+  return withDocumentParts(document, {
     screens: document.screens.map((screen) =>
       screen.layout.id === layoutId
-        ? { ...screen, layout: updater(screen.layout) }
+        ? withScreenParts(screen, { layout: updater(screen.layout) })
         : screen
     ),
-  };
+  });
 }
 
 export interface InspectorContextValue {

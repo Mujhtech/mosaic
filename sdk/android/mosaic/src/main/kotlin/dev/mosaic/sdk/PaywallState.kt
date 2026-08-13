@@ -27,6 +27,15 @@ class MosaicPaywallState(
     private val clock: () -> Long = System::currentTimeMillis,
     private val analyticsRuntime: MosaicAnalyticsRuntime? = null,
     private val analyticsContext: MosaicAnalyticsPresentationContext? = null,
+    /**
+     * The elapsed-time source and on/off switch for authored motion and for the countdown tick.
+     *
+     * Injected here alongside [clock] and for the same reason: everything in the renderer that
+     * advances on its own must be assertable without waiting for it. Disabling it renders every
+     * motion at its terminal state, which the terminal-state rule makes byte-identical to a
+     * document carrying no motion.
+     */
+    val motionDriver: MosaicMotionDriver = MosaicMotionDriver.Default,
 ) {
     private val allNodes = document.walkNodesDepthFirst().toList()
     private val selectors = allNodes

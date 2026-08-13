@@ -70,6 +70,44 @@ documents; clients accept only the current protocol version. Local autosave
 uses a separate local-project envelope in browser storage and is not the
 export format.
 
+## Import a Figma export bundle
+
+The Mosaic Figma plugin exports a bundle file named `<name>.mosaic-figma.json`.
+It wraps a Protocol 0.3 paywall document together with the plugin's conversion
+report and the PNG bytes for every image layer it translated. Import it through
+the same Import control as plain JSON: Studio reads the file's `format` field
+and routes it. Plain protocol documents keep their 1 MB limit; bundles carry
+image bytes and are allowed up to 20 MB.
+
+Studio never applies a bundle straight away. It opens a review dialog first,
+showing:
+
+- **Converted with changes** — layers the plugin translated with a substitution.
+- **Not converted** — layers with no Mosaic equivalent.
+- **Images** — a preview, name, and pixel size for each image, with a checkbox
+  per image. All readable images start selected; an image whose bytes cannot be
+  decoded is shown as unreadable and cannot be selected.
+
+What happens on import depends on where Studio is running:
+
+- **Local Studio** imports the document only. There is no project to upload to,
+  so the images are listed as not imported. Open a hosted Draft to import them.
+- **Hosted Studio** uploads each selected image to the project's managed Assets,
+  adds an `imageAsset` entry pointing at the returned HTTPS URL, and inserts an
+  image node where the plugin recorded it. An image with an accessibility label
+  keeps it; one without is imported as decorative.
+
+Placements are best-effort against the document as it actually is. If the
+recorded parent Stack has been removed, or now sits on a different screen, the
+image is appended to that screen's root Stack; an out-of-range child index is
+clamped. Every such adjustment, and every image that failed to upload, is
+reported above the editor after the import is applied.
+
+The document is validated twice: once when the bundle is read, and again after
+the images are inserted. If insertion would produce a document that no longer
+validates, nothing is applied and the diagnostics are shown in the dialog, so
+the open paywall is never replaced by a broken one.
+
 ## Verification status
 
 Editor behavior, validation, the sub-768 px fallback, and export are covered

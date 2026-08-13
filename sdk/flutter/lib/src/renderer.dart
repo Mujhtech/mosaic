@@ -11,13 +11,23 @@ import 'analytics_event.dart';
 import 'commerce.dart';
 import 'configuration.dart';
 import 'localization.dart';
+import 'motion_driver.dart';
 import 'presentation.dart';
 import 'protocol.dart';
 import 'transaction_observation.dart';
 
+export 'motion_driver.dart'
+    show
+        MosaicMotionDriver,
+        MosaicMotionTicks,
+        MosaicMotionTimeline,
+        MosaicReducedMotionSignal,
+        mosaicPlatformReducedMotion;
+
 part 'renderer_actions.dart';
 part 'renderer_layout.dart';
 part 'renderer_components.dart';
+part 'renderer_motion.dart';
 part 'renderer_selection_components.dart';
 part 'renderer_appearance.dart';
 
@@ -207,6 +217,8 @@ final class MosaicPaywall extends StatefulWidget {
     this.transactionObservations,
     this.onPresented,
     this.clock = _mosaicSystemClock,
+    this.motionDriver = const MosaicMotionDriver(),
+    this.reducedMotion = mosaicPlatformReducedMotion,
     this.externalUrlOpener = mosaicExternalUrlOpener,
     super.key,
   });
@@ -228,6 +240,16 @@ final class MosaicPaywall extends StatefulWidget {
   final MosaicTransactionObservationSink? transactionObservations;
   final VoidCallback? onPresented;
   final MosaicClock clock;
+
+  /// Drives the Protocol 0.4 motion primitives and the Countdown tick.
+  ///
+  /// Disable it to render the document statically: the terminal state of every
+  /// animation is the static rendering, so a disabled driver is lossless
+  /// rather than a second, drifting set of values.
+  final MosaicMotionDriver motionDriver;
+
+  /// The platform's reduced-motion signal, read at the renderer boundary.
+  final MosaicReducedMotionSignal reducedMotion;
   final MosaicExternalUrlOpener externalUrlOpener;
 
   @override
@@ -253,6 +275,15 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   final Map<String, String> _tabSelections = <String, String>{};
   final Map<String, int> _carouselPages = <String, int>{};
   final Map<String, double> _screenScrollOffsets = <String, double>{};
+
+  /// How many times each Paywall Screen has been entered this presentation.
+  ///
+  /// Motion is scoped to screen entry, and this renderer keeps the screen
+  /// below a Sheet mounted, so a widget's own mount is not the entry signal.
+  final Map<String, int> _screenEntryCounts = <String, int>{};
+
+  /// The Paywall Screen each node belongs to, indexed once per document.
+  final Map<String, String> _screenIdByNodeId = <String, String>{};
   final List<String> _navigationHistory = <String>[];
   final FocusNode _screenFocusNode = FocusNode(debugLabel: 'Mosaic screen');
   final FocusNode _sheetFocusNode = FocusNode(debugLabel: 'Mosaic sheet');
@@ -265,7 +296,8 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   bool _productsResolved = false;
   String? _busyActionId;
   int _loadGeneration = 0;
-  Timer? _countdownTimer;
+  MosaicMotionTicks? _countdownTicks;
+  bool _reducedMotion = false;
   String? _currentScreenId;
   String? _productLoadAttemptId;
 
@@ -275,7 +307,7 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
     _resolveLocalization();
     _resetRuntimeState();
     _resetNavigationState();
-    _configureCountdownTimer();
+    _configureCountdownTicks();
     unawaited(_loadProducts());
     _analytics(
       MosaicAnalyticsEventName.paywallPresented,
@@ -340,7 +372,7 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
     if (documentChanged) {
       _resetRuntimeState();
       _resetNavigationState();
-      _configureCountdownTimer();
+      _configureCountdownTicks();
     }
     if (documentChanged ||
         oldWidget.purchaseProvider != widget.purchaseProvider) {
@@ -377,7 +409,7 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   @override
   void dispose() {
     _loadGeneration += 1;
-    _countdownTimer?.cancel();
+    _countdownTicks?.dispose();
     _scrollController.dispose();
     _sheetScrollController?.dispose();
     _screenFocusNode.dispose();
@@ -476,19 +508,88 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
       );
     _screenScrollOffsets.clear();
     _currentScreenId = widget.document.initialScreenId;
+
+    _screenIdByNodeId
+      ..clear()
+      ..addEntries(<MapEntry<String, String>>[
+        for (final screen in widget.document.screens)
+          for (final node in widget.document.nodesIn(screen))
+            MapEntry<String, String>(node.id, screen.id),
+      ]);
+    // Entry counts are carried *forward* through an accepted revision, filtered
+    // through the accepted document's screens, rather than reset to zero. A
+    // reset would replay every entrance on every acceptance, which is exactly
+    // the defect the Local Preview `playedAppearScreens` rule exists to
+    // prevent: a designer nudging padding must not be strobed once per
+    // keystroke. Only a screen the new document does not contain is dropped.
+    _screenEntryCounts
+        .removeWhere((id, _) => widget.document.screen(id) == null);
+    final initialScreenId = widget.document.initialScreenId;
+    if (initialScreenId != null &&
+        (_screenEntryCounts[initialScreenId] ?? 0) == 0) {
+      _screenEntryCounts[initialScreenId] = 1;
+    }
   }
 
-  void _configureCountdownTimer() {
-    _countdownTimer?.cancel();
-    if (widget.document.nodes.any((node) => node is MosaicCountdownComponent)) {
-      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() {});
-      });
+  /// Records an entry into [screenId] and makes it current.
+  ///
+  /// Every navigation funnels through here so that the entry count and the
+  /// current screen can never disagree: the count is the time origin for the
+  /// entrance and pulse of every node on that screen.
+  void _enterScreen(String? screenId) {
+    _currentScreenId = screenId;
+    if (screenId == null) return;
+    _screenEntryCounts[screenId] = (_screenEntryCounts[screenId] ?? 0) + 1;
+  }
+
+  /// Makes [screenId] current again without recording an entry.
+  ///
+  /// Closing a Sheet is the case this exists for. A Sheet is presented *over*
+  /// its screen and this renderer keeps that screen mounted underneath, so the
+  /// screen never left and coming back to it is not a re-entry: its entrances
+  /// must not replay and its pulse must not be handed a second budget. The
+  /// customer's own scroll position, selection, and Carousel page survive the
+  /// round trip for exactly the same reason, and motion has to agree with them.
+  void _returnToMountedScreen(String? screenId) {
+    _currentScreenId = screenId;
+  }
+
+  /// Starts the one-second Countdown tick, when the document has a Countdown
+  /// and the driver is running.
+  ///
+  /// The tick used to be a root-level `setState`, which rebuilt every node in
+  /// the document once a second to advance one line of text. It is now a
+  /// [Listenable] that only the Countdown text — and the Product Card labels
+  /// that quote one — subscribe to.
+  void _configureCountdownTicks() {
+    _countdownTicks?.dispose();
+    _countdownTicks = null;
+    if (!widget.motionDriver.enabled) return;
+    if (!widget.document.nodes
+        .any((node) => node is MosaicCountdownComponent)) {
+      return;
     }
+    _countdownTicks =
+        widget.motionDriver.createTicks(const Duration(seconds: 1));
+  }
+
+  /// Whether a subtree quotes a Countdown, and so has to follow its tick.
+  bool _containsCountdown(MosaicNode node) {
+    if (node is MosaicCountdownComponent) return true;
+    if (node is MosaicStackNode) {
+      return node.children.any(_containsCountdown);
+    }
+    if (node is MosaicProductBadgeComponent) {
+      return node.children.any(_containsCountdown);
+    }
+    return false;
   }
 
   @override
   Widget build(BuildContext context) {
+    // Read once per build at the renderer boundary, so every node in this frame
+    // answers the same way and a test can pin it.
+    _reducedMotion = widget.reducedMotion(context);
     final screen = _baseScreen;
     final result = _buildScreenSurface(context, screen, _scrollController);
     return Directionality(

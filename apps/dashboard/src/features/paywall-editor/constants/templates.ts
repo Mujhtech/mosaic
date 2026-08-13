@@ -1,9 +1,9 @@
-import type {
-  DocumentNode,
-  MosaicDocument,
-  ProtocolNode,
-} from "@/features/paywall-editor/types/editor";
+import type { ProtocolNode } from "@/features/paywall-editor/types/editor";
 import { synchronizeProtocolMetadata } from "@/features/paywall-editor/utils/protocol-document";
+import type {
+  MosaicPaywallV03Document,
+  MosaicPaywallV03Node,
+} from "@/lib/mosaic-protocol";
 
 const STRINGS = {
   en: {
@@ -135,7 +135,10 @@ function fitText(
   };
 }
 
-function baseDocument(id: string, children: DocumentNode[]): MosaicDocument {
+function baseDocument(
+  id: string,
+  children: MosaicPaywallV03Node[]
+): MosaicPaywallV03Document {
   return synchronizeProtocolMetadata({
     schemaVersion: "0.3",
     id,
@@ -203,7 +206,7 @@ function baseDocument(id: string, children: DocumentNode[]): MosaicDocument {
   });
 }
 
-const CLOSE_BUTTON: DocumentNode = {
+const CLOSE_BUTTON: MosaicPaywallV03Node = {
   type: "button",
   id: "close",
   direction: "horizontal",
@@ -218,7 +221,7 @@ const CLOSE_BUTTON: DocumentNode = {
   },
 };
 
-const PRODUCT_SELECTOR: DocumentNode = {
+const PRODUCT_SELECTOR: MosaicPaywallV03Node = {
   type: "productSelector",
   id: "plans",
   direction: "horizontal",
@@ -387,7 +390,7 @@ const PRODUCT_SELECTOR: DocumentNode = {
   },
 };
 
-const PURCHASE_BUTTON: DocumentNode = {
+const PURCHASE_BUTTON: MosaicPaywallV03Node = {
   type: "button",
   id: "purchase",
   direction: "horizontal",
@@ -435,7 +438,7 @@ const PURCHASE_BUTTON: DocumentNode = {
   },
 };
 
-const RESTORE_BUTTON: DocumentNode = {
+const RESTORE_BUTTON: MosaicPaywallV03Node = {
   type: "button",
   id: "restore",
   direction: "horizontal",
@@ -460,7 +463,7 @@ const RESTORE_BUTTON: DocumentNode = {
   },
 };
 
-const LEGAL_TEXT: DocumentNode = {
+const LEGAL_TEXT: MosaicPaywallV03Node = {
   type: "text",
   id: "legal",
   value: {
@@ -480,7 +483,7 @@ const LEGAL_TEXT: DocumentNode = {
   accessibility: { role: "text" },
 };
 
-const FEATURE_LIST: DocumentNode = {
+const FEATURE_LIST: MosaicPaywallV03Node = {
   type: "featureList",
   id: "features",
   marker: "checkmark",
@@ -520,7 +523,7 @@ const FEATURE_LIST: DocumentNode = {
 
 export interface EditorTemplate {
   description: string;
-  document: MosaicDocument;
+  document: MosaicPaywallV03Document;
   id: string;
   name: string;
 }

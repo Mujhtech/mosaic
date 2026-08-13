@@ -52,10 +52,17 @@ class FakeWebSocket {
   }
 
   open(protocol?: string) {
+    // Defaults to the 0.3 subprotocol because every fixture in this file is a
+    // 0.3 client. Studio offers 0.4 first, and echoing back the first offer
+    // would make a 0.3 client claim to speak 0.4.
     this.protocol =
       protocol ??
       (Array.isArray(this.requestedProtocol)
-        ? (this.requestedProtocol[0] ?? "")
+        ? (this.requestedProtocol.find(
+            (candidate) => candidate === "mosaic.local-preview.v0.3"
+          ) ??
+          this.requestedProtocol[0] ??
+          "")
         : (this.requestedProtocol ?? ""));
     this.readyState = FakeWebSocket.OPEN;
     this.dispatch("open", {});
@@ -365,7 +372,10 @@ describe("preview connection", () => {
     const [firstSocket] = FakeWebSocket.instances;
     expect(firstSocket).toBeDefined();
     expect(firstSocket?.url).toContain(`sessionId=${SESSION_ID}`);
+    // Studio offers both, newest first: a 0.4 client renders motion, a 0.3
+    // client still connects.
     expect(firstSocket?.requestedProtocol).toEqual([
+      "mosaic.local-preview.v0.4",
       "mosaic.local-preview.v0.3",
     ]);
 
@@ -528,7 +538,10 @@ describe("preview connection", () => {
 
     render(<Harness />);
     const [socket] = FakeWebSocket.instances;
-    expect(socket?.requestedProtocol).toEqual(["mosaic.local-preview.v0.3"]);
+    expect(socket?.requestedProtocol).toEqual([
+      "mosaic.local-preview.v0.4",
+      "mosaic.local-preview.v0.3",
+    ]);
     await act(async () => socket?.open("mosaic.local-preview.v0.1"));
 
     expect(socket?.readyState).toBe(FakeWebSocket.CLOSED);

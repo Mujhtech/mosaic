@@ -3,10 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { validateEditorDocument } from "@/features/paywall-editor/schema/editor-validation";
 import type {
-  DocumentNode,
   MosaicDocument,
-  ProtocolNode,
-  StackComponent,
   TreeOperationAccepted,
   TreeOperationResult,
 } from "@/features/paywall-editor/types/editor";
@@ -37,7 +34,14 @@ import {
   revealNodeAncestors,
   screenContainingNode,
 } from "@/features/paywall-editor/utils/document-tree-traversal";
+import { withDocumentParts } from "@/features/paywall-editor/utils/document-version";
 import { synchronizeProtocolMetadata } from "@/features/paywall-editor/utils/protocol-document";
+import type {
+  MosaicPaywallV03Document,
+  MosaicPaywallV03Node,
+  MosaicPaywallV03ProductCardComponent,
+  MosaicPaywallV03Stack,
+} from "@/lib/mosaic-protocol";
 import { validatePaywallDocument } from "@/lib/mosaic-protocol";
 import { required } from "@/test/required";
 
@@ -49,7 +53,7 @@ function template(id: "focused" | "benefits" = "focused") {
   return cloneValue(match.document);
 }
 
-function takeNode(document: MosaicDocument, id: string) {
+function takeNode(document: MosaicPaywallV03Document, id: string) {
   const node = required(
     document.screens[0],
     "document.screens[0]"
@@ -65,7 +69,10 @@ function takeNode(document: MosaicDocument, id: string) {
   return node;
 }
 
-function stack(id: string, children: DocumentNode[]): StackComponent {
+function stack(
+  id: string,
+  children: MosaicPaywallV03Node[]
+): MosaicPaywallV03Stack {
   return {
     type: "stack",
     id,
@@ -79,7 +86,7 @@ function stack(id: string, children: DocumentNode[]): StackComponent {
 }
 
 type ProductCardStack = Extract<
-  Extract<ProtocolNode, { type: "productCard" }>["children"][number],
+  MosaicPaywallV03ProductCardComponent["children"][number],
   { type: "stack" }
 >;
 
@@ -797,26 +804,27 @@ describe("document tree transforms", () => {
     if (!copy) {
       throw new Error("Missing duplicated shared-key Stack");
     }
-    const copiedTexts = flattenDocument({
-      ...result.document,
-      initialScreenId: "copy-screen",
-      screens: [
-        {
-          id: "copy-screen",
-          presentation: { type: "screen" },
-          layout: {
-            ...required(
-              result.document.screens[0],
-              "result.document.screens[0]"
-            ).layout,
-            content: copy,
+    const copiedTexts = flattenDocument(
+      withDocumentParts(result.document, {
+        initialScreenId: "copy-screen",
+        screens: [
+          {
+            id: "copy-screen",
+            presentation: { type: "screen" },
+            layout: {
+              ...required(
+                result.document.screens[0],
+                "result.document.screens[0]"
+              ).layout,
+              content: copy,
+            },
           },
-        },
-      ],
-    })
+        ],
+      })
+    )
       .map((entry) => entry.node)
       .filter(
-        (node): node is Extract<ProtocolNode, { type: "text" }> =>
+        (node): node is Extract<MosaicPaywallV03Node, { type: "text" }> =>
           node.type === "text" &&
           node.value.localizationKey.startsWith("paywall.shared.copy")
       );

@@ -23,6 +23,7 @@ extension on _MosaicPaywallState {
     required Iterable<MosaicNode> children,
     required _AvailableProductOption option,
     required bool selected,
+    MosaicSelectionMotion? selectionMotion,
     bool shrinkWrap = false,
   }) {
     final rendered = <Widget>[];
@@ -41,6 +42,7 @@ extension on _MosaicPaywallState {
               child,
               option: option,
               selected: selected,
+              selectionMotion: selectionMotion,
             )
           : _buildNode(context, child, productOption: option);
       rendered.add(
@@ -76,13 +78,49 @@ extension on _MosaicPaywallState {
         : row;
   }
 
+  /// A Product Badge is the Product Card's second two-state selectable box, so
+  /// it follows the same selection transition its Selector authored.
   Widget _buildProductBadge(
     BuildContext context,
     MosaicProductBadgeComponent badge, {
     required _AvailableProductOption option,
     required bool selected,
+    MosaicSelectionMotion? selectionMotion,
   }) {
-    final style = badge.styles.resolve(selected: selected);
+    Widget surface(BuildContext context, MosaicSelectionStateStyle style) =>
+        _buildProductBadgeSurface(
+          context,
+          badge,
+          style: style,
+          option: option,
+          selected: selected,
+          selectionMotion: selectionMotion,
+        );
+    final rendered = selectionMotion == null
+        ? surface(context, badge.styles.resolve(selected: selected))
+        : MosaicSelectionMotionScope(
+            key: ValueKey<String>('mosaic-selection-${badge.id}'),
+            driver: widget.motionDriver,
+            motion: selectionMotion,
+            reducedMotion: _reducedMotion,
+            selected: selected,
+            styles: badge.styles,
+            builder: surface,
+          );
+    return _applyNodeMotion(
+      badge,
+      _applySizing(badge, rendered, badge.sizing),
+    );
+  }
+
+  Widget _buildProductBadgeSurface(
+    BuildContext context,
+    MosaicProductBadgeComponent badge, {
+    required MosaicSelectionStateStyle style,
+    required _AvailableProductOption option,
+    required bool selected,
+    required MosaicSelectionMotion? selectionMotion,
+  }) {
     final content = _buildAuthoredProductLayout(
       context,
       direction: badge.direction,
@@ -92,9 +130,10 @@ extension on _MosaicPaywallState {
       children: badge.children,
       option: option,
       selected: selected,
+      selectionMotion: selectionMotion,
       shrinkWrap: badge.placement is MosaicOverlayProductBadgePlacement,
     );
-    final result = Opacity(
+    return Opacity(
       key: ValueKey<String>('mosaic-${badge.id}'),
       opacity: style.opacity,
       child: _decorateSurface(
@@ -109,7 +148,6 @@ extension on _MosaicPaywallState {
         ),
       ),
     );
-    return _applySizing(badge, result, badge.sizing);
   }
 
   Widget _positionProductBadge(
@@ -400,7 +438,18 @@ extension on _MosaicPaywallState {
     );
   }
 
+  /// Countdown, rebuilt on its own one-second tick rather than on the
+  /// document's.
   Widget _buildCountdown(
+    BuildContext context,
+    MosaicCountdownComponent component,
+  ) =>
+      MosaicTickBuilder(
+        ticks: _countdownTicks,
+        builder: (context) => _buildCountdownFrame(context, component),
+      );
+
+  Widget _buildCountdownFrame(
     BuildContext context,
     MosaicCountdownComponent component,
   ) {

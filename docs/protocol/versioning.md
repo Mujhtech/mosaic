@@ -21,6 +21,10 @@ Phase 9C adds Billing Migration Operations `1`, Authoritative Entitlement `2`,
 and Billing State Webhook `2` as exact, parallel drafts. V1 entitlement and
 webhook readers never interpret v2 documents.
 
+Paywall Protocol `0.4` is an eighth draft and Local Preview `0.4` a ninth. See
+[Paywall Protocol 0.4 versioning](#paywall-protocol-04-versioning) and
+[Local Preview 0.4 versioning](#local-preview-04-versioning).
+
 These are independent versioned contracts. Their exact version values do not
 imply compatibility with one another and do not change the Paywall
 `schemaVersion`.
@@ -77,6 +81,66 @@ behaviour — documentation, a diagnostic message, a comment — update the
 canonical schemas, fixtures, generated browser contract, Studio, and all three
 native renderers together.
 
+## Paywall Protocol 0.4 versioning
+
+Paywall Protocol `0.4` is born `status: "draft"` per the owner decision
+recorded in ADR-0027. It carries no compatibility guarantee, nothing produces
+or consumes it in production, and it may change without a version bump. Its
+manifest deliberately carries no `releaseCandidate` label; a draft has not
+reached the state that label describes.
+
+`0.4` is a pure superset of `0.3` apart from two removals `0.3` itself named
+for it — the co-derived `style.productCardStates` capability and the
+single-constant Feature List marker. It adds a `designSystem.motions` catalog
+and three trigger-constrained motion primitives. The migration is mechanical
+and documented in [Protocol 0.4](v0.4.md#migration-from-03).
+
+Versions remain exact. A reader declaring `0.4` accepts only `0.4`, and a `0.3`
+reader never interprets a `0.4` document. When `0.4` becomes deliverable,
+publishing may emit a `0.3` representation by projection at publish time — the
+established Configuration Delivery pattern — so one authored document can serve
+both reader generations.
+
+That projection is **partial, not lossless**. Motion drops losslessly, by the
+terminal-state rule. The bundled Feature List marker consolidation does not:
+`0.3`'s marker is the single `const "checkmark"` and its items carry no marker
+field, so a `0.4` document using `dot`, `ordinal`, a non-checkmark icon, or any
+per-item override has no `0.3` representation. Publishing must run a
+projectability check and **decline to emit** a representation it cannot
+construct faithfully — the `safeV1Projection` precedent — rather than emit a
+corrupt one; a negated "not included" item projected as a checkmark would tell
+a `0.3` reader the opposite of what the author wrote. A `0.3`-only reader
+requesting a release with no `0.3` representation is refused through the
+existing `rejectDocument` flow, exactly as it is for any capability it lacks.
+See [the projectability rule](v0.4.md#the-projectability-rule).
+
+`0.4` introduces the **first enhancement-fallback tier** in any Mosaic
+contract. Three capabilities — `motion.appear`, `motion.selection`,
+`motion.loop` — carry `fallback: "renderWithoutMotion"`; every other capability
+in every contract remains `rejectDocument`, and a validator asserts that
+partition. Reader policy splits into `unsupportedRequiredCapability:
+rejectDocument` and `unsupportedEnhancementCapability: renderStaticDocument`.
+The tier is lossless because every animation's terminal state is
+byte-identical to the static rendering. This is a motion-specific exception and
+not a precedent: server-side stripping of material a reader cannot understand
+remains doctrine-forbidden.
+
+## Local Preview 0.4 versioning
+
+Local Preview `0.4` is a ninth draft, born `status: "draft"` alongside the
+paywall contract it accompanies. Local Preview is version-locked to the paywall
+contract — its message schema `$ref`s the paywall schema URN directly — so a
+paywall bump is a Local Preview bump. Local Preview `0.3` remains the release
+candidate for Paywall Protocol `0.3` drafts and is unchanged.
+
+The message taxonomy, capability names, fallback vocabulary, and delivery
+diagnostic codes are unchanged. `0.4` adds exactly one behavioural rule: an
+accepted revision does not replay appear motion for a screen already listed in
+the runtime state's new `motion.playedAppearScreens` member. It is the only
+runtime member an acceptance carries forward rather than resets, because it is
+the only one the document does not author. See
+[Local Preview 0.4](local-preview-v0.4.md#the-entrance-replay-suppression-rule).
+
 ## Capability negotiation
 
 An SDK advertises the exact contract versions and capabilities it supports. The
@@ -118,14 +182,21 @@ so a demo cannot be mistaken for a synchronized design.
 
 ## Local Preview negotiation
 
-Local Preview uses one exact WebSocket subprotocol:
+Local Preview uses exact WebSocket subprotocols, offered most preferred first:
 
 ```text
+mosaic.local-preview.v0.4
 mosaic.local-preview.v0.3
 ```
 
+A peer that speaks only `0.3` is served `0.3`; adding the `0.4` draft may not
+strand a client that has not been rebuilt. There is no translation between the
+two: the selected subprotocol fixes the paywall generation for the connection.
+
 The selected connection still does not imply support for every capability, so
-Studio checks the client's capability report before sending a draft.
+Studio checks the client's capability report before sending a draft. Local
+Preview capability names are the same in both versions, so the reported
+*version* is the whole signal.
 
 The protocol remains platform-neutral. Framework convenience, native resource
 names, billing-provider models, and platform-only view behavior are not reasons

@@ -1,11 +1,11 @@
 part of 'protocol.dart';
 
-extension on MosaicProtocolDecoder {
-  MosaicButtonComponent _v03Button(
+extension on _DocumentDecoder {
+  MosaicButtonComponent _docButton(
     Map<String, Object?> object,
     String path,
   ) {
-    _expectV03ComponentKeys(
+    _expectComponentKeys(
       object,
       path,
       required: const <String>{
@@ -26,6 +26,7 @@ extension on MosaicProtocolDecoder {
         'outerInsets',
         'visibility',
       },
+      motion: _MotionSlot.button,
     );
     final children = _nonEmptyList(object['children'], '$path.children');
     final inProgress = object.containsKey('inProgressChildren')
@@ -34,7 +35,7 @@ extension on MosaicProtocolDecoder {
             '$path.inProgressChildren',
           )
         : null;
-    final action = _v03ButtonAction(object['action'], '$path.action');
+    final action = _docButtonAction(object['action'], '$path.action');
     if (inProgress != null &&
         action is! MosaicPurchaseAction &&
         action is! MosaicRestoreAction) {
@@ -54,7 +55,7 @@ extension on MosaicProtocolDecoder {
           ? MosaicStackDirection.vertical
           : MosaicStackDirection.horizontal,
       gap: _logicalSize(object['gap'], '$path.gap'),
-      mainAxisDistribution: _v03Distribution(
+      mainAxisDistribution: _docDistribution(
         object['mainAxisDistribution'],
         '$path.mainAxisDistribution',
       ),
@@ -64,13 +65,13 @@ extension on MosaicProtocolDecoder {
       ),
       children: <MosaicNode>[
         for (var index = 0; index < children.length; index += 1)
-          _v03Node(children[index], '$path.children[$index]'),
+          _docNode(children[index], '$path.children[$index]'),
       ],
       inProgressChildren: inProgress == null
           ? null
           : <MosaicNode>[
               for (var index = 0; index < inProgress.length; index += 1)
-                _v03Node(
+                _docNode(
                   inProgress[index],
                   '$path.inProgressChildren[$index]',
                 ),
@@ -80,18 +81,19 @@ extension on MosaicProtocolDecoder {
         object['accessibility'],
         '$path.accessibility',
       ),
-      appearance: _v03OptionalAppearance(object, path),
-      sizing: _v03OptionalSizing(object, path),
-      outerInsets: _v03OptionalInsets(object, path, 'outerInsets'),
-      visibility: _v03OptionalVisibility(object, path),
+      appearance: _docOptionalAppearance(object, path),
+      sizing: _docOptionalSizing(object, path),
+      outerInsets: _docOptionalInsets(object, path, 'outerInsets'),
+      visibility: _docOptionalVisibility(object, path),
+      motion: _nodeMotion(object, path, _MotionSlot.button),
     );
   }
 
-  MosaicIconComponent _v03Icon(
+  MosaicIconComponent _docIcon(
     Map<String, Object?> object,
     String path,
   ) {
-    _expectV03ComponentKeys(
+    _expectComponentKeys(
       object,
       path,
       required: const <String>{
@@ -111,26 +113,27 @@ extension on MosaicProtocolDecoder {
     );
     return MosaicIconComponent(
       id: _identifier(object['id'], '$path.id'),
-      name: _v03IconName(object['name'], '$path.name'),
+      name: _docIconName(object['name'], '$path.name'),
       size: _boundedNumber(
         object['size'],
         '$path.size',
         minimumExclusive: 0,
         maximum: 4096,
       ),
-      color: _v03Color(object['color'], '$path.color'),
+      color: _docColor(object['color'], '$path.color'),
       accessibility: _imageAccessibility(
         object['accessibility'],
         '$path.accessibility',
       ),
-      appearance: _v03OptionalAppearance(object, path),
-      sizing: _v03OptionalSizing(object, path),
-      outerInsets: _v03OptionalInsets(object, path, 'outerInsets'),
-      visibility: _v03OptionalVisibility(object, path),
+      appearance: _docOptionalAppearance(object, path),
+      sizing: _docOptionalSizing(object, path),
+      outerInsets: _docOptionalInsets(object, path, 'outerInsets'),
+      visibility: _docOptionalVisibility(object, path),
+      motion: _nodeMotion(object, path, _MotionSlot.node),
     );
   }
 
-  MosaicAction _v03ButtonAction(Object? value, String path) {
+  MosaicAction _docButtonAction(Object? value, String path) {
     final object = _object(value, path);
     final type = _string(object['type'], '$path.type');
     return switch (type) {
@@ -150,7 +153,7 @@ extension on MosaicProtocolDecoder {
       'openExternalUrl' => () {
           _expectKeys(object, const <String>{'type', 'url'}, path);
           return MosaicOpenExternalUrlAction(
-            url: _v03ExternalUrl(object['url'], '$path.url'),
+            url: _docExternalUrl(object['url'], '$path.url'),
           );
         }(),
       _ => throw MosaicProtocolException(
@@ -159,7 +162,7 @@ extension on MosaicProtocolDecoder {
     };
   }
 
-  Uri _v03ExternalUrl(Object? value, String path) {
+  Uri _docExternalUrl(Object? value, String path) {
     final source = _string(value, path);
     final uri = Uri.tryParse(source);
     final match = RegExp(
@@ -187,11 +190,11 @@ extension on MosaicProtocolDecoder {
     return uri;
   }
 
-  MosaicCarouselComponent _v03Carousel(
+  MosaicCarouselComponent _docCarousel(
     Map<String, Object?> object,
     String path,
   ) {
-    _expectV03ComponentKeys(
+    _expectComponentKeys(
       object,
       path,
       required: const <String>{
@@ -231,7 +234,7 @@ extension on MosaicProtocolDecoder {
             page['accessibilityLabel'],
             '$pagePath.accessibilityLabel',
           ),
-          content: _v03Stack(page['content'], '$pagePath.content'),
+          content: _docStack(page['content'], '$pagePath.content'),
         ),
       );
     }
@@ -252,22 +255,23 @@ extension on MosaicProtocolDecoder {
         object['accessibility'],
         '$path.accessibility',
       ),
-      appearance: _v03OptionalAppearance(
+      appearance: _docOptionalAppearance(
         object,
         path,
         container: true,
       ),
-      sizing: _v03OptionalSizing(object, path),
-      outerInsets: _v03OptionalInsets(object, path, 'outerInsets'),
-      visibility: _v03OptionalVisibility(object, path),
+      sizing: _docOptionalSizing(object, path),
+      outerInsets: _docOptionalInsets(object, path, 'outerInsets'),
+      visibility: _docOptionalVisibility(object, path),
+      motion: _nodeMotion(object, path, _MotionSlot.node),
     );
   }
 
-  MosaicSwitchComponent _v03Switch(
+  MosaicSwitchComponent _docSwitch(
     Map<String, Object?> object,
     String path,
   ) {
-    _expectV03ComponentKeys(
+    _expectComponentKeys(
       object,
       path,
       required: const <String>{
@@ -292,36 +296,37 @@ extension on MosaicProtocolDecoder {
       id: _identifier(object['id'], '$path.id'),
       label: _localizedText(object['label'], '$path.label'),
       initialValue: _boolean(object['initialValue'], '$path.initialValue'),
-      typography: _v03Typography(
+      typography: _docTypography(
         object['typography'],
         '$path.typography',
         allowMaximumLines: false,
       ),
-      offTrackColor: _v03Color(
+      offTrackColor: _docColor(
         object['offTrackColor'],
         '$path.offTrackColor',
       ),
-      onTrackColor: _v03Color(
+      onTrackColor: _docColor(
         object['onTrackColor'],
         '$path.onTrackColor',
       ),
-      thumbColor: _v03Color(object['thumbColor'], '$path.thumbColor'),
+      thumbColor: _docColor(object['thumbColor'], '$path.thumbColor'),
       accessibility: _controlAccessibility(
         object['accessibility'],
         '$path.accessibility',
       ),
-      appearance: _v03OptionalAppearance(object, path),
-      sizing: _v03OptionalSizing(object, path),
-      outerInsets: _v03OptionalInsets(object, path, 'outerInsets'),
-      visibility: _v03OptionalVisibility(object, path),
+      appearance: _docOptionalAppearance(object, path),
+      sizing: _docOptionalSizing(object, path),
+      outerInsets: _docOptionalInsets(object, path, 'outerInsets'),
+      visibility: _docOptionalVisibility(object, path),
+      motion: _nodeMotion(object, path, _MotionSlot.node),
     );
   }
 
-  MosaicCountdownComponent _v03Countdown(
+  MosaicCountdownComponent _docCountdown(
     Map<String, Object?> object,
     String path,
   ) {
-    _expectV03ComponentKeys(
+    _expectComponentKeys(
       object,
       path,
       required: const <String>{
@@ -358,11 +363,11 @@ extension on MosaicProtocolDecoder {
         '$path.endsAt.',
       );
     }
-    final largest = _v03CountdownUnit(
+    final largest = _docCountdownUnit(
       object['largestUnit'],
       '$path.largestUnit',
     );
-    final smallest = _v03CountdownUnit(
+    final smallest = _docCountdownUnit(
       object['smallestUnit'],
       '$path.smallestUnit',
     );
@@ -381,25 +386,26 @@ extension on MosaicProtocolDecoder {
         object['completedText'],
         '$path.completedText',
       ),
-      typography: _v03Typography(
+      typography: _docTypography(
         object['typography'],
         '$path.typography',
         allowMaximumLines: false,
       ),
-      accessibility: _v03TextAccessibility(
+      accessibility: _docTextAccessibility(
         object['accessibility'],
         '$path.accessibility',
         allowHeading: true,
       ),
-      appearance: _v03OptionalAppearance(object, path),
-      sizing: _v03OptionalSizing(object, path),
-      outerInsets: _v03OptionalInsets(object, path, 'outerInsets'),
-      visibility: _v03OptionalVisibility(object, path),
+      appearance: _docOptionalAppearance(object, path),
+      sizing: _docOptionalSizing(object, path),
+      outerInsets: _docOptionalInsets(object, path, 'outerInsets'),
+      visibility: _docOptionalVisibility(object, path),
+      motion: _nodeMotion(object, path, _MotionSlot.node),
     );
   }
 
-  MosaicTabsComponent _v03Tabs(Map<String, Object?> object, String path) {
-    _expectV03ComponentKeys(
+  MosaicTabsComponent _docTabs(Map<String, Object?> object, String path) {
+    _expectComponentKeys(
       object,
       path,
       required: const <String>{
@@ -422,6 +428,7 @@ extension on MosaicProtocolDecoder {
         'outerInsets',
         'visibility',
       },
+      motion: _MotionSlot.selectable,
     );
     final values = _list(object['tabs'], '$path.tabs');
     if (values.length < 2 || values.length > 8) {
@@ -438,31 +445,31 @@ extension on MosaicProtocolDecoder {
         MosaicTabsEntry(
           id: _identifier(tab['id'], '$tabPath.id'),
           label: _localizedText(tab['label'], '$tabPath.label'),
-          content: _v03Stack(tab['content'], '$tabPath.content'),
+          content: _docStack(tab['content'], '$tabPath.content'),
         ),
       );
     }
     return MosaicTabsComponent(
       id: _identifier(object['id'], '$path.id'),
-      tabBarDirection: _v03StackDirection(
+      tabBarDirection: _docStackDirection(
         object['tabBarDirection'],
         '$path.tabBarDirection',
       ),
       tabBarGap: _logicalSize(object['tabBarGap'], '$path.tabBarGap'),
-      tabBarDistribution: _v03Distribution(
+      tabBarDistribution: _docDistribution(
         object['tabBarDistribution'],
         '$path.tabBarDistribution',
       ),
       gap: _logicalSize(object['gap'], '$path.gap'),
       initialTabId: _identifier(object['initialTabId'], '$path.initialTabId'),
       tabs: tabs,
-      styles: _v03SelectionStyles(object['styles'], '$path.styles'),
-      labelTypography: _v03Typography(
+      styles: _docSelectionStyles(object['styles'], '$path.styles'),
+      labelTypography: _docTypography(
         object['labelTypography'],
         '$path.labelTypography',
         allowMaximumLines: false,
       ),
-      selectedLabelColor: _v03Color(
+      selectedLabelColor: _docColor(
         object['selectedLabelColor'],
         '$path.selectedLabelColor',
       ),
@@ -470,18 +477,19 @@ extension on MosaicProtocolDecoder {
         object['accessibility'],
         '$path.accessibility',
       ),
-      appearance: _v03OptionalAppearance(object, path, container: true),
-      sizing: _v03OptionalSizing(object, path),
-      outerInsets: _v03OptionalInsets(object, path, 'outerInsets'),
-      visibility: _v03OptionalVisibility(object, path),
+      appearance: _docOptionalAppearance(object, path, container: true),
+      sizing: _docOptionalSizing(object, path),
+      outerInsets: _docOptionalInsets(object, path, 'outerInsets'),
+      visibility: _docOptionalVisibility(object, path),
+      motion: _nodeMotion(object, path, _MotionSlot.selectable),
     );
   }
 
-  MosaicTimelineComponent _v03Timeline(
+  MosaicTimelineComponent _docTimeline(
     Map<String, Object?> object,
     String path,
   ) {
-    _expectV03ComponentKeys(
+    _expectComponentKeys(
       object,
       path,
       required: const <String>{
@@ -529,7 +537,7 @@ extension on MosaicProtocolDecoder {
               ? _localizedText(entry['description'], '$entryPath.description')
               : null,
           marker: entry.containsKey('marker')
-              ? _v03TimelineMarker(entry['marker'], '$entryPath.marker')
+              ? _marker(entry['marker'], '$entryPath.marker')
               : null,
         ),
       );
@@ -561,12 +569,12 @@ extension on MosaicProtocolDecoder {
     return MosaicTimelineComponent(
       id: _identifier(object['id'], '$path.id'),
       gap: _logicalSize(object['gap'], '$path.gap'),
-      connector: _v03TimelineConnector(
+      connector: _docTimelineConnector(
         object['connector'],
         '$path.connector',
       ),
       entries: entries,
-      titleTypography: _v03Typography(
+      titleTypography: _docTypography(
         object['titleTypography'],
         '$path.titleTypography',
         allowMaximumLines: false,
@@ -576,7 +584,7 @@ extension on MosaicProtocolDecoder {
         '$path.accessibility',
       ),
       markerColor: usesMarkers
-          ? _v03Color(object['markerColor'], '$path.markerColor')
+          ? _docColor(object['markerColor'], '$path.markerColor')
           : null,
       markerSize: usesMarkers
           ? _boundedNumber(
@@ -587,24 +595,25 @@ extension on MosaicProtocolDecoder {
             )
           : null,
       descriptionTypography: usesDescriptions
-          ? _v03Typography(
+          ? _docTypography(
               object['descriptionTypography'],
               '$path.descriptionTypography',
               allowMaximumLines: false,
             )
           : null,
-      appearance: _v03OptionalAppearance(object, path),
-      sizing: _v03OptionalSizing(object, path),
-      outerInsets: _v03OptionalInsets(object, path, 'outerInsets'),
-      visibility: _v03OptionalVisibility(object, path),
+      appearance: _docOptionalAppearance(object, path),
+      sizing: _docOptionalSizing(object, path),
+      outerInsets: _docOptionalInsets(object, path, 'outerInsets'),
+      visibility: _docOptionalVisibility(object, path),
+      motion: _nodeMotion(object, path, _MotionSlot.node),
     );
   }
 
-  MosaicTimelineConnector _v03TimelineConnector(Object? value, String path) {
+  MosaicTimelineConnector _docTimelineConnector(Object? value, String path) {
     final object = _object(value, path);
     _expectKeys(object, const <String>{'color', 'width', 'style'}, path);
     return MosaicTimelineConnector(
-      color: _v03Color(object['color'], '$path.color'),
+      color: _docColor(object['color'], '$path.color'),
       width: _boundedNumber(
         object['width'],
         '$path.width',
@@ -624,35 +633,8 @@ extension on MosaicProtocolDecoder {
     );
   }
 
-  MosaicTimelineMarker _v03TimelineMarker(Object? value, String path) {
-    final object = _object(value, path);
-    final kind = _enumValue(
-      object['kind'],
-      const <String>{'dot', 'ordinal', 'icon'},
-      '$path.kind',
-    );
-    switch (kind) {
-      case 'dot':
-        _expectKeys(object, const <String>{'kind'}, path);
-        return const MosaicTimelineDotMarker();
-      case 'ordinal':
-        _expectKeys(object, const <String>{'kind'}, path);
-        return const MosaicTimelineOrdinalMarker();
-      case 'icon':
-        _expectKeys(object, const <String>{'kind', 'name'}, path);
-        return MosaicTimelineIconMarker(
-          _v03IconName(object['name'], '$path.name'),
-        );
-      // `_enumValue` already rejected every other string, so a value here means
-      // the accepted set and this mapping disagree. That is an SDK bug, and it
-      // must never be absorbed as a plausible-looking glyph.
-      default:
-        throw StateError('Unhandled timeline marker kind "$kind".');
-    }
-  }
-
-  MosaicAwardComponent _v03Award(Map<String, Object?> object, String path) {
-    _expectV03ComponentKeys(
+  MosaicAwardComponent _docAward(Map<String, Object?> object, String path) {
+    _expectComponentKeys(
       object,
       path,
       required: const <String>{
@@ -683,17 +665,17 @@ extension on MosaicProtocolDecoder {
     }
     return MosaicAwardComponent(
       id: _identifier(object['id'], '$path.id'),
-      direction: _v03StackDirection(object['direction'], '$path.direction'),
+      direction: _docStackDirection(object['direction'], '$path.direction'),
       gap: _logicalSize(object['gap'], '$path.gap'),
       crossAxisAlignment: _stackAlignment(
         object['crossAxisAlignment'],
         '$path.crossAxisAlignment',
       ),
       emblem: object.containsKey('emblem')
-          ? _v03AwardEmblem(object['emblem'], '$path.emblem')
+          ? _docAwardEmblem(object['emblem'], '$path.emblem')
           : null,
       title: _localizedText(object['title'], '$path.title'),
-      titleTypography: _v03Typography(
+      titleTypography: _docTypography(
         object['titleTypography'],
         '$path.titleTypography',
         allowMaximumLines: false,
@@ -702,7 +684,7 @@ extension on MosaicProtocolDecoder {
           ? _localizedText(object['subtitle'], '$path.subtitle')
           : null,
       subtitleTypography: hasSubtitle
-          ? _v03Typography(
+          ? _docTypography(
               object['subtitleTypography'],
               '$path.subtitleTypography',
               allowMaximumLines: false,
@@ -712,14 +694,15 @@ extension on MosaicProtocolDecoder {
         object['accessibility'],
         '$path.accessibility',
       ),
-      appearance: _v03OptionalAppearance(object, path),
-      sizing: _v03OptionalSizing(object, path),
-      outerInsets: _v03OptionalInsets(object, path, 'outerInsets'),
-      visibility: _v03OptionalVisibility(object, path),
+      appearance: _docOptionalAppearance(object, path),
+      sizing: _docOptionalSizing(object, path),
+      outerInsets: _docOptionalInsets(object, path, 'outerInsets'),
+      visibility: _docOptionalVisibility(object, path),
+      motion: _nodeMotion(object, path, _MotionSlot.node),
     );
   }
 
-  MosaicAwardEmblem _v03AwardEmblem(Object? value, String path) {
+  MosaicAwardEmblem _docAwardEmblem(Object? value, String path) {
     final object = _object(value, path);
     final type = _enumValue(
       object['type'],
@@ -744,22 +727,22 @@ extension on MosaicProtocolDecoder {
       path,
     );
     return MosaicAwardIconEmblem(
-      name: _v03IconName(object['name'], '$path.name'),
+      name: _docIconName(object['name'], '$path.name'),
       size: _boundedNumber(
         object['size'],
         '$path.size',
         minimumExclusive: 0,
         maximum: 4096,
       ),
-      color: _v03Color(object['color'], '$path.color'),
+      color: _docColor(object['color'], '$path.color'),
     );
   }
 
-  MosaicSocialProofComponent _v03SocialProof(
+  MosaicSocialProofComponent _docSocialProof(
     Map<String, Object?> object,
     String path,
   ) {
-    _expectV03ComponentKeys(
+    _expectComponentKeys(
       object,
       path,
       required: const <String>{
@@ -785,35 +768,36 @@ extension on MosaicProtocolDecoder {
       id: _identifier(object['id'], '$path.id'),
       gap: _logicalSize(object['gap'], '$path.gap'),
       quote: _localizedText(object['quote'], '$path.quote'),
-      quoteTypography: _v03Typography(
+      quoteTypography: _docTypography(
         object['quoteTypography'],
         '$path.quoteTypography',
         allowMaximumLines: false,
       ),
       attribution: _localizedText(object['attribution'], '$path.attribution'),
-      attributionTypography: _v03Typography(
+      attributionTypography: _docTypography(
         object['attributionTypography'],
         '$path.attributionTypography',
         allowMaximumLines: false,
       ),
       rating: object.containsKey('rating')
-          ? _v03SocialProofRating(object['rating'], '$path.rating')
+          ? _docSocialProofRating(object['rating'], '$path.rating')
           : null,
       avatar: object.containsKey('avatar')
-          ? _v03SocialProofAvatar(object['avatar'], '$path.avatar')
+          ? _docSocialProofAvatar(object['avatar'], '$path.avatar')
           : null,
       accessibility: _controlAccessibility(
         object['accessibility'],
         '$path.accessibility',
       ),
-      appearance: _v03OptionalAppearance(object, path),
-      sizing: _v03OptionalSizing(object, path),
-      outerInsets: _v03OptionalInsets(object, path, 'outerInsets'),
-      visibility: _v03OptionalVisibility(object, path),
+      appearance: _docOptionalAppearance(object, path),
+      sizing: _docOptionalSizing(object, path),
+      outerInsets: _docOptionalInsets(object, path, 'outerInsets'),
+      visibility: _docOptionalVisibility(object, path),
+      motion: _nodeMotion(object, path, _MotionSlot.node),
     );
   }
 
-  MosaicSocialProofRating _v03SocialProofRating(Object? value, String path) {
+  MosaicSocialProofRating _docSocialProofRating(Object? value, String path) {
     final object = _object(value, path);
     _expectKeys(
       object,
@@ -859,8 +843,8 @@ extension on MosaicProtocolDecoder {
         minimumExclusive: 0,
         maximum: 4096,
       ),
-      filledColor: _v03Color(object['filledColor'], '$path.filledColor'),
-      emptyColor: _v03Color(object['emptyColor'], '$path.emptyColor'),
+      filledColor: _docColor(object['filledColor'], '$path.filledColor'),
+      emptyColor: _docColor(object['emptyColor'], '$path.emptyColor'),
     );
     if (rating.value > rating.maximumSteps) {
       throw MosaicProtocolException(
@@ -872,7 +856,7 @@ extension on MosaicProtocolDecoder {
     return rating;
   }
 
-  MosaicSocialProofAvatar _v03SocialProofAvatar(Object? value, String path) {
+  MosaicSocialProofAvatar _docSocialProofAvatar(Object? value, String path) {
     final object = _object(value, path);
     _expectKeys(object, const <String>{'assetId', 'size'}, path);
     return MosaicSocialProofAvatar(
@@ -886,7 +870,7 @@ extension on MosaicProtocolDecoder {
     );
   }
 
-  MosaicIconName _v03IconName(Object? value, String path) =>
+  MosaicIconName _docIconName(Object? value, String path) =>
       MosaicIconName.values.byName(
         _enumValue(
           value,
@@ -905,16 +889,24 @@ extension on MosaicProtocolDecoder {
         ),
       );
 
-  void _expectV03ComponentKeys(
+  void _expectComponentKeys(
     Map<String, Object?> object,
     String path, {
     required Set<String> required,
     required Set<String> optional,
+    _MotionSlot motion = _MotionSlot.node,
   }) {
-    _expectKeys(object, required, path, optional: optional);
+    _expectKeys(
+      object,
+      required,
+      path,
+      optional: isV04 && motion != _MotionSlot.none
+          ? <String>{...optional, 'motion'}
+          : optional,
+    );
   }
 
-  MosaicColorValue _v03Color(Object? value, String path) {
+  MosaicColorValue _docColor(Object? value, String path) {
     if (value is Map<String, Object?>) {
       _expectKeys(value, const <String>{'type', 'id'}, path);
       _expectConst(value['type'], 'colorToken', '$path.type');
@@ -928,13 +920,13 @@ extension on MosaicProtocolDecoder {
     }
   }
 
-  MosaicBackground _v03Background(Object? value, String path) {
+  MosaicBackground _docBackground(Object? value, String path) {
     final object = _object(value, path);
     final type = _string(object['type'], '$path.type');
     switch (type) {
       case 'color':
         _expectKeys(object, const <String>{'type', 'value'}, path);
-        return MosaicColorBackground(_v03Color(object['value'], '$path.value'));
+        return MosaicColorBackground(_docColor(object['value'], '$path.value'));
       case 'linearGradient':
         _expectKeys(object, const <String>{'type', 'angle', 'stops'}, path);
         return MosaicLinearGradientBackground(
@@ -944,7 +936,7 @@ extension on MosaicProtocolDecoder {
             minimum: 0,
             maximum: 360,
           ),
-          stops: _v03GradientStops(object['stops'], '$path.stops'),
+          stops: _docGradientStops(object['stops'], '$path.stops'),
         );
       case 'radialGradient':
         _expectKeys(
@@ -973,7 +965,7 @@ extension on MosaicProtocolDecoder {
             minimumExclusive: 0,
             maximum: 2,
           ),
-          stops: _v03GradientStops(object['stops'], '$path.stops'),
+          stops: _docGradientStops(object['stops'], '$path.stops'),
         );
       case 'image':
       case 'video':
@@ -993,7 +985,7 @@ extension on MosaicProtocolDecoder {
         final contentMode = mode == 'fit'
             ? MosaicImageContentMode.fit
             : MosaicImageContentMode.fill;
-        final fallback = _v03Color(
+        final fallback = _docColor(
           object['fallbackColor'],
           '$path.fallbackColor',
         );
@@ -1022,7 +1014,7 @@ extension on MosaicProtocolDecoder {
     }
   }
 
-  List<MosaicGradientStop> _v03GradientStops(Object? value, String path) {
+  List<MosaicGradientStop> _docGradientStops(Object? value, String path) {
     final values = _list(value, path);
     if (values.length < 2 || values.length > 8) {
       throw MosaicProtocolException(
@@ -1050,14 +1042,14 @@ extension on MosaicProtocolDecoder {
       stops.add(
         MosaicGradientStop(
           position: position,
-          color: _v03Color(object['color'], '$stopPath.color'),
+          color: _docColor(object['color'], '$stopPath.color'),
         ),
       );
     }
     return stops;
   }
 
-  MosaicShadow _v03Shadow(Object? value, String path) {
+  MosaicShadow _docShadow(Object? value, String path) {
     final object = _object(value, path);
     final type = _string(object['type'], '$path.type');
     if (type == 'shadowToken') {
@@ -1071,7 +1063,7 @@ extension on MosaicProtocolDecoder {
     );
     _expectConst(type, 'shadow', '$path.type');
     return MosaicInlineShadow(
-      color: _v03Color(object['color'], '$path.color'),
+      color: _docColor(object['color'], '$path.color'),
       offsetX: _boundedNumber(
         object['offsetX'],
         '$path.offsetX',
@@ -1088,7 +1080,7 @@ extension on MosaicProtocolDecoder {
     );
   }
 
-  MosaicBoxAppearance? _v03OptionalAppearance(
+  MosaicBoxAppearance? _docOptionalAppearance(
     Map<String, Object?> parent,
     String parentPath, {
     bool container = false,
@@ -1113,10 +1105,10 @@ extension on MosaicProtocolDecoder {
     _expectKeys(object, const <String>{}, path, optional: allowed);
     return MosaicBoxAppearance(
       background: object.containsKey('background')
-          ? _v03Background(object['background'], '$path.background')
+          ? _docBackground(object['background'], '$path.background')
           : null,
       border: object.containsKey('border')
-          ? _v03Border(object['border'], '$path.border')
+          ? _docBorder(object['border'], '$path.border')
           : null,
       cornerRadius: object.containsKey('cornerRadius')
           ? _logicalSize(object['cornerRadius'], '$path.cornerRadius')
@@ -1136,21 +1128,21 @@ extension on MosaicProtocolDecoder {
           ? _boolean(object['clipContent'], '$path.clipContent')
           : null,
       shadow: object.containsKey('shadow')
-          ? _v03Shadow(object['shadow'], '$path.shadow')
+          ? _docShadow(object['shadow'], '$path.shadow')
           : null,
     );
   }
 
-  MosaicBorderStyle _v03Border(Object? value, String path) {
+  MosaicBorderStyle _docBorder(Object? value, String path) {
     final object = _object(value, path);
     _expectKeys(object, const <String>{'color', 'width'}, path);
     return MosaicBorderStyle(
-      color: _v03Color(object['color'], '$path.color'),
+      color: _docColor(object['color'], '$path.color'),
       width: _logicalSize(object['width'], '$path.width'),
     );
   }
 
-  MosaicSizing? _v03OptionalSizing(
+  MosaicSizing? _docOptionalSizing(
     Map<String, Object?> parent,
     String parentPath,
   ) {
@@ -1159,12 +1151,12 @@ extension on MosaicProtocolDecoder {
     final object = _object(parent['sizing'], path);
     _expectKeys(object, const <String>{'width', 'height'}, path);
     return MosaicSizing(
-      width: _v03SizingValue(object['width'], '$path.width'),
-      height: _v03SizingValue(object['height'], '$path.height'),
+      width: _docSizingValue(object['width'], '$path.width'),
+      height: _docSizingValue(object['height'], '$path.height'),
     );
   }
 
-  MosaicSizingValue _v03SizingValue(Object? value, String path) {
+  MosaicSizingValue _docSizingValue(Object? value, String path) {
     if (value is String) {
       final mode = _enumValue(value, const <String>{'fit', 'fill'}, path);
       return mode == 'fill'
@@ -1184,7 +1176,7 @@ extension on MosaicProtocolDecoder {
     );
   }
 
-  MosaicEdgeInsets? _v03OptionalInsets(
+  MosaicEdgeInsets? _docOptionalInsets(
     Map<String, Object?> parent,
     String parentPath,
     String key,
@@ -1193,7 +1185,7 @@ extension on MosaicProtocolDecoder {
           ? _edgeInsets(parent[key], '$parentPath.$key')
           : null;
 
-  MosaicVisibility _v03OptionalVisibility(
+  MosaicVisibility _docOptionalVisibility(
     Map<String, Object?> parent,
     String parentPath,
   ) {

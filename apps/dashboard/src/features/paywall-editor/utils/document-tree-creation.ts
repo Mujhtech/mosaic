@@ -5,10 +5,18 @@ import type {
   ProtocolNode,
   Screen,
   SelectionStyles,
-  StackComponent,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { isValidCountdownInstant } from "@/features/paywall-editor/utils/countdown";
+import {
+  isMotionCapableDocument,
+  withDocumentParts,
+  withNodeParts,
+} from "@/features/paywall-editor/utils/document-version";
+import type {
+  MosaicPaywallV03ProductCardComponent,
+  MosaicPaywallV03Stack,
+} from "@/lib/mosaic-protocol";
 import {
   allocateIdentifier,
   allocateLocalizationKey,
@@ -117,7 +125,7 @@ export function createProductCard(
   keys: Set<string>,
   selectorId: string,
   productReferenceId: string
-): Extract<ProtocolNode, { type: "productCard" }> {
+): MosaicPaywallV03ProductCardComponent {
   const id = allocateIdentifier(
     identifiers,
     `${selectorId}-${productReferenceId}-card`
@@ -203,10 +211,13 @@ export function appendProductCard(
   }
 
   const card = createProductCard(identifiers, keys, selector.id, reference.id);
-  const next = updateNode({ ...document, products }, selector.id, (node) =>
-    node.type === "productSelector"
-      ? { ...node, cards: [...node.cards, card] }
-      : node
+  const next = updateNode(
+    withDocumentParts(document, { products }),
+    selector.id,
+    (node) =>
+      node.type === "productSelector"
+        ? withNodeParts(node, { cards: [...node.cards, card] })
+        : node
   );
   return { document: ensureLocalizationCatalogs(next), selectionId: card.id };
 }
@@ -254,7 +265,7 @@ export function appendProductBadge(
   const next = ensureLocalizationCatalogs(
     updateNode(document, card.id, (node) =>
       node.type === "productCard"
-        ? { ...node, children: [...node.children, badge] }
+        ? withNodeParts(node, { children: [...node.children, badge] })
         : node
     )
   );
@@ -264,7 +275,7 @@ export function appendProductBadge(
   return { document: next, selectionId: badge.id };
 }
 
-export function emptyStack(id: string): StackComponent {
+export function emptyStack(id: string): MosaicPaywallV03Stack {
   return {
     type: "stack",
     id,
@@ -331,7 +342,11 @@ export function createBlock(
       return {
         type,
         id,
-        marker: "checkmark",
+        // 0.4 consolidated Feature List and Timeline onto one marker union; a
+        // 0.3 list still pins the single "checkmark" constant.
+        marker: isMotionCapableDocument(document)
+          ? { kind: "icon" as const, name: "checkmark" as const }
+          : ("checkmark" as const),
         gap: 12,
         markerColor: "action.primary",
         items: [
@@ -790,9 +805,8 @@ export function appendScreen(
       },
     },
   } as Screen;
-  const nextDocument = ensureLocalizationCatalogs({
-    ...document,
-    screens: [...existingScreens, screen],
-  });
+  const nextDocument = ensureLocalizationCatalogs(
+    withDocumentParts(document, { screens: [...existingScreens, screen] })
+  );
   return { document: nextDocument, screenId, selectionId: titleId };
 }

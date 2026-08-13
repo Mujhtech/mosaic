@@ -9,10 +9,23 @@ import {
   validateV03JsonFormatting,
 } from "./validation-v0.3.mjs";
 import {
+  loadProtocolV04Artifacts,
+  validateCanonicalV04Coverage,
+  validateMotionFrameVectors,
+  validateProtocolV04,
+  validateV04AccessibilityAnnouncementVectors,
+  validateV04JsonFormatting,
+} from "./validation-v0.4.mjs";
+import {
   loadPreviewV03Artifacts,
   validatePreviewV03Artifacts,
   validatePreviewV03JsonFormatting,
 } from "./preview-validation-v0.3.mjs";
+import {
+  loadPreviewV04Artifacts,
+  validatePreviewV04Artifacts,
+  validatePreviewV04JsonFormatting,
+} from "./preview-validation-v0.4.mjs";
 import { relative } from "node:path";
 import {
   loadDeliveryV1Artifacts,
@@ -105,7 +118,9 @@ import {
 
 try {
   const artifactsV03 = loadProtocolV03Artifacts();
+  const artifactsV04 = loadProtocolV04Artifacts();
   const previewArtifactsV03 = loadPreviewV03Artifacts();
+  const previewArtifactsV04 = loadPreviewV04Artifacts();
   const localeResolutionArtifactsV03 = loadLocaleResolutionV03Artifacts();
   const deliveryArtifactsV1 = loadDeliveryV1Artifacts();
   const commerceProviderArtifactsV1 = loadCommerceProviderV1Artifacts();
@@ -157,10 +172,38 @@ try {
     ...validateRatingAnnouncementVectors(),
     ...validateAccessibilityAnnouncementVectors(),
     ...validateV03JsonFormatting(),
+    ...validateProtocolV04(artifactsV04),
+    ...validateProtocolV04({
+      ...artifactsV04,
+      document: artifactsV04.edgeDocument,
+    }),
+    ...validateProtocolV04({
+      ...artifactsV04,
+      document: artifactsV04.expiredCountdownDocument,
+    }),
+    ...validateProtocolV04({
+      ...artifactsV04,
+      document: artifactsV04.hiddenPurchaseTargetDocument,
+    }),
+    ...validateProtocolV04({
+      ...artifactsV04,
+      document: artifactsV04.navigationOnlyDocument,
+    }),
+    ...validateProtocolV04({
+      ...artifactsV04,
+      document: artifactsV04.screenRoundTripDocument,
+    }),
+    ...validateCanonicalV03Coverage(artifactsV04.document),
+    ...validateCanonicalV04Coverage(artifactsV04.document),
+    ...validateMotionFrameVectors(),
+    ...validateV04AccessibilityAnnouncementVectors(),
+    ...validateV04JsonFormatting(),
     ...validateLocaleResolutionV03Artifacts(localeResolutionArtifactsV03),
     ...validateLocaleResolutionV03JsonFormatting(),
     ...validatePreviewV03Artifacts(previewArtifactsV03),
     ...validatePreviewV03JsonFormatting(),
+    ...validatePreviewV04Artifacts(previewArtifactsV04),
+    ...validatePreviewV04JsonFormatting(),
     ...validateDeliveryV1Artifacts(deliveryArtifactsV1),
     ...validateDeliveryV1JsonFormatting(),
     ...validateCommerceProviderV1Artifacts(commerceProviderArtifactsV1),
@@ -222,8 +265,9 @@ try {
         "Ingestion v1 (draft), Authoritative Entitlement v1 (draft), Customer " +
         "Access Token v1 (draft), Billing State Webhook v1 (draft), Billing " +
         "Migration Operations v1 (draft), Authoritative Entitlement v2 " +
-        "(draft), Billing State Webhook v2 (draft), and the " +
-        "browser contract.",
+        "(draft), Billing State Webhook v2 (draft), Paywall Protocol 0.4 " +
+        "(draft) with its motion frame vectors, Local Preview 0.4 (draft), " +
+        "and the browser contract.",
     );
   }
 } catch (error) {

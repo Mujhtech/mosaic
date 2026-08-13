@@ -154,20 +154,32 @@ struct MosaicTabsView: View {
 
   private func tabControl(_ tab: MosaicTabsEntry) -> some View {
     let selected = selectedTabID == tab.id
-    let style = component.styles.resolving(selected: selected)
     // `selectedLabelColor` is authored either way, so the selected label colour
     // is read rather than inferred from the Default typography.
     let typography = selected
       ? component.labelTypography.recolored(component.selectedLabelColor)
       : component.labelTypography
-    return Button {
-      model.selectTab(tab.id, in: component.id)
-    } label: {
-      MosaicStyledText(value: localization.resolve(tab.label), typography: typography)
-        .contentShape(Rectangle())
+    // Tabs `selection` animates the tab control's style, not the panel swap:
+    // `0.3` visibility semantics remove a hidden node from layout, the
+    // accessibility tree, and focus order, and animating a removal would need a
+    // "present but not focusable" third state that does not exist.
+    return MosaicSelectionStyledContent(
+      styles: component.styles,
+      selected: selected,
+      motion: component.motion?.selection,
+      curve: component.motion?.selection.flatMap {
+        document.resolvedMotionCurve($0.curve)
+      }
+    ) { style in
+      Button {
+        model.selectTab(tab.id, in: component.id)
+      } label: {
+        MosaicStyledText(value: localization.resolve(tab.label), typography: typography)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .modifier(MosaicSelectionStyledBox(style: style, document: document))
     }
-    .buttonStyle(.plain)
-    .modifier(MosaicSelectionStyledBox(style: style, document: document))
     .frame(minWidth: 44, minHeight: 44)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(Text(localization.resolve(tab.label)))
@@ -263,6 +275,46 @@ private struct MosaicTimelineRailExtent: ViewModifier {
       content.frame(height: fixedHeight)
     } else {
       content.frame(maxHeight: .infinity)
+    }
+  }
+}
+
+/// The glyph a Feature List item or a Timeline entry draws for its marker.
+///
+/// One view for both components, because `0.4` consolidated the two vocabularies
+/// onto one `MosaicMarker` union. Keeping a second, component-local glyph is how
+/// a Feature List went on drawing a checkmark for every row: an ordinal came out
+/// as a tick, and a "not included" row authored as an `icon: close` came out
+/// claiming the opposite of what it said.
+///
+/// `extent` is the marker's box. Timeline passes the authored `markerSize`;
+/// Feature List has no authored size and passes the item text's font size, so
+/// the glyph tracks the type it sits beside — the same choice Compose makes.
+struct MosaicMarkerGlyph: View {
+  let marker: MosaicMarker
+  /// The 1-based position, read only by `.ordinal`.
+  let ordinal: Int
+  let color: Color
+  let extent: Double
+
+  var body: some View {
+    switch marker {
+    case .dot:
+      Circle().fill(color).frame(width: extent, height: extent)
+    case .ordinal:
+      // The position formatted by the platform's locale number formatting,
+      // through the renderer's `\.locale` environment, so an Arabic catalog
+      // renders Arabic-Indic digits without the protocol carrying a second
+      // numeral vocabulary.
+      Text(ordinal, format: .number)
+        .font(.system(size: extent * 0.8, weight: .semibold))
+        .foregroundStyle(color)
+        .frame(width: extent, height: extent)
+    case .icon(let name):
+      Image(systemName: name.systemName)
+        .font(.system(size: extent * 0.9))
+        .foregroundStyle(color)
+        .frame(width: extent, height: extent)
     }
   }
 }
@@ -418,35 +470,13 @@ struct MosaicTimelineView: View {
       // either, a document that somehow reached the renderer without them draws
       // no glyph and diagnoses.
       if let color, let extent = markerExtent {
-        glyph(marker, index: index, color: color, extent: extent)
+        MosaicMarkerGlyph(marker: marker, ordinal: index + 1, color: color, extent: extent)
       } else {
         EmptyView()
           .mosaicStyleDiagnostics(
             MosaicStyleResolutionFailure(
               code: "timeline_marker_style_missing", subjectID: component.id))
       }
-    }
-  }
-
-  @ViewBuilder
-  private func glyph(
-    _ marker: MosaicTimelineMarker, index: Int, color: Color, extent: Double
-  ) -> some View {
-    switch marker {
-    case .dot:
-      Circle().fill(color).frame(width: extent, height: extent)
-    case .ordinal:
-      // The 1-based position, formatted by the platform's locale number
-      // formatting through the renderer's `\.locale` environment.
-      Text(index + 1, format: .number)
-        .font(.system(size: extent * 0.8, weight: .semibold))
-        .foregroundStyle(color)
-        .frame(width: extent, height: extent)
-    case .icon(let name):
-      Image(systemName: name.systemName)
-        .font(.system(size: extent * 0.9))
-        .foregroundStyle(color)
-        .frame(width: extent, height: extent)
     }
   }
 }

@@ -13,14 +13,12 @@ import type {
 import type {
   MosaicDocument,
   Screen,
-  StackComponent,
 } from "@/features/paywall-editor/types/editor";
 import type { StudioCanvasPreferences } from "@/features/paywall-editor/types/studio-workspace";
 import {
-  resolvedBackground,
-  resolvedProtocolColor,
-  resolvedShadow,
-} from "@/features/paywall-editor/utils/protocol-styles";
+  previewScreenSurface,
+  resolvedScreenSafeArea,
+} from "@/features/paywall-editor/utils/preview-screen-surface";
 
 const FRAME_MATERIALS: Record<CanvasDeviceMaterial, CSSProperties> = {
   aluminum: {
@@ -40,29 +38,6 @@ const FRAME_MATERIALS: Record<CanvasDeviceMaterial, CSSProperties> = {
       "linear-gradient(145deg, #e0e1df 0%, #7f827f 18%, #303330 50%, #b9bbb8 80%, #545754 100%)",
   },
 };
-
-function alignmentStyle(alignment: StackComponent["crossAxisAlignment"]) {
-  switch (alignment) {
-    case "start":
-      return "flex-start";
-    case "center":
-      return "center";
-    case "end":
-      return "flex-end";
-    case "stretch":
-      return "stretch";
-    default: {
-      const unhandled: never = alignment;
-      throw new Error(`Unhandled alignment: ${JSON.stringify(unhandled)}`);
-    }
-  }
-}
-
-function distributionStyle(
-  distribution: StackComponent["mainAxisDistribution"]
-) {
-  return distribution === "spaceBetween" ? "space-between" : distribution;
-}
 
 function HardwareButtons({
   orientation,
@@ -439,16 +414,15 @@ export function CanvasPreviewDevice({
   onRootClick: (event: MouseEvent<HTMLFieldSetElement>) => void;
   onRootSelect: () => void;
 }) {
-  const root = layout.content;
-  const layoutBackground = resolvedBackground(document, layout.background);
-  const rootBackground = resolvedBackground(
-    document,
-    root.appearance?.background
-  );
-  const respectsSafeArea = layout.safeArea === "respect";
-  const safeArea = respectsSafeArea
-    ? geometry.safeArea
-    : { top: 0, right: 0, bottom: 0, left: 0 };
+  const safeArea = resolvedScreenSafeArea(layout, geometry.safeArea);
+  const { layoutBackground, root, rootBackground, rootStyle } =
+    previewScreenSurface(
+      document,
+      layout,
+      // A sheet is anchored to the bottom of the screen, so it never reserves
+      // the top inset the screen behind it does.
+      presentation === "sheet" ? { ...safeArea, top: 0 } : safeArea
+    );
 
   return (
     <fieldset
@@ -595,8 +569,7 @@ export function CanvasPreviewDevice({
               onRootSelect();
             }}
             style={{
-              alignItems: alignmentStyle(root.crossAxisAlignment),
-              ...rootBackground.style,
+              ...rootStyle,
               backgroundColor:
                 rootBackground.style.backgroundColor ??
                 (() => {
@@ -612,29 +585,10 @@ export function CanvasPreviewDevice({
                     })();
                   }
                 })(),
-              borderColor: resolvedProtocolColor(
-                document,
-                root.appearance?.border?.color
-              ),
               borderRadius:
                 presentation === "sheet"
                   ? `${Math.max(28, root.appearance?.cornerRadius ?? 0)}px ${Math.max(28, root.appearance?.cornerRadius ?? 0)}px 0 0`
-                  : root.appearance?.cornerRadius,
-              borderStyle: root.appearance?.border ? "solid" : undefined,
-              borderWidth: root.appearance?.border?.width,
-              flexDirection: root.direction === "vertical" ? "column" : "row",
-              gap: root.gap,
-              justifyContent: distributionStyle(root.mainAxisDistribution),
-              opacity: root.appearance?.opacity,
-              boxShadow: resolvedShadow(document, root.appearance?.shadow),
-              isolation: "isolate",
-              overflow: root.appearance?.clipContent ? "hidden" : undefined,
-              paddingBlockEnd: root.padding.bottom + safeArea.bottom,
-              paddingBlockStart:
-                root.padding.top +
-                (presentation === "sheet" ? 0 : safeArea.top),
-              paddingInlineEnd: root.padding.end + safeArea.right,
-              paddingInlineStart: root.padding.start + safeArea.left,
+                  : rootStyle.borderRadius,
             }}
           >
             {rootBackground.video ? (

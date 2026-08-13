@@ -28,8 +28,20 @@ func isSafeMosaicV03ExternalURL(_ raw: String) -> Bool {
   return true
 }
 
-enum MosaicProtocolV03Shape {
-  static func validate(_ root: [String: Any]) throws {
+/// The shape gate for every supported contract.
+///
+/// `0.4` is a pure superset of `0.3` apart from two removals, so this is one
+/// validator parameterized by version rather than two that would have to be
+/// kept in step by hand. Every version-specific branch below names the contract
+/// it belongs to.
+struct MosaicProtocolShape {
+  let version: MosaicSchemaVersion
+
+  static func validate(_ root: [String: Any], version: MosaicSchemaVersion) throws {
+    try MosaicProtocolShape(version: version).document(root)
+  }
+
+  private func document(_ root: [String: Any]) throws {
     try keys(
       root,
       required: [
@@ -83,7 +95,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func screen(
+  private func screen(
     _ value: Any,
     at path: String,
     requiresAccessibilityLabel: Bool
@@ -108,14 +120,31 @@ enum MosaicProtocolV03Shape {
     try scrollContainer(screen["layout"], at: "\(path).layout")
   }
 
-  private static func designSystem(_ value: Any?, at path: String) throws {
+  private func designSystem(_ value: Any?, at path: String) throws {
     let system = try object(value, at: path)
-    try keys(system, required: ["colors", "backgrounds", "shadows"], at: path)
+    // The motion catalog is required in `0.4` and unknown in `0.3`, so an
+    // absent catalog and a `0.3` document are different failures.
+    try keys(
+      system,
+      required: version.supportsMotion
+        ? ["colors", "backgrounds", "shadows", "motions"]
+        : ["colors", "backgrounds", "shadows"],
+      at: path
+    )
     let colors = try array(system["colors"], at: "\(path).colors")
     let backgrounds = try array(system["backgrounds"], at: "\(path).backgrounds")
     let shadows = try array(system["shadows"], at: "\(path).shadows")
-    guard colors.count <= 256, backgrounds.count <= 256, shadows.count <= 256 else {
+    let motions = try array(system["motions"] ?? [], at: "\(path).motions")
+    guard colors.count <= 256, backgrounds.count <= 256, shadows.count <= 256,
+      motions.count <= 256
+    else {
       throw invalid(path, "too_many_design_tokens")
+    }
+    for (index, raw) in motions.enumerated() {
+      let tokenPath = "\(path).motions[\(index)]"
+      let token = try object(raw, at: tokenPath)
+      try keys(token, required: ["id", "name", "value"], at: tokenPath)
+      try motionCurve(token["value"], at: "\(tokenPath).value")
     }
     for (index, raw) in colors.enumerated() {
       let tokenPath = "\(path).colors[\(index)]"
@@ -137,7 +166,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func localization(_ value: Any?, at path: String) throws {
+  private func localization(_ value: Any?, at path: String) throws {
     let value = try object(value, at: path)
     try keys(
       value,
@@ -157,7 +186,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func asset(_ value: Any, at path: String) throws {
+  private func asset(_ value: Any, at path: String) throws {
     let asset = try object(value, at: path)
     guard let type = asset["type"] as? String, type == "image" || type == "video" else {
       throw invalid("\(path).type", "invalid_asset_type")
@@ -183,7 +212,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func product(_ value: Any, at path: String) throws {
+  private func product(_ value: Any, at path: String) throws {
     let product = try object(value, at: path)
     try keys(
       product,
@@ -193,7 +222,7 @@ enum MosaicProtocolV03Shape {
     try localizedText(product["label"], at: "\(path).label")
   }
 
-  private static func scrollContainer(_ value: Any?, at path: String) throws {
+  private func scrollContainer(_ value: Any?, at path: String) throws {
     let container = try object(value, at: path)
     try keys(
       container,
@@ -205,7 +234,7 @@ enum MosaicProtocolV03Shape {
     try stack(container["content"], at: "\(path).content")
   }
 
-  private static func stack(_ value: Any?, at path: String) throws {
+  private func stack(_ value: Any?, at path: String) throws {
     let stack = try object(value, at: path)
     try keys(
       stack,
@@ -216,6 +245,11 @@ enum MosaicProtocolV03Shape {
       optional: ["appearance", "sizing", "outerInsets", "visibility"],
       at: path
     )
+    // The root content stack of a screen is reached directly rather than through
+    // `node(_:at:)`, so its motion is validated here too.
+    if let value = stack["motion"] {
+      try motion(value, at: "\(path).motion", allows: motionMembers(forNodeType: "stack"))
+    }
     try edgeInsets(stack["padding"], at: "\(path).padding")
     try optionalPresentation(stack, at: path, appearanceKind: .container, sizingKind: .box)
     for (index, child) in try array(stack["children"], at: "\(path).children").enumerated() {
@@ -223,10 +257,13 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func node(_ value: Any, at path: String) throws {
+  private func node(_ value: Any, at path: String) throws {
     let node = try object(value, at: path)
     guard let type = node["type"] as? String else {
       throw invalid("\(path).type", "expected_string")
+    }
+    if let value = node["motion"] {
+      try motion(value, at: "\(path).motion", allows: motionMembers(forNodeType: type))
     }
     switch type {
     case "stack":
@@ -268,18 +305,36 @@ enum MosaicProtocolV03Shape {
           "type", "id", "marker", "gap", "markerColor", "items", "typography",
           "accessibility",
         ],
-        optional: ["appearance", "sizing", "outerInsets", "visibility"],
+        // `markerSize` is a `0.4` addition: `0.3` sizes the single checkmark it
+        // admits from the list's typography and has no field to override it.
+        optional: version.supportsMotion
+          ? ["markerSize", "appearance", "sizing", "outerInsets", "visibility"]
+          : ["appearance", "sizing", "outerInsets", "visibility"],
         at: path
       )
       try color(node["markerColor"], at: "\(path).markerColor")
+      // `0.3` carries the single constant `"checkmark"`, so a list cannot
+      // express a negated item; `0.4` consolidated onto Timeline's union and
+      // lets an item override the list's glyph.
+      if version.supportsMotion {
+        try marker(node["marker"] as Any, at: "\(path).marker")
+      } else if node["marker"] as? String != MosaicIconName.checkmark.rawValue {
+        throw invalid("\(path).marker", "invalid_marker_kind")
+      }
       try typography(node["typography"], at: "\(path).typography", allowsTruncation: false)
       let items = try array(node["items"], at: "\(path).items")
       guard !items.isEmpty else { throw invalid("\(path).items", "expected_nonempty_array") }
       for (index, value) in items.enumerated() {
         let itemPath = "\(path).items[\(index)]"
         let item = try object(value, at: itemPath)
-        try keys(item, required: ["id", "text"], at: itemPath)
+        try keys(
+          item,
+          required: ["id", "text"],
+          optional: version.supportsMotion ? ["marker"] : [],
+          at: itemPath
+        )
         try localizedText(item["text"], at: "\(itemPath).text")
+        if let value = item["marker"] { try marker(value, at: "\(itemPath).marker") }
       }
       try controlAccessibility(node["accessibility"], at: "\(path).accessibility")
       try optionalPresentation(node, at: path, appearanceKind: .box, sizingKind: .box)
@@ -306,7 +361,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func tabs(_ node: [String: Any], at path: String) throws {
+  private func tabs(_ node: [String: Any], at path: String) throws {
     try keys(
       node,
       required: [
@@ -335,7 +390,7 @@ enum MosaicProtocolV03Shape {
     try optionalPresentation(node, at: path, appearanceKind: .container, sizingKind: .box)
   }
 
-  private static func timeline(_ node: [String: Any], at path: String) throws {
+  private func timeline(_ node: [String: Any], at path: String) throws {
     try keys(
       node,
       required: ["type", "id", "orientation", "gap", "connector", "entries", "titleTypography",
@@ -370,7 +425,7 @@ enum MosaicProtocolV03Shape {
       if let value = entry["description"] {
         try localizedText(value, at: "\(entryPath).description")
       }
-      if let value = entry["marker"] { try timelineMarker(value, at: "\(entryPath).marker") }
+      if let value = entry["marker"] { try marker(value, at: "\(entryPath).marker") }
     }
     if let value = node["markerColor"] { try color(value, at: "\(path).markerColor") }
     try typography(node["titleTypography"], at: "\(path).titleTypography", allowsTruncation: false)
@@ -381,7 +436,8 @@ enum MosaicProtocolV03Shape {
     try optionalPresentation(node, at: path, appearanceKind: .box, sizingKind: .box)
   }
 
-  private static func timelineMarker(_ value: Any, at path: String) throws {
+  /// The marker union Feature List and Timeline share from `0.4` onwards.
+  private func marker(_ value: Any, at path: String) throws {
     let marker = try object(value, at: path)
     switch marker["kind"] as? String {
     case "dot", "ordinal":
@@ -389,11 +445,139 @@ enum MosaicProtocolV03Shape {
     case "icon":
       try keys(marker, required: ["kind", "name"], at: path)
     default:
-      throw invalid("\(path).kind", "invalid_timeline_marker_kind")
+      throw invalid("\(path).kind", "invalid_marker_kind")
     }
   }
 
-  private static func award(_ node: [String: Any], at path: String) throws {
+  // MARK: - Motion
+
+  /// Which motion members a node may carry.
+  ///
+  /// The constraint is by trigger rather than by taste: `selection` needs
+  /// runtime selection state to interpolate between, and `loop` is bounded to
+  /// the one control a paywall exists to draw attention to.
+  private func motionMembers(forNodeType type: String) -> Set<String> {
+    switch type {
+    case "button": ["appear", "loop"]
+    case "productSelector", "tabs": ["appear", "selection"]
+    default: ["appear"]
+    }
+  }
+
+  private func motion(_ value: Any, at path: String, allows members: Set<String>) throws {
+    guard version.supportsMotion else { throw invalid(path, "unsupported_property") }
+    let motion = try object(value, at: path)
+    guard !motion.isEmpty else { throw invalid(path, "expected_nonempty_object") }
+    try keys(motion, required: [], optional: members, at: path)
+    if let value = motion["appear"] { try appearMotion(value, at: "\(path).appear") }
+    if let value = motion["selection"] {
+      let selection = try object(value, at: "\(path).selection")
+      try keys(selection, required: ["curve"], at: "\(path).selection")
+      try motionCurve(selection["curve"], at: "\(path).selection.curve")
+    }
+    if let value = motion["loop"] { try loopMotion(value, at: "\(path).loop") }
+  }
+
+  private func appearMotion(_ value: Any, at path: String) throws {
+    let appear = try object(value, at: path)
+    // `riseLogicalSize` is required with `fadeRise` and forbidden with `fade`.
+    // Both directions are enforced: a rise on a fade is a value nothing reads,
+    // and a `fadeRise` without one has no distance to travel.
+    switch appear["effect"] as? String {
+    case "fade":
+      try keys(appear, required: ["effect", "curve", "delayMilliseconds"], at: path)
+    case "fadeRise":
+      try keys(
+        appear,
+        required: ["effect", "riseLogicalSize", "curve", "delayMilliseconds"],
+        at: path
+      )
+      try boundedNumber(
+        appear["riseLogicalSize"], at: "\(path).riseLogicalSize",
+        minimum: 0, maximum: 64, exclusiveMinimum: true)
+    default:
+      throw invalid("\(path).effect", "invalid_appear_effect")
+    }
+    try motionDuration(appear["delayMilliseconds"], at: "\(path).delayMilliseconds")
+    try motionCurve(appear["curve"], at: "\(path).curve")
+  }
+
+  private func loopMotion(_ value: Any, at path: String) throws {
+    let loop = try object(value, at: path)
+    try keys(
+      loop,
+      required: ["effect", "scaleAmplitude", "opacityAmplitude", "curve", "repeat"],
+      at: path
+    )
+    guard loop["effect"] as? String == "pulse" else {
+      throw invalid("\(path).effect", "invalid_loop_effect")
+    }
+    // Flash safety is enforced rather than advised. A looping colour change is
+    // inexpressible by construction: `pulse` carries only scale and opacity.
+    try boundedNumber(
+      loop["scaleAmplitude"], at: "\(path).scaleAmplitude",
+      minimum: 0, maximum: 0.06, exclusiveMinimum: true)
+    try boundedNumber(
+      loop["opacityAmplitude"], at: "\(path).opacityAmplitude",
+      minimum: 0, maximum: 0.2, exclusiveMinimum: false)
+    let repeats = try object(loop["repeat"], at: "\(path).repeat")
+    try keys(repeats, required: ["count"], at: "\(path).repeat")
+    guard let count = integer(repeats["count"]), (1...5).contains(count) else {
+      throw invalid("\(path).repeat.count", "invalid_loop_repeat_count")
+    }
+    try motionCurve(loop["curve"], at: "\(path).curve")
+  }
+
+  private func motionCurve(_ value: Any?, at path: String) throws {
+    let curve = try object(value, at: path)
+    switch curve["type"] as? String {
+    case "motion":
+      try keys(curve, required: ["type", "durationMilliseconds", "easing"], at: path)
+      try motionDuration(curve["durationMilliseconds"], at: "\(path).durationMilliseconds")
+      guard let easing = curve["easing"] as? String,
+        MosaicMotionEasing(rawValue: easing) != nil
+      else { throw invalid("\(path).easing", "invalid_motion_easing") }
+    case "motionToken":
+      try keys(curve, required: ["type", "id"], at: path)
+    default:
+      throw invalid("\(path).type", "invalid_motion_type")
+    }
+  }
+
+  /// Durations are whole milliseconds in `0...2000`. Integers throughout, per
+  /// the `0.3` doctrine that four runtimes must not disagree about a rounded
+  /// fraction.
+  private func motionDuration(_ value: Any?, at path: String) throws {
+    guard let milliseconds = integer(value), (0...2000).contains(milliseconds) else {
+      throw invalid(path, "invalid_motion_duration")
+    }
+  }
+
+  private func boundedNumber(
+    _ value: Any?,
+    at path: String,
+    minimum: Double,
+    maximum: Double,
+    exclusiveMinimum: Bool
+  ) throws {
+    guard let number = value as? NSNumber else { throw invalid(path, "expected_number") }
+    let amount = number.doubleValue
+    guard amount.isFinite, amount <= maximum,
+      exclusiveMinimum ? amount > minimum : amount >= minimum
+    else { throw invalid(path, "value_out_of_range") }
+  }
+
+  /// A JSON number that carries no fraction. `NSNumber` is checked rather than
+  /// cast to `Int` because `12.0` bridges to `Int` happily and is not an
+  /// authored integer.
+  private func integer(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber, CFNumberIsFloatType(number) == false else {
+      return nil
+    }
+    return number.intValue
+  }
+
+  private func award(_ node: [String: Any], at path: String) throws {
     try keys(
       node,
       required: [
@@ -423,7 +607,7 @@ enum MosaicProtocolV03Shape {
     try optionalPresentation(node, at: path, appearanceKind: .box, sizingKind: .box)
   }
 
-  private static func awardEmblem(_ value: Any, at path: String) throws {
+  private func awardEmblem(_ value: Any, at path: String) throws {
     let emblem = try object(value, at: path)
     switch emblem["type"] as? String {
     case "image":
@@ -436,7 +620,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func socialProof(_ node: [String: Any], at path: String) throws {
+  private func socialProof(_ node: [String: Any], at path: String) throws {
     try keys(
       node,
       required: [
@@ -483,7 +667,7 @@ enum MosaicProtocolV03Shape {
     try optionalPresentation(node, at: path, appearanceKind: .box, sizingKind: .box)
   }
 
-  private static func button(_ node: [String: Any], at path: String) throws {
+  private func button(_ node: [String: Any], at path: String) throws {
     try keys(
       node,
       required: [
@@ -530,7 +714,7 @@ enum MosaicProtocolV03Shape {
     try optionalPresentation(node, at: path, appearanceKind: .box, sizingKind: .box)
   }
 
-  private static func productSelector(_ node: [String: Any], at path: String) throws {
+  private func productSelector(_ node: [String: Any], at path: String) throws {
     try keys(
       node,
       required: [
@@ -558,7 +742,7 @@ enum MosaicProtocolV03Shape {
     try optionalPresentation(node, at: path, appearanceKind: .box, sizingKind: .box)
   }
 
-  private static func productCard(_ value: Any, at path: String) throws {
+  private func productCard(_ value: Any, at path: String) throws {
     let card = try object(value, at: path)
     try keys(
       card,
@@ -566,11 +750,18 @@ enum MosaicProtocolV03Shape {
         "type", "id", "productReferenceId", "direction", "gap", "mainAxisDistribution",
         "crossAxisAlignment", "children", "styles",
       ],
-      optional: ["sizing", "clipContent", "accessibility"],
+      // Product Card admits motion without admitting visibility, so it names the
+      // key rather than inheriting it.
+      optional: version.supportsMotion
+        ? ["sizing", "clipContent", "accessibility", "motion"]
+        : ["sizing", "clipContent", "accessibility"],
       at: path
     )
     guard card["type"] as? String == "productCard" else {
       throw invalid("\(path).type", "expected_product_card")
+    }
+    if let value = card["motion"] {
+      try motion(value, at: "\(path).motion", allows: motionMembers(forNodeType: "productCard"))
     }
     let children = try array(card["children"], at: "\(path).children")
     guard !children.isEmpty else { throw invalid("\(path).children", "expected_nonempty_array") }
@@ -591,7 +782,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func productCardChild(_ value: Any, at path: String) throws {
+  private func productCardChild(_ value: Any, at path: String) throws {
     let child = try object(value, at: path)
     if child["type"] as? String == "productBadge" {
       try productBadge(child, at: path)
@@ -600,7 +791,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func productCardPassiveNode(_ node: [String: Any], at path: String) throws {
+  private func productCardPassiveNode(_ node: [String: Any], at path: String) throws {
     switch node["type"] as? String {
     case "stack":
       try productCardPassiveStack(node, at: path)
@@ -612,7 +803,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func productCardPassiveStack(_ stack: [String: Any], at path: String) throws {
+  private func productCardPassiveStack(_ stack: [String: Any], at path: String) throws {
     try keys(
       stack,
       required: [
@@ -622,6 +813,9 @@ enum MosaicProtocolV03Shape {
       optional: ["appearance", "sizing", "outerInsets", "visibility"],
       at: path
     )
+    if let value = stack["motion"] {
+      try motion(value, at: "\(path).motion", allows: motionMembers(forNodeType: "stack"))
+    }
     try edgeInsets(stack["padding"], at: "\(path).padding")
     try optionalPresentation(stack, at: path, appearanceKind: .container, sizingKind: .box)
     for (index, child) in try array(stack["children"], at: "\(path).children").enumerated() {
@@ -632,16 +826,19 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func productBadge(_ badge: [String: Any], at path: String) throws {
+  private func productBadge(_ badge: [String: Any], at path: String) throws {
     try keys(
       badge,
       required: [
         "type", "id", "placement", "direction", "gap", "mainAxisDistribution",
         "crossAxisAlignment", "children", "styles",
       ],
-      optional: ["sizing"],
+      optional: version.supportsMotion ? ["sizing", "motion"] : ["sizing"],
       at: path
     )
+    if let value = badge["motion"] {
+      try motion(value, at: "\(path).motion", allows: motionMembers(forNodeType: "productBadge"))
+    }
     let placement = try object(badge["placement"], at: "\(path).placement")
     switch placement["mode"] as? String {
     case "nested":
@@ -670,7 +867,7 @@ enum MosaicProtocolV03Shape {
   /// The neutral `selectionStyles` shape that `0.3` gave Product Card, Product
   /// Badge, and Tabs. `productCardStyles` is an alias of it in the schema, so it
   /// is validated here once.
-  private static func selectionStyles(_ value: Any?, at path: String) throws {
+  private func selectionStyles(_ value: Any?, at path: String) throws {
     let styles = try object(value, at: path)
     try keys(styles, required: ["default", "selected"], at: path)
     let base = try object(styles["default"], at: "\(path).default")
@@ -704,7 +901,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func carousel(_ node: [String: Any], at path: String) throws {
+  private func carousel(_ node: [String: Any], at path: String) throws {
     try keys(
       node,
       required: ["type", "id", "initialPageIndex", "showsIndicators", "pages", "accessibility"],
@@ -726,7 +923,7 @@ enum MosaicProtocolV03Shape {
     try optionalPresentation(node, at: path, appearanceKind: .container, sizingKind: .box)
   }
 
-  private static func switchControl(_ node: [String: Any], at path: String) throws {
+  private func switchControl(_ node: [String: Any], at path: String) throws {
     try keys(
       node,
       required: [
@@ -745,7 +942,7 @@ enum MosaicProtocolV03Shape {
     try optionalPresentation(node, at: path, appearanceKind: .box, sizingKind: .box)
   }
 
-  private static func countdown(_ node: [String: Any], at path: String) throws {
+  private func countdown(_ node: [String: Any], at path: String) throws {
     try keys(
       node,
       required: [
@@ -764,7 +961,7 @@ enum MosaicProtocolV03Shape {
   private enum AppearanceKind { case none, box, container }
   private enum SizingKind { case none, widthOnly, box }
 
-  private static func optionalPresentation(
+  private func optionalPresentation(
     _ node: [String: Any],
     at path: String,
     appearanceKind: AppearanceKind,
@@ -788,7 +985,7 @@ enum MosaicProtocolV03Shape {
     if let value = node["visibility"] { try visibility(value, at: "\(path).visibility") }
   }
 
-  private static func appearance(_ value: Any, at path: String, container: Bool) throws {
+  private func appearance(_ value: Any, at path: String, container: Bool) throws {
     let value = try object(value, at: path)
     var allowed: Set<String> = ["background", "border", "cornerRadius", "opacity", "shadow"]
     allowed.insert(container ? "clipContent" : "padding")
@@ -804,7 +1001,7 @@ enum MosaicProtocolV03Shape {
     if let padding = value["padding"] { try edgeInsets(padding, at: "\(path).padding") }
   }
 
-  private static func sizing(_ value: Any, at path: String, allowsHeight: Bool) throws {
+  private func sizing(_ value: Any, at path: String, allowsHeight: Bool) throws {
     let value = try object(value, at: path)
     guard !value.isEmpty else { throw invalid(path, "expected_nonempty_object") }
     try keys(value, required: ["width", "height"], at: path)
@@ -812,7 +1009,7 @@ enum MosaicProtocolV03Shape {
     if let heightValue = value["height"] { try height(heightValue, at: "\(path).height") }
   }
 
-  private static func width(_ value: Any?, at path: String) throws {
+  private func width(_ value: Any?, at path: String) throws {
     if let value = value as? String {
       guard value == "fit" || value == "fill" else { throw invalid(path, "invalid_width") }
       return
@@ -821,7 +1018,7 @@ enum MosaicProtocolV03Shape {
     try keys(value, required: ["mode", "value"], at: path)
   }
 
-  private static func height(_ value: Any, at path: String) throws {
+  private func height(_ value: Any, at path: String) throws {
     if let value = value as? String {
       guard value == "fit" || value == "fill" else { throw invalid(path, "invalid_height") }
       return
@@ -830,7 +1027,7 @@ enum MosaicProtocolV03Shape {
     try keys(value, required: ["mode", "value"], at: path)
   }
 
-  private static func typography(_ value: Any?, at path: String, allowsTruncation: Bool) throws {
+  private func typography(_ value: Any?, at path: String, allowsTruncation: Bool) throws {
     let typography = try object(value, at: path)
     try keys(
       typography,
@@ -844,14 +1041,14 @@ enum MosaicProtocolV03Shape {
     try color(typography["color"], at: "\(path).color")
   }
 
-  private static func controlAccessibility(_ value: Any?, at path: String) throws {
+  private func controlAccessibility(_ value: Any?, at path: String) throws {
     let value = try object(value, at: path)
     try keys(value, required: ["label"], optional: ["hint"], at: path)
     try localizedText(value["label"], at: "\(path).label")
     if let hint = value["hint"] { try localizedText(hint, at: "\(path).hint") }
   }
 
-  private static func textAccessibility(_ value: Any?, at path: String, legal: Bool) throws {
+  private func textAccessibility(_ value: Any?, at path: String, legal: Bool) throws {
     let value = try object(value, at: path)
     guard let role = value["role"] as? String else {
       throw invalid("\(path).role", "expected_string")
@@ -866,7 +1063,7 @@ enum MosaicProtocolV03Shape {
     if let label = value["label"] { try localizedText(label, at: "\(path).label") }
   }
 
-  private static func imageAccessibility(_ value: Any?, at path: String) throws {
+  private func imageAccessibility(_ value: Any?, at path: String) throws {
     let value = try object(value, at: path)
     guard let hidden = value["hidden"] as? Bool else {
       throw invalid("\(path).hidden", "expected_boolean")
@@ -879,7 +1076,7 @@ enum MosaicProtocolV03Shape {
     if let label = value["label"] { try localizedText(label, at: "\(path).label") }
   }
 
-  private static func visibility(_ value: Any, at path: String) throws {
+  private func visibility(_ value: Any, at path: String) throws {
     let value = try object(value, at: path)
     guard let mode = value["mode"] as? String else {
       throw invalid("\(path).mode", "expected_string")
@@ -892,7 +1089,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func border(_ value: Any?, at path: String, override: Bool) throws {
+  private func border(_ value: Any?, at path: String, override: Bool) throws {
     let value = try object(value, at: path)
     try keys(
       value,
@@ -903,7 +1100,7 @@ enum MosaicProtocolV03Shape {
     if let colorValue = value["color"] { try color(colorValue, at: "\(path).color") }
   }
 
-  private static func edgeInsets(_ value: Any?, at path: String) throws {
+  private func edgeInsets(_ value: Any?, at path: String) throws {
     try keys(
       try object(value, at: path),
       required: ["top", "start", "bottom", "end"],
@@ -911,7 +1108,7 @@ enum MosaicProtocolV03Shape {
     )
   }
 
-  private static func edgeInsetsOverride(_ value: Any, at path: String) throws {
+  private func edgeInsetsOverride(_ value: Any, at path: String) throws {
     try keys(
       try object(value, at: path),
       required: [],
@@ -920,7 +1117,7 @@ enum MosaicProtocolV03Shape {
     )
   }
 
-  private static func localizedText(_ value: Any?, at path: String) throws {
+  private func localizedText(_ value: Any?, at path: String) throws {
     try keys(
       try object(value, at: path),
       required: ["default", "localizationKey"],
@@ -928,7 +1125,7 @@ enum MosaicProtocolV03Shape {
     )
   }
 
-  private static func color(_ value: Any?, at path: String) throws {
+  private func color(_ value: Any?, at path: String) throws {
     if value is String { return }
     let token = try object(value, at: path)
     try keys(token, required: ["type", "id"], at: path)
@@ -937,7 +1134,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func background(_ value: Any?, at path: String) throws {
+  private func background(_ value: Any?, at path: String) throws {
     let value = try object(value, at: path)
     guard let type = value["type"] as? String else {
       throw invalid("\(path).type", "expected_string")
@@ -969,7 +1166,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func gradientStops(_ value: Any?, at path: String) throws {
+  private func gradientStops(_ value: Any?, at path: String) throws {
     let stops = try array(value, at: path)
     guard (2...8).contains(stops.count) else { throw invalid(path, "expected_2_to_8_items") }
     for (index, raw) in stops.enumerated() {
@@ -980,7 +1177,7 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func shadow(_ value: Any?, at path: String) throws {
+  private func shadow(_ value: Any?, at path: String) throws {
     let value = try object(value, at: path)
     switch value["type"] as? String {
     case "shadow":
@@ -991,17 +1188,17 @@ enum MosaicProtocolV03Shape {
     }
   }
 
-  private static func object(_ value: Any?, at path: String) throws -> [String: Any] {
+  private func object(_ value: Any?, at path: String) throws -> [String: Any] {
     guard let value = value as? [String: Any] else { throw invalid(path, "expected_object") }
     return value
   }
 
-  private static func array(_ value: Any?, at path: String) throws -> [Any] {
+  private func array(_ value: Any?, at path: String) throws -> [Any] {
     guard let value = value as? [Any] else { throw invalid(path, "expected_array") }
     return value
   }
 
-  private static func keys(
+  private func keys(
     _ object: [String: Any],
     required: Set<String>,
     optional: Set<String> = [],
@@ -1009,12 +1206,26 @@ enum MosaicProtocolV03Shape {
   ) throws {
     let actual = Set(object.keys)
     guard required.isSubset(of: actual) else { throw invalid(path, "missing_property") }
-    guard actual.isSubset(of: required.union(optional)) else {
+    guard actual.isSubset(of: permitted(required, optional)) else {
       throw invalid(path, "unknown_property")
     }
   }
 
-  private static func containsAuthoredStaticVisibility(in value: Any) -> Bool {
+  /// Every authored node in `0.4` may carry a `motion` block, and an authored
+  /// node is exactly a shape that admits `visibility`.
+  ///
+  /// Deriving the allowance from that rather than repeating `"motion"` at
+  /// sixteen call sites means a component added later cannot silently reject
+  /// authored motion, and `0.3` cannot silently start accepting it. Product Card
+  /// and Product Badge admit motion without admitting visibility, so they name
+  /// the key themselves.
+  private func permitted(_ required: Set<String>, _ optional: Set<String>) -> Set<String> {
+    let all = required.union(optional)
+    guard version.supportsMotion, all.contains("visibility") else { return all }
+    return all.union(["motion"])
+  }
+
+  private func containsAuthoredStaticVisibility(in value: Any) -> Bool {
     if let values = value as? [Any] {
       return values.contains(where: containsAuthoredStaticVisibility)
     }
@@ -1028,7 +1239,7 @@ enum MosaicProtocolV03Shape {
     return object.values.contains(where: containsAuthoredStaticVisibility)
   }
 
-  private static func invalid(_ path: String, _ reason: String) -> MosaicProtocolError {
+  private func invalid(_ path: String, _ reason: String) -> MosaicProtocolError {
     .invalidShape(path: path, reason: reason)
   }
 }

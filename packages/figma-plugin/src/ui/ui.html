@@ -62,18 +62,43 @@
       }
       ul {
         margin: 6px 0 0;
-        padding-left: 16px;
+        padding: 0;
+        list-style: none;
         max-height: 150px;
         overflow-y: auto;
       }
       li {
-        margin-bottom: 4px;
+        margin-bottom: 2px;
       }
       li code {
         color: var(--muted);
       }
+      .row {
+        display: block;
+        width: 100%;
+        text-align: left;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        padding: 4px 6px;
+        cursor: pointer;
+      }
+      .row:hover,
+      .row:focus-visible {
+        border-color: var(--border);
+        background: var(--figma-color-bg-hover, rgba(127, 127, 127, 0.12));
+      }
+      .row-label {
+        font-weight: 600;
+      }
+      .row-label::after {
+        content: ":";
+      }
       .actions {
         display: flex;
+        flex-wrap: wrap;
         gap: 8px;
         margin-top: 12px;
       }
@@ -113,8 +138,9 @@
   <body>
     <h1>Mosaic Export</h1>
     <p class="muted">
-      Maps the selected frame into a Mosaic Paywall Protocol 0.3 document, then
-      import it in Studio with <strong>Import</strong>.
+      Maps the selected frames into a Mosaic Paywall Protocol 0.3 document --
+      one frame per screen -- then import it in Studio with
+      <strong>Import</strong>. Click any report row to select that layer.
     </p>
 
     <section id="error" class="panel" hidden>
@@ -145,7 +171,12 @@
       </div>
 
       <div class="actions">
-        <button class="primary" id="download" type="button">Download JSON</button>
+        <button class="primary" id="download-bundle" type="button">
+          Download for Studio (with images)
+        </button>
+      </div>
+      <div class="actions">
+        <button id="download-document" type="button">Download document only</button>
         <button id="copy" type="button">Copy to clipboard</button>
       </div>
     </section>

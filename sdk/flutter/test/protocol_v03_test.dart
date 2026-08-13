@@ -193,8 +193,8 @@ void main() {
       fixture('complete-paywall.json'),
     );
     expect(
-      mosaicFlutterCapabilityReport.supportedSchemaVersions,
-      <String>{'0.3'},
+      mosaicFlutterCapabilityReport.capabilitiesFor('0.3'),
+      unorderedEquals(mosaicProtocolV03Capabilities),
     );
     expect(
       mosaicProtocolV03Capabilities,

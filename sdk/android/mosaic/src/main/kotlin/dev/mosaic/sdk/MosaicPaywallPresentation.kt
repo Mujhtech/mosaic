@@ -105,7 +105,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
 import coil.compose.AsyncImage
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
@@ -207,9 +206,12 @@ internal fun RenderCountdown(
     var now by remember(component.id, component.endsAtEpochMillis) {
         mutableLongStateOf(state.currentTimeMillis())
     }
-    LaunchedEffect(component.id, component.endsAtEpochMillis) {
+    // The tick is the motion driver's, not a bare `delay`: with a wall-clock delay the only way to
+    // observe a second countdown frame was to wait a real second, so nothing asserted the loop.
+    // Countdown rounding is unchanged and still owned entirely by `MosaicCountdownText`.
+    LaunchedEffect(component.id, component.endsAtEpochMillis, state.motionDriver) {
         while (now < component.endsAtEpochMillis) {
-            delay(1_000)
+            state.motionDriver.awaitTick(1_000)
             now = state.currentTimeMillis()
         }
     }

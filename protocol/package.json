@@ -9,8 +9,9 @@
     "generate:delivery-fixtures": "node tools/generate-delivery-fixtures-v1.mjs && node tools/generate-phase5-fixtures.mjs",
     "generate:phase7-contracts": "node tools/generate-phase7-contracts.mjs",
     "generate:analytics-minimization": "node tools/generate-analytics-minimization.mjs",
+    "generate:motion-frames": "node tools/generate-motion-frames-v0.4.mjs",
     "generate:rejection-layers": "node tools/generate-rejection-layers.mjs",
-    "generate": "npm run generate:browser-contract && npm run generate:delivery-fixtures && npm run generate:phase7-contracts && npm run generate:analytics-minimization && npm run generate:rejection-layers",
+    "generate": "npm run generate:browser-contract && npm run generate:delivery-fixtures && npm run generate:phase7-contracts && npm run generate:analytics-minimization && npm run generate:motion-frames && npm run generate:rejection-layers",
     "test": "node --test tools/*.test.mjs",
     "check:guards": "node tools/check-guard-vacuity.mjs",
     "validate": "node tools/validate.mjs"

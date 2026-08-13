@@ -8,7 +8,9 @@
 // embedded copy.
 //
 // The embedded copies under schemas/ are byte-for-byte duplicates of the
-// canonical files under protocol/schema/**. go:embed cannot reach outside the
+// canonical files under protocol/schema/** (plus the Protocol 0.4
+// compatibility manifest under protocol/compatibility/, which the runtime
+// reads for capability fallback tiers). go:embed cannot reach outside the
 // module directory, so the copies are refreshed with:
 //
 //	go generate ./internal/platform/protocolschema
@@ -27,14 +29,22 @@ import (
 
 //go:generate go run ./internal/sync
 
-//go:embed schemas/*.schema.json
+//go:embed schemas/*.json
 var files embed.FS
 
 // Schema identifies one canonical protocol schema the API runtime loads.
 type Schema string
 
 const (
-	PaywallV03              Schema = "paywall/v0.3"
+	PaywallV03 Schema = "paywall/v0.3"
+	PaywallV04 Schema = "paywall/v0.4"
+	// PaywallV03Compatibility and PaywallV04Compatibility are compatibility
+	// manifests, not JSON Schemas. They are embedded through the same
+	// sync-and-drift-test pipeline because the runtime reads the capability
+	// vocabulary and its fallback tiers from them, and a stale copy would
+	// silently enforce a different delivery contract than the published one.
+	PaywallV03Compatibility Schema = "paywall/v0.3-compatibility"
+	PaywallV04Compatibility Schema = "paywall/v0.4-compatibility"
 	CommerceProviderV1      Schema = "commerce-provider/v1"
 	CommerceProviderV2      Schema = "commerce-provider/v2"
 	CommerceConfigurationV1 Schema = "commerce-configuration/v1"
@@ -50,6 +60,9 @@ type location struct {
 
 var locations = map[Schema]location{
 	PaywallV03:              {"schemas/paywall-v0.3.schema.json", "protocol/schema/v0.3/paywall.schema.json"},
+	PaywallV04:              {"schemas/paywall-v0.4.schema.json", "protocol/schema/v0.4/paywall.schema.json"},
+	PaywallV03Compatibility: {"schemas/paywall-v0.3-compatibility.json", "protocol/compatibility/v0.3.json"},
+	PaywallV04Compatibility: {"schemas/paywall-v0.4-compatibility.json", "protocol/compatibility/v0.4.json"},
 	CommerceProviderV1:      {"schemas/commerce-provider-v1.schema.json", "protocol/schema/commerce-provider/v1/contract.schema.json"},
 	CommerceProviderV2:      {"schemas/commerce-provider-v2.schema.json", "protocol/schema/commerce-provider/v2/contract.schema.json"},
 	CommerceConfigurationV1: {"schemas/commerce-configuration-v1.schema.json", "protocol/schema/commerce-configuration/v1/configuration.schema.json"},

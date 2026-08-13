@@ -16,8 +16,13 @@ func newCanonicalProtocolValidator(t *testing.T) *ProtocolValidator {
 	if err != nil {
 		t.Fatal(err)
 	}
-	validator, err := CompileProtocolValidator(schemaFile)
+	schemaFile04, err := os.Open("../../../../protocol/schema/v0.4/paywall.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	validator, err := CompileProtocolValidator(schemaFile, schemaFile04)
 	_ = schemaFile.Close()
+	_ = schemaFile04.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +103,7 @@ func TestProtocolValidatorRejectsSupersededVersion(t *testing.T) {
 func TestProtocolCapabilityDerivationCoversNewFeatures(t *testing.T) {
 	root := readProtocolFixture(t, filepath.Join(protocolFixtureRoot, "complete-paywall.json"))
 	entries := walkProtocolNodes(root)
-	if errors := validateProtocolCapabilities(root, entries); len(errors) != 0 {
+	if errors := validateProtocolCapabilities(root, entries, ProtocolVersion); len(errors) != 0 {
 		t.Fatalf("canonical fixture capability reconciliation failed: %v", errors)
 	}
 	declared := map[string]bool{}
@@ -163,7 +168,12 @@ func TestReservedAccessibilityKeyRulesHoldInBothDirections(t *testing.T) {
 
 func readRejectionLayers(t *testing.T) []string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(protocolFixtureRoot, "invalid", "rejection-layers.json"))
+	return readRejectionLayersIn(t, protocolFixtureRoot)
+}
+
+func readRejectionLayersIn(t *testing.T, root string) []string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, "invalid", "rejection-layers.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
