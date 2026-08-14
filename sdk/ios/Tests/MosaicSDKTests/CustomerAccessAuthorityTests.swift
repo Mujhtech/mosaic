@@ -139,7 +139,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
 
   // Risk: iOS accepting a different wrapper shape or authority vocabulary from
   // Android/Flutter would make cutover behavior platform-dependent.
-  func testCanonicalV2FixturesDecodeAndInvalidAuthorityIsRejected() throws {
+  func testCanonicalFixturesDecodeAndInvalidAuthorityIsRejected() throws {
     let source = try MosaicCustomerAuthorityCodec.decode(
       authoritativeEntitlementFixtureData("source-snapshot.json"))
     guard case .snapshot(let snapshot, let authority, _, let support, _) = source else {
@@ -196,7 +196,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
 
   // Risk: readiness enforcement depends on exact app/SDK/capability metadata;
   // CAT binding remains server-side and must never be guessed into this body.
-  func testV2RequestMatchesCanonicalFixtureAndCarriesNoCustomerBinding() throws {
+  func testSyncRequestMatchesCanonicalFixtureAndCarriesNoCustomerBinding() throws {
     let encoded = try MosaicEntitlementSyncRequestBody.encodeAuthorityAware(
       knownAuthorityEpoch: 5,
       knownSnapshotVersion: 4,
@@ -216,8 +216,8 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // Risk: the digest is a verification hint for one retained customer/scope/
   // epoch snapshot. Sending it on the first request, or without both known
   // versions, could let a server treat unrelated state as unchanged.
-  func testV2RequestOmitsVerificationTupleUntilExactSnapshotIsRetained() async throws {
-    let full = try authoritativeEntitlementV2SnapshotVariant(
+  func testSyncRequestOmitsVerificationTupleUntilExactSnapshotIsRetained() async throws {
+    let full = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
     let fullRoot = try XCTUnwrap(
@@ -254,7 +254,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // snapshot. Bootstrap must discard that tuple, and the next sync must ask
   // for a full snapshot without leaking any of its conditional members.
   func testStaleCachedScopeOrDigestIsNeverSentAsKnownVerification() async throws {
-    let full = try authoritativeEntitlementV2SnapshotVariant(
+    let full = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
     let primedCache = MosaicCustomerEntitlementMemoryCacheStore()
@@ -309,7 +309,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // unavailable. Treating omitted support metadata as a generic decode failure
   // could preserve an old active Mosaic snapshot through a policy outage.
   func testPolicyUnavailableClearsRetainedSnapshotAndNeverBecomesInactive() async throws {
-    let full = try authoritativeEntitlementV2SnapshotVariant(
+    let full = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
     let policyUnavailable = try authoritativeEntitlementFixtureData(
@@ -338,7 +338,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // window where restart can replay the old file. The tombstone must survive
   // reconstruction and suppress the prior grant without network access.
   func testPolicyUnavailableTombstoneSurvivesRestart() async throws {
-    let full = try authoritativeEntitlementV2SnapshotVariant(
+    let full = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
     let policyUnavailable = try authoritativeEntitlementFixtureData(
@@ -368,7 +368,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // leave memory and durable state disagreeing. While the write is suspended,
   // the previously durable authority remains the only published state.
   func testPolicyInvalidationPersistsBeforePublishingUnavailable() async throws {
-    let full = try authoritativeEntitlementV2SnapshotVariant(
+    let full = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
     let policyUnavailable = try authoritativeEntitlementFixtureData(
@@ -406,10 +406,10 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // contact the server again while the old active file can still replay. Each
   // refresh retries the marker first; only a successful retry opens sync.
   func testFailedPolicyInvalidationBlocksSyncUntilTombstoneRetryAndRecovery() async throws {
-    let full = try authoritativeEntitlementV2SnapshotVariant(
+    let full = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
-    let recovered = try authoritativeEntitlementV2SnapshotVariant(
+    let recovered = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 5)
     let policyUnavailable = try authoritativeEntitlementFixtureData(
@@ -457,7 +457,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // exactly one forbidden property. Treating it like arbitrary malformed JSON
   // would preserve active access despite an unmistakable policy outage.
   func testExactMalformedPolicyUnavailableFixturePersistsTombstone() async throws {
-    let full = try authoritativeEntitlementV2SnapshotVariant(
+    let full = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
     let malformed = try authoritativeEntitlementFixtureData(
@@ -480,10 +480,10 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // Risk: a durable tombstone must not become a permanent denial. A later
   // valid full snapshot atomically replaces it through the ordinary cache path.
   func testValidFullSnapshotRecoversFromRestartedPolicyTombstone() async throws {
-    let full = try authoritativeEntitlementV2SnapshotVariant(
+    let full = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
-    let recovered = try authoritativeEntitlementV2SnapshotVariant(
+    let recovered = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 5)
     let cache = MosaicCustomerEntitlementMemoryCacheStore()
@@ -513,13 +513,13 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // 5/version 1, or accept a late epoch 4/version 99 after cutover. Both return
   // access from the wrong authority.
   func testAuthorityEpochPrecedesSnapshotVersionAndTriggersOneUrgentTokenGeneration() async throws {
-    let epoch4 = try authoritativeEntitlementV2SnapshotVariant(
+    let epoch4 = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 4, authorityKind: .source, transitionState: .cutoverPending,
       snapshotVersion: 14)
-    let epoch5 = try authoritativeEntitlementV2SnapshotVariant(
+    let epoch5 = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stabilizing,
       snapshotVersion: 1)
-    let lateEpoch4 = try authoritativeEntitlementV2SnapshotVariant(
+    let lateEpoch4 = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 4, authorityKind: .source, transitionState: .stable,
       snapshotVersion: 99)
     let transport = AuthoritySyncTransport([epoch4, epoch5, lateEpoch4])
@@ -599,7 +599,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // is authoritative; waiting for the next transition can leave a screen using
   // stale provider access indefinitely.
   func testAuthorityStreamReplaysCurrentAcceptedState() async throws {
-    let data = try authoritativeEntitlementV2SnapshotVariant(
+    let data = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stabilizing,
       snapshotVersion: 4)
     let broadcaster = MosaicCustomerAccessAuthorityBroadcaster()
@@ -626,7 +626,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // confirmed paying customer; treating a bare 304 as equivalent invents an
   // unbounded freshness channel outside the contract.
   func testAuthorityUnchangedSlidesFreshnessAndKeepsCacheBootstrapable() async throws {
-    let full = try authoritativeEntitlementV2SnapshotVariant(
+    let full = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stabilizing,
       snapshotVersion: 4)
     let unchanged = try unchangedResponse(for: full)
@@ -656,7 +656,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // would let the old provider keep granting an Entitlement Mosaic revoked.
   // Commerce remains installed and usable, but targeting reads Mosaic only.
   func testMosaicAuthorityTargetingNeverUnionsProviderEntitlements() async throws {
-    let data = try authoritativeEntitlementV2SnapshotVariant(
+    let data = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stabilizing,
       snapshotVersion: 4)
     let entitlementClient = client(transport: AuthoritySyncTransport([data]))
@@ -688,7 +688,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
     ]
 
     for (authorityKind, transitionState) in cases {
-      let source = try authoritativeEntitlementV2SnapshotVariant(
+      let source = try authoritativeEntitlementAuthoritySnapshotVariant(
         authorityEpoch: 4, authorityKind: authorityKind,
         transitionState: transitionState, snapshotVersion: 4)
       let entitlementClient = client(transport: AuthoritySyncTransport([source]))
@@ -731,7 +731,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // any identity, evaluation, projection, digest, or regressing-window change
   // would mutate the retained snapshot without a new snapshot version.
   func testAuthorityUnchangedRejectsEveryRetainedBindingAndFreshnessMismatch() async throws {
-    let full = try authoritativeEntitlementV2SnapshotVariant(
+    let full = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
     let mutations: [(String, (inout [String: Any]) -> Void)] = [
@@ -804,10 +804,10 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // listeners observe an authority epoch that cannot survive restart. A blocked
   // or failed write must leave the prior durable epoch as the only publication.
   func testFailedBlockedPersistenceNeverPublishesCandidateAuthority() async throws {
-    let initial = try authoritativeEntitlementV2SnapshotVariant(
+    let initial = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stable,
       snapshotVersion: 4)
-    let candidate = try authoritativeEntitlementV2SnapshotVariant(
+    let candidate = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 6, authorityKind: .sourceRollback, transitionState: .rolledBack,
       snapshotVersion: 1)
     let cache = BlockingAuthorityCache()
@@ -846,10 +846,10 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // access leak. Scope mismatch is the authority rejection that clears rather
   // than preserving the mismatched cache.
   func testAuthorityScopeMismatchClearsCacheAndReportsUnavailable() async throws {
-    let accepted = try authoritativeEntitlementV2SnapshotVariant(
+    let accepted = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stabilizing,
       snapshotVersion: 4)
-    let wrongApplication = try authoritativeEntitlementV2SnapshotVariant(
+    let wrongApplication = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 6, authorityKind: .mosaic, transitionState: .stabilizing,
       snapshotVersion: 5,
       applicationID: "other.application")
@@ -875,7 +875,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
   // can run cutover behavior on an app version that lacks its required safety
   // semantics. It must be unavailable, never inactive or provider-derived.
   func testMinimumAppSupportFailsClosed() async throws {
-    let unsupported = try authoritativeEntitlementV2SnapshotVariant(
+    let unsupported = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 5, authorityKind: .mosaic, transitionState: .stabilizing,
       snapshotVersion: 4,
       minimumAppVersion: "5.0.0")
@@ -897,7 +897,7 @@ final class CustomerAccessAuthorityTests: XCTestCase {
     authorityKind: MosaicCustomerAccessAuthorityKind,
     transitionState: MosaicCustomerAccessTransitionState
   ) async throws {
-    let data = try authoritativeEntitlementV2SnapshotVariant(
+    let data = try authoritativeEntitlementAuthoritySnapshotVariant(
       authorityEpoch: 4, authorityKind: authorityKind,
       transitionState: transitionState, snapshotVersion: 4)
     let entitlementClient = client(transport: AuthoritySyncTransport([data]))

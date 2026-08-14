@@ -4,7 +4,7 @@ import XCTest
 @testable import MosaicSDK
 
 final class CommerceConfigurationTests: XCTestCase {
-  func testCanonicalStoreKitV2DecodesExactMappingGrantsAndNativeActivation() throws {
+  func testCanonicalStoreKitConfigurationDecodesExactMappingGrantsAndNativeActivation() throws {
     let association = MosaicCommerceConfigurationAssociation(
       environmentID: "environment_production",
       applicationID: "application_ios",
@@ -20,7 +20,7 @@ final class CommerceConfigurationTests: XCTestCase {
       ]
     )
     let configuration = try MosaicCommerceConfigurationDecoder.decode(
-      commerceConfigurationV2FixtureData(),
+      commerceConfigurationFixtureData(),
       association: association
     )
 
@@ -54,10 +54,10 @@ final class CommerceConfigurationTests: XCTestCase {
     )
   }
 
-  func testV2RouterRejectsDuplicateAndStaleAsynchronousUpdates() async throws {
+  func testRouterRejectsDuplicateAndStaleAsynchronousUpdates() async throws {
     let association = storeKitAssociation()
     let configuration = try MosaicCommerceConfigurationDecoder.decode(
-      commerceConfigurationV2FixtureData(),
+      commerceConfigurationFixtureData(),
       association: association
     )
     let provider = AsyncRecordingCommerceProvider(
@@ -173,6 +173,60 @@ final class CommerceConfigurationTests: XCTestCase {
         .directProduct,
       ]
     )
+  }
+
+  /// A RevenueCat package mapping is only meaningful under the RevenueCat
+  /// provider.
+  ///
+  /// Protects a rule that lived only in the retired decoder body: the surviving
+  /// one gated `storeKitProduct` and `googlePlayProduct` on their providers but
+  /// let `revenueCatPackage` ride under any provider, so a configuration naming
+  /// an arbitrary adapter with RevenueCat offerings decoded cleanly and routed
+  /// purchases at an offering the adapter cannot resolve. Flutter enforces it.
+  func testRevenueCatPackageMappingRequiresTheRevenueCatProvider() throws {
+    let mutated = try commerceConfigurationVariant("revenuecat-configuration.json") {
+      configuration in
+      var provider = configuration["activeProvider"] as! [String: Any]
+      var identity = provider["identity"] as! [String: Any]
+      identity["id"] = "acme-commerce"
+      identity["displayName"] = "Acme Commerce"
+      provider["identity"] = identity
+      configuration["activeProvider"] = provider
+    }
+    XCTAssertThrowsError(
+      try MosaicCommerceConfigurationDecoder.decode(
+        mutated, association: revenueCatMappingAssociation())
+    ) { error in
+      XCTAssertEqual(
+        error as? MosaicCommerceConfigurationError,
+        .invalidConfiguration(code: "commerce_configuration_revenuecat_mapping_provider_mismatch")
+      )
+    }
+  }
+
+  /// Freshness timestamps are a timeline and are rejected out of order.
+  ///
+  /// Protects a rule that lived only in the retired decoder body: the surviving
+  /// one parsed all four timestamps on this branch and compared none of them, so
+  /// a configuration claiming it was synchronized before it was observed decoded
+  /// cleanly and reported a freshness window that never existed.
+  func testFreshnessTimestampsMustBeOrdered() throws {
+    let mutated = try commerceConfigurationVariant("revenuecat-configuration.json") {
+      configuration in
+      var freshness = configuration["freshness"] as! [String: Any]
+      // Synchronized an hour before it was observed.
+      freshness["synchronizedAt"] = "2026-07-23T11:00:00Z"
+      configuration["freshness"] = freshness
+    }
+    XCTAssertThrowsError(
+      try MosaicCommerceConfigurationDecoder.decode(
+        mutated, association: revenueCatMappingAssociation())
+    ) { error in
+      XCTAssertEqual(
+        error as? MosaicCommerceConfigurationError,
+        .invalidConfiguration(code: "commerce_configuration_freshness_order_invalid")
+      )
+    }
   }
 
   func testInvalidCandidatePreservesExactCacheAndReleaseChangeFailsClosed() async throws {
@@ -391,7 +445,7 @@ final class CommerceConfigurationTests: XCTestCase {
       response: MosaicCommerceConfigurationHTTPResponse(
         statusCode: 200,
         data: data,
-        contentType: "application/vnd.mosaic.commerce-configuration+json;version=1",
+        contentType: mosaicCommerceConfigurationMediaType,
         etag:
           "\"sha256:4a306573de618a989765713f4ad9ed7134e6fc565aa4767134276eb8b51128f2\"",
         configurationReleaseID: "configuration_release_42",
@@ -422,13 +476,53 @@ final class CommerceConfigurationTests: XCTestCase {
     XCTAssertEqual(request.headers["Authorization"], "Bearer pk_test")
     XCTAssertEqual(request.headers["Mosaic-SDK-Platform"], "ios")
     XCTAssertEqual(request.headers["Mosaic-SDK-Version"], mosaicSDKVersion)
-    XCTAssertEqual(request.headers["Mosaic-Commerce-Configuration-Versions"], "2,1")
-    XCTAssertEqual(request.headers["Mosaic-Commerce-Provider-Contract-Versions"], "2,1")
+    XCTAssertEqual(
+      request.headers["Mosaic-Commerce-Configuration-Versions"],
+      mosaicCommerceConfigurationVersion)
+    XCTAssertEqual(
+      request.headers["Mosaic-Commerce-Provider-Contract-Versions"],
+      mosaicCommerceProviderContractVersion)
+    // One media type is offered, so a server cannot answer with a version this
+    // reader would have to interpret.
     XCTAssertEqual(
       request.headers["Accept"],
-      "application/vnd.mosaic.commerce-configuration+json;version=2, "
-        + "application/vnd.mosaic.commerce-configuration+json;version=1"
+      "application/vnd.mosaic.commerce-configuration+json;version=2"
     )
+  }
+
+  private func revenueCatMappingAssociation() -> MosaicCommerceConfigurationAssociation {
+    MosaicCommerceConfigurationAssociation(
+      environmentID: "environment_production",
+      applicationID: "application_ios",
+      storePlatform: .ios,
+      configurationReleaseID: "configuration_release_42",
+      configurationReleaseDigest:
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      mosaicProductIDs: ["mosaic_pro_monthly", "mosaic_pro_yearly", "mosaic_lifetime"],
+      mosaicProductTypes: [
+        "mosaic_pro_monthly": .subscription,
+        "mosaic_pro_yearly": .subscription,
+        "mosaic_lifetime": .oneTimeNonConsumable,
+      ]
+    )
+  }
+
+  /// An iOS-local variant of a canonical configuration, with the content digest
+  /// recomputed so the mutation is exercised by the rule under test rather than
+  /// stopped at the digest gate.
+  private func commerceConfigurationVariant(
+    _ name: String,
+    _ mutation: (inout [String: Any]) -> Void
+  ) throws -> Data {
+    var root = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: try commerceConfigurationFixtureData(named: name))
+        as? [String: Any])
+    var configuration = try XCTUnwrap(root["configuration"] as? [String: Any])
+    mutation(&configuration)
+    configuration.removeValue(forKey: "contentDigest")
+    configuration["contentDigest"] = try DeliveryCanonicalJSON.digest(configuration)
+    root["configuration"] = configuration
+    return try DeliveryCanonicalJSON.data(root)
   }
 
   private func sdkLocalAssociation() -> MosaicCommerceConfigurationAssociation {

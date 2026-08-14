@@ -42,7 +42,7 @@ final class ConfigurationDeliveryTests: XCTestCase {
     }
   }
 
-  func testEveryCanonicalDeliveryV2ReleaseDecodesItsAuthoritativeEnvironmentMode() throws {
+  func testEveryCanonicalDeliveryReleaseDecodesItsAuthoritativeEnvironmentMode() throws {
     let advanced = try MosaicConfigurationDeliveryDecoder.decode(
       phase5FixtureData("configuration-delivery/v3/advanced-release.json")
     )
@@ -67,17 +67,21 @@ final class ConfigurationDeliveryTests: XCTestCase {
     XCTAssertEqual(staging.placementDecisions.first?.ruleSet.qaOverrides.count, 1)
   }
 
-  func testEveryCanonicalInvalidDeliveryV2CandidateRejectsAtomically() throws {
-    for name in [
-      "unsupported-operator", "invalid-condition-type", "duplicate-priority", "fallback-cycle",
-      "incompatible-source-operator", "missing-unavailable-fallback", "underdeclared-features",
-      "overdeclared-features", "release-underdeclared-compatibility",
-      "release-overdeclared-compatibility", "qa-override-over-24h",
-      "production-qa-override", "invalid-environment-mode",
-    ] {
+  /// Every fixture in the canonical invalid delivery corpus, read from the
+  /// directory rather than from a list copied into this file.
+  ///
+  /// The list this replaced named thirteen of the twenty-one fixtures on disk,
+  /// so eight rejections the corpus declares were never exercised while the test
+  /// still claimed "every". A floor keeps a truncated or renamed corpus from
+  /// passing as an empty loop.
+  func testEveryCanonicalInvalidDeliveryCandidateRejectsAtomically() throws {
+    let names = try deliveryFixtureNames(in: "invalid")
+    XCTAssertGreaterThanOrEqual(names.count, 21)
+
+    for name in names {
       XCTAssertThrowsError(
         try MosaicConfigurationDeliveryDecoder.decode(
-          phase5FixtureData("configuration-delivery/v3/invalid/\(name).json")
+          deliveryFixtureData(named: "invalid/\(name)")
         ), "Expected \(name) to reject the complete candidate")
     }
   }
@@ -146,7 +150,7 @@ final class ConfigurationClientTests: XCTestCase {
     XCTAssertNotNil(storedRecord)
   }
 
-  func testUnsupportedAndMalformedV2RefreshesPreserveAcceptedV2ForOfflineDecision() async throws {
+  func testUnsupportedAndMalformedRefreshesPreserveTheAcceptedReleaseOffline() async throws {
     let invalidNames = [
       "unsupported-operator", "invalid-condition-type", "duplicate-priority", "fallback-cycle",
       "incompatible-source-operator", "missing-unavailable-fallback", "underdeclared-features",
@@ -242,9 +246,10 @@ final class ConfigurationClientTests: XCTestCase {
     XCTAssertEqual(malformedMetadata.id, "release_rich")
     XCTAssertEqual(unsupportedMetadata.id, "release_rich")
     guard
-      case .resolved(let document, _, let release, _) = await client.resolve(
-        placement: "upgrade_prompt"
-      )
+      case .paywallSelected(let document, _, _, _, let release, _, _) =
+        await client.decide(
+          placement: "upgrade_prompt", context: deliveryDecisionContext(),
+          identity: deliveryIdentity())
     else { return XCTFail("The last known valid Placement should remain resolvable.") }
     XCTAssertEqual(document.id, "phase1-complete-paywall")
     XCTAssertEqual(release.id, "release_rich")
@@ -307,9 +312,10 @@ final class ConfigurationClientTests: XCTestCase {
     )
     await bundled.bootstrap()
     guard
-      case .resolved(_, _, _, let source) = await bundled.resolve(
-        placement: "upgrade_prompt"
-      )
+      case .paywallSelected(_, _, _, _, _, let source, _) =
+        await bundled.decide(
+          placement: "upgrade_prompt", context: deliveryDecisionContext(),
+          identity: deliveryIdentity())
     else { return XCTFail("Expected the complete bundled release to resolve its Placement.") }
     XCTAssertEqual(source, .bundled)
 
@@ -320,9 +326,10 @@ final class ConfigurationClientTests: XCTestCase {
     )
     await unavailable.bootstrap()
     guard
-      case .unavailable(let diagnostics) = await unavailable.resolve(
-        placement: "upgrade_prompt"
-      )
+      case .configurationUnavailable(let diagnostics) =
+        await unavailable.decide(
+          placement: "upgrade_prompt", context: deliveryDecisionContext(),
+          identity: deliveryIdentity())
     else { return XCTFail("Expected explicit unavailable without cache or bundle.") }
     XCTAssertEqual(diagnostics.last?.code, "delivery_configuration_unavailable")
   }
@@ -440,6 +447,26 @@ final class ConfigurationClientTests: XCTestCase {
       clock: { Date(timeIntervalSince1970: 1_768_953_600) }
     )
   }
+}
+
+/// The decision inputs these delivery tests share. Placement resolution runs
+/// through the decision evaluator, which needs a context and an identity.
+private func deliveryDecisionContext() -> MosaicDecisionContext {
+  MosaicDecisionContext(
+    platform: "ios", applicationVersion: "2.10.0", applicationLocale: "en-US",
+    entitlements: [:],
+    // The canonical release's paywall references all three products, and a
+    // decision withholds a paywall whose commerce is unavailable.
+    products: [
+      "mosaic_pro_monthly": .available,
+      "mosaic_pro_yearly": .available,
+      "mosaic_pro_lifetime": .available,
+    ])
+}
+
+private func deliveryIdentity() -> MosaicIdentitySnapshot {
+  MosaicIdentitySnapshot(
+    installationID: "install_01", userID: nil, attributes: [:], generation: 0)
 }
 
 private func releaseData(environmentID: String) throws -> Data {

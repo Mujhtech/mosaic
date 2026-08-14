@@ -126,6 +126,12 @@ This rule is independent of the single-version policy and outlives it. Today it
 is what makes a document at a deleted version fail closed rather than be read
 leniently; after GA it is what keeps parallel versions apart.
 
+Contracts that commit to bytes — every `contentDigest` and the signed webhook
+body — additionally require the
+[canonical number form](versioning.md#canonical-json-and-the-canonical-number-form).
+Two implementations that serialize one value differently do not disagree
+cosmetically; one of them rejects a genuine document.
+
 Unknown versions, unknown fields, unknown enumeration members, and unknown
 capabilities all fail closed. A reader never partially applies a document it
 does not fully understand, and never strips the parts it cannot read.

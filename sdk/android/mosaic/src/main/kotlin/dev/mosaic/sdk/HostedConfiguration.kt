@@ -767,7 +767,11 @@ class MosaicHostedConfigurationClient(
         qaOverrideTokens = tokens.toSet()
     }
 
-    /** Stable Delivery-v1 Placement API retained for existing applications. */
+    /**
+     * Convenience wrapper over [decidePlacement] that flattens the decision to
+     * a paywall-or-unavailable result. Every call evaluates the Rule Set — this
+     * is not a key lookup and bypasses nothing.
+     */
     suspend fun paywall(placement: String, refresh: Boolean = false): MosaicPlacementResult =
         when (val decision = decidePlacement(placement, refresh)) {
             is MosaicPlacementDecisionResult.Available -> MosaicPlacementResult.Available(

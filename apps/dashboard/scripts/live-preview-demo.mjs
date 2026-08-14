@@ -37,7 +37,7 @@ const deadline = Date.now() + 20_000;
 const fixtures = JSON.parse(
   await readFile(
     new URL(
-      "../../../protocol/fixtures/local-preview/v0.3/session-flow.messages.json",
+      "../../../protocol/fixtures/local-preview/v0.4/session-flow.messages.json",
       import.meta.url
     ),
     "utf8"
@@ -52,7 +52,7 @@ const diagnostics = [];
 const studioUrl = new URL(endpoint);
 studioUrl.searchParams.set("role", "studio");
 studioUrl.searchParams.set("sessionId", sessionId);
-const socket = new WebSocket(studioUrl, localPreviewWebSocketProtocols["0.3"]);
+const socket = new WebSocket(studioUrl, localPreviewWebSocketProtocols["0.4"]);
 
 socket.on("message", (frame) => {
   const message = JSON.parse(frame.toString());
@@ -189,7 +189,7 @@ while (Date.now() < holdDeadline) {
   heartbeatSequence += 1;
   for (const client of result.clients) {
     const heartbeat = {
-      previewProtocolVersion: "0.3",
+      previewProtocolVersion: "0.4",
       messageId: `msg_phase2_live_demo_heartbeat_${revisionSuffix}_${heartbeatSequence}_${client.renderer.replaceAll(".", "_")}`,
       sessionId,
       sentAt: new Date().toISOString(),

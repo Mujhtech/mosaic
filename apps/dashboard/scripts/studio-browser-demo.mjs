@@ -141,7 +141,7 @@ const exportedFile = await waitForExport();
 const exported = JSON.parse(await readFile(exportedFile, "utf8"));
 const validation = validatePaywallDocument(exported);
 if (!validation.ok) {
-  throw new Error("The browser-exported document is not Protocol 0.3 valid.");
+  throw new Error("The browser-exported document is not Protocol 0.4 valid.");
 }
 
 const initialScreen = exported.screens.find(

@@ -66,6 +66,19 @@ never fetches media, expands design tokens, or rewrites presentation.
 
 > **Normative.** An accepted revision does **not** replay appear motion for any
 > screen listed in `motion.playedAppearScreens`.
+>
+> **Implementation status (2026-08-14): specified and pinned, not yet read by
+> any client.** The reference implementation is
+> `runtimeStateForAcceptedV04Revision` in `protocol/tools/validation-v0.4.mjs`
+> and the fixture
+> `protocol/fixtures/local-preview/v0.4/accepted-revision-runtime-reset.json`
+> pins all three states — before, after, and first acceptance. No SDK preview
+> reader implements the rule, and the browser runtime's
+> `runtimeStateForAcceptedRevision` does not emit the member. A preview client
+> built today therefore replays every entrance on every accepted revision. The
+> rule states what a conforming reader must do; it does not assert that one
+> exists. Tracked in
+> [known limitations](../known-limitations.md#the-entrance-replay-suppression-rule-has-no-sdk-reader-implementation).
 
 This is the one behavioural rule `0.4` adds to Local Preview, and it exists
 because Local Preview is the one place a paywall document is re-accepted dozens

@@ -422,7 +422,7 @@ final class ProtocolPresentationTests: XCTestCase {
 
   /// The shared cross-SDK rating-announcement vectors.
   ///
-  /// Read from `protocol/fixtures/v0.3/rating-announcement.json` rather than
+  /// Read from `protocol/fixtures/v0.4/rating-announcement.json` rather than
   /// copied here, because the point of the corpus is that Flutter, Compose, and
   /// SwiftUI produce the same bytes; values transcribed into this file could
   /// drift from the ones the other two assert against. The case-count floor
@@ -439,7 +439,7 @@ final class ProtocolPresentationTests: XCTestCase {
     let cases = try XCTUnwrap(object["cases"] as? [[String: Any]])
     XCTAssertEqual(
       cases.count, 10,
-      "protocol/fixtures/v0.3/rating-announcement.json declares 10 vectors. "
+      "protocol/fixtures/v0.4/rating-announcement.json declares 10 vectors. "
         + "Shrinking the corpus has to be a deliberate edit, not a silent pass."
     )
     XCTAssertEqual(Set(cases.compactMap { $0["id"] as? String }).count, cases.count)
@@ -697,7 +697,7 @@ final class ProtocolPresentationTests: XCTestCase {
     let cases = try XCTUnwrap(object["cases"] as? [[String: Any]])
     XCTAssertEqual(
       cases.count, 11,
-      "protocol/fixtures/v0.3/accessibility-announcement.json declares 11 vectors. "
+      "protocol/fixtures/v0.4/accessibility-announcement.json declares 11 vectors. "
         + "Shrinking the corpus has to be a deliberate edit, not a silent pass."
     )
     XCTAssertEqual(Set(cases.compactMap { $0["id"] as? String }).count, cases.count)

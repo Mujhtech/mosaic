@@ -1,9 +1,14 @@
 import Foundation
 
-public let mosaicCommerceProviderContractVersion = "1"
-public let mosaicCommerceConfigurationVersion = "1"
-public let mosaicSupportedCommerceProviderContractVersions = ["2", "1"]
-public let mosaicSupportedCommerceConfigurationVersions = ["2", "1"]
+/// The Commerce contracts this SDK reads: `2`, and nothing else (ADR-0028).
+public let mosaicCommerceProviderContractVersion = "2"
+public let mosaicCommerceConfigurationVersion = "2"
+/// Kept as lists so a post-GA parallel version widens a constant rather than
+/// changing its type. Both are joined into the negotiation headers.
+public let mosaicSupportedCommerceProviderContractVersions = [
+  mosaicCommerceProviderContractVersion
+]
+public let mosaicSupportedCommerceConfigurationVersions = [mosaicCommerceConfigurationVersion]
 
 public enum MosaicCommercePeriodUnit: String, Sendable, Equatable, CaseIterable {
   case day

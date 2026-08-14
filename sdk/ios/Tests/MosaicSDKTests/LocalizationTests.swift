@@ -30,7 +30,7 @@ final class LocalizationTests: XCTestCase {
 
   /// The cross-SDK locale-resolution corpus. Every case must agree with the
   /// protocol's reference implementation
-  /// (`protocol/tools/locale-resolution-v0.3.mjs`), so iOS cannot drift from
+  /// (`protocol/tools/locale-resolution.mjs`), so iOS cannot drift from
   /// Flutter or Compose on which catalog a device reaches.
   ///
   /// The corpus lists candidates as catalog *keys*, declared or not, while

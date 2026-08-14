@@ -785,7 +785,11 @@ func buildDeliveryPayload(releaseID string, releaseNumber int64, projectID strin
 	envelope := deliveryEnvelope{ConfigurationDeliveryVersion: DeliveryVersion, Release: deliveryRelease{
 		ID: releaseID, Number: releaseNumber, ProjectID: projectID,
 		Environment: deliveryEnvironment{ID: environment.ID, Key: environment.Key, Mode: environment.Mode},
-		PublishedAt: publishedAt.UTC().Format(time.RFC3339Nano), Compatibility: deliveryCompatibility{
+		// The millisecond-precision UTC form every Mosaic contract timestamp
+		// uses: exactly three fractional digits and a literal Z. The iOS and
+		// Android readers require exactly this shape; RFC3339Nano trims
+		// trailing zeros and would emit a variable-width fraction they reject.
+		PublishedAt: contractTimestamp(publishedAt), Compatibility: deliveryCompatibility{
 			PlacementDecisionContracts: []deliveryDecisionCompatibility{{
 				Version:             placementdecision.ContractVersion,
 				RequiredFeatures:    sortedSet(decisionFeatures),
@@ -822,6 +826,14 @@ func buildDeliveryPayload(releaseID string, releaseNumber int64, projectID strin
 		return nil, "", err
 	}
 	return payload, digestString(string(payload)), nil
+}
+
+// contractTimestamp renders the millisecond-precision UTC form every Mosaic
+// contract timestamp uses. The SDK readers pin the shape exactly — three
+// fractional digits, literal Z — so a nanosecond-precision or trailing-zero-
+// trimmed rendering is a rejection, not a cosmetic difference.
+func contractTimestamp(value time.Time) string {
+	return value.UTC().Format("2006-01-02T15:04:05.000Z")
 }
 
 func sortedSet(values map[string]struct{}) []string {
@@ -1023,7 +1035,7 @@ func cloneDeliveryPayload(target json.RawMessage, releaseID string, releaseNumbe
 	}
 	envelope.Release.ID = releaseID
 	envelope.Release.Number = releaseNumber
-	envelope.Release.PublishedAt = publishedAt.UTC().Format(time.RFC3339Nano)
+	envelope.Release.PublishedAt = contractTimestamp(publishedAt)
 	envelope.Release.ContentDigest = ""
 	material, err := json.Marshal(envelope.Release)
 	if err != nil {

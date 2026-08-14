@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -96,4 +97,15 @@ func TestPublishedDeliveryPayloadSatisfiesTheCanonicalV3Contract(t *testing.T) {
 	if len(envelope.Release.PlacementDecisions) != 1 {
 		t.Fatalf("a bound Placement without a published Rule Set must be carried as exactly one synthesized Placement Decision, got %d", len(envelope.Release.PlacementDecisions))
 	}
+	// Reader-strict, beyond the schema's optional 1-9 digit fraction: every
+	// Mosaic contract timestamp is millisecond-precision UTC with exactly
+	// three fractional digits and a literal Z, and the iOS and Android readers
+	// pin that shape exactly. A trailing-zero-trimmed (RFC3339Nano) rendering
+	// passes the schema but rejects on device, so the convention is asserted
+	// here where the schema cannot.
+	if !readerStrictTimestampPattern.MatchString(envelope.Release.PublishedAt) {
+		t.Fatalf("publishedAt %q is not the millisecond-precision contract form (yyyy-MM-ddTHH:mm:ss.SSSZ)", envelope.Release.PublishedAt)
+	}
 }
+
+var readerStrictTimestampPattern = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$`)

@@ -471,7 +471,7 @@ public struct MosaicCustomerEntitlementDiagnostics: Sendable, Equatable {
 // MARK: - Cross-platform policy constants
 
 /// The constants five implementations must agree on. They are pinned in
-/// `protocol/compatibility/authoritative-entitlement/v1.json` and asserted
+/// `protocol/compatibility/authoritative-entitlement/v2.json` and asserted
 /// against the shared reference vectors.
 public enum MosaicCustomerEntitlementPolicy: Sendable {
   public static let clockSkewToleranceSeconds: TimeInterval = 60

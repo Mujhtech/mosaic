@@ -11,11 +11,10 @@
     /// The one canonical full-paywall golden.
     ///
     /// This previously had a sibling that rendered `canonicalDocument()`
-    /// against a separate `complete-paywall.png` baseline. Both helpers resolve
-    /// to `protocol/fixtures/v0.3/complete-paywall.json`, so the two tests
-    /// rendered the same document and produced byte-identical output; the
-    /// sibling's baseline was a stale Protocol 0.1-era recording. They are now
-    /// one test with one baseline.
+    /// against a separate baseline. Both helpers resolve to
+    /// `protocol/fixtures/v0.4/complete-paywall.json`, so the two tests rendered
+    /// the same document and produced byte-identical output. They are now one
+    /// test with one baseline.
     ///
     /// The clock is pinned because the fixture's Countdown resolves against it.
     func testCanonicalFixtureMatchesDeterministicSwiftUIGolden() async throws {
@@ -27,6 +26,13 @@
           products: MosaicProduct.phase1MockProducts
         ),
         clock: { Date(timeIntervalSince1970: 1_893_455_998) },
+        // A golden records the settled paywall, so motion is disabled rather
+        // than raced. The default driver runs the entrance in real time against
+        // a 50 ms capture window, so a golden taken through it records whichever
+        // frame the entrance happened to be on — for the canonical document that
+        // is its first, with the headline, subtitle, and feature list still at
+        // opacity zero. The terminal-state test proves the two agree.
+        motionDriver: .disabled(),
         onResult: { _ in }
       )
       await model.prepare()
@@ -80,6 +86,13 @@
           products: MosaicProduct.phase1MockProducts
         ),
         clock: { Date(timeIntervalSince1970: 1_893_455_998) },
+        // A golden records the settled paywall, so motion is disabled rather
+        // than raced. The default driver runs the entrance in real time against
+        // a 50 ms capture window, so a golden taken through it records whichever
+        // frame the entrance happened to be on — for the canonical document that
+        // is its first, with the headline, subtitle, and feature list still at
+        // opacity zero. The terminal-state test proves the two agree.
+        motionDriver: .disabled(),
         onResult: { _ in }
       )
       await model.prepare()
@@ -259,7 +272,11 @@
     func testProtocolV04MotionAtItsEndRendersTheStaticDocument() async throws {
       let size = CGSize(width: 390, height: 844)
       let document = try v04Document()
-      func image(driver: @escaping @autoclosure () -> MosaicMotionDriver) async -> UIImage {
+      func image(
+        driver: @escaping @autoclosure () -> MosaicMotionDriver,
+        advanceTo: Int? = nil
+      ) async -> UIImage {
+        let driver = driver()
         let model = MosaicPaywallModel(
           document: document,
           requestedLocale: "en",
@@ -267,10 +284,16 @@
             products: MosaicProduct.phase1MockProducts
           ),
           clock: { Date(timeIntervalSince1970: 1_893_455_998) },
-          motionDriver: driver(),
+          motionDriver: driver,
           onResult: { _ in }
         )
         await model.prepare()
+        // After `prepare`, which is what stamps each surface's entry origin at
+        // the driver's current time. Winding the clock forward only now is what
+        // makes the elapsed time *since entry* reach the end of the motion; a
+        // driver constructed already at the end stamps its entry there too and
+        // sits at the entrance's first frame forever.
+        if let advanceTo { driver.advance(to: advanceTo) }
         return render(
           MosaicPaywall(
             model: model,
@@ -287,7 +310,7 @@
       let staticRendering = await image(driver: .disabled())
       // Past the last delay plus the longest curve, and past three 900 ms pulse
       // cycles, so nothing authored is still running.
-      let ended = await image(driver: .controlled(elapsedMilliseconds: 60_000))
+      let ended = await image(driver: .controlled(), advanceTo: 60_000)
       let comparison = try compare(actual: ended, expected: staticRendering)
       XCTAssertEqual(
         comparison.differentPixelRatio, 0,
@@ -615,6 +638,39 @@
     /// The fixture declares it on the `details` sheet, which is presented into a
     /// separate hierarchy; the base screen is what a hosting controller can be
     /// walked from.
+    /// The canonical document with the `details` sheet's video background pointed
+    /// at a *bundled* asset whose key no resolver maps.
+    ///
+    /// The fixture authors that sheet with a remote video, which always resolves
+    /// to its URL — whether it would actually load is the player's question — so
+    /// it can never exercise the unavailable-media path. A bundled key is
+    /// unresolvable by lookup alone, which is what makes the decorative-video
+    /// fallback and its diagnostic reachable.
+    private func v04DocumentWithBundledSheetVideo() throws -> MosaicPaywallDocument {
+      var object = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any]
+      )
+      var assets = try XCTUnwrap(object["assets"] as? [[String: Any]])
+      let index = try XCTUnwrap(assets.firstIndex { $0["id"] as? String == "remote-sheet-video" })
+      // Only the asset's *source* changes. Repointing the background at another
+      // asset would orphan this one, and an unreferenced asset is itself a
+      // semantic violation.
+      assets[index]["source"] = ["type": "bundled", "key": "mosaic.sheet.video"]
+      object["assets"] = assets
+      // With no remote video left, declaring the capability would be an unused
+      // declaration, which the semantic validator rejects in both directions.
+      var compatibility = try XCTUnwrap(object["compatibility"] as? [String: Any])
+      let capabilities = try XCTUnwrap(
+        compatibility["requiredCapabilities"] as? [[String: Any]])
+      compatibility["requiredCapabilities"] = capabilities.filter {
+        $0["name"] as? String != MosaicCapabilityName.remoteVideo.rawValue
+      }
+      object["compatibility"] = compatibility
+      return try MosaicProtocolDecoder.decode(
+        JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+      )
+    }
+
     private func v04DocumentWithVideoBackgroundOnTheOfferScreen() throws
       -> MosaicPaywallDocument
     {

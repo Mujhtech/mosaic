@@ -75,12 +75,15 @@ final class ConfigurationTests: XCTestCase {
     // metadata. It is synthesized at runtime, so a shape or digest regression
     // is otherwise invisible until a host loses connectivity.
     guard
-      case .resolved(_, _, _, let resolvedSource) = await mosaic.resolve(
+      case .paywallSelected(_, _, _, _, _, let resolvedSource, let trace) = await mosaic.decision(
         placement: "onboarding_complete")
     else {
       return XCTFail("The packaged fallback must resolve its declared Placement.")
     }
     XCTAssertEqual(resolvedSource, .bundled)
+    // The fallback carries no decision rule set, so it is selected as the
+    // fallback rather than by a rule.
+    XCTAssertEqual(trace.steps.map(\.code), ["bundled_fallback_selected"])
   }
 
   /// The decision context used to hardcode every provider capability as

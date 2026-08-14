@@ -3,8 +3,8 @@
 The SDK strictly decodes Mosaic Protocol 0.4 and renders it with native
 SwiftUI, and can receive validated draft and mock-commerce revisions from a
 local Mosaic Studio session over WebSockets. It preserves the Phase 1 bundled
-fallback and adds hosted Configuration Delivery v1–v3 plus the provider-neutral
-Commerce Configuration v1/v2 boundary. The core package remains free of StoreKit
+fallback and adds hosted Configuration Delivery v3 plus the provider-neutral
+Commerce Configuration v2 boundary. The core package remains free of StoreKit
 and RevenueCat dependencies; the optional RevenueCat adapter is a separate
 package under `RevenueCat/`.
 
@@ -87,24 +87,22 @@ rendering, Product, purchase, or restore outcomes. The SDK never originates
 `purchase_completed_provider`; its codec decodes that trusted-source fixture
 only for conformance. Local Preview and bundled/unhosted paywalls do not emit.
 
-Configuration Delivery v2 adds Placement Decision v1 without changing the
-existing Delivery v1 `resolve(placement:)` API. The new
+Placement selection goes through Placement Decision v1 exclusively:
 `decision(placement:context:)` evaluates the accepted release locally and
 returns an explicit selected Paywall, `noPaywall`, unavailable,
 unsupported-contract, or evaluation-failed result. It never refreshes during a
-Placement decision.
+Placement decision, and there is no key-lookup shortcut around the Rule Set.
 
 ## Advanced Placement decisions
 
-The hosted client advertises Delivery `3,2,1`, Placement Decision `1`,
+The hosted client advertises Delivery `3`, Placement Decision `1`,
 Experiment Assignment `1`, exact experiment and decision features, both
 canonical experiment bucketing algorithms, and the frozen schedule policy. A
-v2 candidate is accepted
+candidate release is accepted
 only when its digest, authoritative `development`/`staging`/`production`
 Environment mode, closed shape, exact derived compatibility, decision semantics,
-Paywall documents, and Product/Entitlement references all validate. Delivery v1
-metadata keeps `environmentMode` nil because that immutable contract does not
-carry a mode. Rejection preserves the last accepted release, so cached evaluation
+Paywall documents, and Product/Entitlement references all validate. Rejection
+preserves the last accepted release, so cached evaluation
 continues offline.
 
 ```swift

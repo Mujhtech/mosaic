@@ -824,6 +824,15 @@ func billingStateEventEnvelope(eventID string, scope billingprojection.Scope,
 		payload["previousSnapshotVersion"] = input.CurrentSnapshotVersion
 	}
 	return map[string]any{
+		// Deliberate exception to ADR-0028: the published v1 contract was
+		// deleted, but this internal wire format survives because a v2 event
+		// requires the authority block (authorityEpoch, applicationId+platform
+		// scope, snapshotAuthorityDigest) and therefore a per-authority-scope
+		// fanout this per-customer projection does not perform. Stamping "2"
+		// without that material would emit schema-invalid events; stamping "1"
+		// keeps entitlements-changed delivery working against contract-1
+		// destinations. Pending the billing-domain design pass tracked in
+		// docs/known-limitations.md.
 		"billingStateWebhookContractVersion": "1",
 		"recordType":                         "billingStateEvent",
 		"payload":                            payload,

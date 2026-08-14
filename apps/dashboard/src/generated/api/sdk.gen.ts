@@ -2120,7 +2120,7 @@ export const submitServerTransactionObservation = <ThrowOnError extends boolean 
 
 /**
  * The Access Decision Snapshot for the Billing Customer the Customer Access Token names,
- * as the Authoritative Entitlement Contract v1 customerEntitlementSnapshot record.
+ * as the Authoritative Entitlement Contract v2 customerEntitlementSnapshot record.
  *
  * Two credentials are required and they answer different questions: the token decides
  * WHICH customer is read, and the public SDK key in Mosaic-SDK-Key decides which

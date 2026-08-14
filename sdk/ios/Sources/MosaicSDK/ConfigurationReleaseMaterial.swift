@@ -13,25 +13,22 @@ import Foundation
 /// The paywall documents it decodes are Paywall Protocol `0.4`, the one version
 /// `MosaicProtocolDecoder` reads.
 enum MosaicConfigurationReleaseMaterialDecoder {
-  static func release(_ raw: [String: Any]) throws -> MosaicConfigurationRelease {
+  /// - Parameter contentDigest: the digest the caller already verified, or
+  ///   computed for material it synthesized itself. No digest is derived here:
+  ///   re-deriving one over material this layer re-assembled would only prove
+  ///   the process is self-consistent.
+  static func release(
+    _ raw: [String: Any], contentDigest: String
+  ) throws -> MosaicConfigurationRelease {
     let path = "$.release"
     try DeliveryValue.exactKeys(
       raw,
       expected: [
-        "id", "number", "environment", "publishedAt", "contentDigest", "compatibility",
-        "placements", "paywallVersions", "productReferences", "assetReferences",
+        "id", "number", "environment", "publishedAt", "compatibility",
+        "paywallVersions", "productReferences", "assetReferences",
       ],
       path: path
     )
-
-    let contentDigest = try DeliveryValue.digest(
-      raw["contentDigest"], path: "\(path).contentDigest")
-    var releaseMaterial = raw
-    releaseMaterial.removeValue(forKey: "contentDigest")
-    guard contentDigest == (try DeliveryCanonicalJSON.digest(releaseMaterial)) else {
-      throw MosaicConfigurationDeliveryError.invalidRelease(
-        code: "delivery_release_digest_mismatch")
-    }
 
     let environment = try DeliveryValue.object(raw["environment"], path: "\(path).environment")
     try DeliveryValue.exactKeys(environment, expected: ["id", "key"], path: "\(path).environment")
@@ -50,13 +47,11 @@ enum MosaicConfigurationReleaseMaterialDecoder {
 
     let releaseCapabilities = try decodeCompatibility(
       raw["compatibility"], path: "\(path).compatibility")
-    let placements = try decodePlacements(raw["placements"], path: "\(path).placements")
     let products = try decodeProducts(raw["productReferences"], path: "\(path).productReferences")
     let assets = try decodeAssets(raw["assetReferences"], path: "\(path).assetReferences")
     let paywalls = try decodePaywalls(raw["paywallVersions"], path: "\(path).paywallVersions")
 
     try validateSemantics(
-      placements: placements,
       paywalls: paywalls,
       products: products,
       assets: assets,
@@ -65,7 +60,6 @@ enum MosaicConfigurationReleaseMaterialDecoder {
     return MosaicConfigurationRelease(
       metadata: metadata,
       projectID: nil,
-      placements: placements,
       placementDecisions: [],
       paywallVersions: paywalls,
       productReferences: products,
@@ -124,30 +118,6 @@ enum MosaicConfigurationReleaseMaterialDecoder {
       }
     }
     return capabilities
-  }
-
-  private static func decodePlacements(_ value: Any?, path: String) throws
-    -> [MosaicConfigurationPlacement]
-  {
-    let values = try DeliveryValue.array(value, count: 1...256, path: path)
-    var result: [MosaicConfigurationPlacement] = []
-    var keys = Set<String>()
-    for (index, value) in values.enumerated() {
-      let itemPath = "\(path)[\(index)]"
-      let item = try DeliveryValue.object(value, path: itemPath)
-      try DeliveryValue.exactKeys(item, expected: ["key", "paywallVersionId"], path: itemPath)
-      let key = try DeliveryValue.placementKey(item["key"], path: "\(itemPath).key")
-      guard keys.insert(key).inserted else {
-        throw MosaicConfigurationDeliveryError.invalidRelease(code: "delivery_duplicate_placement")
-      }
-      result.append(
-        MosaicConfigurationPlacement(
-          key: key,
-          paywallVersionID: try DeliveryValue.identifier(
-            item["paywallVersionId"], path: "\(itemPath).paywallVersionId")
-        ))
-    }
-    return result
   }
 
   private static func decodeProducts(_ value: Any?, path: String) throws
@@ -328,18 +298,11 @@ enum MosaicConfigurationReleaseMaterialDecoder {
   }
 
   private static func validateSemantics(
-    placements: [MosaicConfigurationPlacement],
     paywalls: [MosaicConfigurationPaywallVersion],
     products: [MosaicConfigurationProductReference],
     assets: [MosaicConfigurationAssetReference],
     releaseCapabilities: Set<MosaicRequiredCapability>
   ) throws {
-    let versionIDs = Set(paywalls.map(\.id))
-    let placementVersionIDs = Set(placements.map(\.paywallVersionID))
-    guard placementVersionIDs == versionIDs else {
-      throw MosaicConfigurationDeliveryError.invalidRelease(
-        code: "delivery_incomplete_placement_bindings")
-    }
     let productIDs = Set(products.map(\.id))
     let expectedProductIDs = Set(paywalls.flatMap(\.productReferenceIDs))
     guard productIDs == expectedProductIDs else {

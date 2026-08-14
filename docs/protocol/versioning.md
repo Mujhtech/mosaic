@@ -44,6 +44,13 @@ version per contract those dependencies are structural rather than negotiated.
 Configuration Delivery `3` is `draft` because it embeds Paywall Protocol `0.4`,
 which is a draft. Statuses harden at GA, after which a status only moves forward.
 
+Version suffixes on artifact names are **not** debt either. A module holding
+rules the contract carries at every version is unsuffixed
+(`paywall-document-rules.mjs`, `locale-resolution.mjs`); a module or type that
+defines one specific version keeps it (`validation-v0.4.mjs`,
+`delivery-validation-v3.mjs`, `MosaicPaywallV04Document`). See
+[ADR-0028](../architecture/decisions/0028-single-version-contracts.md).
+
 Two mechanisms are **not** version debt and are unaffected:
 
 - **Capability negotiation**, which is how one contract version serves readers
@@ -137,6 +144,60 @@ runtime state's new `motion.playedAppearScreens` member. It is the only runtime
 member an acceptance carries forward rather than resets, because it is the only
 one the document does not author. See
 [Local Preview 0.4](local-preview-v0.4.md#the-entrance-replay-suppression-rule).
+
+## Canonical JSON, and the canonical number form
+
+Several contracts commit to bytes rather than to a parsed value: Configuration
+Delivery `3` and Commerce Configuration `2` cover their material with a
+`contentDigest`, Authoritative Entitlement `2` digests its snapshot body, and
+Billing State Webhook `2` signs the raw delivered body. Every one of those is a
+byte comparison, so two implementations that serialize the same value
+differently do not merely disagree cosmetically — one of them rejects a
+genuine document.
+
+**Normative.** The canonical number form is the shortest round-tripping decimal
+form specified by ECMAScript `Number::toString` — exactly what ECMAScript
+`JSON.stringify` emits. **Go's `encoding/json` and JavaScript's `JSON.stringify`
+are the reference implementations**, and they agree byte-for-byte at every
+boundary below. A third implementation conforms by matching them, not by
+matching its own language's default float formatter.
+
+The rule that catches implementations out is *when exponent notation appears*.
+It is not a matter of magnitude alone, and the thresholds are asymmetric:
+
+| Value | Canonical form | Note |
+| --- | --- | --- |
+| `1e-7` | `1e-7` | exponent form begins below `1e-6` |
+| `1e-6` | `0.000001` | still fixed-point |
+| `1e16` | `10000000000000000` | fixed-point, **not** `1e+16` |
+| `1e20` | `100000000000000000000` | still fixed-point |
+| `1e21` | `1e+21` | exponent form begins at `1e21` |
+| `-1e-7` | `-1e-7` | the sign is outside the form |
+| `1.5e300` | `1.5e+300` | note the `+` in a positive exponent |
+| `1e-323` | `1e-323` | subnormals carry no `+` |
+
+So: exponent notation below `1e-6` and at or above `1e21`, fixed-point
+everywhere between, a `+` on a positive exponent and none on a negative one, and
+no leading zeros in the exponent. `1e16` is the case an implementation is most
+likely to get wrong, because several languages switch to scientific notation
+well before it — a 2026-08 review found a Swift implementation diverging on
+exactly that boundary, outside the range any fixture exercised.
+
+Mosaic contracts carry plenty of non-integer numbers today — opacities, motion
+amplitudes, line-height multipliers, rating values — and they sit inside digest
+coverage; a 2026-08 iOS fix records `0.04` rendered as
+`0.040000000000000001` breaking a release's own content digest on Apple
+platforms. What every one of those values shares is that it falls inside the
+fixed-point range, which is why the *exponent boundaries* above went
+unexercised until reviewed. That is a property of the current contracts rather
+than a guarantee, and it is exactly why the full rule — including the
+boundaries — is written down before a contract crosses one.
+
+The rest of canonical JSON is unchanged and is stated per contract: no
+insignificant whitespace, object members ordered ascending by UTF-16 code unit
+at every depth, array order preserved exactly, absent members omitted rather
+than emitted as `null`, minimal string escaping with non-ASCII left unescaped,
+and the excluded digest member removed before serializing.
 
 ## Capability negotiation
 

@@ -57,10 +57,13 @@ enum MosaicConfigurationDeliveryV3Decoder {
       projectedRelease["compatibility"], path: "$.release.compatibility")
     projectedCompatibility.removeValue(forKey: "experimentAssignmentContracts")
     projectedRelease["compatibility"] = projectedCompatibility
+    // The authoritative digest was verified above, over the bytes the server
+    // signed. The projected body is this process's own construction, so it
+    // carries no digest and none is re-derived for it.
     projectedRelease.removeValue(forKey: "contentDigest")
-    projectedRelease["contentDigest"] = try DeliveryCanonicalJSON.digest(projectedRelease)
     var base = try MosaicConfigurationReleaseDecoder.decode(
-      release: projectedRelease, allowUnreferencedExperimentMaterial: true)
+      release: projectedRelease, contentDigest: digest,
+      allowUnreferencedExperimentMaterial: true)
     try validateReferences(assignments, release: base)
     base = MosaicConfigurationRelease(
       metadata: .init(
@@ -68,8 +71,8 @@ enum MosaicConfigurationDeliveryV3Decoder {
         environmentID: base.metadata.environmentID, environmentKey: base.metadata.environmentKey,
         environmentMode: base.metadata.environmentMode, publishedAt: base.metadata.publishedAt,
         contentDigest: digest),
-      projectID: base.projectID, placements: base.placements,
-      placementDecisions: base.placementDecisions, paywallVersions: base.paywallVersions,
+      projectID: base.projectID, placementDecisions: base.placementDecisions,
+      paywallVersions: base.paywallVersions,
       productReferences: base.productReferences, entitlementReferences: base.entitlementReferences,
       assetReferences: base.assetReferences, experimentAssignments: assignments)
     return base

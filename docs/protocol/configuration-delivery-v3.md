@@ -48,7 +48,10 @@ the authoritative publication/start time. `schedule.endsAt` is optional and,
 when absent, manual lifecycle releases control completion. Trusted server-time
 capture and unreliable-time fallback remain unchanged.
 `release.contentDigest` covers all release material except the digest field
-itself.
+itself, over the canonical serialization — including the
+[canonical number form](versioning.md#canonical-json-and-the-canonical-number-form),
+which is a byte comparison and therefore where a second implementation diverges
+first.
 
 Unsupported contract/features/algorithms/schedule policy, malformed allocation,
 invalid references, non-exact compatibility, or a bad digest rejects the whole

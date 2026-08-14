@@ -16,24 +16,19 @@ class PlacementDecisionTest {
     @get:Rule
     val folder = TemporaryFolder()
 
-    private val invalidFixtureNames = listOf(
-        "duplicate-priority.json",
-        "fallback-cycle.json",
-        "incompatible-source-operator.json",
-        "invalid-condition-type.json",
-        "missing-unavailable-fallback.json",
-        "overdeclared-features.json",
-        "qa-override-over-24h.json",
-        "underdeclared-features.json",
-        "unsupported-operator.json",
-    )
+    /**
+     * Both invalid corpora are enumerated from disk rather than listed.
+     *
+     * A hand-maintained list silently under-tests: a rejection the protocol agent adds a fixture for
+     * is a rejection this reader is expected to make on the day it lands, and a list only covers it
+     * once somebody remembers to edit the list too. The delivery list previously named 13 of the 20
+     * committed candidates, so seven were shipped unexercised.
+     */
+    private val invalidDecisionFixtureNames =
+        repositoryFixtureNames("protocol/fixtures/placement-decision/v1/invalid")
 
-    private val invalidDeliveryFixtureNames = invalidFixtureNames + listOf(
-        "invalid-environment-mode.json",
-        "production-qa-override.json",
-        "release-overdeclared-compatibility.json",
-        "release-underdeclared-compatibility.json",
-    )
+    private val invalidDeliveryFixtureNames =
+        repositoryFixtureNames("protocol/fixtures/configuration-delivery/v3/invalid")
 
     @Test
     fun `canonical release and evaluator corpus produce exact decisions`() {
@@ -187,7 +182,8 @@ class PlacementDecisionTest {
 
     @Test
     fun `malformed decision candidates reject atomically`() {
-        invalidFixtureNames.forEach { name ->
+        assertTrue("the invalid Placement Decision corpus is empty", invalidDecisionFixtureNames.isNotEmpty())
+        invalidDecisionFixtureNames.forEach { name ->
             val invalidDecision = JsonParser.parseString(fixture("placement-decision/v1/invalid/$name")).asJsonObject
             val release = JsonParser.parseString(fixture("configuration-delivery/v3/advanced-release.json")).asJsonObject
             release.getAsJsonObject("release").getAsJsonArray("placementDecisions").set(0, invalidDecision)
@@ -248,6 +244,7 @@ class PlacementDecisionTest {
 
     @Test
     fun `every canonical invalid release candidate is rejected`() {
+        assertTrue("the invalid release corpus is empty", invalidDeliveryFixtureNames.isNotEmpty())
         invalidDeliveryFixtureNames.forEach { name ->
             assertTrue(
                 name,
