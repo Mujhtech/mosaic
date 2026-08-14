@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
+import 'support/canonical_fixture.dart';
 import 'support/configuration_delivery_fixture.dart';
 
 void main() {
@@ -31,18 +32,39 @@ void main() {
 
   test('atomically rejects every canonical invalid Delivery release', () {
     const decoder = MosaicConfigurationDeliveryDecoder();
-    for (final name in <String>[
-      'invalid/unsupported-contract-version.json',
-      'invalid/unsupported-paywall-protocol.json',
-      'invalid/malformed-release.json',
-      'invalid/incomplete-release.json',
-    ]) {
+    // Enumerated from disk rather than listed here, so a fixture the protocol
+    // agent adds is swept the day it lands instead of sitting unexercised
+    // behind a test whose name already claimed to cover it.
+    final invalid = canonicalFixtureFiles(
+      repositoryDirectory(
+        'protocol/fixtures/configuration-delivery/v3/invalid',
+      ),
+    );
+    final rejected = <String>{};
+    for (final file in invalid) {
+      final name = file.uri.pathSegments.last;
       expect(
-        () => decoder.decode(deliveryFixtureSource(name)),
+        () => decoder.decode(file.readAsStringSync()),
         throwsA(isA<MosaicConfigurationDeliveryException>()),
         reason: name,
       );
+      rejected.add(name);
     }
+    // Named rather than counted, for the same reason the sweep is
+    // directory-driven: a fixture that stops being swept — renamed, moved, or
+    // newly excluded — would otherwise reduce coverage silently.
+    expect(
+      rejected,
+      containsAll(<String>{
+        'unsupported-contract-version.json',
+        'unsupported-paywall-protocol.json',
+        'unsupported-experiment-contract.json',
+        'malformed-release.json',
+        'malformed-allocation.json',
+        'incomplete-release.json',
+        'paywall-material-digest.json',
+      }),
+    );
   });
 
   test('Flutter capability request advertises one Delivery version', () {
