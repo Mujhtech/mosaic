@@ -65,6 +65,11 @@ Do not add a second version of a contract, a reader that accepts two versions, a
 projection between versions, or a migration path. Parallel versions begin at GA,
 when the deprecation policy takes over.
 
+Naming follows the same split: a module holding rules the contract carries at
+every version is **unsuffixed**; a module or type defining one specific version
+**keeps** the version in its name. Do not strip a suffix that identifies which
+version an artifact defines.
+
 Version identifiers stay **exact** regardless: a reader declaring `0.4` accepts
 only `0.4` and never infers support from numeric ordering.
 

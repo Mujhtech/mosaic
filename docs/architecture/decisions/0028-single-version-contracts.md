@@ -105,6 +105,28 @@ Two mechanisms explicitly **survive**, because neither is version debt:
   not of versioning, and a validator still asserts that no other capability
   joins the tier.
 
+**A surviving version suffix is a name, not debt.** Deleting a version deletes
+the machinery that existed *because there were two*; it does not require
+renaming everything that mentions a version. The rule is:
+
+- A module that holds rules the contract carries **at every version** is
+  **unsuffixed**. `validation-v0.3.mjs` became `paywall-document-rules.mjs`,
+  `locale-resolution-v0.3.mjs` became `locale-resolution.mjs`, and
+  `delivery-v1-common.mjs` became `delivery-common.mjs`, because each names a
+  rule rather than a generation, and a version suffix on them would be a claim
+  that a second generation exists.
+- A module, type, or constant that is **about one specific version** keeps that
+  version in its name. `delivery-validation-v3.mjs`, `validation-v0.4.mjs`,
+  `MosaicPaywallV04Document`, and `commerce-provider-validation-v2.mjs` are
+  correct as they stand: the suffix identifies *which* contract version the
+  artifact defines, which is information that survives the policy and becomes
+  load-bearing again at GA.
+
+The test is whether the name would need to change if a parallel version were
+added tomorrow. `paywall-document-rules.mjs` would not. `validation-v0.4.mjs`
+would sit beside a `validation-v0.5.mjs`. Renaming the second category to strip
+suffixes would destroy that distinction and would have to be undone at GA.
+
 **Lifecycle statuses are provisional until GA.** A contract's `status` cannot
 be stronger than the status of a contract it structurally depends on: an
 `approved` manifest that embeds a `draft` schema promises a guarantee it cannot

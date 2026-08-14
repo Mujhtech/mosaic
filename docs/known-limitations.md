@@ -451,11 +451,10 @@ failure.
 
 ### Commerce Provider fixtures are tool-verified but not SDK-consumed
 
-- Surface: `protocol/fixtures/commerce-provider/v1/` and
-  `protocol/fixtures/commerce-provider/v2/`.
+- Surface: `protocol/fixtures/commerce-provider/v2/`.
 - Platforms: Flutter, iOS, Android.
 - Symptom: these fixtures are validated by
-  `protocol/tools/commerce-provider-validation-v1.mjs` and its v2 counterpart
+  `protocol/tools/commerce-provider-validation-v2.mjs`
   under `npm --prefix protocol run validate`, but no SDK conformance suite reads
   them. The SDKs' commerce adapters are tested against their own test doubles
   instead. A divergence between an SDK's provider-record decoder and the
@@ -478,17 +477,18 @@ failure.
 
 ### A few fixtures remain unconsumed, and invalid-fixture coverage is uneven across SDKs
 
-- Surface: `protocol/fixtures/configuration-delivery/v3/legacy-v2-projection.json`,
-  `protocol/fixtures/configuration-delivery/v1/capability-request.json`,
-  `protocol/fixtures/configuration-delivery/v3/capability-request.json`, and the
-  invalid fixtures under `protocol/fixtures/configuration-delivery/v3/invalid/`
-  and `protocol/fixtures/experiment-assignment/v1/invalid/`.
+- Surface: `protocol/fixtures/configuration-delivery/v3/capability-request.json`
+  and the invalid fixtures under
+  `protocol/fixtures/configuration-delivery/v3/invalid/` and
+  `protocol/fixtures/experiment-assignment/v1/invalid/`.
 - Platforms: Flutter, iOS, Android.
-- Symptom: three valid fixtures are validated by
-  `npm --prefix protocol run validate` but read by no SDK conformance suite. Only
-  the Delivery v2 capability request is consumed (by the Android
-  `PlacementDecisionTest`); the v1 and v3 capability requests and the v3
-  legacy-v2 projection are tool-verified only. Separately, the Delivery v3 and
+- Symptom: the Delivery v3 capability request is validated by
+  `npm --prefix protocol run validate` but read by no SDK conformance suite. The
+  entry previously also named the Delivery v1 capability request and the v3
+  legacy-v2 projection; both were deleted with Delivery `1`/`2` under
+  [ADR-0028](architecture/decisions/0028-single-version-contracts.md), so that
+  part of the gap closed by removal rather than by binding. Separately, the
+  Delivery v3 and
   Experiment Assignment negative fixtures are consumed by the iOS suite alone
   (`sdk/ios/Tests/MosaicSDKTests/ExperimentTests.swift`), so Flutter and Android
   have no shared-fixture proof that they reject a malformed allocation or an
@@ -510,9 +510,10 @@ failure.
 ### A locale with a script subtag resolves to its base language, never to language+region
 
 - Surface: `localization.locales` keys in
-  `protocol/schema/v0.2/paywall.schema.json` (`localeTag`), the candidate chain
-  documented in [`docs/protocol/v0.2.md`](protocol/v0.2.md), and its reference
-  implementation `protocol/tools/locale-resolution-v0.2.mjs`.
+  `protocol/schema/v0.4/paywall.schema.json` (`localeTag`), the candidate chain
+  documented in [`docs/protocol/v0.4.md`](protocol/v0.4.md), and its reference
+  implementation `protocol/tools/locale-resolution.mjs`. (The behaviour is
+  unchanged since `0.2`; only the paths moved as versions were replaced.)
 - Platforms: Flutter, iOS, Android.
 - Symptom: catalog keys are `language[-REGION]`; the grammar admits no script
   subtag. A device reporting `zh-Hans-CN` or `zh-Hant-TW` therefore walks
