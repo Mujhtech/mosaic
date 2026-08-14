@@ -28,8 +28,22 @@ internal fun protocolFixtureDocument(relativeName: String): MosaicPaywallDocumen
     MosaicProtocolDecoder.decode(protocolFixtureSource(relativeName))
 
 internal fun protocolFixtureNames(relativeDirectory: String): List<String> =
-    Files.list(repositoryFile("$PROTOCOL_FIXTURE_DIRECTORY/$relativeDirectory")).use { paths ->
-        paths.map { it.fileName.toString() }.filter { it.endsWith(".json") }.sorted().toList()
+    repositoryFixtureNames("$PROTOCOL_FIXTURE_DIRECTORY/$relativeDirectory")
+
+/**
+ * Every `.json` fixture in a repository directory, sorted, minus `rejection-layers.json`.
+ *
+ * That one file is generated metadata describing *which layer* rejects each of its siblings, not a
+ * document any reader is meant to accept or refuse, so it is excluded here rather than at each call
+ * site. Enumerating from disk is what makes a fixture the protocol agent adds swept on the day it
+ * lands instead of on the day somebody remembers to edit a list.
+ */
+internal fun repositoryFixtureNames(relativeDirectory: String): List<String> =
+    Files.list(repositoryFile(relativeDirectory)).use { paths ->
+        paths.map { it.fileName.toString() }
+            .filter { it.endsWith(".json") && it != "rejection-layers.json" }
+            .sorted()
+            .toList()
     }
 
 internal fun canonicalFixtureSource(): String = protocolFixtureSource(CANONICAL_FIXTURE_NAME)
