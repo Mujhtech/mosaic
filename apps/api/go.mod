@@ -2,7 +2,7 @@ module github.com/Mujhtech/mosaic/apps/api
 
 go 1.26.2
 
-toolchain go1.26.5
+toolchain go1.26.6
 
 require (
 	github.com/dlclark/regexp2 v1.11.0
