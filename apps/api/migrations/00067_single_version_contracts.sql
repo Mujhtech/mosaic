@@ -35,3 +35,8 @@ INSERT INTO configuration_release_representations(
 )
 SELECT id, environment_id, delivery_contract_version, payload, payload_bytes, content_hash, published_at
 FROM configuration_releases;
+-- Restore the immutability trigger 00010 created on this table, so a full
+-- down cycle finds the exact state 00010's down expects to tear down.
+CREATE TRIGGER immutable_configuration_release_representations
+BEFORE UPDATE OR DELETE ON configuration_release_representations
+FOR EACH ROW EXECUTE FUNCTION reject_placement_decision_version_change();
