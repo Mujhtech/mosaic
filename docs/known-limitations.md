@@ -289,30 +289,6 @@ release-blocker category: none can cause data loss, money loss, or a wrong
 monetization decision, and each has a stated workaround or a safe visible
 failure.
 
-### Billing webhook internals still stamp a Contract `1` envelope
-
-- Surface: `apps/api/internal/billingwebhook/model.go` (`ContractVersion = "1"`)
-  and the emission paths that read it.
-- Platforms: server; any application backend consuming Mosaic billing webhooks.
-- Symptom: Billing State Webhook `1` was deleted under the single-version policy
-  ([ADR-0028](architecture/decisions/0028-single-version-contracts.md)) and `2`
-  is the only contract, but the webhook emitter still stamps
-  `billingStateWebhookContractVersion: "1"` on some envelopes. A strict `2`
-  consumer reading the discriminator exactly would reject those deliveries.
-- Workaround: none needed today. Nothing outside this repository consumes Mosaic
-  billing webhooks, which is the same premise the single-version policy rests
-  on, and the documented consumer posture for this contract is tolerant reading
-  (see [compatibility policy](protocol/compatibility-policy.md#webhook-consumer-tolerance-is-a-documented-exception)).
-- Planned resolution: the backend agent is adding code-site comments now; the
-  re-stamp itself is deferred to a billing-domain design pass, because the
-  emitter's version constant is entangled with the projection and delivery-retry
-  records rather than being a single literal.
-- GA safety: the protocol artifacts — schema, fixtures, manifest, signature
-  vectors — are all `2` and self-consistent, so the contract Mosaic *publishes*
-  is correct. The gap is that one producer has not been moved to it yet, and a
-  producer stamping an old version fails closed at a strict consumer rather than
-  delivering wrong billing state.
-
 ### The entrance-replay suppression rule has no SDK reader implementation
 
 - Surface: `motion.playedAppearScreens` in Local Preview `0.4`; see

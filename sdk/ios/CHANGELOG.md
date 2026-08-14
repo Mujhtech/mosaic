@@ -49,9 +49,14 @@
   values (opacity, motion amplitude, line-height multipliers) failed its own
   content digest on Apple platforms alone. Numbers now use the shortest
   representation that round-trips, matching every other implementation.
-- A release's placement table is derived from the placement decisions that name
-  each paywall, so `paywall(forPlacement:)` and the public `resolve(placement:)`
-  answer with the authored placement key instead of a positional placeholder.
+- **The key-lookup placement API is removed.** `resolve(placement:)`,
+  `paywall(forPlacement:)`, and `MosaicConfigurationPlacement` are deleted:
+  they answered from a table derived from placement decisions' default
+  outcomes, which bypassed every rule, rollout, and override in the Rule Set
+  and was lossy when two placements defaulted to one paywall version. Use
+  `decide(placement:context:identity:)`, which evaluates the Rule Set —
+  matching the Flutter and Android SDKs, neither of which carries a key-lookup
+  API.
 - An unknown capability name is reported as `unsupportedCapability` rather than
   as a generic shape error, so diagnostics name the capability that was missing.
 

@@ -346,7 +346,7 @@ export function subscriptionAccessStatement(input: {
 
 /**
  * The contract's closed explanation vocabulary
- * (`protocol/schema/authoritative-entitlement/v1`). A reader may render its own
+ * (`protocol/schema/authoritative-entitlement/v2`). A reader may render its own
  * copy for a code but must never invent one, so an unrecognised code renders as
  * the raw code plus an explicit "this build does not have copy for it" rather
  * than as an invented sentence.

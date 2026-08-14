@@ -183,10 +183,15 @@ likely to get wrong, because several languages switch to scientific notation
 well before it — a 2026-08 review found a Swift implementation diverging on
 exactly that boundary, outside the range any fixture exercised.
 
-Mosaic contracts contain no non-integer numbers today, which is why this has not
-bitten a shipped reader. That is a property of the current contracts rather than
-a guarantee, and it is exactly why the rule is written down before a contract
-adds one.
+Mosaic contracts carry plenty of non-integer numbers today — opacities, motion
+amplitudes, line-height multipliers, rating values — and they sit inside digest
+coverage; a 2026-08 iOS fix records `0.04` rendered as
+`0.040000000000000001` breaking a release's own content digest on Apple
+platforms. What every one of those values shares is that it falls inside the
+fixed-point range, which is why the *exponent boundaries* above went
+unexercised until reviewed. That is a property of the current contracts rather
+than a guarantee, and it is exactly why the full rule — including the
+boundaries — is written down before a contract crosses one.
 
 The rest of canonical JSON is unchanged and is stated per contract: no
 insignificant whitespace, object members ordered ascending by UTF-16 code unit
