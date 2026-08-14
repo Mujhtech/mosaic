@@ -289,6 +289,137 @@ release-blocker category: none can cause data loss, money loss, or a wrong
 monetization decision, and each has a stated workaround or a safe visible
 failure.
 
+### Billing webhook internals still stamp a Contract `1` envelope
+
+- Surface: `apps/api/internal/billingwebhook/model.go` (`ContractVersion = "1"`)
+  and the emission paths that read it.
+- Platforms: server; any application backend consuming Mosaic billing webhooks.
+- Symptom: Billing State Webhook `1` was deleted under the single-version policy
+  ([ADR-0028](architecture/decisions/0028-single-version-contracts.md)) and `2`
+  is the only contract, but the webhook emitter still stamps
+  `billingStateWebhookContractVersion: "1"` on some envelopes. A strict `2`
+  consumer reading the discriminator exactly would reject those deliveries.
+- Workaround: none needed today. Nothing outside this repository consumes Mosaic
+  billing webhooks, which is the same premise the single-version policy rests
+  on, and the documented consumer posture for this contract is tolerant reading
+  (see [compatibility policy](protocol/compatibility-policy.md#webhook-consumer-tolerance-is-a-documented-exception)).
+- Planned resolution: the backend agent is adding code-site comments now; the
+  re-stamp itself is deferred to a billing-domain design pass, because the
+  emitter's version constant is entangled with the projection and delivery-retry
+  records rather than being a single literal.
+- GA safety: the protocol artifacts — schema, fixtures, manifest, signature
+  vectors — are all `2` and self-consistent, so the contract Mosaic *publishes*
+  is correct. The gap is that one producer has not been moved to it yet, and a
+  producer stamping an old version fails closed at a strict consumer rather than
+  delivering wrong billing state.
+
+### The entrance-replay suppression rule has no SDK reader implementation
+
+- Surface: `motion.playedAppearScreens` in Local Preview `0.4`; see
+  [the rule](protocol/local-preview-v0.4.md#the-entrance-replay-suppression-rule).
+- Platforms: Flutter, iOS, Android preview clients; Studio live preview.
+- Symptom: the rule is **normative** and has a reference implementation
+  (`runtimeStateForAcceptedV04Revision` in
+  `protocol/tools/validation-v0.4.mjs`) pinned by
+  `protocol/fixtures/local-preview/v0.4/accepted-revision-runtime-reset.json`,
+  but no SDK preview reader implements it and the browser runtime's
+  `runtimeStateForAcceptedRevision` does not emit the member. A preview client
+  built today replays every entrance on every accepted revision — the exact
+  strobing the rule exists to prevent.
+- Workaround: none. Authors working on a document with appear motion see the
+  entrance replay while editing.
+- Planned resolution: the Studio live-preview wave, which is the first consumer
+  that needs it. Deliberately not implemented ahead of that consumer: a runtime
+  member no client reads would be an unexercised second implementation of a rule
+  the validator already owns.
+- GA safety: Local Preview is development-only (`audience:
+  "developmentOnly"`) and never reaches an end user. The failure mode is a
+  distracting authoring experience, not a wrong paywall.
+
+### The entitlement corpus pins an SDK version floor no shipping SDK meets
+
+- Surface: `minimumSupport.minimumSdkVersion: "2.0.0"` across
+  `protocol/fixtures/authoritative-entitlement/v2/`.
+- Platforms: Flutter, iOS, Android.
+- Symptom: the canonical Authoritative Entitlement fixtures declare a minimum
+  SDK version of `2.0.0`, while every shipping Mosaic SDK is `0.x`. A reader
+  comparing its own version against the fixture's floor concludes it is
+  unsupported and resolves to `authorityUnavailable`.
+- Workaround: the fixtures are conformance material rather than served
+  responses; a live server computes `minimumSupport` from its own frozen support
+  policy, not from these values.
+- Planned resolution: **needs an owner ruling** on what the floor means before
+  any SDK implements the comparison. Two readings are open, and they behave
+  differently at `0.x`: the floor is a *product* SDK version (in which case the
+  fixture is simply wrong and should be `0.x`), or it is an entitlement-contract
+  support generation that happens to be numbered independently (in which case
+  the comparison is not against the SDK's published version at all). Nobody has
+  chosen, and picking one silently in a fixture would decide it by accident.
+- GA safety: the contract is a draft, nothing produces or consumes it in
+  production, and the ambiguity is in unimplemented comparison semantics rather
+  than in shipped behaviour.
+
+### The capability report has a different shape in each SDK
+
+- Surface: the Local Preview capability report; for example
+  `MosaicPreviewSupportedCapability` list in
+  `sdk/android/.../LocalPreviewModels.kt` against the map form in
+  `.../ProtocolModels.kt`, with the Flutter and iOS clients differing again.
+- Platforms: Flutter, iOS, Android.
+- Symptom: the three SDKs model `supportedCapabilities` and
+  `previewCapabilities` with different in-memory shapes (list of pairs versus
+  map, and different treatment of the version field). Each serialises to a valid
+  report, so the wire contract holds, but there is no shared rule about the
+  internal shape and no cross-SDK test asserting the three produce the same
+  report for the same capability set.
+- Workaround: the protocol validator checks the serialised report against the
+  message schema, which is the only form that crosses a boundary.
+- Planned resolution: a cross-SDK rule fixing one shape, then a conformance
+  vector all three read — the pattern already used for motion frames and locale
+  resolution. Deferred until the Studio preview wave gives all three a reason to
+  be compared.
+- GA safety: divergence is confined to the in-memory representation; the
+  serialised report is schema-validated on the relay before any draft is sent,
+  and a malformed report withholds the draft atomically.
+
+### iOS pixel goldens are being re-recorded
+
+- Surface: `sdk/ios/Tests/MosaicSDKTests/` snapshot goldens.
+- Platforms: iOS.
+- Symptom: the pixel-comparison goldens are mid-re-record and do not all match
+  the current renderer output.
+- Workaround: the structural and semantic iOS suites are unaffected and green;
+  only pixel comparison is in flux.
+- Planned resolution: in progress, tracked by the iOS agent.
+- GA safety: a stale golden fails visibly in CI rather than shipping a wrong
+  rendering, and the protocol conformance suites that pin cross-platform
+  behaviour are independent of the goldens.
+
+### Eleven Analytics Event names have no canonical fixture
+
+- Surface: `protocol/fixtures/analytics-event/v2/`; the floor is
+  `ANALYTICS_EVENT_NAME_COVERAGE_FLOOR` in
+  `protocol/tools/analytics-event-validation-v2.mjs`.
+- Platforms: Flutter, iOS, Android; analytics ingestion.
+- Symptom: the canonical corpus exercises 20 of the 31 declared event names.
+  These 11 have never had a fixture at any contract version:
+  `placement_unavailable`, `paywall_dismissed`, `paywall_action_selected`,
+  `product_load_started`, `product_load_completed`, `product_load_failed`,
+  `purchase_pending`, `purchase_deferred`, `restore_started`,
+  `restore_cancelled`, `restore_failed`. Their correlation and attribution
+  allow-lists are therefore pinned by the validator's tables alone, with no
+  document any SDK can be reconciled against.
+- Workaround: every event is schema-validated and semantically validated on
+  ingestion regardless of whether a fixture exists for its name, so an SDK
+  emitting one of these wrongly is rejected at the boundary rather than silently
+  accepted.
+- Planned resolution: author the missing fixtures from real emissions. This is
+  pre-existing — the Contract `1` corpus did not cover them either — and the
+  coverage floor now prevents the set shrinking further. Raise the floor as
+  fixtures land; never lower it to make a check pass.
+- GA safety: nothing is unvalidated, only unexemplified. The gap is in
+  cross-SDK conformance material, not in the ingestion path.
+
 ### Browser-contract generation is not extended to the Phase 5-7 contracts
 
 - Surface: `protocol/browser/`, generated by
@@ -656,6 +787,34 @@ failure.
   details added during the drills.
 - GA safety: a diagnosability gap on a read-only path. The request fails
   closed with the correct status; no data is returned or mutated.
+
+### The entitlements-changed webhook pipeline still emits the deleted v1 wire format
+
+- Surface: `webhook_events` written by the billing projection
+  (`internal/platform/billingprojectionpostgres`), webhook destinations
+  defaulting to contract 1 (`internal/billingwebhook`).
+- Platforms: server (all installations).
+- Symptom: ADR-0028 deleted Billing State Webhook v1 — it has no schema,
+  fixtures, or validator anywhere in the repository — but
+  `customer.entitlements.changed` events are still stored and delivered in the
+  v1 wire format, and newly registered destinations default to contract 1 so
+  they can receive them. Only authority-transition events
+  (`billing_migration` cutover/rollback/stabilization) use the published v2
+  contract.
+- Workaround: consumers of `customer.entitlements.changed` validate against the
+  delivered body's documented fields rather than a published schema; the body
+  is stable, signed, and byte-identical across replays. Authority events can be
+  validated against `protocol/schema/billing-state-webhook/v2/`.
+- Planned resolution: a billing-domain design pass that emits v2
+  entitlements-changed events. v2's `billingStateEvent` requires the authority
+  block (`authorityEpoch`, `applicationId`+`platform` scope,
+  `snapshotAuthorityDigest`), which means fanning one per-customer projection
+  event out per authority scope — a change to event identity and idempotency,
+  not a constant flip. Flipping the version without it would emit
+  schema-invalid events or silently stop entitlements-changed delivery.
+- GA safety: the format is internal-to-Mosaic on both ends of the signature and
+  has not changed; deliveries keep working exactly as before ADR-0028. No data
+  or money decision depends on the envelope's version marker.
 
 ## Dashboard
 

@@ -10,11 +10,27 @@ package billingwebhook
 
 import "time"
 
-// ContractVersion is the Billing State Webhook Contract this package speaks.
-// It appears on the stored envelope, never assembled here — the projection
-// transaction writes the complete body and delivery sends those exact bytes.
+// ContractVersion is the Billing State Webhook Contract the projection-written
+// entitlements-changed pipeline speaks. It appears on the stored envelope,
+// never assembled here — the projection transaction writes the complete body
+// and delivery sends those exact bytes.
+//
+// Deliberate exception to ADR-0028 (single-version contracts): the published
+// v1 contract was deleted — it has no schema, fixtures, or validator anywhere
+// in the repository — but its wire format survives here internally, paired
+// with contract-1 destinations. Collapsing this pipeline to v2 requires the
+// projection to build authority-scoped v2 events (authorityEpoch,
+// applicationId+platform scope, snapshotAuthorityDigest), a per-scope fanout
+// the projection's (project, environment, customer) scope does not carry
+// today; flipping only the constant would silently stop entitlements-changed
+// delivery. Pending that billing-domain design pass, tracked in
+// docs/known-limitations.md ("The entitlements-changed webhook pipeline still
+// emits the deleted v1 wire format").
 const ContractVersion = "1"
 
+// ContractVersionV2 is the only published Billing State Webhook Contract
+// version. Authority-transition events (billingmigration) emit it; the
+// entitlements-changed pipeline above does not yet.
 const ContractVersionV2 = "2"
 
 // EventTypeEntitlementsChanged is the one event type Phase 9B emits. The

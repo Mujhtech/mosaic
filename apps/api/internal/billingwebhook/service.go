@@ -118,6 +118,13 @@ func (s *Service) CreateDestination(ctx context.Context, actor Actor, input Dest
 	}
 	contractVersion := input.ContractVersion
 	if contractVersion == 0 {
+		// Deliberate exception to ADR-0028: new destinations default to
+		// contract 1 because the projection-written entitlements-changed
+		// events are still v1-stamped and delivery pairs destinations to
+		// events by contract version — a contract-2 default would receive no
+		// entitlements-changed events at all. The internal v1 wire format
+		// survives pending the authority-scoped v2 event design; see
+		// billingwebhook.ContractVersion and docs/known-limitations.md.
 		contractVersion = 1
 	}
 	eventTypes, err := normalizeEventTypes(contractVersion, input.EventTypes)
