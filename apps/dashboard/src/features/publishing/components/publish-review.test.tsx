@@ -26,7 +26,7 @@ describe("PublishReview", () => {
           ],
           placements: [],
           products: [],
-          protocolVersion: "0.3",
+          protocolVersion: "0.4",
         }}
       />
     );
@@ -65,7 +65,7 @@ describe("PublishReview", () => {
           ],
           placements: [],
           products: [{ id: "product_01", name: "Monthly", ready: false }],
-          protocolVersion: "0.3",
+          protocolVersion: "0.4",
         }}
       />
     );
@@ -98,7 +98,7 @@ describe("PublishReview", () => {
           ],
           placements: [],
           products: [{ id: "product_01", name: "Monthly", ready: false }],
-          protocolVersion: "0.3",
+          protocolVersion: "0.4",
         }}
       />
     );

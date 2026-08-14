@@ -1658,22 +1658,6 @@ export type CustomerAccessTokenMetadata = {
     digestAlgorithm: 'sha256';
 };
 
-export type EntitlementSyncRequestRecord = {
-    authoritativeEntitlementContractVersion: '1';
-    recordType: 'entitlementSyncRequest';
-    payload: {
-        /**
-         * A hint only. Verified against the token; a mismatch is refused.
-         */
-        billingCustomerId?: string;
-        knownSnapshotVersion?: number;
-        entityTag?: string;
-        supportedAuthoritativeEntitlementContracts: Array<'1'>;
-        requestedEntitlementKeys?: Array<string>;
-        correlationId: string;
-    };
-};
-
 export type AuthorityEntitlementSyncRequestRecord = {
     authoritativeEntitlementContractVersion: '2';
     recordType: 'entitlementSyncRequest';
@@ -1686,17 +1670,13 @@ export type AuthorityEntitlementSyncRequestRecord = {
             platform: 'ios' | 'android';
             appVersion: string;
             sdkVersion: string;
-            supportedContractVersions: Array<'1' | '2'>;
+            supportedContractVersions: Array<'2'>;
             capabilities: Array<'authority_epoch' | 'authority_scope' | 'urgent_authority_sync' | 'mosaic_authoritative_targeting'>;
         };
     };
 };
 
-export type EntitlementSyncRequestUnion = ({
-    authoritativeEntitlementContractVersion: '1';
-} & EntitlementSyncRequestRecord) | ({
-    authoritativeEntitlementContractVersion: '2';
-} & AuthorityEntitlementSyncRequestRecord);
+export type EntitlementSyncRequestUnion = AuthorityEntitlementSyncRequestRecord;
 
 export type BillingAuthorityScope = {
     projectId: string;
@@ -1796,14 +1776,14 @@ export type AuthorityUnavailableRecord = {
 export type AuthoritativeEntitlementSyncResponse = CustomerEntitlementSnapshotRecord | AuthorityCustomerEntitlementSnapshotRecord | AuthoritySnapshotUnchangedRecord | AuthorityUnavailableRecord;
 
 /**
- * The Authoritative Entitlement Contract v1 restoreRequest envelope. The normative shape is
- * protocol/schema/authoritative-entitlement/v1/restore.schema.json; this declaration exists
+ * The Authoritative Entitlement Contract v2 restoreRequest envelope. The normative shape is
+ * protocol/schema/authoritative-entitlement/v2/restore.schema.json; this declaration exists
  * so the operation has a resolvable request schema and is deliberately not a second source
  * of truth for the contract.
  *
  */
 export type RestoreRequestRecord = {
-    authoritativeEntitlementContractVersion: '1';
+    authoritativeEntitlementContractVersion: '2';
     recordType: 'restoreRequest';
     payload: {
         storePlatform: 'apple_app_store' | 'google_play';
@@ -1824,12 +1804,12 @@ export type RestoreRequestRecord = {
 };
 
 /**
- * The Authoritative Entitlement Contract v1 restoreResult envelope. Normative shape:
- * protocol/schema/authoritative-entitlement/v1/restore.schema.json.
+ * The Authoritative Entitlement Contract v2 restoreResult envelope. Normative shape:
+ * protocol/schema/authoritative-entitlement/v2/restore.schema.json.
  *
  */
 export type RestoreResultRecord = {
-    authoritativeEntitlementContractVersion: '1';
+    authoritativeEntitlementContractVersion: '2';
     recordType: 'restoreResult';
     payload: {
         restoreId?: string;
@@ -1866,14 +1846,14 @@ export type RestoreResultRecord = {
 };
 
 /**
- * The Authoritative Entitlement Contract v1 customerEntitlementSnapshot envelope. The
- * normative shape is protocol/schema/authoritative-entitlement/v1/snapshot.schema.json;
+ * The Authoritative Entitlement Contract v2 customerEntitlementSnapshot envelope. The
+ * normative shape is protocol/schema/authoritative-entitlement/v2/snapshot.schema.json;
  * this declaration exists so the operation has a resolvable response schema and is
  * deliberately not a second source of truth for the contract.
  *
  */
 export type CustomerEntitlementSnapshotRecord = {
-    authoritativeEntitlementContractVersion: '1';
+    authoritativeEntitlementContractVersion: '2';
     recordType: 'customerEntitlementSnapshot' | 'snapshotUnchanged';
     payload: {
         snapshotId?: string;
@@ -1976,19 +1956,19 @@ export type PrimaryExplanation = {
 };
 
 export type EntitlementCheckRequestRecord = {
-    authoritativeEntitlementContractVersion: '1';
+    authoritativeEntitlementContractVersion: '2';
     recordType: 'entitlementCheckRequest';
     payload: {
         billingCustomerId: string;
         entitlementKeys: Array<string>;
         expectedSnapshotVersion?: number;
-        supportedAuthoritativeEntitlementContracts: Array<'1'>;
+        supportedAuthoritativeEntitlementContracts: Array<'2'>;
         correlationId: string;
     };
 };
 
 export type EntitlementCheckResultRecord = {
-    authoritativeEntitlementContractVersion: '1';
+    authoritativeEntitlementContractVersion: '2';
     recordType: 'entitlementCheckResult';
     payload: {
         billingCustomerId: string;
@@ -2022,12 +2002,12 @@ export type EntitlementCheckResultRecord = {
 };
 
 /**
- * The Authoritative Entitlement Contract v1 subscriptionSnapshot envelope. The normative
- * shape is protocol/schema/authoritative-entitlement/v1/subscription.schema.json.
+ * The Authoritative Entitlement Contract v2 subscriptionSnapshot envelope. The normative
+ * shape is protocol/schema/authoritative-entitlement/v2/subscription.schema.json.
  *
  */
 export type SubscriptionSnapshotRecord = {
-    authoritativeEntitlementContractVersion: '1';
+    authoritativeEntitlementContractVersion: '2';
     recordType: 'subscriptionSnapshot';
     payload: {
         subscriptionSnapshotId?: string;
@@ -2493,8 +2473,9 @@ export type WebhookDelivery = {
 };
 
 /**
- * One recorded try. Mirrors the Billing State Webhook Contract v1 webhookDeliveryAttempt
- * record; the normative shape is protocol/schema/billing-state-webhook/v1/delivery.schema.json.
+ * One recorded try. Mirrors the Billing State Webhook Contract v2 webhookDeliveryAttempt
+ * record; the normative shape is the webhookDeliveryAttempt definition in
+ * protocol/schema/billing-state-webhook/v2/contract.schema.json.
  *
  */
 export type WebhookDeliveryAttempt = {
@@ -4633,7 +4614,7 @@ export type Draft = {
     status: 'active' | 'published' | 'archived';
     revision: number;
     sourceVersionId?: string;
-    protocolVersion: '0.3';
+    protocolVersion: '0.4';
     validationStatus: 'valid' | 'invalid';
     validation: ValidationSummary;
     createdByActorId: string;
@@ -4657,7 +4638,7 @@ export type PaywallVersion = {
     versionNumber: number;
     sourceDraftId: string;
     sourceRevision: number;
-    protocolVersion: '0.3';
+    protocolVersion: '0.4';
     document: {
         [key: string]: unknown;
     };
@@ -4724,7 +4705,7 @@ export type ConfigurationRelease = {
     projectId: string;
     environmentId: string;
     releaseNumber: number;
-    deliveryContractVersion: '1';
+    deliveryContractVersion: '3';
     contentHash: string;
     sourceReleaseId?: string;
     rollbackSourceReleaseId?: string;
@@ -8443,10 +8424,18 @@ export type GetSdkConfigurationData = {
     headers: {
         'Mosaic-SDK-Platform': 'flutter' | 'ios' | 'android';
         'Mosaic-SDK-Version': string;
-        'Mosaic-Configuration-Versions': string;
-        'Mosaic-Paywall-Protocol-Versions': '0.3';
         /**
-         * Comma-separated unique exact Protocol capability pairs (`name@0.3`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
+         * The Configuration Delivery contract versions the SDK decodes. Exactly one version exists (v3); a reader that does not advertise it receives nothing new.
+         */
+        'Mosaic-Configuration-Versions': string;
+        /**
+         * The single Paywall Protocol version the SDK renders. Versions are exact identifiers; a reader declaring 0.4 accepts only 0.4.
+         */
+        'Mosaic-Paywall-Protocol-Versions': '0.4';
+        /**
+         * Comma-separated unique exact Protocol capability pairs (`name@<version>`), bounded to 128 pairs, drawn from the compatibility manifest for the declared protocol version.
+         * The selected Release is returned only when every required pair is reported, with one exception: Protocol 0.4 `motion.*` capabilities carry the `renderWithoutMotion` fallback, so a Release is still delivered to a reader that omits them and the reader renders the document statically. Every other capability keeps `rejectDocument`.
+         *
          */
         'Mosaic-Paywall-Capabilities': string;
         'Mosaic-Placement-Decision-Versions'?: string;
@@ -8456,21 +8445,21 @@ export type GetSdkConfigurationData = {
         'Mosaic-Decision-Features'?: string;
         'Mosaic-Bucketing-Algorithms'?: 'sha256_length_prefixed_v1';
         /**
-         * Required when Delivery v3 is requested. Comma-separated unique Experiment Assignment contract versions.
+         * Comma-separated unique Experiment Assignment contract versions.
          */
-        'Mosaic-Experiment-Assignment-Versions'?: string;
+        'Mosaic-Experiment-Assignment-Versions': string;
         /**
-         * Required when Delivery v3 is requested. Comma-separated unique exact Experiment Assignment v1 feature identifiers.
+         * Comma-separated unique exact Experiment Assignment v1 feature identifiers.
          */
-        'Mosaic-Experiment-Features'?: string;
+        'Mosaic-Experiment-Features': string;
         /**
-         * Required when Delivery v3 is requested. Comma-separated unique canonical Variant and Group bucketing algorithms.
+         * Comma-separated unique canonical Variant and Group bucketing algorithms.
          */
-        'Mosaic-Experiment-Bucketing-Algorithms'?: string;
+        'Mosaic-Experiment-Bucketing-Algorithms': string;
         /**
-         * Required when Delivery v3 is requested. Comma-separated unique trusted-time schedule policies.
+         * Comma-separated unique trusted-time schedule policies.
          */
-        'Mosaic-Experiment-Schedule-Policies'?: string;
+        'Mosaic-Experiment-Schedule-Policies': string;
         'Mosaic-App-Version'?: string;
         'If-None-Match'?: string;
     };
@@ -8502,7 +8491,7 @@ export type GetSdkConfigurationError = GetSdkConfigurationErrors[keyof GetSdkCon
 
 export type GetSdkConfigurationResponses = {
     /**
-     * Highest mutually supported representation actually available for the current immutable Release. A v3-capable SDK falls back to an available v2 or safe v1 representation when that Release predates v3. Delivery v3 requires complete Experiment capability headers. A v1 candidate is withheld when an advanced Placement lacks an explicit Paywall default.
+     * The current immutable Release in its single stored representation (Configuration Delivery v3, carrying Paywall Protocol 0.4). There are no projections to older Delivery versions; a Release stored at a deleted version is withheld with 406 until the Environment republishes.
      */
     200: {
         [key: string]: unknown;
@@ -8515,7 +8504,7 @@ export type GetSdkCommerceConfigurationData = {
     body?: never;
     headers: {
         /**
-         * Comma-separated accepted Commerce media types. Supported versions are application/vnd.mosaic.commerce-configuration+json;version=1 and version=2.
+         * Comma-separated accepted Commerce media types. The only supported version is application/vnd.mosaic.commerce-configuration+json;version=2.
          */
         Accept: string;
         'Mosaic-SDK-Platform': 'flutter' | 'ios' | 'android';

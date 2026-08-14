@@ -1,7 +1,7 @@
 # Mosaic Dashboard and Local Studio
 
 The dashboard is a standalone TanStack Start application. Local Studio at `/studio` authors the
-constrained Protocol 0.2 tree, validates it, and sends live revisions to the three native example
+constrained Protocol 0.4 tree, validates it, and sends live revisions to the three native example
 apps through the loopback preview relay.
 
 Local Studio does not use accounts, hosted projects, cloud storage, remote publishing, analytics,
@@ -155,7 +155,7 @@ This starts both:
 - the local WebSocket relay at `ws://127.0.0.1:4317/preview`
 
 Native clients use session `session_local_01`. Studio and the relay use the single
-`mosaic.local-preview.v0.2` contract. Override the Studio connection with:
+`mosaic.local-preview.v0.4` contract. Override the Studio connection with:
 
 ```bash
 VITE_MOSAIC_PREVIEW_URL=ws://127.0.0.1:4317/preview
@@ -168,10 +168,10 @@ backoff, and the last draft is replayed after the client reports capabilities ag
 
 ## Local files and recovery
 
-- Autosave uses browser storage key `mosaic:local-project:v0.2` after a 500 ms debounce.
+- Autosave uses browser storage key `mosaic:local-project:v0.4` after a 500 ms debounce.
 - The autosave wrapper preserves the document, locale, text scale, revision, and mock-commerce state.
 - Invalid but schema-shaped drafts remain resumable so validation fixes are not lost.
-- **Import JSON** accepts a raw, valid Mosaic Protocol 0.2 paywall document under 1 MB.
+- **Import JSON** accepts a raw, valid Mosaic Protocol 0.4 paywall document under 1 MB.
 - **Export** writes only a canonical raw paywall document (`*.mosaic.json`), never the autosave
   wrapper.
 - Imported products receive matching `unavailable/notConfigured` mocks until the user binds local
@@ -190,7 +190,7 @@ fieldsets, radios, figures, and native buttons.
 
 The property inspector uses compact contextual sections. Common content, layout, appearance,
 typography, visibility, localization, and accessibility fields are grouped by component, while
-uncommon contract details remain under Advanced. Protocol 0.2 adds generalized vertical or
+uncommon contract details remain under Advanced. The protocol adds generalized vertical or
 horizontal Stack, Carousel, Switch, Countdown, constrained color and box styling, and Product Card
 Default/Selected state editing with explicit inheritance and reset controls. Width and height each
 offer Fit, Fill, or a fixed layout-unit value; unbounded vertical Fill recovers to Fit. Backgrounds
