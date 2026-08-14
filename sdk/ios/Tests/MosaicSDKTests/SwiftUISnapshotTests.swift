@@ -26,6 +26,13 @@
           products: MosaicProduct.phase1MockProducts
         ),
         clock: { Date(timeIntervalSince1970: 1_893_455_998) },
+        // A golden records the settled paywall, so motion is disabled rather
+        // than raced. The default driver runs the entrance in real time against
+        // a 50 ms capture window, so a golden taken through it records whichever
+        // frame the entrance happened to be on — for the canonical document that
+        // is its first, with the headline, subtitle, and feature list still at
+        // opacity zero. The terminal-state test proves the two agree.
+        motionDriver: .disabled(),
         onResult: { _ in }
       )
       await model.prepare()
@@ -79,6 +86,13 @@
           products: MosaicProduct.phase1MockProducts
         ),
         clock: { Date(timeIntervalSince1970: 1_893_455_998) },
+        // A golden records the settled paywall, so motion is disabled rather
+        // than raced. The default driver runs the entrance in real time against
+        // a 50 ms capture window, so a golden taken through it records whichever
+        // frame the entrance happened to be on — for the canonical document that
+        // is its first, with the headline, subtitle, and feature list still at
+        // opacity zero. The terminal-state test proves the two agree.
+        motionDriver: .disabled(),
         onResult: { _ in }
       )
       await model.prepare()
@@ -258,7 +272,11 @@
     func testProtocolV04MotionAtItsEndRendersTheStaticDocument() async throws {
       let size = CGSize(width: 390, height: 844)
       let document = try v04Document()
-      func image(driver: @escaping @autoclosure () -> MosaicMotionDriver) async -> UIImage {
+      func image(
+        driver: @escaping @autoclosure () -> MosaicMotionDriver,
+        advanceTo: Int? = nil
+      ) async -> UIImage {
+        let driver = driver()
         let model = MosaicPaywallModel(
           document: document,
           requestedLocale: "en",
@@ -266,10 +284,16 @@
             products: MosaicProduct.phase1MockProducts
           ),
           clock: { Date(timeIntervalSince1970: 1_893_455_998) },
-          motionDriver: driver(),
+          motionDriver: driver,
           onResult: { _ in }
         )
         await model.prepare()
+        // After `prepare`, which is what stamps each surface's entry origin at
+        // the driver's current time. Winding the clock forward only now is what
+        // makes the elapsed time *since entry* reach the end of the motion; a
+        // driver constructed already at the end stamps its entry there too and
+        // sits at the entrance's first frame forever.
+        if let advanceTo { driver.advance(to: advanceTo) }
         return render(
           MosaicPaywall(
             model: model,
@@ -286,7 +310,7 @@
       let staticRendering = await image(driver: .disabled())
       // Past the last delay plus the longest curve, and past three 900 ms pulse
       // cycles, so nothing authored is still running.
-      let ended = await image(driver: .controlled(elapsedMilliseconds: 60_000))
+      let ended = await image(driver: .controlled(), advanceTo: 60_000)
       let comparison = try compare(actual: ended, expected: staticRendering)
       XCTAssertEqual(
         comparison.differentPixelRatio, 0,

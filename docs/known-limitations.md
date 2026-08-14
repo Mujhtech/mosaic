@@ -382,18 +382,26 @@ failure.
   serialised report is schema-validated on the relay before any draft is sent,
   and a malformed report withholds the draft atomically.
 
-### iOS pixel goldens are being re-recorded
+### iOS UIKit-gated tests run in no CI job
 
-- Surface: `sdk/ios/Tests/MosaicSDKTests/` snapshot goldens.
+- Surface: `sdk/ios/Tests/MosaicSDKTests/SwiftUISnapshotTests.swift` and every
+  `#if canImport(UIKit)` test — the pixel goldens and the terminal-state pixel
+  proof of ADR-0027's rule among them.
 - Platforms: iOS.
-- Symptom: the pixel-comparison goldens are mid-re-record and do not all match
-  the current renderer output.
-- Workaround: the structural and semantic iOS suites are unaffected and green;
-  only pixel comparison is in flux.
-- Planned resolution: in progress, tracked by the iOS agent.
-- GA safety: a stale golden fails visibly in CI rather than shipping a wrong
-  rendering, and the protocol conformance suites that pin cross-platform
-  behaviour are independent of the goldens.
+- Symptom: these tests compile and run only in the simulator-hosted
+  `MosaicExampleTests` target, which CI does not build; macOS `swift test`
+  skips them by construction. The target was silently unbuildable for a period
+  without any signal, which is how a mis-recorded golden pair and a broken
+  terminal-state test went unnoticed until 2026-08-14 (both since fixed: the
+  goldens are re-recorded deterministically through the disabled motion
+  driver, and the terminal-state test passes).
+- Workaround: run the simulator suite manually before release-significant
+  renderer changes.
+- Planned resolution: wire a macOS/simulator CI job that builds and runs
+  `MosaicExampleTests`; owner decision alongside the Android emulator-job
+  question.
+- GA safety: the structural and semantic iOS suites run in CI and stay green;
+  only pixel-level regression detection is manual until the job exists.
 
 ### Eleven Analytics Event names have no canonical fixture
 
