@@ -173,26 +173,19 @@ public enum MosaicCommerceConfigurationDecoder {
       root["commerceConfigurationVersion"],
       path: "$.commerceConfigurationVersion"
     )
-    if version == "2" {
-      return try MosaicCommerceConfigurationV2Decoder.decode(
-        root,
-        association: association
-      )
-    }
+    // Exact-match reading. A configuration at any other version is rejected
+    // atomically rather than partially interpreted.
     guard version == mosaicCommerceConfigurationVersion else {
       throw MosaicCommerceConfigurationError.unsupportedVersion(version)
     }
-    let configuration = try CommerceValue.object(
-      root["configuration"],
-      path: "$.configuration"
-    )
-    return try decodeConfiguration(configuration, association: association)
+    return try decodeConfiguration(root, association: association)
   }
 
   private static func decodeConfiguration(
-    _ raw: [String: Any],
+    _ root: [String: Any],
     association: MosaicCommerceConfigurationAssociation
   ) throws -> MosaicCommerceConfiguration {
+    let raw = try CommerceValue.object(root["configuration"], path: "$.configuration")
     let path = "$.configuration"
     try CommerceValue.exactKeys(
       raw,
@@ -215,24 +208,20 @@ public enum MosaicCommerceConfigurationDecoder {
     }
 
     let environmentID = try CommerceValue.identifier(
-      raw["environmentId"],
-      path: "\(path).environmentId"
+      raw["environmentId"], path: "\(path).environmentId"
     )
     let applicationID = try CommerceValue.identifier(
-      raw["applicationId"],
-      path: "\(path).applicationId"
+      raw["applicationId"], path: "\(path).applicationId"
     )
-    let platformSource = try CommerceValue.string(
-      raw["storePlatform"],
-      path: "\(path).storePlatform"
-    )
-    guard let platform = MosaicCommerceStorePlatform(rawValue: platformSource) else {
+    guard
+      let platform = MosaicCommerceStorePlatform(
+        rawValue: try CommerceValue.string(raw["storePlatform"], path: "\(path).storePlatform")
+      )
+    else {
       throw CommerceValue.shape("\(path).storePlatform", "unsupported_value")
     }
-
     let release = try CommerceValue.object(
-      raw["configurationRelease"],
-      path: "\(path).configurationRelease"
+      raw["configurationRelease"], path: "\(path).configurationRelease"
     )
     try CommerceValue.exactKeys(
       release,
@@ -240,14 +229,11 @@ public enum MosaicCommerceConfigurationDecoder {
       path: "\(path).configurationRelease"
     )
     let releaseID = try CommerceValue.identifier(
-      release["id"],
-      path: "\(path).configurationRelease.id"
+      release["id"], path: "\(path).configurationRelease.id"
     )
     let releaseDigest = try CommerceValue.digest(
-      release["contentDigest"],
-      path: "\(path).configurationRelease.contentDigest"
+      release["contentDigest"], path: "\(path).configurationRelease.contentDigest"
     )
-
     guard environmentID == association.environmentID,
       applicationID == association.applicationID,
       platform == association.storePlatform,
@@ -258,38 +244,32 @@ public enum MosaicCommerceConfigurationDecoder {
     }
 
     let activeProvider = try decodeActiveProvider(
-      raw["activeProvider"],
-      path: "\(path).activeProvider"
+      raw["activeProvider"], platform: platform, path: "\(path).activeProvider"
     )
     let productMappings = try decodeProductMappings(
-      raw["productMappings"],
+      raw["productMappings"], providerID: activeProvider.identity.id,
       path: "\(path).productMappings"
     )
     let entitlementMappings = try decodeEntitlementMappings(
-      raw["entitlementMappings"],
-      path: "\(path).entitlementMappings"
+      raw["entitlementMappings"], path: "\(path).entitlementMappings"
     )
-    let freshness = try decodeFreshness(raw["freshness"], path: "\(path).freshness")
-    let diagnostics = try decodeDiagnostics(
-      raw["diagnostics"],
-      count: 0...32,
-      path: "\(path).diagnostics"
+    let freshness = try decodeFreshness(
+      raw["freshness"], activation: activeProvider.activation, path: "\(path).freshness"
     )
-
-    let actualProducts = Set(productMappings.map(\.mosaicProductID))
-    guard actualProducts == Set(association.mosaicProductIDs) else {
+    let diagnostics = try decodeDiagnostics(raw["diagnostics"], path: "\(path).diagnostics")
+    guard Set(productMappings.map(\.mosaicProductID)) == Set(association.mosaicProductIDs) else {
       throw invalid("commerce_configuration_product_association_mismatch")
     }
-    if productMappings.contains(where: {
-      if case .revenueCatPackage = $0.adapterMapping { return true }
-      return false
-    }), activeProvider.identity.id != "revenuecat" {
-      throw invalid("commerce_configuration_revenuecat_mapping_provider_mismatch")
+    guard association.mosaicProductTypes.count == association.mosaicProductIDs.count,
+      productMappings.allSatisfy({
+        association.mosaicProductTypes[$0.mosaicProductID] == $0.productType
+      })
+    else {
+      throw invalid("commerce_configuration_product_type_association_mismatch")
     }
-    try validateFreshness(freshness, activation: activeProvider.activation)
 
     return MosaicCommerceConfiguration(
-      version: "1",
+      version: "2",
       id: try CommerceValue.identifier(raw["id"], path: "\(path).id"),
       environmentID: environmentID,
       applicationID: applicationID,
@@ -305,13 +285,15 @@ public enum MosaicCommerceConfigurationDecoder {
     )
   }
 
-  private static func decodeActiveProvider(_ value: Any?, path: String) throws
-    -> MosaicCommerceActiveProvider
-  {
+  private static func decodeActiveProvider(
+    _ value: Any?,
+    platform: MosaicCommerceStorePlatform,
+    path: String
+  ) throws -> MosaicCommerceActiveProvider {
     let object = try CommerceValue.object(value, path: path)
     try CommerceValue.exactKeys(
       object,
-      required: ["identity", "activation", "capabilities"],
+      required: ["identity", "activation", "capabilities", "recoveryMode"],
       path: path
     )
     let identityObject = try CommerceValue.object(object["identity"], path: "\(path).identity")
@@ -323,32 +305,25 @@ public enum MosaicCommerceConfigurationDecoder {
     let identity = MosaicCommerceProviderIdentity(
       id: try CommerceValue.identifier(identityObject["id"], path: "\(path).identity.id"),
       displayName: try CommerceValue.safeString(
-        identityObject["displayName"],
-        length: 1...240,
-        path: "\(path).identity.displayName"
+        identityObject["displayName"], length: 1...240, path: "\(path).identity.displayName"
       ),
       adapterVersion: try CommerceValue.patternString(
-        identityObject["adapterVersion"],
-        length: 1...64,
+        identityObject["adapterVersion"], length: 1...64,
         pattern: "^[A-Za-z0-9][A-Za-z0-9.+_-]*$",
         path: "\(path).identity.adapterVersion"
       )
     )
-
     let activationObject = try CommerceValue.object(
-      object["activation"],
-      path: "\(path).activation"
+      object["activation"], path: "\(path).activation"
     )
     let source = try CommerceValue.string(
-      activationObject["source"],
-      path: "\(path).activation.source"
+      activationObject["source"], path: "\(path).activation.source"
     )
     let activation: MosaicCommerceProviderActivation
     switch source {
     case "providerConnection":
       try CommerceValue.exactKeys(
-        activationObject,
-        required: ["source", "providerConnectionId"],
+        activationObject, required: ["source", "providerConnectionId"],
         path: "\(path).activation"
       )
       activation = .providerConnection(
@@ -359,9 +334,7 @@ public enum MosaicCommerceConfigurationDecoder {
       )
     case "sdkLocal":
       try CommerceValue.exactKeys(
-        activationObject,
-        required: ["source", "localSnapshotId"],
-        path: "\(path).activation"
+        activationObject, required: ["source", "localSnapshotId"], path: "\(path).activation"
       )
       activation = .sdkLocal(
         snapshotID: try CommerceValue.identifier(
@@ -369,35 +342,41 @@ public enum MosaicCommerceConfigurationDecoder {
           path: "\(path).activation.localSnapshotId"
         )
       )
+    case "nativeStore":
+      try CommerceValue.exactKeys(
+        activationObject, required: ["source"], path: "\(path).activation"
+      )
+      guard
+        (platform == .ios && identity.id == "app_store")
+          || (platform == .android && identity.id == "google_play")
+      else {
+        throw invalid("commerce_configuration_native_provider_platform_mismatch")
+      }
+      activation = .nativeStore
     default:
       throw CommerceValue.shape("\(path).activation.source", "unsupported_value")
     }
 
-    let values = try CommerceValue.array(
-      object["capabilities"],
-      count: 1...13,
-      path: "\(path).capabilities"
+    let capabilityValues = try CommerceValue.array(
+      object["capabilities"], count: 1...19, path: "\(path).capabilities"
     )
-    var capabilities: [MosaicCommerceCapability] = []
     var names = Set<MosaicCommerceCapabilityName>()
-    for (index, value) in values.enumerated() {
+    let capabilities = try capabilityValues.enumerated().map { index, value in
       let itemPath = "\(path).capabilities[\(index)]"
       let item = try CommerceValue.object(value, path: itemPath)
       try CommerceValue.exactKeys(
-        item,
-        required: ["name", "support"],
-        optional: ["reasonCode"],
-        path: itemPath
+        item, required: ["name", "support"], optional: ["reasonCode"], path: itemPath
       )
-      let nameSource = try CommerceValue.string(item["name"], path: "\(itemPath).name")
-      let supportSource = try CommerceValue.string(item["support"], path: "\(itemPath).support")
-      guard let name = MosaicCommerceCapabilityName(rawValue: nameSource),
-        let support = MosaicCommerceCapabilitySupport(rawValue: supportSource)
+      guard
+        let name = MosaicCommerceCapabilityName(
+          rawValue: try CommerceValue.string(item["name"], path: "\(itemPath).name")
+        ),
+        let support = MosaicCommerceCapabilitySupport(
+          rawValue: try CommerceValue.string(item["support"], path: "\(itemPath).support")
+        ),
+        names.insert(name).inserted
       else {
-        throw CommerceValue.shape(itemPath, "unsupported_value")
-      }
-      guard names.insert(name).inserted else {
-        throw invalid("commerce_configuration_duplicate_capability")
+        throw CommerceValue.shape(itemPath, "unsupported_or_duplicate_value")
       }
       let reason = try item["reasonCode"].map {
         try CommerceValue.reasonCode($0, path: "\(itemPath).reasonCode")
@@ -408,117 +387,211 @@ public enum MosaicCommerceConfigurationDecoder {
       else {
         throw invalid("commerce_configuration_capability_reason_invalid")
       }
-      capabilities.append(
-        MosaicCommerceCapability(name: name, support: support, reasonCode: reason)
+      return MosaicCommerceCapability(name: name, support: support, reasonCode: reason)
+    }
+    guard
+      let recoveryMode = MosaicCommerceRecoveryMode(
+        rawValue: try CommerceValue.string(
+          object["recoveryMode"], path: "\(path).recoveryMode"
+        )
       )
+    else {
+      throw CommerceValue.shape("\(path).recoveryMode", "unsupported_value")
+    }
+    if case .nativeStore = activation {
+      let expectedRecovery: MosaicCommerceRecoveryMode =
+        platform == .ios ? .storeSynchronization : .activePurchaseRecovery
+      guard recoveryMode == expectedRecovery else {
+        throw invalid("commerce_configuration_native_recovery_mode_mismatch")
+      }
+      let expected = nativeCapabilityMatrix(providerID: identity.id)
+      guard capabilities.count == MosaicCommerceCapabilityName.allCases.count,
+        expected.count == MosaicCommerceCapabilityName.allCases.count,
+        capabilities.allSatisfy({
+          expected[$0.name]
+            == NativeCapabilityExpectation(
+              support: $0.support,
+              reasonCode: $0.reasonCode
+            )
+        })
+      else {
+        throw invalid("commerce_configuration_native_capability_matrix_mismatch")
+      }
     }
     return MosaicCommerceActiveProvider(
       identity: identity,
       activation: activation,
       capabilities: capabilities,
-      recoveryMode: .providerDefined
+      recoveryMode: recoveryMode
     )
   }
 
-  private static func decodeProductMappings(_ value: Any?, path: String) throws
-    -> [MosaicCommerceProductMapping]
-  {
+  private static func decodeProductMappings(
+    _ value: Any?,
+    providerID: String,
+    path: String
+  ) throws -> [MosaicCommerceProductMapping] {
     let values = try CommerceValue.array(value, count: 1...256, path: path)
-    var result: [MosaicCommerceProductMapping] = []
     var productIDs = Set<String>()
     var mappingIDs = Set<String>()
+    var providerProductReferences = Set<String>()
     var providerTargets = Set<String>()
-    for (index, value) in values.enumerated() {
+    return try values.enumerated().map { index, value in
       let itemPath = "\(path)[\(index)]"
       let item = try CommerceValue.object(value, path: itemPath)
       try CommerceValue.exactKeys(
         item,
         required: [
-          "mosaicProductId", "mappingId", "providerProductReference", "adapterMapping",
+          "mosaicProductId", "mappingId", "productType", "entitlementKeys",
+          "providerProductReference", "adapterMapping",
         ],
         path: itemPath
       )
       let productID = try CommerceValue.identifier(
-        item["mosaicProductId"],
-        path: "\(itemPath).mosaicProductId"
+        item["mosaicProductId"], path: "\(itemPath).mosaicProductId"
       )
       let mappingID = try CommerceValue.identifier(
-        item["mappingId"],
-        path: "\(itemPath).mappingId"
+        item["mappingId"], path: "\(itemPath).mappingId"
       )
+      guard productIDs.insert(productID).inserted, mappingIDs.insert(mappingID).inserted else {
+        throw invalid("commerce_configuration_duplicate_product_mapping")
+      }
+      guard
+        let productType = MosaicCommerceProductType(
+          rawValue: try CommerceValue.string(
+            item["productType"], path: "\(itemPath).productType"
+          )
+        )
+      else {
+        throw CommerceValue.shape("\(itemPath).productType", "unsupported_value")
+      }
+      let entitlementValues = try CommerceValue.array(
+        item["entitlementKeys"], count: 1...32, path: "\(itemPath).entitlementKeys"
+      )
+      var entitlementSet = Set<String>()
+      let entitlementKeys = try entitlementValues.enumerated().map { entitlementIndex, value in
+        let key = try CommerceValue.entitlementKey(
+          value, path: "\(itemPath).entitlementKeys[\(entitlementIndex)]"
+        )
+        guard entitlementSet.insert(key).inserted else {
+          throw invalid("commerce_configuration_duplicate_product_entitlement")
+        }
+        return key
+      }
       let providerReference = try CommerceValue.opaqueIdentifier(
-        item["providerProductReference"],
-        path: "\(itemPath).providerProductReference"
+        item["providerProductReference"], path: "\(itemPath).providerProductReference"
       )
       let adapterObject = try CommerceValue.object(
-        item["adapterMapping"],
-        path: "\(itemPath).adapterMapping"
+        item["adapterMapping"], path: "\(itemPath).adapterMapping"
       )
       let kind = try CommerceValue.string(
-        adapterObject["kind"],
-        path: "\(itemPath).adapterMapping.kind"
+        adapterObject["kind"], path: "\(itemPath).adapterMapping.kind"
       )
       let adapter: MosaicCommerceAdapterMapping
-      let targetKey: String
       switch kind {
       case "directProduct":
         try CommerceValue.exactKeys(
-          adapterObject,
-          required: ["kind"],
-          path: "\(itemPath).adapterMapping"
-        )
+          adapterObject, required: ["kind"], path: "\(itemPath).adapterMapping")
         adapter = .directProduct
-        targetKey = "\(providerReference):{\"kind\":\"directProduct\"}"
       case "revenueCatPackage":
         try CommerceValue.exactKeys(
           adapterObject,
           required: ["kind", "offeringIdentifier", "packageIdentifier"],
           path: "\(itemPath).adapterMapping"
         )
-        let offering = try CommerceValue.opaqueIdentifier(
-          adapterObject["offeringIdentifier"],
-          path: "\(itemPath).adapterMapping.offeringIdentifier"
-        )
-        let package = try CommerceValue.opaqueIdentifier(
-          adapterObject["packageIdentifier"],
-          path: "\(itemPath).adapterMapping.packageIdentifier"
-        )
+        guard providerID == "revenuecat" else {
+          throw invalid("commerce_configuration_revenuecat_mapping_provider_mismatch")
+        }
         adapter = .revenueCatPackage(
-          offeringIdentifier: offering,
-          packageIdentifier: package
+          offeringIdentifier: try CommerceValue.opaqueIdentifier(
+            adapterObject["offeringIdentifier"],
+            path: "\(itemPath).adapterMapping.offeringIdentifier"
+          ),
+          packageIdentifier: try CommerceValue.opaqueIdentifier(
+            adapterObject["packageIdentifier"],
+            path: "\(itemPath).adapterMapping.packageIdentifier"
+          )
         )
-        targetKey =
-          "\(providerReference):{\"kind\":\"revenueCatPackage\",\"offeringIdentifier\":"
-          + "\"\(offering)\",\"packageIdentifier\":\"\(package)\"}"
+      case "storeKitProduct":
+        try CommerceValue.exactKeys(
+          adapterObject, required: ["kind"], path: "\(itemPath).adapterMapping")
+        guard providerID == "app_store" else {
+          throw invalid("commerce_configuration_storekit_mapping_provider_mismatch")
+        }
+        adapter = .storeKitProduct
+      case "googlePlayProduct":
+        try CommerceValue.exactKeys(
+          adapterObject, required: ["kind"], optional: ["basePlanId", "offerId"],
+          path: "\(itemPath).adapterMapping"
+        )
+        guard providerID == "google_play" else {
+          throw invalid("commerce_configuration_google_mapping_provider_mismatch")
+        }
+        let basePlanID = try adapterObject["basePlanId"].map {
+          try CommerceValue.opaqueIdentifier($0, path: "\(itemPath).adapterMapping.basePlanId")
+        }
+        let offerID = try adapterObject["offerId"].map {
+          try CommerceValue.opaqueIdentifier($0, path: "\(itemPath).adapterMapping.offerId")
+        }
+        guard productType == .subscription ? basePlanID != nil : basePlanID == nil && offerID == nil
+        else {
+          throw invalid("commerce_configuration_google_selector_invalid")
+        }
+        adapter = .googlePlayProduct(basePlanID: basePlanID, offerID: offerID)
       default:
         throw CommerceValue.shape("\(itemPath).adapterMapping.kind", "unsupported_value")
       }
-      guard productIDs.insert(productID).inserted,
-        mappingIDs.insert(mappingID).inserted,
-        providerTargets.insert(targetKey).inserted
-      else {
-        throw invalid("commerce_configuration_duplicate_product_mapping")
+      let targetKey: String =
+        switch adapter {
+        case .directProduct:
+          "\(providerReference):directProduct"
+        case .revenueCatPackage(let offering, let package):
+          "\(providerReference):revenueCatPackage:\(offering):\(package)"
+        case .storeKitProduct:
+          "\(providerReference):storeKitProduct"
+        case .googlePlayProduct(let basePlan, let offer):
+          "\(providerReference):googlePlayProduct:\(basePlan ?? ""):\(offer ?? "")"
+        }
+      guard providerTargets.insert(targetKey).inserted else {
+        throw invalid("commerce_configuration_duplicate_provider_product_target")
       }
-      result.append(
-        MosaicCommerceProductMapping(
-          mosaicProductID: productID,
-          mappingID: mappingID,
-          providerProductReference: providerReference,
-          adapterMapping: adapter
-        )
+      if providerID == "app_store" || providerID == "google_play" {
+        guard providerProductReferences.insert(providerReference).inserted else {
+          throw invalid("commerce_configuration_duplicate_native_provider_product")
+        }
+        let nativeMappingMatches =
+          providerID == "app_store"
+          ? {
+            if case .storeKitProduct = adapter { return true }
+            return false
+          }()
+          : {
+            if case .googlePlayProduct = adapter { return true }
+            return false
+          }()
+        guard nativeMappingMatches else {
+          throw invalid("commerce_configuration_native_mapping_kind_mismatch")
+        }
+      }
+      return MosaicCommerceProductMapping(
+        mosaicProductID: productID,
+        mappingID: mappingID,
+        providerProductReference: providerReference,
+        adapterMapping: adapter,
+        productType: productType,
+        entitlementKeys: entitlementKeys
       )
     }
-    return result
   }
 
-  private static func decodeEntitlementMappings(_ value: Any?, path: String) throws
-    -> [MosaicCommerceEntitlementMapping]
-  {
-    let values = try CommerceValue.array(value, count: 1...128, path: path)
-    var result: [MosaicCommerceEntitlementMapping] = []
+  private static func decodeEntitlementMappings(
+    _ value: Any?,
+    path: String
+  ) throws -> [MosaicCommerceEntitlementMapping] {
+    let values = try CommerceValue.array(value, count: 0...128, path: path)
     var mosaicKeys = Set<String>()
     var providerKeys = Set<String>()
-    for (index, value) in values.enumerated() {
+    return try values.enumerated().map { index, value in
       let itemPath = "\(path)[\(index)]"
       let item = try CommerceValue.object(value, path: itemPath)
       try CommerceValue.exactKeys(
@@ -527,8 +600,7 @@ public enum MosaicCommerceConfigurationDecoder {
         path: itemPath
       )
       let mosaicKey = try CommerceValue.entitlementKey(
-        item["mosaicEntitlementKey"],
-        path: "\(itemPath).mosaicEntitlementKey"
+        item["mosaicEntitlementKey"], path: "\(itemPath).mosaicEntitlementKey"
       )
       let providerKey = try CommerceValue.opaqueIdentifier(
         item["providerEntitlementIdentifier"],
@@ -537,126 +609,116 @@ public enum MosaicCommerceConfigurationDecoder {
       guard mosaicKeys.insert(mosaicKey).inserted, providerKeys.insert(providerKey).inserted else {
         throw invalid("commerce_configuration_duplicate_entitlement_mapping")
       }
-      result.append(
-        MosaicCommerceEntitlementMapping(
-          mosaicEntitlementKey: mosaicKey,
-          providerEntitlementIdentifier: providerKey
-        )
+      return MosaicCommerceEntitlementMapping(
+        mosaicEntitlementKey: mosaicKey,
+        providerEntitlementIdentifier: providerKey
       )
     }
-    return result
   }
 
-  private static func decodeFreshness(_ value: Any?, path: String) throws
-    -> MosaicCommerceFreshness
-  {
+  private static func decodeFreshness(
+    _ value: Any?,
+    activation: MosaicCommerceProviderActivation,
+    path: String
+  ) throws -> MosaicCommerceFreshness {
     let object = try CommerceValue.object(value, path: path)
+    let source = try CommerceValue.string(object["source"], path: "\(path).source")
+    if source == "nativeStoreConfiguration" {
+      try CommerceValue.exactKeys(
+        object, required: ["source", "status", "configuredAt"],
+        optional: ["observation"], path: path
+      )
+      guard case .nativeStore = activation else {
+        throw invalid("commerce_configuration_freshness_source_mismatch")
+      }
+      let statusSource = try CommerceValue.string(object["status"], path: "\(path).status")
+      guard let status = MosaicCommerceFreshnessStatus(rawValue: statusSource) else {
+        throw CommerceValue.shape("\(path).status", "unsupported_value")
+      }
+      let configuredAt = try CommerceValue.timestamp(
+        object["configuredAt"], path: "\(path).configuredAt"
+      )
+      var observedAt = configuredAt
+      var expiresAt: String?
+      if let observationValue = object["observation"] {
+        let observation = try CommerceValue.object(
+          observationValue, path: "\(path).observation"
+        )
+        try CommerceValue.exactKeys(
+          observation, required: ["environment", "observedAt"],
+          optional: ["expiresAt"], path: "\(path).observation"
+        )
+        let environment = try CommerceValue.string(
+          observation["environment"], path: "\(path).observation.environment"
+        )
+        guard ["test", "production", "unknown"].contains(environment) else {
+          throw CommerceValue.shape("\(path).observation.environment", "unsupported_value")
+        }
+        observedAt = try CommerceValue.timestamp(
+          observation["observedAt"], path: "\(path).observation.observedAt"
+        )
+        expiresAt = try observation["expiresAt"].map {
+          try CommerceValue.timestamp($0, path: "\(path).observation.expiresAt")
+        }
+      }
+      guard (status == .configured) == (object["observation"] == nil) else {
+        throw invalid("commerce_configuration_native_freshness_observation_invalid")
+      }
+      if let expiresAt {
+        guard let observed = CommerceValue.date(observedAt),
+          let expires = CommerceValue.date(expiresAt),
+          expires >= observed
+        else {
+          throw invalid("commerce_configuration_native_freshness_order_invalid")
+        }
+      }
+      return MosaicCommerceFreshness(
+        source: .nativeStoreConfiguration,
+        status: status,
+        providerObservedAt: observedAt,
+        synchronizedAt: configuredAt,
+        staleAt: expiresAt ?? configuredAt,
+        expiresAt: expiresAt
+      )
+    }
     try CommerceValue.exactKeys(
       object,
       required: ["source", "status", "providerObservedAt", "synchronizedAt", "staleAt"],
-      optional: ["expiresAt"],
-      path: path
+      optional: ["expiresAt"], path: path
     )
-    let sourceValue = try CommerceValue.string(object["source"], path: "\(path).source")
-    let statusValue = try CommerceValue.string(object["status"], path: "\(path).status")
-    guard let source = MosaicCommerceFreshnessSource(rawValue: sourceValue),
-      let status = MosaicCommerceFreshnessStatus(rawValue: statusValue)
+    guard let freshnessSource = MosaicCommerceFreshnessSource(rawValue: source),
+      let status = MosaicCommerceFreshnessStatus(
+        rawValue: try CommerceValue.string(object["status"], path: "\(path).status")
+      )
     else {
       throw CommerceValue.shape(path, "unsupported_value")
     }
-    return MosaicCommerceFreshness(
-      source: source,
+    let expected: MosaicCommerceFreshnessSource =
+      switch activation {
+      case .providerConnection: .providerSynchronization
+      case .sdkLocal: .sdkLocalSnapshot
+      case .nativeStore: .nativeStoreConfiguration
+      }
+    guard freshnessSource == expected else {
+      throw invalid("commerce_configuration_freshness_source_mismatch")
+    }
+    let freshness = MosaicCommerceFreshness(
+      source: freshnessSource,
       status: status,
       providerObservedAt: try CommerceValue.timestamp(
-        object["providerObservedAt"],
-        path: "\(path).providerObservedAt"
+        object["providerObservedAt"], path: "\(path).providerObservedAt"
       ),
       synchronizedAt: try CommerceValue.timestamp(
-        object["synchronizedAt"],
-        path: "\(path).synchronizedAt"
+        object["synchronizedAt"], path: "\(path).synchronizedAt"
       ),
       staleAt: try CommerceValue.timestamp(object["staleAt"], path: "\(path).staleAt"),
       expiresAt: try object["expiresAt"].map {
         try CommerceValue.timestamp($0, path: "\(path).expiresAt")
       }
     )
-  }
-
-  private static func decodeDiagnostics(
-    _ value: Any?,
-    count: ClosedRange<Int>,
-    path: String
-  ) throws -> [MosaicCommerceDiagnostic] {
-    let values = try CommerceValue.array(value, count: count, path: path)
-    return try values.enumerated().map { index, value in
-      let itemPath = "\(path)[\(index)]"
-      let item = try CommerceValue.object(value, path: itemPath)
-      try CommerceValue.exactKeys(
-        item,
-        required: ["code", "safeMessage", "severity", "retryable", "correlationId"],
-        optional: [
-          "retryAfterSeconds", "providerCode", "mosaicProductId", "recoveryAction",
-        ],
-        path: itemPath
-      )
-      let severitySource = try CommerceValue.string(
-        item["severity"],
-        path: "\(itemPath).severity"
-      )
-      guard let severity = MosaicCommerceDiagnosticSeverity(rawValue: severitySource) else {
-        throw CommerceValue.shape("\(itemPath).severity", "unsupported_value")
-      }
-      let retryable = try CommerceValue.boolean(
-        item["retryable"],
-        path: "\(itemPath).retryable"
-      )
-      let retryAfter = try item["retryAfterSeconds"].map {
-        try CommerceValue.integer($0, range: 1...86_400, path: "\(itemPath).retryAfterSeconds")
-      }
-      guard retryable || retryAfter == nil else {
-        throw invalid("commerce_configuration_diagnostic_retry_invalid")
-      }
-      let recoverySource = try item["recoveryAction"].map {
-        try CommerceValue.string($0, path: "\(itemPath).recoveryAction")
-      }
-      let recovery: MosaicCommerceRecoveryAction?
-      if let recoverySource {
-        guard let value = MosaicCommerceRecoveryAction(rawValue: recoverySource) else {
-          throw CommerceValue.shape("\(itemPath).recoveryAction", "unsupported_value")
-        }
-        recovery = value
-      } else {
-        recovery = nil
-      }
-      return MosaicCommerceDiagnostic(
-        code: try CommerceValue.reasonCode(item["code"], path: "\(itemPath).code"),
-        safeMessage: try CommerceValue.safeString(
-          item["safeMessage"],
-          length: 1...240,
-          path: "\(itemPath).safeMessage"
-        ),
-        severity: severity,
-        retryable: retryable,
-        retryAfterSeconds: retryAfter,
-        correlationID: try CommerceValue.identifier(
-          item["correlationId"],
-          path: "\(itemPath).correlationId"
-        ),
-        providerCode: try item["providerCode"].map {
-          try CommerceValue.safeString($0, length: 1...128, path: "\(itemPath).providerCode")
-        },
-        mosaicProductID: try item["mosaicProductId"].map {
-          try CommerceValue.identifier($0, path: "\(itemPath).mosaicProductId")
-        },
-        recoveryAction: recovery
-      )
-    }
-  }
-
-  private static func validateFreshness(
-    _ freshness: MosaicCommerceFreshness,
-    activation: MosaicCommerceProviderActivation
-  ) throws {
+    // Observation, synchronization, and staleness are a timeline, and a reader
+    // that accepted them out of order would report a freshness window that never
+    // existed. Flutter and Compose enforce the same ordering.
     guard let observed = CommerceValue.date(freshness.providerObservedAt),
       let synchronized = CommerceValue.date(freshness.synchronizedAt),
       let stale = CommerceValue.date(freshness.staleAt),
@@ -670,14 +732,109 @@ public enum MosaicCommerceConfigurationDecoder {
         throw invalid("commerce_configuration_expiry_order_invalid")
       }
     }
-    let expected: MosaicCommerceFreshnessSource
-    switch activation {
-    case .providerConnection: expected = .providerSynchronization
-    case .sdkLocal: expected = .sdkLocalSnapshot
-    case .nativeStore: expected = .nativeStoreConfiguration
-    }
-    guard freshness.source == expected else {
-      throw invalid("commerce_configuration_freshness_source_mismatch")
+    return freshness
+  }
+
+  private struct NativeCapabilityExpectation: Equatable {
+    let support: MosaicCommerceCapabilitySupport
+    let reasonCode: String?
+  }
+
+  private static func nativeCapabilityMatrix(
+    providerID: String
+  ) -> [MosaicCommerceCapabilityName: NativeCapabilityExpectation] {
+    guard providerID == "app_store" else { return [:] }
+    return [
+      .productLoading: .init(support: .supported, reasonCode: nil),
+      .subscriptions: .init(support: .supported, reasonCode: nil),
+      .oneTimeNonConsumables: .init(support: .supported, reasonCode: nil),
+      .trials: .init(support: .supported, reasonCode: nil),
+      .introductoryOffers: .init(support: .supported, reasonCode: nil),
+      .promotionalOffers: .init(
+        support: .conditional, reasonCode: "provider.configurationRequired"),
+      .restore: .init(support: .supported, reasonCode: nil),
+      .activeEntitlementLookup: .init(support: .supported, reasonCode: nil),
+      .pendingPurchases: .init(support: .supported, reasonCode: nil),
+      .deferredPurchases: .init(
+        support: .unsupported, reasonCode: "provider.outcomeUnavailable"),
+      .serverConfirmedTransactions: .init(
+        support: .unsupported, reasonCode: "provider.serverValidationExcluded"),
+      .productSynchronization: .init(
+        support: .unsupported, reasonCode: "provider.serverSynchronizationUnavailable"),
+      .providerDiagnostics: .init(support: .supported, reasonCode: nil),
+      .basePlans: .init(
+        support: .unsupported, reasonCode: "provider.capabilityUnavailable"),
+      .explicitOffers: .init(
+        support: .unsupported, reasonCode: "provider.capabilityUnavailable"),
+      .storeSynchronization: .init(support: .supported, reasonCode: nil),
+      .activePurchaseRecovery: .init(
+        support: .unsupported, reasonCode: "provider.recoveryModeUnavailable"),
+      .asynchronousCommerceUpdates: .init(support: .supported, reasonCode: nil),
+      .localDeliveryAcceptance: .init(support: .supported, reasonCode: nil),
+    ]
+  }
+
+  private static func decodeDiagnostics(
+    _ value: Any?,
+    path: String
+  ) throws -> [MosaicCommerceDiagnostic] {
+    let values = try CommerceValue.array(value, count: 0...32, path: path)
+    return try values.enumerated().map { index, value in
+      let itemPath = "\(path)[\(index)]"
+      let item = try CommerceValue.object(value, path: itemPath)
+      try CommerceValue.exactKeys(
+        item,
+        required: ["code", "safeMessage", "severity", "retryable", "correlationId"],
+        optional: [
+          "retryAfterSeconds", "providerCode", "mosaicProductId", "recoveryAction",
+        ],
+        path: itemPath
+      )
+      guard
+        let severity = MosaicCommerceDiagnosticSeverity(
+          rawValue: try CommerceValue.string(item["severity"], path: "\(itemPath).severity")
+        )
+      else {
+        throw CommerceValue.shape("\(itemPath).severity", "unsupported_value")
+      }
+      let retryable = try CommerceValue.boolean(item["retryable"], path: "\(itemPath).retryable")
+      let retryAfter = try item["retryAfterSeconds"].map {
+        try CommerceValue.integer(
+          $0, range: 1...86_400, path: "\(itemPath).retryAfterSeconds"
+        )
+      }
+      guard retryable || retryAfter == nil else {
+        throw invalid("commerce_configuration_diagnostic_retry_invalid")
+      }
+      let recovery = try item["recoveryAction"].map {
+        guard
+          let action = MosaicCommerceRecoveryAction(
+            rawValue: try CommerceValue.string($0, path: "\(itemPath).recoveryAction")
+          )
+        else {
+          throw CommerceValue.shape("\(itemPath).recoveryAction", "unsupported_value")
+        }
+        return action
+      }
+      return MosaicCommerceDiagnostic(
+        code: try CommerceValue.reasonCode(item["code"], path: "\(itemPath).code"),
+        safeMessage: try CommerceValue.safeString(
+          item["safeMessage"], length: 1...240, path: "\(itemPath).safeMessage"
+        ),
+        severity: severity,
+        retryable: retryable,
+        retryAfterSeconds: retryAfter,
+        correlationID: try CommerceValue.identifier(
+          item["correlationId"], path: "\(itemPath).correlationId"
+        ),
+        providerCode: try item["providerCode"].map {
+          try CommerceValue.safeString($0, length: 1...128, path: "\(itemPath).providerCode")
+        },
+        mosaicProductID: try item["mosaicProductId"].map {
+          try CommerceValue.identifier($0, path: "\(itemPath).mosaicProductId")
+        },
+        recoveryAction: recovery
+      )
     }
   }
 

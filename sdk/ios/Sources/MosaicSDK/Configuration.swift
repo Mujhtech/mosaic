@@ -364,16 +364,6 @@ public struct Mosaic: Sendable {
     return await configurationClient.refreshIfNeeded()
   }
 
-  public func resolve(placement: String) async -> MosaicPlacementResolution {
-    guard let configurationClient else {
-      return .unavailable(
-        diagnostics: [
-          MosaicDiagnostic(code: "delivery_not_configured", stage: .placement)
-        ])
-    }
-    return await configurationClient.resolve(placement: placement)
-  }
-
   /// Evaluates an accepted Placement locally. This never refreshes configuration.
   public func decision(
     placement: String,

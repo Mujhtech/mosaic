@@ -1,11 +1,10 @@
 import Foundation
 
+/// The one Commerce Configuration media type (ADR-0028). A response at any other
+/// version is refused rather than partially interpreted.
 let mosaicCommerceConfigurationMediaType =
-  "application/vnd.mosaic.commerce-configuration+json;version=1"
-let mosaicCommerceConfigurationMediaTypeV2 =
-  "application/vnd.mosaic.commerce-configuration+json;version=2"
-let mosaicCommerceConfigurationAcceptedMediaTypes =
-  "\(mosaicCommerceConfigurationMediaTypeV2), \(mosaicCommerceConfigurationMediaType)"
+  "application/vnd.mosaic.commerce-configuration+json;version=\(mosaicCommerceConfigurationVersion)"
+let mosaicCommerceConfigurationAcceptedMediaTypes = mosaicCommerceConfigurationMediaType
 
 struct MosaicCommerceConfigurationHTTPRequest: Sendable, Equatable {
   let url: URL

@@ -101,6 +101,16 @@ func deliveryFixtureURL(named name: String = "rich-release.json") throws -> URL 
   throw CanonicalFixtureLookupError.notFound
 }
 
+/// The canonical Configuration Delivery fixture names in one corpus directory.
+func deliveryFixtureNames(in subdirectory: String) throws -> [String] {
+  let directory = try deliveryFixtureURL()
+    .deletingLastPathComponent()
+    .appendingPathComponent(subdirectory)
+  return try FileManager.default.contentsOfDirectory(atPath: directory.path)
+    .filter { $0.hasSuffix(".json") }
+    .sorted()
+}
+
 func deliveryFixtureData(named name: String = "rich-release.json") throws -> Data {
   try Data(contentsOf: deliveryFixtureURL(named: name))
 }
@@ -307,7 +317,7 @@ func authoritativeEntitlementSnapshot(_ relativePath: String) throws -> [String:
 /// Builds an iOS-local authority wrapper around the canonical active-subscription
 /// snapshot. The canonical authority digest is recomputed so transition tests
 /// exercise epoch ordering rather than corruption handling.
-func authoritativeEntitlementV2SnapshotVariant(
+func authoritativeEntitlementAuthoritySnapshotVariant(
   authorityEpoch: Int64,
   authorityKind: MosaicCustomerAccessAuthorityKind,
   transitionState: MosaicCustomerAccessTransitionState,
@@ -450,27 +460,6 @@ func contractTimestamp(_ value: String) throws -> Date {
 /// One canonical Commerce Configuration fixture. `storekit-configuration.json`
 /// is the iOS-relevant one and supersedes the retired RevenueCat fixture.
 func commerceConfigurationFixtureData(
-  named name: String = "storekit-configuration.json"
-) throws -> Data {
-  let fileManager = FileManager.default
-  var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-  while directory.path != "/" {
-    let candidate =
-      directory
-      .appendingPathComponent("protocol")
-      .appendingPathComponent("fixtures")
-      .appendingPathComponent("commerce-configuration")
-      .appendingPathComponent("v2")
-      .appendingPathComponent(name)
-    if fileManager.fileExists(atPath: candidate.path) {
-      return try Data(contentsOf: candidate)
-    }
-    directory.deleteLastPathComponent()
-  }
-  throw CanonicalFixtureLookupError.notFound
-}
-
-func commerceConfigurationV2FixtureData(
   named name: String = "storekit-configuration.json"
 ) throws -> Data {
   let fileManager = FileManager.default

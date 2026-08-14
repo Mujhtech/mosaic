@@ -12,8 +12,8 @@ import Foundation
 /// that existed.
 ///
 /// `canonicalTag` implements the protocol's canonical form verbatim — see the
-/// "Localization and locale resolution" section of `docs/protocol/v0.3.md` and
-/// the reference implementation `protocol/tools/locale-resolution-v0.3.mjs`.
+/// "Localization and locale resolution" section of `docs/protocol/v0.4.md` and
+/// the reference implementation `protocol/tools/locale-resolution.mjs`.
 /// Placement targeting and catalog lookup deliberately share it, with exactly
 /// one ruled asymmetry: only catalog lookup recovers the leading language
 /// subtag (`catalogTag`).

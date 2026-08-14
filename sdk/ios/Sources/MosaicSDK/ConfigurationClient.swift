@@ -33,16 +33,6 @@ public enum MosaicConfigurationRefreshResult: Sendable, Equatable {
   case unavailable(diagnostics: [MosaicDiagnostic])
 }
 
-public enum MosaicPlacementResolution: Sendable, Equatable {
-  case resolved(
-    document: MosaicPaywallDocument,
-    paywallVersionID: String,
-    release: MosaicConfigurationReleaseMetadata,
-    source: MosaicConfigurationSource
-  )
-  case unavailable(diagnostics: [MosaicDiagnostic])
-}
-
 struct MosaicDecisionRequirements: Sendable {
   let productIDs: [String]
   let entitlementKeys: [String]
@@ -137,31 +127,6 @@ actor MosaicConfigurationClient {
       metadata: accepted.release.metadata,
       source: accepted.source,
       diagnostics: diagnostics
-    )
-  }
-
-  func resolve(placement key: String) -> MosaicPlacementResolution {
-    guard key.range(of: "^[a-z][a-z0-9_]{0,63}$", options: .regularExpression) != nil else {
-      let diagnostic = MosaicDiagnostic(code: "delivery_invalid_placement", stage: .placement)
-      recordDiagnostic(diagnostic)
-      return .unavailable(diagnostics: diagnostics)
-    }
-    guard let accepted else {
-      let diagnostic = MosaicDiagnostic(
-        code: "delivery_configuration_unavailable", stage: .placement)
-      recordDiagnostic(diagnostic)
-      return .unavailable(diagnostics: diagnostics)
-    }
-    guard let paywall = accepted.release.paywall(forPlacement: key) else {
-      let diagnostic = MosaicDiagnostic(code: "delivery_placement_unavailable", stage: .placement)
-      recordDiagnostic(diagnostic)
-      return .unavailable(diagnostics: diagnostics)
-    }
-    return .resolved(
-      document: paywall.document,
-      paywallVersionID: paywall.id,
-      release: accepted.release.metadata,
-      source: accepted.source
     )
   }
 
@@ -284,14 +249,20 @@ actor MosaicConfigurationClient {
       return .init(.configurationUnavailable(diagnostics: diagnostics))
     }
     guard let decision = accepted.release.decision(forPlacement: key) else {
-      if let paywall = accepted.release.paywall(forPlacement: key) {
+      // The bundled fallback carries no decisions: it exists so that a host with
+      // no reachable configuration still has one paywall to present, and it
+      // declares exactly one. Selecting it is the whole point of the fallback,
+      // and it is the only case where a placement resolves without a rule set.
+      if accepted.source == .bundled, accepted.release.paywallVersions.count == 1,
+        let paywall = accepted.release.paywallVersions.first
+      {
         return .init(
           .paywallSelected(
             document: paywall.document, paywallVersionID: paywall.id, matchedRuleID: nil,
             fallbackPath: [], release: accepted.release.metadata, source: accepted.source,
             trace: .init(steps: [
               .init(
-                code: "legacy_binding_selected", ruleID: nil, safeLabel: nil, result: nil,
+                code: "bundled_fallback_selected", ruleID: nil, safeLabel: nil, result: nil,
                 assignmentType: nil, rolloutBucket: nil, fallbackKey: nil)
             ])))
       }
@@ -755,8 +726,10 @@ actor MosaicConfigurationClient {
       let release: MosaicConfigurationRelease
       switch bundledFallback {
       case .packaged:
+        let material = try DeliveryValueForFallback.object(
+          JSONSerialization.jsonObject(with: data))
         release = try MosaicConfigurationReleaseMaterialDecoder.release(
-          try DeliveryValueForFallback.object(JSONSerialization.jsonObject(with: data)))
+          material, contentDigest: try DeliveryCanonicalJSON.digest(material))
       case .data:
         release = try MosaicConfigurationDeliveryDecoder.decode(data)
       }
@@ -901,12 +874,6 @@ private enum MosaicPackagedConfigurationRelease {
         ],
         "acceptance": "atomic",
       ],
-      "placements": [
-        [
-          "key": "onboarding_complete",
-          "paywallVersionId": "paywall_version_bundled",
-        ]
-      ],
       "paywallVersions": [
         [
           "id": "paywall_version_bundled",
@@ -921,7 +888,6 @@ private enum MosaicPackagedConfigurationRelease {
       "productReferences": products,
       "assetReferences": assetReferences,
     ]
-    release["contentDigest"] = try DeliveryCanonicalJSON.digest(release)
     return release
   }
 }

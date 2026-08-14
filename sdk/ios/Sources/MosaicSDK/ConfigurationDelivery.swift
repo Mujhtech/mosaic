@@ -58,12 +58,6 @@ public enum MosaicEnvironmentMode: String, Sendable, Equatable {
   case production
 }
 
-public struct MosaicConfigurationPlacement: Sendable, Equatable, Identifiable {
-  public var id: String { key }
-  public let key: String
-  public let paywallVersionID: String
-}
-
 public struct MosaicConfigurationPaywallVersion: Sendable, Equatable, Identifiable {
   public let id: String
   public let paywallID: String
@@ -118,7 +112,6 @@ public struct MosaicConfigurationAssetReference: Sendable, Equatable, Identifiab
 public struct MosaicConfigurationRelease: Sendable, Equatable {
   public let metadata: MosaicConfigurationReleaseMetadata
   public let projectID: String?
-  public let placements: [MosaicConfigurationPlacement]
   public let placementDecisions: [MosaicPlacementDecision]
   public let paywallVersions: [MosaicConfigurationPaywallVersion]
   public let productReferences: [MosaicConfigurationProductReference]
@@ -126,13 +119,12 @@ public struct MosaicConfigurationRelease: Sendable, Equatable {
   public let assetReferences: [MosaicConfigurationAssetReference]
   public let experimentAssignments: [MosaicExperimentAssignment]
 
-  public func paywall(forPlacement key: String) -> MosaicConfigurationPaywallVersion? {
-    guard let versionID = placements.first(where: { $0.key == key })?.paywallVersionID else {
-      return nil
-    }
-    return paywallVersions.first(where: { $0.id == versionID })
-  }
-
+  /// The decision rule set that governs a placement.
+  ///
+  /// This is the only placement lookup. A flat placement-to-paywall table used to
+  /// sit beside it, but selecting through it bypassed every rule, fallback, and
+  /// experiment the decision encodes, and it could not represent two placements
+  /// resolving to one paywall version. Flutter and Compose carry no such table.
   public func decision(forPlacement key: String) -> MosaicPlacementDecision? {
     placementDecisions.first { $0.ruleSet.placementKey == key }
   }

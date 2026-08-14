@@ -11,11 +11,10 @@
     /// The one canonical full-paywall golden.
     ///
     /// This previously had a sibling that rendered `canonicalDocument()`
-    /// against a separate `complete-paywall.png` baseline. Both helpers resolve
-    /// to `protocol/fixtures/v0.3/complete-paywall.json`, so the two tests
-    /// rendered the same document and produced byte-identical output; the
-    /// sibling's baseline was a stale Protocol 0.1-era recording. They are now
-    /// one test with one baseline.
+    /// against a separate baseline. Both helpers resolve to
+    /// `protocol/fixtures/v0.4/complete-paywall.json`, so the two tests rendered
+    /// the same document and produced byte-identical output. They are now one
+    /// test with one baseline.
     ///
     /// The clock is pinned because the fixture's Countdown resolves against it.
     func testCanonicalFixtureMatchesDeterministicSwiftUIGolden() async throws {
@@ -615,6 +614,39 @@
     /// The fixture declares it on the `details` sheet, which is presented into a
     /// separate hierarchy; the base screen is what a hosting controller can be
     /// walked from.
+    /// The canonical document with the `details` sheet's video background pointed
+    /// at a *bundled* asset whose key no resolver maps.
+    ///
+    /// The fixture authors that sheet with a remote video, which always resolves
+    /// to its URL — whether it would actually load is the player's question — so
+    /// it can never exercise the unavailable-media path. A bundled key is
+    /// unresolvable by lookup alone, which is what makes the decorative-video
+    /// fallback and its diagnostic reachable.
+    private func v04DocumentWithBundledSheetVideo() throws -> MosaicPaywallDocument {
+      var object = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: v04FixtureData()) as? [String: Any]
+      )
+      var assets = try XCTUnwrap(object["assets"] as? [[String: Any]])
+      let index = try XCTUnwrap(assets.firstIndex { $0["id"] as? String == "remote-sheet-video" })
+      // Only the asset's *source* changes. Repointing the background at another
+      // asset would orphan this one, and an unreferenced asset is itself a
+      // semantic violation.
+      assets[index]["source"] = ["type": "bundled", "key": "mosaic.sheet.video"]
+      object["assets"] = assets
+      // With no remote video left, declaring the capability would be an unused
+      // declaration, which the semantic validator rejects in both directions.
+      var compatibility = try XCTUnwrap(object["compatibility"] as? [String: Any])
+      let capabilities = try XCTUnwrap(
+        compatibility["requiredCapabilities"] as? [[String: Any]])
+      compatibility["requiredCapabilities"] = capabilities.filter {
+        $0["name"] as? String != MosaicCapabilityName.remoteVideo.rawValue
+      }
+      object["compatibility"] = compatibility
+      return try MosaicProtocolDecoder.decode(
+        JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+      )
+    }
+
     private func v04DocumentWithVideoBackgroundOnTheOfferScreen() throws
       -> MosaicPaywallDocument
     {
