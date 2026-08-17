@@ -66,14 +66,6 @@ export const storeEnvironments = [
   "production",
 ] as const satisfies readonly StoreEnvironment[];
 
-export const validationOutcomes = [
-  "validated",
-  "recorded_no_fact",
-  "quarantined",
-  "retryable_failure",
-  "permanently_failed",
-] as const satisfies readonly ValidationOutcome[];
-
 export const resolutionStates = [
   "active_mapping",
   "archived_mapping",

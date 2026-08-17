@@ -14,7 +14,6 @@ import {
  */
 export const FIGMA_BUNDLE_FORMAT = "mosaic.figma-export";
 export const FIGMA_BUNDLE_FORMAT_VERSION = 1;
-export const FIGMA_BUNDLE_FILE_SUFFIX = ".mosaic-figma.json";
 
 /**
  * Local Studio has no project to upload Assets to, so a bundle's images cannot

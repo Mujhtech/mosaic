@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { isRestoreJobRunning } from "@/features/billing-customers/types/restore-vocabulary";
-import { getBillingRestoreJob, listBillingRestoreJobs } from "@/generated/api";
+import { listBillingRestoreJobs } from "@/generated/api";
 import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 export const restoreKeys = {
@@ -68,26 +68,5 @@ export function restoreJobsQueryOptions(
       const items = queryValue.state.data?.items ?? [];
       return items.some((job) => isRestoreJobRunning(job)) ? 5000 : false;
     },
-  });
-}
-
-export function restoreJobQueryOptions(
-  projectId: string,
-  environmentId: string,
-  restoreId: string
-) {
-  return queryOptions({
-    queryKey: restoreKeys.detail(projectId, environmentId, restoreId),
-    queryFn: async ({ signal }) => {
-      const result = await getBillingRestoreJob({
-        client: generatedDashboardClient,
-        path: { environmentId, projectId, restoreId },
-        signal,
-        throwOnError: true,
-      });
-      return result.data.data;
-    },
-    refetchInterval: (query) =>
-      query.state.data && isRestoreJobRunning(query.state.data) ? 5000 : false,
   });
 }

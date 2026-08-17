@@ -113,16 +113,6 @@ const UNCERTAINTY_REASON_LABELS: Record<string, string> = {
   unsupported_provider_state: "Unsupported store state",
 };
 
-const EXPECTED_RESOLUTION_LABELS: Record<string, string> = {
-  automatic_retry: "Mosaic retries automatically",
-  customer_action: "The customer has to act",
-  next_projection_run: "Resolves on the next projection run",
-  next_provider_notification:
-    "Resolves when the store sends the next notification",
-  none_expected: "Nothing will resolve this on its own",
-  operator_action: "An operator has to act",
-};
-
 function humanize(value: string) {
   const spaced = value.replaceAll("_", " ");
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
@@ -147,13 +137,6 @@ export function uncertaintyReasonClause(value: string | undefined) {
     UNCERTAINTY_REASON_SENTENCES[value] ??
     `the store reported ${humanize(value).toLowerCase()}, which this build does not model`
   );
-}
-
-export function expectedResolutionLabel(value: string | undefined) {
-  if (!value) {
-    return "Mosaic did not state how this resolves";
-  }
-  return EXPECTED_RESOLUTION_LABELS[value] ?? humanize(value);
 }
 
 /**

@@ -53,15 +53,3 @@ export function parseAnalyticsFilters(
         : undefined,
   };
 }
-
-export function serializeAnalyticsFilters(filters: AnalyticsFilters) {
-  return {
-    from: filters.from,
-    to: filters.to,
-    timezone: filters.timezone,
-    basis: filters.basis,
-    platform: filters.platform,
-    locale: filters.locale,
-    applicationVersion: filters.applicationVersion,
-  };
-}

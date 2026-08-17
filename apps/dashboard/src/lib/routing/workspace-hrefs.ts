@@ -74,11 +74,6 @@ export function assetsHref(scope: WorkspaceScope) {
   return base ? `${base}/assets` : undefined;
 }
 
-export function paywallsHref(scope: WorkspaceScope) {
-  const base = monetizationBase(scope);
-  return base ? `${base}/paywalls` : undefined;
-}
-
 export function catalogProductsHref(scope: WorkspaceScope) {
   const base = projectBase(scope);
   return base ? `${base}/catalog/products` : undefined;
@@ -162,11 +157,6 @@ export function billingQuarantineHref(scope: WorkspaceScope) {
   return base ? `${base}/quarantine` : undefined;
 }
 
-export function billingReconciliationHref(scope: WorkspaceScope) {
-  const base = billingEnvironmentBase(scope);
-  return base ? `${base}/reconciliation` : undefined;
-}
-
 export function billingHealthHref(scope: WorkspaceScope) {
   const base = billingEnvironmentBase(scope);
   return base ? `${base}/health` : undefined;
@@ -222,17 +212,6 @@ export function billingIdentityConflictHref(
 ) {
   const base = billingIdentityConflictsHref(scope);
   return base ? `${base}/${encodeURIComponent(conflictId)}` : undefined;
-}
-
-/**
- * Projection health is a sibling of billing health, not a tab inside it. The
- * two answer different questions — "is store input still becoming facts?" and
- * "is the access answer still current?" — and either can be red while the other
- * is green.
- */
-export function billingProjectionHealthHref(scope: WorkspaceScope) {
-  const base = billingEnvironmentBase(scope);
-  return base ? `${base}/projection-health` : undefined;
 }
 
 /**

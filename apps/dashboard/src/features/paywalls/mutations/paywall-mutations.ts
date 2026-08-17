@@ -58,26 +58,6 @@ export async function createPaywallWithDraft(
   }
 }
 
-export function createPaywallMutationOptions(
-  projectId: string,
-  adapter: HostedPublishingAdapter,
-  queryClient: QueryClient
-) {
-  return mutationOptions({
-    mutationFn: (input: { key: string; name: string }) =>
-      adapter.createPaywall({ ...input, projectId }),
-    onSuccess: async (paywall) => {
-      queryClient.setQueryData(
-        paywallKeys.detail({ paywallId: paywall.id, projectId }, adapter),
-        paywall
-      );
-      await queryClient.invalidateQueries({
-        queryKey: paywallKeys.all(projectId),
-      });
-    },
-  });
-}
-
 export function createHostedDraftMutationOptions(
   input: { environmentId: string; paywallId: string; projectId: string },
   adapter: HostedPublishingAdapter,

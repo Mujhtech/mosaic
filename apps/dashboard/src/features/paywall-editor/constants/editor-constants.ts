@@ -13,7 +13,6 @@ export const MAX_LOCAL_PROJECT_BYTES = 1_048_576;
  * is still refused at 1 MB.
  */
 export const MAX_FIGMA_BUNDLE_BYTES = 20_971_520;
-export const PREVIEW_ENDPOINT_DEFAULT = "ws://127.0.0.1:4317/preview";
 export const LOCAL_PROJECT_STORAGE_KEY = "mosaic:local-project:v0.4";
 export const LOCAL_EDITOR_UI_STORAGE_KEY = "mosaic:local-project-ui:v0.4";
 /**

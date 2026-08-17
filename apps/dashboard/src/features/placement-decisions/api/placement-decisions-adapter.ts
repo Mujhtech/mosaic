@@ -76,35 +76,3 @@ export interface PlacementDecisionsAdapter {
     revision: number
   ) => Promise<DecisionValidation>;
 }
-
-export class PlacementDecisionContractPendingError extends Error {
-  constructor() {
-    super(
-      "Advanced Placement decisions are unavailable while the REST contract is being generated."
-    );
-    this.name = "PlacementDecisionContractPendingError";
-  }
-}
-
-const pending = () =>
-  Promise.reject(new PlacementDecisionContractPendingError());
-
-export const CONTRACT_PENDING_PLACEMENT_DECISIONS_ADAPTER: PlacementDecisionsAdapter =
-  {
-    status: "contract_pending",
-    archiveAttribute: pending,
-    archivePlacement: pending,
-    archiveRuleSet: pending,
-    createAlias: pending,
-    createAttribute: pending,
-    createOverride: pending,
-    getPlacementDecision: pending,
-    listAttributes: pending,
-    listOverrides: pending,
-    publishRuleSet: pending,
-    revokeOverride: pending,
-    saveDraft: pending,
-    simulate: pending,
-    updatePlacement: pending,
-    validateDraft: pending,
-  };

@@ -1,7 +1,6 @@
 import type {
   FeatureListComponent,
   FeatureListItem,
-  IconName,
   Marker,
 } from "@/features/paywall-editor/types/editor";
 
@@ -29,11 +28,6 @@ export function resolvedFeatureListMarkerSize(
   list: FeatureListComponent
 ): number {
   return list.markerSize ?? list.typography.fontSize;
-}
-
-/** The icon a marker draws, or null when the marker is not an icon. */
-export function markerIconName(marker: Marker): IconName | null {
-  return marker.kind === "icon" ? marker.name : null;
 }
 
 /** A human-readable description of a marker, for inspector summaries. */

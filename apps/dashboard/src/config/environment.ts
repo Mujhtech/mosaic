@@ -1,6 +1,5 @@
 const TRAILING_SLASHES = /\/+$/;
 const DEFAULT_API_BASE_URL = "http://localhost:8080";
-// Matches PREVIEW_ENDPOINT_DEFAULT in the editor constants.
 const DEFAULT_PREVIEW_URL = "ws://127.0.0.1:4317/preview";
 const DEFAULT_PREVIEW_SESSION_ID = "session_local_01";
 

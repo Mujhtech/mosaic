@@ -121,15 +121,6 @@ export interface ExperimentAdapter {
   ) => Promise<ExperimentValidation>;
 }
 
-export class ExperimentContractPendingError extends Error {
-  constructor() {
-    super(
-      "Experiment management is unavailable until the Phase 7 REST contract is deployed."
-    );
-    this.name = "ExperimentContractPendingError";
-  }
-}
-
 export class ExperimentDraftConflictError extends Error {
   readonly currentRevision: number;
   readonly currentDraft?: ExperimentDraft;
@@ -141,30 +132,3 @@ export class ExperimentDraftConflictError extends Error {
     this.currentDraft = currentDraft;
   }
 }
-
-const pending = () => Promise.reject(new ExperimentContractPendingError());
-
-export const CONTRACT_PENDING_EXPERIMENT_ADAPTER: ExperimentAdapter = {
-  archive: pending,
-  complete: pending,
-  create: pending,
-  createMutualExclusionGroup: pending,
-  createMutualExclusionGroupVersion: pending,
-  createQaOverride: pending,
-  deleteQaOverride: pending,
-  emergencyStop: pending,
-  get: pending,
-  history: pending,
-  list: pending,
-  listImmutablePaywallVersions: pending,
-  listMetricDefinitions: pending,
-  listMutualExclusionGroups: pending,
-  listMutualExclusionGroupVersions: pending,
-  listQaOverrides: pending,
-  publish: pending,
-  requestExport: pending,
-  results: pending,
-  saveDraft: pending,
-  transition: pending,
-  validate: pending,
-};
