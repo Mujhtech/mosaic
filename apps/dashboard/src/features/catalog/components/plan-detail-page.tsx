@@ -61,6 +61,11 @@ export function PlanDetailPage({
     removePlanProductMutationOptions(planId, projectId, queryClient)
   );
   const items = memberships.data?.items ?? [];
+  const availableProducts = (products.data?.items ?? []).filter(
+    (product) =>
+      product.status !== "archived" &&
+      !items.some((item) => item.id === product.id)
+  );
   const state = resolveHostedQueryState({
     emptyDescription: "Add a Product to offer it through this Plan.",
     emptyTitle: "No Products in this Plan",
@@ -161,28 +166,18 @@ export function PlanDetailPage({
           title="Add Product"
         >
           <div className="flex flex-wrap gap-2">
-            {products.data?.items
-              .filter((product) => product.status !== "archived")
-              .filter(
-                (product) => !items.some((item) => item.id === product.id)
-              )
-              .map((product) => (
-                <Button
-                  key={product.id}
-                  onClick={() => addProduct.mutate(product.id)}
-                  size="sm"
-                  variant="outline"
-                >
-                  Add {product.internalName}
-                </Button>
-              ))}
+            {availableProducts.map((product) => (
+              <Button
+                key={product.id}
+                onClick={() => addProduct.mutate(product.id)}
+                size="sm"
+                variant="outline"
+              >
+                Add {product.internalName}
+              </Button>
+            ))}
           </div>
-          {products.isSuccess &&
-          products.data.items.filter(
-            (product) =>
-              product.status !== "archived" &&
-              !items.some((item) => item.id === product.id)
-          ).length === 0 ? (
+          {products.isSuccess && availableProducts.length === 0 ? (
             <p className="text-muted-foreground text-sm">
               No additional active Products are available. Create a Product
               first.

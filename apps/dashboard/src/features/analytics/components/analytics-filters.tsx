@@ -30,6 +30,8 @@ interface Props {
 
 export function AnalyticsFilters({ filters, onChange }: Props) {
   return (
+    // Client-rendered authenticated SPA behind TanStack Query: there are no
+    // server actions in this stack, and nothing here works without JS.
     <form
       aria-label="Analytics filters"
       className="grid gap-3 rounded border border-border bg-muted/20 p-4 sm:grid-cols-2 xl:grid-cols-6"

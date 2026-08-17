@@ -118,6 +118,25 @@ function MetricsAlert({
  * read must never keep an operator from reaching Applications or Catalog, which
  * is the page's other job and does not depend on any of these numbers.
  */
+// The Environment-settings recovery names the control it is sending the
+// operator to, not just the page. Landing on a settings page and hunting for
+// the analytics toggle is the dead end this link exists to remove.
+const renderOverviewRecovery = (
+  target: OverviewRecoveryTarget,
+  label: string
+) => (
+  <Link
+    className="self-start text-primary text-xs underline underline-offset-2 hover:no-underline"
+    {...(target === "environment-settings"
+      ? { hash: ANALYTICS_COLLECTION_ANCHOR }
+      : {})}
+    params={(prev) => ({ ...prev, ...workspaceScopeParams(prev) })}
+    to={RECOVERY_ROUTES[target]}
+  >
+    {label}
+  </Link>
+);
+
 export function ProjectOverviewMetricsSection({
   organizationId,
   projectId,
@@ -161,22 +180,6 @@ export function ProjectOverviewMetricsSection({
     ? deriveFreshness(data.analyticsFreshness)
     : null;
   const windowLabel = data ? describeOverviewWindow(data.windows.today) : null;
-
-  // The Environment-settings recovery names the control it is sending the
-  // operator to, not just the page. Landing on a settings page and hunting for
-  // the analytics toggle is the dead end this link exists to remove.
-  const renderRecovery = (target: OverviewRecoveryTarget, label: string) => (
-    <Link
-      className="self-start text-primary text-xs underline underline-offset-2 hover:no-underline"
-      {...(target === "environment-settings"
-        ? { hash: ANALYTICS_COLLECTION_ANCHOR }
-        : {})}
-      params={(prev) => ({ ...prev, ...workspaceScopeParams(prev) })}
-      to={RECOVERY_ROUTES[target]}
-    >
-      {label}
-    </Link>
-  );
 
   const retry = () => {
     metrics.refetch();
@@ -231,20 +234,20 @@ export function ProjectOverviewMetricsSection({
             isPending={isPending}
             metrics={data?.metrics}
             onRetry={retry}
-            renderRecovery={renderRecovery}
+            renderRecovery={renderOverviewRecovery}
           />
           <OverviewTrendChart
             environmentId={environmentId}
             {...(environmentKey ? { environmentKey } : {})}
             organizationId={organizationId}
             projectId={projectId}
-            renderRecovery={renderRecovery}
+            renderRecovery={renderOverviewRecovery}
           />
           <StandingTiles
             isPending={isPending}
             metrics={data?.metrics}
             onRetry={retry}
-            renderRecovery={renderRecovery}
+            renderRecovery={renderOverviewRecovery}
           />
         </>
       )}

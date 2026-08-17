@@ -81,25 +81,23 @@ export function purchaseProviderChoices(
           label: "Google Play Billing",
           provider: "google_play",
         };
-  const connectionChoices = connections
-    .filter(
-      (connection) =>
-        connection.status === "active" &&
-        connection.healthStatus === "healthy" &&
-        connection.environmentIds.includes(environment.id) &&
-        connection.applicationIds.includes(application.id) &&
-        environmentMatchesConnectionMode(environment.mode, connection.mode)
-    )
-    .map(
-      (connection) =>
-        ({
-          connection,
-          id: `connection:${connection.id}`,
-          kind: "connection",
-          label: connection.name,
-          provider: connection.provider,
-        }) satisfies PurchaseProviderChoice
-    );
+  const connectionChoices = connections.flatMap((connection) =>
+    connection.status === "active" &&
+    connection.healthStatus === "healthy" &&
+    connection.environmentIds.includes(environment.id) &&
+    connection.applicationIds.includes(application.id) &&
+    environmentMatchesConnectionMode(environment.mode, connection.mode)
+      ? [
+          {
+            connection,
+            id: `connection:${connection.id}`,
+            kind: "connection",
+            label: connection.name,
+            provider: connection.provider,
+          } satisfies PurchaseProviderChoice,
+        ]
+      : []
+  );
 
   return [nativeChoice, ...connectionChoices];
 }
@@ -111,17 +109,21 @@ export function activeProviderScopes(
   connections: readonly ProviderConnection[]
 ): ActiveProviderScopeView[] {
   const assignmentByApplication = new Map(
-    assignments
-      .filter((assignment) => assignment.environmentId === environment.id)
-      .map((assignment) => [
-        assignment.applicationId,
-        {
-          assignment,
-          connection: connections.find(
-            (connection) => connection.id === assignment.connectionId
-          ),
-        } satisfies ActiveProviderAssignmentView,
-      ])
+    assignments.flatMap((assignment) =>
+      assignment.environmentId === environment.id
+        ? [
+            [
+              assignment.applicationId,
+              {
+                assignment,
+                connection: connections.find(
+                  (connection) => connection.id === assignment.connectionId
+                ),
+              } satisfies ActiveProviderAssignmentView,
+            ] as const,
+          ]
+        : []
+    )
   );
 
   return applications.map((application) => ({

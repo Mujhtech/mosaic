@@ -96,9 +96,10 @@ export function useFigmaBundleImport({
       bundle: FigmaExportBundle;
       imageIds: readonly string[];
     }): Promise<FigmaBundleImportOutcome> => {
+      const requestedImageIds = new Set(imageIds);
       const included =
         figmaImagesCanBeImported(source) && source.kind === "hosted"
-          ? bundle.images.filter((image) => imageIds.includes(image.id))
+          ? bundle.images.filter((image) => requestedImageIds.has(image.id))
           : [];
       const uploads: FigmaImageUpload[] = [];
       const failed: FigmaImageFailure[] = [];

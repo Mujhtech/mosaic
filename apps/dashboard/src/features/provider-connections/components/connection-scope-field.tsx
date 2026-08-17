@@ -48,6 +48,7 @@ export function ConnectionScopeField({
   /** Present only when the list could not be read at all. */
   unreadableDescription?: string;
 }) {
+  const selectedIds = new Set(selected);
   return (
     <fieldset className="space-y-2">
       <legend className="font-medium text-sm">{label}</legend>
@@ -87,7 +88,7 @@ export function ConnectionScopeField({
               key={item.id}
             >
               <input
-                checked={selected.includes(item.id)}
+                checked={selectedIds.has(item.id)}
                 className="mt-0.5 size-4 accent-primary"
                 onChange={(event) =>
                   onChange(

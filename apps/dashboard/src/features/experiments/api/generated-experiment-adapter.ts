@@ -423,26 +423,31 @@ export function createGeneratedExperimentAdapter(
         throwOnError: true,
       });
       const versions = await Promise.all(
-        paywallResult.data.data.items
-          .filter((paywall) => paywall.status === "active")
-          .map(async (paywall) => {
-            const result = await listPaywallVersions({
-              client,
-              path: { paywallId: paywall.id, projectId: scope.projectId },
-              throwOnError: true,
-            });
-            return result.data.data.items
-              .filter(
-                (version) => version.environmentId === scope.environmentId
-              )
-              .map((version) => ({
-                createdAt: version.createdAt,
-                id: version.id,
-                paywallId: paywall.id,
-                paywallName: paywall.name,
-                versionNumber: version.versionNumber,
-              }));
-          })
+        paywallResult.data.data.items.flatMap((paywall) =>
+          paywall.status === "active"
+            ? [
+                listPaywallVersions({
+                  client,
+                  path: { paywallId: paywall.id, projectId: scope.projectId },
+                  throwOnError: true,
+                }).then((result) =>
+                  result.data.data.items.flatMap((version) =>
+                    version.environmentId === scope.environmentId
+                      ? [
+                          {
+                            createdAt: version.createdAt,
+                            id: version.id,
+                            paywallId: paywall.id,
+                            paywallName: paywall.name,
+                            versionNumber: version.versionNumber,
+                          },
+                        ]
+                      : []
+                  )
+                ),
+              ]
+            : []
+        )
       );
       return versions.flat();
     },
@@ -512,9 +517,9 @@ export function createGeneratedExperimentAdapter(
         path: { ...scope, experimentId },
         throwOnError: true,
       });
-      return result.data.data.items
-        .filter((override) => override.status === "active")
-        .map(mapQaOverride);
+      return result.data.data.items.flatMap((override) =>
+        override.status === "active" ? [mapQaOverride(override)] : []
+      );
     },
     async publish(scope, experimentId, expectedRevision) {
       await publishExperiment({

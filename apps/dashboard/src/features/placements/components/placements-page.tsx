@@ -90,6 +90,8 @@ function BindPlacementAction({
   );
 
   return (
+    // Client-rendered authenticated SPA: no server actions in this stack,
+    // and nothing here works without JS.
     <form
       className="flex flex-wrap items-end gap-2"
       onSubmit={(event) => {

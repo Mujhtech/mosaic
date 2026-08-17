@@ -123,10 +123,11 @@ export function FigmaImportDialog({
     preview: figmaBundleImagePreview(image),
   }));
   const [selected, setSelected] = useState<readonly string[]>(() =>
-    previews
-      .filter((entry) => entry.preview.readable)
-      .map((entry) => entry.image.id)
+    previews.flatMap((entry) =>
+      entry.preview.readable ? [entry.image.id] : []
+    )
   );
+  const selectedIds = new Set(selected);
 
   const selectedCount = imagesImportable ? selected.length : 0;
   const { skipped, warnings } = bundle.report;
@@ -216,15 +217,19 @@ export function FigmaImportDialog({
                     image={image}
                     key={image.id}
                     onToggle={() =>
-                      setSelected((current) =>
-                        current.includes(image.id)
-                          ? current.filter((id) => id !== image.id)
-                          : [...current, image.id]
-                      )
+                      setSelected((current) => {
+                        const next = new Set(current);
+                        if (next.has(image.id)) {
+                          next.delete(image.id);
+                        } else {
+                          next.add(image.id);
+                        }
+                        return [...next];
+                      })
                     }
                     readable={preview.readable ? preview : null}
                     selectable={imagesImportable}
-                    selected={selected.includes(image.id)}
+                    selected={selectedIds.has(image.id)}
                   />
                 ))}
               </ul>

@@ -173,21 +173,22 @@ export function identifierSet(document: MosaicDocument) {
     ...document.products.map((product) => product.id),
   ]);
   for (const entry of flattenDocument(document)) {
-    identifiers.add(entry.node.id);
-    if (entry.node.type === "featureList") {
-      for (const item of entry.node.items) {
+    const { node } = entry;
+    identifiers.add(node.id);
+    if (node.type === "featureList") {
+      for (const item of node.items) {
         identifiers.add(item.id);
       }
-    } else if (entry.node.type === "carousel") {
-      for (const page of entry.node.pages) {
+    } else if (node.type === "carousel") {
+      for (const page of node.pages) {
         identifiers.add(page.id);
       }
-    } else if (entry.node.type === "tabs") {
-      for (const tab of entry.node.tabs) {
+    } else if (node.type === "tabs") {
+      for (const tab of node.tabs) {
         identifiers.add(tab.id);
       }
-    } else if (entry.node.type === "timeline") {
-      for (const timelineEntry of entry.node.entries) {
+    } else if (node.type === "timeline") {
+      for (const timelineEntry of node.entries) {
         identifiers.add(timelineEntry.id);
       }
     }

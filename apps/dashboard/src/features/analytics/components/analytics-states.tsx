@@ -74,12 +74,14 @@ export function WarningList({ warnings }: { warnings: string[] }) {
   );
 }
 
+const TIMESTAMP_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 function formatTimestamp(value?: string) {
   if (!value) {
     return "not reported";
   }
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return TIMESTAMP_FORMATTER.format(new Date(value));
 }

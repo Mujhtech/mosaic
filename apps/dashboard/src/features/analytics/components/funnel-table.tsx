@@ -6,8 +6,8 @@ import {
 } from "./analytics-states";
 
 export function FunnelTable({ report }: { report: FunnelReport }) {
-  const maximum = Math.max(
-    ...report.steps.filter((step) => step.available).map((step) => step.count),
+  const maximum = report.steps.reduce(
+    (max, step) => (step.available && step.count > max ? step.count : max),
     1
   );
   return (

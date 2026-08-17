@@ -172,8 +172,8 @@ export function providerAssignmentImpactQueryOptions(input: {
           return { mappings: result.data.data.items, product };
         }
       );
-      const affectedProducts = mappingResults
-        .filter(({ mappings }) =>
+      const affectedProducts = mappingResults.flatMap(
+        ({ mappings, product }) =>
           mappings.some(
             (mapping) =>
               mapping.provider === input.provider &&
@@ -184,8 +184,9 @@ export function providerAssignmentImpactQueryOptions(input: {
                 mapping.environmentId === input.environmentId) &&
               mapping.status !== "archived"
           )
-        )
-        .map(({ product }) => product);
+            ? [product]
+            : []
+      );
       const affectedProductIds = new Set(
         affectedProducts.map((product) => product.id)
       );
@@ -229,13 +230,13 @@ export function providerAssignmentImpactQueryOptions(input: {
       );
 
       return {
-        paywalls: probes
-          .filter((probe) => probe.kind === "references")
-          .map((probe) => probe.paywall),
+        paywalls: probes.flatMap((probe) =>
+          probe.kind === "references" ? [probe.paywall] : []
+        ),
         products: affectedProducts,
-        uncheckedPaywalls: probes
-          .filter((probe) => probe.kind === "unchecked")
-          .map((probe) => probe.paywall),
+        uncheckedPaywalls: probes.flatMap((probe) =>
+          probe.kind === "unchecked" ? [probe.paywall] : []
+        ),
       };
     },
   });

@@ -175,9 +175,11 @@ function HostedManagedAssets({
   function managedAssetOptions(kind: Asset["type"]) {
     return [
       { label: "Choose a managed Asset", value: "" },
-      ...readyManagedAssets
-        .filter((candidate) => candidate.kind === kind)
-        .map((candidate) => ({ label: candidate.name, value: candidate.id })),
+      ...readyManagedAssets.flatMap((candidate) =>
+        candidate.kind === kind
+          ? [{ label: candidate.name, value: candidate.id }]
+          : []
+      ),
     ];
   }
 

@@ -50,13 +50,14 @@ function useFieldDescribedBy(
     const owned = [descriptionId, errorId].filter((id) =>
       element.querySelector(`[id="${id}"]`)
     );
-    const previouslyOwned = (control.getAttribute(MANAGED_ATTRIBUTE) ?? "")
-      .split(" ")
-      .filter(Boolean);
+    const previouslyOwned = new Set(
+      (control.getAttribute(MANAGED_ATTRIBUTE) ?? "").split(" ").filter(Boolean)
+    );
     const authored = (control.getAttribute("aria-describedby") ?? "")
       .split(" ")
-      .filter((id) => id.length > 0 && !previouslyOwned.includes(id));
-    const next = [...authored, ...owned.filter((id) => !authored.includes(id))];
+      .filter((id) => id.length > 0 && !previouslyOwned.has(id));
+    const authoredIds = new Set(authored);
+    const next = [...authored, ...owned.filter((id) => !authoredIds.has(id))];
 
     if (next.length > 0) {
       control.setAttribute("aria-describedby", next.join(" "));

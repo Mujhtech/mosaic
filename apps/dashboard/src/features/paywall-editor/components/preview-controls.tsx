@@ -96,11 +96,8 @@ function IconControl({
 }
 
 const DEVICE_ITEM_GROUPS = CANVAS_DEVICE_GROUPS.map((group) => ({
-  items: CANVAS_DEVICE_PRESETS.filter((entry) => entry.group === group).map(
-    (entry) => ({
-      label: entry.label,
-      value: entry.id,
-    })
+  items: CANVAS_DEVICE_PRESETS.flatMap((entry) =>
+    entry.group === group ? [{ label: entry.label, value: entry.id }] : []
   ),
   label: group,
 }));

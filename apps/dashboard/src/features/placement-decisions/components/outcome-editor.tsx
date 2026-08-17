@@ -45,9 +45,11 @@ export function OutcomeEditor({
 }) {
   const paywallOptions = [
     { label: "Select a Paywall", value: "" },
-    ...paywalls
-      .filter((paywall) => paywall.status === "active")
-      .map((paywall) => ({ label: paywall.name, value: paywall.id })),
+    ...paywalls.flatMap((paywall) =>
+      paywall.status === "active"
+        ? [{ label: paywall.name, value: paywall.id }]
+        : []
+    ),
   ];
   const fallbackOptions = [
     { label: "Select a named fallback", value: "" },

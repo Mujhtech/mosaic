@@ -366,9 +366,9 @@ function groupByEntitlement(
 
 function describePolicy(version: ProductEntitlementGrantVersion) {
   const policy = version.accessPolicy ?? {};
-  const granted = grantPolicyFields
-    .filter((field) => policy[field] === true)
-    .map(grantPolicyLabel);
+  const granted = grantPolicyFields.flatMap((field) =>
+    policy[field] === true ? [grantPolicyLabel(field)] : []
+  );
   return granted.length > 0
     ? granted.join(", ")
     : "Nothing — this version grants no access";

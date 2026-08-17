@@ -4,6 +4,11 @@ import { useCallback, useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
+// Module-level so the default prop is referentially stable across renders;
+// an inline default rebuilt `copySecret` on every render.
+const defaultWriteToClipboard = (value: string) =>
+  navigator.clipboard.writeText(value);
+
 interface OneTimeSecretProps {
   /** Label for the copy control. Name the thing being copied, not "value". */
   copyLabel?: string;
@@ -33,7 +38,7 @@ export function OneTimeSecret({
   onDismiss,
   secret,
   title = "Copy this key now",
-  writeToClipboard = (value) => navigator.clipboard.writeText(value),
+  writeToClipboard = defaultWriteToClipboard,
 }: OneTimeSecretProps) {
   const [copied, setCopied] = useState(false);
   const copyButtonLabel = copied ? "Copied" : copyLabel;

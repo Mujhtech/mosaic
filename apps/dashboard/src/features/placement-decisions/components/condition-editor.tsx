@@ -291,9 +291,11 @@ function LeafEditor({
   );
   const attributeOptions = [
     { label: "Select attribute", value: "" },
-    ...attributes
-      .filter((attribute) => attribute.status === "active")
-      .map((attribute) => ({ label: attribute.key, value: attribute.key })),
+    ...attributes.flatMap((attribute) =>
+      attribute.status === "active"
+        ? [{ label: attribute.key, value: attribute.key }]
+        : []
+    ),
   ];
   const noOperand =
     value.operator === "exists" || value.operator === "does_not_exist";

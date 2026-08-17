@@ -90,6 +90,8 @@ function CollectionSettingsPanel({
         scope={scope}
       >
         {settings.data ? (
+          // Client-rendered authenticated SPA: no server actions in this
+          // stack, and nothing here works without JS.
           <form
             className="grid gap-4 sm:grid-cols-2"
             onSubmit={(event) => {
@@ -211,6 +213,10 @@ function IdentityOperationsPanel({
       adapter.createIdentityExport(scope, request),
     onSuccess: setJob,
   });
+  // Nothing cached is stale at mutation success: confirming only enqueues an
+  // async job (onSuccess stores it locally), the job query is keyed by the
+  // new job's id, and the deletion itself lands later via the polled job.
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
   const deletionMutation = useMutation({
     mutationFn: ({
       request,
