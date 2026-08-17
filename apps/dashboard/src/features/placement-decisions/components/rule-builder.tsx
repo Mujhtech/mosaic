@@ -68,7 +68,7 @@ export function RuleBuilder({
   paywalls: readonly HostedPaywallListItem[];
   rules: readonly PlacementRule[];
 }) {
-  const ordered = [...rules].sort(
+  const ordered = rules.toSorted(
     (left, right) => left.priority - right.priority
   );
 
@@ -243,9 +243,14 @@ export function RuleBuilder({
                           max={100}
                           min={0}
                           onChange={(event) => {
-                            const percentage = Number(
-                              event.currentTarget.value
-                            );
+                            const raw = event.currentTarget.value;
+                            // A cleared field deliberately reads as 0% — the
+                            // safe direction for a rollout — and partial
+                            // input like "-" is ignored rather than coerced.
+                            const percentage = raw === "" ? 0 : Number(raw);
+                            if (Number.isNaN(percentage)) {
+                              return;
+                            }
                             onChange(
                               ordered.map((item) =>
                                 item.id === rule.id
@@ -292,21 +297,25 @@ export function RuleBuilder({
                       estimate.
                     </p>
                   </fieldset>
-                  {ruleIssues
-                    .filter((issue) => !issue.conditionId)
-                    .map((issue) => (
-                      <p
-                        className={
-                          issue.severity === "error"
-                            ? "text-destructive text-sm"
-                            : "text-muted-foreground text-sm"
-                        }
-                        key={`${issue.code}:${issue.message}`}
-                        role={issue.severity === "error" ? "alert" : "status"}
-                      >
-                        {issue.message}
-                      </p>
-                    ))}
+                  {ruleIssues.flatMap((issue) =>
+                    issue.conditionId
+                      ? []
+                      : [
+                          <p
+                            className={
+                              issue.severity === "error"
+                                ? "text-destructive text-sm"
+                                : "text-muted-foreground text-sm"
+                            }
+                            key={`${issue.code}:${issue.message}`}
+                            role={
+                              issue.severity === "error" ? "alert" : "status"
+                            }
+                          >
+                            {issue.message}
+                          </p>,
+                        ]
+                  )}
                 </div>
               </div>
             </li>

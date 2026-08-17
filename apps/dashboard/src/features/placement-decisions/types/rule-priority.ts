@@ -5,7 +5,7 @@ export function moveRule(
   ruleId: string,
   direction: "up" | "down"
 ) {
-  const ordered = [...rules].sort(
+  const ordered = rules.toSorted(
     (left, right) => left.priority - right.priority
   );
   const index = ordered.findIndex((rule) => rule.id === ruleId);
@@ -31,7 +31,7 @@ export function duplicateRule(
   ruleId: string,
   id: string
 ) {
-  const ordered = [...rules].sort(
+  const ordered = rules.toSorted(
     (left, right) => left.priority - right.priority
   );
   const index = ordered.findIndex((rule) => rule.id === ruleId);

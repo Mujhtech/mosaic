@@ -121,7 +121,7 @@ export function proposalFingerprint(proposal: GrantProposal) {
     proposal.entitlementId,
     proposal.effectiveStart,
     proposal.retroactive === true,
-    [...(proposal.supportedPurchaseTypes ?? [])].sort(),
+    (proposal.supportedPurchaseTypes ?? []).toSorted(),
     proposal.grantsInActive === true,
     proposal.grantsInTrial === true,
     proposal.grantsInGrace === true,
@@ -266,15 +266,4 @@ export function impactHeadline(impact: GrantVersionImpact | undefined) {
     return "No purchase currently granting access cites this Product, so no customer can lose access from this change.";
   }
   return `${active} purchase${active === 1 ? "" : "s"} currently granting access cite this Product. That is how many customers could lose access if this change narrows what it grants.`;
-}
-
-/** Half-open `[start, end)`. The absent end is the version in force now. */
-export function grantIntervalLabel(
-  effectiveStart: string | undefined,
-  effectiveEnd: string | undefined
-) {
-  const start = effectiveStart ?? "—";
-  return effectiveEnd
-    ? `${start} → ${effectiveEnd}`
-    : `${start} → in force now`;
 }

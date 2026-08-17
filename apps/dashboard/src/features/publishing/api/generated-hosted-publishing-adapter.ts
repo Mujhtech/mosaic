@@ -67,7 +67,7 @@ function documentRequest(
   document: MosaicDocument,
   paywallId: string
 ): Record<string, unknown> {
-  const request = JSON.parse(JSON.stringify(document)) as Record<
+  const request = structuredClone(document) as unknown as Record<
     string,
     unknown
   >;
@@ -444,12 +444,16 @@ export function createGeneratedHostedPublishingAdapter(
           throwOnError: true,
         }),
       ]);
-      return versionsResult.data.data.items
-        .filter((version) => version.environmentId === input.environmentId)
-        .map((version) => ({
-          ...mapVersion(version),
-          paywallName: paywallResult.data.data.name,
-        }));
+      return versionsResult.data.data.items.flatMap((version) =>
+        version.environmentId === input.environmentId
+          ? [
+              {
+                ...mapVersion(version),
+                paywallName: paywallResult.data.data.name,
+              },
+            ]
+          : []
+      );
     },
     async listReleases(input) {
       const result = await listConfigurationReleases({
@@ -682,13 +686,17 @@ export function createGeneratedHostedPublishingAdapter(
             asset.source.type === "bundled" || managedAsset?.status === "ready",
         };
       });
-      const assetIssues = assetReadiness
-        .filter((asset) => !asset.ready)
-        .map((asset) => ({
-          code: "asset.hosted_mapping_required",
-          message: `${asset.name} is not backed by a ready managed Asset. Upload or select one before publishing.`,
-          severity: "error" as const,
-        }));
+      const assetIssues = assetReadiness.flatMap((asset) =>
+        asset.ready
+          ? []
+          : [
+              {
+                code: "asset.hosted_mapping_required",
+                message: `${asset.name} is not backed by a ready managed Asset. Upload or select one before publishing.`,
+                severity: "error" as const,
+              },
+            ]
+      );
       const placementsForPaywall = resolvePlacementReadiness(
         placements,
         input.paywallId

@@ -256,7 +256,7 @@ export function selectComparableAttempts(
   if (sequenced.length < 2) {
     return;
   }
-  const ordered = [...sequenced].sort(compareAttemptNumberAscending);
+  const ordered = sequenced.toSorted(compareAttemptNumberAscending);
   const latest = ordered.at(-1);
   const earlier = ordered.at(-2);
   if (!(latest && earlier)) {

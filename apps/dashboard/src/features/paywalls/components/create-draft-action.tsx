@@ -54,7 +54,13 @@ export function CreateDraftAction({
   );
 
   const handleClick = useCallback(() => {
-    create(EDITOR_TEMPLATES[0].document);
+    create(EDITOR_TEMPLATES[0].document).catch((caught: unknown) =>
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The Draft could not be created."
+      )
+    );
   }, [create]);
   return (
     <div>

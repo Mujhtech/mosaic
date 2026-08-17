@@ -176,7 +176,7 @@ export function providerMappingView(
     snapshotObservedAt: snapshot?.observedAt,
     snapshotStaleAt: snapshot?.staleAt,
     snapshotSyncedAt: snapshot?.syncedAt,
-    latestObservation: [...observations].sort((left, right) =>
+    latestObservation: observations.toSorted((left, right) =>
       right.observedAt.localeCompare(left.observedAt)
     )[0],
     status: mapping.status,

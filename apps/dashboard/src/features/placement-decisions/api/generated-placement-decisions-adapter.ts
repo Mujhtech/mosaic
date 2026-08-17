@@ -377,15 +377,19 @@ async function initialDocument(client: Client, scope: DecisionScope) {
   }
   const ruleSet: MosaicPlacementDecisionV1RuleSet = {
     assignmentPolicy: "installation",
-    attributeDefinitions: attributesResult.data.data.items
-      .filter((item) => item.status === "active")
-      .map((item) => ({
-        allowedOperators:
-          item.allowedOperators as MosaicPlacementDecisionV1RuleSet["attributeDefinitions"][number]["allowedOperators"],
-        key: item.key,
-        sensitivity: item.sensitivity,
-        type: item.type,
-      })),
+    attributeDefinitions: attributesResult.data.data.items.flatMap((item) =>
+      item.status === "active"
+        ? [
+            {
+              allowedOperators:
+                item.allowedOperators as MosaicPlacementDecisionV1RuleSet["attributeDefinitions"][number]["allowedOperators"],
+              key: item.key,
+              sensitivity: item.sensitivity,
+              type: item.type,
+            },
+          ]
+        : []
+    ),
     compatibility: { bucketingAlgorithms: [], requiredFeatures: [] },
     defaultOutcome,
     enabled: true,
@@ -537,7 +541,7 @@ export function createGeneratedPlacementDecisionsAdapter(
               throwOnError: true,
             }).then(
               (result) =>
-                [...result.data.data.items].sort(
+                result.data.data.items.toSorted(
                   (left, right) => right.versionNumber - left.versionNumber
                 )[0]
             );

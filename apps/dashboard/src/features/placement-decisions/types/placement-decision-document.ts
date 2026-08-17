@@ -157,16 +157,20 @@ export function toContractRuleSet(
   );
   return {
     assignmentPolicy: draft.assignmentPolicy,
-    attributeDefinitions: input.attributes
-      .filter((attribute) => attribute.status === "active")
-      .map((attribute) => ({
-        allowedOperators: [...attribute.allowedOperators].filter(
-          (operator) => operator !== "locale_matches"
-        ) as MosaicPlacementDecisionV1RuleSet["attributeDefinitions"][number]["allowedOperators"],
-        key: attribute.key,
-        sensitivity: attribute.sensitivity,
-        type: attribute.type,
-      })),
+    attributeDefinitions: input.attributes.flatMap((attribute) =>
+      attribute.status === "active"
+        ? [
+            {
+              allowedOperators: [...attribute.allowedOperators].filter(
+                (operator) => operator !== "locale_matches"
+              ) as MosaicPlacementDecisionV1RuleSet["attributeDefinitions"][number]["allowedOperators"],
+              key: attribute.key,
+              sensitivity: attribute.sensitivity,
+              type: attribute.type,
+            },
+          ]
+        : []
+    ),
     compatibility: {
       bucketingAlgorithms: draft.rules.some((rule) => rule.rollout)
         ? ["sha256_length_prefixed_v1"]
@@ -187,8 +191,8 @@ export function toContractRuleSet(
     placementKey: input.placementKey,
     projectId: input.projectId,
     qaOverrides: [],
-    rules: [...draft.rules]
-      .sort((left, right) => left.priority - right.priority)
+    rules: draft.rules
+      .toSorted((left, right) => left.priority - right.priority)
       .map((rule) => ({
         conditions: condition(rule.conditions, attributes),
         enabled: rule.enabled,

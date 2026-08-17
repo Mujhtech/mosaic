@@ -29,7 +29,7 @@ export function ValidationAttemptsPanel({
   // attempt number treated as 0 put those records at the top of a
   // newest-first list, where `latest` is read from — which then marked every
   // real attempt as "superseded" by an attempt that has no position at all.
-  const ordered = [...attempts].sort(compareAttemptNumberDescending);
+  const ordered = attempts.toSorted(compareAttemptNumberDescending);
   const latest = ordered.find(
     (attempt) => typeof attempt.attemptNumber === "number"
   )?.attemptNumber;

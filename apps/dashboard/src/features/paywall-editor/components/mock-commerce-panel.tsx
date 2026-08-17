@@ -521,7 +521,7 @@ function ConnectedProductBindingContext({
   const snapshot = scopedMappings.length === 1 ? metadata[0]?.data : undefined;
   const latestObservation =
     scopedMappings.length === 1
-      ? [...(observations[0]?.data ?? [])].sort((left, right) =>
+      ? (observations[0]?.data ?? []).toSorted((left, right) =>
           right.observedAt.localeCompare(left.observedAt)
         )[0]
       : undefined;

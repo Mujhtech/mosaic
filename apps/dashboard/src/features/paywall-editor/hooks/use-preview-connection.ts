@@ -510,20 +510,25 @@ export function usePreviewConnection(options: {
           if (maxDocumentBytes > 0) {
             clientDocumentLimitsRef.current.set(clientId, maxDocumentBytes);
           }
+          // Computed outside the updater: React may replay updater functions,
+          // so work nested inside one can run for renders that never commit.
+          const supportedSchemaVersions = stringList(
+            framePayload.supportedSchemaVersions
+          );
+          const supportedCapabilities = reportedCapabilities(
+            framePayload.supportedCapabilities
+          );
+          const previewCapabilities = reportedCapabilities(
+            framePayload.previewCapabilities
+          );
           setClients((current) =>
             current.map((client) =>
               client.clientId === clientId
                 ? {
                     ...client,
-                    supportedSchemaVersions: stringList(
-                      framePayload.supportedSchemaVersions
-                    ),
-                    supportedCapabilities: reportedCapabilities(
-                      framePayload.supportedCapabilities
-                    ),
-                    previewCapabilities: reportedCapabilities(
-                      framePayload.previewCapabilities
-                    ),
+                    supportedSchemaVersions,
+                    supportedCapabilities,
+                    previewCapabilities,
                     maxDocumentBytes: maxDocumentBytes || undefined,
                     lastSeenAt: frame.sentAt,
                   }
