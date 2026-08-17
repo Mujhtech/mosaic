@@ -14,9 +14,6 @@ interface CustomersSearch {
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/"
 )({
-  component: BillingCustomersRoute,
-  head: () => routeHead({ title: "Customers" }),
-  pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): CustomersSearch => ({
     conflictedOnly:
       search.conflictedOnly === true || search.conflictedOnly === "true"
@@ -29,6 +26,9 @@ export const Route = createFileRoute(
         ? search.cursor
         : undefined,
   }),
+  component: BillingCustomersRoute,
+  head: () => routeHead({ title: "Customers" }),
+  pendingComponent: RoutePendingState,
 });
 
 function BillingCustomersRoute() {

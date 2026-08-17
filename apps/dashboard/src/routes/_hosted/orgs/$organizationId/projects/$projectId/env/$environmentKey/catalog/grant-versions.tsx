@@ -19,13 +19,13 @@ function readIdentifier(value: unknown) {
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions"
 )({
-  component: GrantVersionsRoute,
-  head: () => routeHead({ title: "Grant versions" }),
-  pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): GrantVersionsSearch => ({
     entitlementId: readIdentifier(search.entitlementId),
     productId: readIdentifier(search.productId),
   }),
+  component: GrantVersionsRoute,
+  head: () => routeHead({ title: "Grant versions" }),
+  pendingComponent: RoutePendingState,
 });
 
 function GrantVersionsRoute() {

@@ -13,9 +13,6 @@ interface ReconciliationSearch {
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/"
 )({
-  component: BillingReconciliationRoute,
-  head: () => routeHead({ title: "Reconciliation" }),
-  pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): ReconciliationSearch => ({
     cursor:
       typeof search.cursor === "string" &&
@@ -24,6 +21,9 @@ export const Route = createFileRoute(
         ? search.cursor
         : undefined,
   }),
+  component: BillingReconciliationRoute,
+  head: () => routeHead({ title: "Reconciliation" }),
+  pendingComponent: RoutePendingState,
 });
 
 function BillingReconciliationRoute() {

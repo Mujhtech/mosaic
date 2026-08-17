@@ -13,9 +13,6 @@ interface RestoresSearch {
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores"
 )({
-  component: RestoreJobsRoute,
-  head: () => routeHead({ title: "Restore jobs" }),
-  pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): RestoresSearch => ({
     cursor:
       typeof search.cursor === "string" &&
@@ -24,6 +21,9 @@ export const Route = createFileRoute(
         ? search.cursor
         : undefined,
   }),
+  component: RestoreJobsRoute,
+  head: () => routeHead({ title: "Restore jobs" }),
+  pendingComponent: RoutePendingState,
 });
 
 function RestoreJobsRoute() {

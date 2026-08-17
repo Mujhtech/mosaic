@@ -13,9 +13,6 @@ interface SubscriptionSearch {
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId"
 )({
-  component: SubscriptionDetailRoute,
-  head: () => routeHead({ title: "Subscription" }),
-  pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): SubscriptionSearch => ({
     cursor:
       typeof search.cursor === "string" &&
@@ -24,6 +21,9 @@ export const Route = createFileRoute(
         ? search.cursor
         : undefined,
   }),
+  component: SubscriptionDetailRoute,
+  head: () => routeHead({ title: "Subscription" }),
+  pendingComponent: RoutePendingState,
 });
 
 function SubscriptionDetailRoute() {

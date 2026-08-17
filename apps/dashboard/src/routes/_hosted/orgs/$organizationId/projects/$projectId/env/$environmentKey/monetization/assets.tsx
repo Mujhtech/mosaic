@@ -14,13 +14,13 @@ interface AssetsRouteSearch {
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets"
 )({
-  component: RouteComponent,
-  head: () => routeHead({ title: "Assets" }),
-  pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): AssetsRouteSearch => {
     const returnTo = safeInternalReturnTo(search.returnTo, "");
     return returnTo ? { returnTo } : {};
   },
+  component: RouteComponent,
+  head: () => routeHead({ title: "Assets" }),
+  pendingComponent: RoutePendingState,
 });
 
 function RouteComponent() {

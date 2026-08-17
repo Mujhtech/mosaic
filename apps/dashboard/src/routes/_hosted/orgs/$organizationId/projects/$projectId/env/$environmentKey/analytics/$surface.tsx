@@ -14,8 +14,8 @@ import { routeHead } from "@/lib/routing/route-head";
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface"
 )({
-  head: () => routeHead({ title: "Analytics" }),
   validateSearch: parseAnalyticsFilters,
+  head: () => routeHead({ title: "Analytics" }),
   component: RouteComponent,
   pendingComponent: RoutePendingState,
 });

@@ -13,12 +13,12 @@ import { routeHead } from "@/lib/routing/route-head";
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/"
 )({
-  component: BillingTransactionsRoute,
-  head: () => routeHead({ title: "Transactions" }),
-  pendingComponent: RoutePendingState,
   // The Mosaic Environment is a path parameter and is deliberately never read
   // from the search string, so a crafted URL cannot retarget the view.
   validateSearch: parseTransactionFilters,
+  component: BillingTransactionsRoute,
+  head: () => routeHead({ title: "Transactions" }),
+  pendingComponent: RoutePendingState,
 });
 
 function BillingTransactionsRoute() {

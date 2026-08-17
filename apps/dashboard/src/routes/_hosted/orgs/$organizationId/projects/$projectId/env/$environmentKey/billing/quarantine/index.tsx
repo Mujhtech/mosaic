@@ -19,9 +19,6 @@ const REASON_CODE = /^[a-z_]{1,64}$/;
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/"
 )({
-  component: BillingQuarantineRoute,
-  head: () => routeHead({ title: "Quarantine" }),
-  pendingComponent: RoutePendingState,
   // Unknown values fall back to "no filter" rather than throwing: a stale link
   // should still render the page it names.
   validateSearch: (search: Record<string, unknown>): QuarantineListFilters => ({
@@ -39,6 +36,9 @@ export const Route = createFileRoute(
         : undefined,
     status: STATUSES.find((value) => value === search.status),
   }),
+  component: BillingQuarantineRoute,
+  head: () => routeHead({ title: "Quarantine" }),
+  pendingComponent: RoutePendingState,
 });
 
 function BillingQuarantineRoute() {

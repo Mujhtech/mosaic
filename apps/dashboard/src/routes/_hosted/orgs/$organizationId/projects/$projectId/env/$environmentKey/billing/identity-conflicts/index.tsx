@@ -13,12 +13,12 @@ interface ConflictsSearch {
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/"
 )({
-  component: IdentityConflictsRoute,
-  head: () => routeHead({ title: "Identity conflicts" }),
-  pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): ConflictsSearch => ({
     status: search.status === "resolved" ? "resolved" : undefined,
   }),
+  component: IdentityConflictsRoute,
+  head: () => routeHead({ title: "Identity conflicts" }),
+  pendingComponent: RoutePendingState,
 });
 
 function IdentityConflictsRoute() {

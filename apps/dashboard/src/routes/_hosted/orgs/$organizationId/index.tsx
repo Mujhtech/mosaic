@@ -10,12 +10,12 @@ interface OrganizationSearch {
 }
 
 export const Route = createFileRoute("/_hosted/orgs/$organizationId/")({
-  component: OrganizationRoute,
-  head: () => routeHead({ title: "Organization" }),
-  pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): OrganizationSearch => ({
     projectStatus: search.projectStatus === "archived" ? "archived" : undefined,
   }),
+  component: OrganizationRoute,
+  head: () => routeHead({ title: "Organization" }),
+  pendingComponent: RoutePendingState,
 });
 
 function OrganizationRoute() {

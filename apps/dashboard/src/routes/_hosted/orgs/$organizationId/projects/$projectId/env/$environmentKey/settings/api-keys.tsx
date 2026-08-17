@@ -12,9 +12,6 @@ interface ApiKeysSearch {
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys"
 )({
-  component: ProjectApiKeysRoute,
-  head: () => routeHead({ title: "API keys" }),
-  pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): ApiKeysSearch => ({
     environmentId:
       typeof search.environmentId === "string" &&
@@ -22,6 +19,9 @@ export const Route = createFileRoute(
         ? search.environmentId
         : undefined,
   }),
+  component: ProjectApiKeysRoute,
+  head: () => routeHead({ title: "API keys" }),
+  pendingComponent: RoutePendingState,
 });
 
 function ProjectApiKeysRoute() {

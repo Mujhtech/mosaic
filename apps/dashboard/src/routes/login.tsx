@@ -10,16 +10,16 @@ interface AuthRouteSearch {
 }
 
 export const Route = createFileRoute("/login")({
+  validateSearch: (search: Record<string, unknown>): AuthRouteSearch => {
+    const returnTo = safeInternalReturnTo(search.returnTo, "");
+    return returnTo ? { returnTo } : {};
+  },
   component: LoginRoute,
   head: () =>
     routeHead({
       description: "Sign in to your Mosaic Studio workspace.",
       title: "Sign in",
     }),
-  validateSearch: (search: Record<string, unknown>): AuthRouteSearch => {
-    const returnTo = safeInternalReturnTo(search.returnTo, "");
-    return returnTo ? { returnTo } : {};
-  },
 });
 
 function LoginRoute() {

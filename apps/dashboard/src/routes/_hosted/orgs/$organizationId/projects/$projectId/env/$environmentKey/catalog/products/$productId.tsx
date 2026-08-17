@@ -12,8 +12,6 @@ interface ProductReadinessSearch {
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId"
 )({
-  component: CatalogProductRoute,
-  head: () => routeHead({ title: "Product" }),
   validateSearch: (search: Record<string, unknown>): ProductReadinessSearch => {
     const returnTo = safeInternalReturnTo(search.returnTo, "");
     return {
@@ -30,6 +28,8 @@ export const Route = createFileRoute(
       ...(returnTo ? { returnTo } : {}),
     };
   },
+  component: CatalogProductRoute,
+  head: () => routeHead({ title: "Product" }),
 });
 
 function CatalogProductRoute() {

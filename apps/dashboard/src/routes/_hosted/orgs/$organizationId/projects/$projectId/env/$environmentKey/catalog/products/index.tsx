@@ -35,9 +35,6 @@ function isProductType(value: unknown): value is ProductFilters["type"] {
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/"
 )({
-  component: CatalogProductsRoute,
-  head: () => routeHead({ title: "Products" }),
-  pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): ProductsSearch => {
     // Bounded to same-origin paths, so a recovery round trip can never be
     // rewritten into an off-origin destination.
@@ -52,6 +49,9 @@ export const Route = createFileRoute(
       ...(returnTo ? { returnTo } : {}),
     };
   },
+  component: CatalogProductsRoute,
+  head: () => routeHead({ title: "Products" }),
+  pendingComponent: RoutePendingState,
 });
 
 function CatalogProductsRoute() {

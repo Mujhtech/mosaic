@@ -12,15 +12,15 @@ interface ProviderConnectionsSearch {
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers"
 )({
-  component: ProjectProviderConnectionsRoute,
-  head: () => routeHead({ title: "Provider connections" }),
-  pendingComponent: RoutePendingState,
   validateSearch: (
     search: Record<string, unknown>
   ): ProviderConnectionsSearch => {
     const returnTo = safeInternalReturnTo(search.returnTo, "");
     return returnTo ? { returnTo } : {};
   },
+  component: ProjectProviderConnectionsRoute,
+  head: () => routeHead({ title: "Provider connections" }),
+  pendingComponent: RoutePendingState,
 });
 
 function ProjectProviderConnectionsRoute() {
