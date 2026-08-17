@@ -1,8 +1,8 @@
 import { PlusIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-
 import { EmptyState } from "@/components/feedback/empty-state";
+import { LocalDateTime } from "@/components/feedback/local-date-time";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
@@ -95,7 +95,7 @@ export function ExperimentsPage({
                   </p>
                 </div>
                 <p className="self-center text-muted-foreground text-xs">
-                  Updated {new Date(experiment.updatedAt).toLocaleString()}
+                  Updated <LocalDateTime value={experiment.updatedAt} />
                 </p>
               </Link>
             ))}

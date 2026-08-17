@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-
 import { EmptyState } from "@/components/feedback/empty-state";
+import { LocalDateTime } from "@/components/feedback/local-date-time";
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
 import {
@@ -164,7 +164,7 @@ export function PaywallsPage({
                     {paywall.key}
                   </span>
                   <span className="mt-4 block text-muted-foreground text-xs">
-                    Updated {new Date(paywall.updatedAt).toLocaleString()}
+                    Updated <LocalDateTime value={paywall.updatedAt} />
                   </span>
                 </Link>
               </li>

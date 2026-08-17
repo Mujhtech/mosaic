@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-
 import { EmptyState } from "@/components/feedback/empty-state";
+import { LocalDateTime } from "@/components/feedback/local-date-time";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
@@ -100,7 +100,7 @@ export function ReleaseHistoryPage({
                       ) : null}
                     </div>
                     <p className="mt-2 text-muted-foreground text-sm">
-                      Published {new Date(release.publishedAt).toLocaleString()}
+                      Published <LocalDateTime value={release.publishedAt} />
                       {release.publisherName
                         ? ` by ${release.publisherName}`
                         : ""}

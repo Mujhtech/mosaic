@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { LocalDateTime } from "@/components/feedback/local-date-time";
 
 import { buttonVariants } from "@/components/ui/button-variants";
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
@@ -143,7 +144,7 @@ export function PaywallDetailPage({
                 <div className="space-y-3">
                   <p className="text-muted-foreground text-sm">
                     Revision {activeDraft.data.revision} · saved{" "}
-                    {new Date(activeDraft.data.updatedAt).toLocaleString()}
+                    <LocalDateTime value={activeDraft.data.updatedAt} />
                   </p>
                   <Link
                     className={buttonVariants()}
@@ -195,7 +196,7 @@ export function PaywallDetailPage({
                       Draft revision {record.expectedRevision}
                     </p>
                     <p className="mt-1 text-muted-foreground text-xs">
-                      Saved {new Date(record.savedAt).toLocaleString()} after{" "}
+                      Saved <LocalDateTime value={record.savedAt} /> after{" "}
                       {record.reason}.
                     </p>
                   </div>
@@ -253,7 +254,7 @@ export function PaywallDetailPage({
                     <p className="mt-1 text-muted-foreground text-xs">
                       Protocol {version.protocolVersion} · Draft revision{" "}
                       {version.sourceDraftRevision}·{" "}
-                      {new Date(version.createdAt).toLocaleString()}
+                      <LocalDateTime value={version.createdAt} />
                     </p>
                   </div>
                   <EditPublishedVersionAction

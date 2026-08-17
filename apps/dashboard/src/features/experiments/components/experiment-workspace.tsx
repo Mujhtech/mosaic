@@ -7,10 +7,10 @@ import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
-
 import { ErrorState } from "@/components/feedback/error-state";
 import { LiveAnnouncer } from "@/components/feedback/live-announcer";
 import { LoadingState } from "@/components/feedback/loading-state";
+import { LocalDateTime } from "@/components/feedback/local-date-time";
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -59,12 +59,15 @@ import {
 } from "./experiment-status";
 import { MutualExclusionGroupManager } from "./mutual-exclusion-group-manager";
 
-function formatInstant(value?: string) {
+function ScheduleInstant({ value }: { value?: string }) {
   if (!value) {
     return "No scheduled end";
   }
-  const date = new Date(value);
-  return `${date.toLocaleString()} (${date.toISOString()})`;
+  return (
+    <>
+      <LocalDateTime value={value} /> ({new Date(value).toISOString()})
+    </>
+  );
 }
 
 function ImmutableActiveDefinition({
@@ -149,15 +152,21 @@ function ImmutableActiveDefinition({
           </div>
           <div>
             <dt className="text-muted-foreground">Start · inclusive</dt>
-            <dd>{formatInstant(definition.startsAt)}</dd>
+            <dd>
+              <ScheduleInstant value={definition.startsAt} />
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">End · exclusive</dt>
-            <dd>{formatInstant(definition.endsAt)}</dd>
+            <dd>
+              <ScheduleInstant value={definition.endsAt} />
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Published</dt>
-            <dd>{formatInstant(definition.publishedAt)}</dd>
+            <dd>
+              <ScheduleInstant value={definition.publishedAt} />
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">QA policy at publication</dt>
@@ -670,7 +679,7 @@ function HistoryPanel({
             <li className="rounded border p-3" key={entry.id}>
               <p className="font-medium text-sm">{entry.summary}</p>
               <p className="mt-1 text-muted-foreground text-xs">
-                {new Date(entry.createdAt).toLocaleString()} ·{" "}
+                <LocalDateTime value={entry.createdAt} /> ·{" "}
                 {entry.actorLabel ?? "System"}
                 {entry.releaseId ? ` · Release ${entry.releaseId}` : ""}
               </p>
@@ -891,7 +900,7 @@ function QaPanel({
                   <p className="font-medium text-sm">{override.label}</p>
                   <p className="text-muted-foreground text-xs">
                     Digest {override.visibleSelectorDigest} · expires{" "}
-                    {new Date(override.expiresAt).toLocaleString()}
+                    <LocalDateTime value={override.expiresAt} />
                   </p>
                 </div>
                 <Button
