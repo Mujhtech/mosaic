@@ -90,14 +90,6 @@ type ContractRecord[T any] struct {
 	Payload                                   T      `json:"payload"`
 }
 
-func ProgramRecord(program Program) ContractRecord[Program] {
-	return ContractRecord[Program]{
-		BillingMigrationOperationsContractVersion: ContractVersion,
-		RecordType: "migrationProgram",
-		Payload:    program,
-	}
-}
-
 type CreateProgramInput struct {
 	ProjectID          string
 	EnvironmentID      string

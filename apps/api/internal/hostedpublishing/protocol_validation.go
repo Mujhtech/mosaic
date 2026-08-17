@@ -137,8 +137,11 @@ func walkProtocolNodes(root map[string]any) []protocolNode {
 		if node == nil {
 			return
 		}
-		result = append(result, protocolNode{value: node, screenID: screenID, ancestors: append([]map[string]any(nil), ancestors...)})
-		next := append(append([]map[string]any(nil), ancestors...), node)
+		// The entry shares the caller's ancestors slice: every visit builds a
+		// fresh `next` for its children and nobody appends to a slice after
+		// handing it out, so the share is safe and halves the per-node copies.
+		result = append(result, protocolNode{value: node, screenID: screenID, ancestors: ancestors})
+		next := append(append(make([]map[string]any, 0, len(ancestors)+1), ancestors...), node)
 		switch stringValue(node["type"]) {
 		case "scrollContainer":
 			visit(mapValue(node["content"]), screenID, next)
@@ -231,10 +234,8 @@ func validateProtocolCapabilities(root map[string]any, entries []protocolNode) [
 			expected["navigation.sheets"] = true
 		}
 	}
-	authored := []any{design}
 	for _, entry := range entries {
 		node := entry.value
-		authored = append(authored, node)
 		if capability := componentCapability[stringValue(node["type"])]; capability != "" {
 			expected[capability] = true
 		}
@@ -285,7 +286,7 @@ func validateProtocolCapabilities(root map[string]any, entries []protocolNode) [
 			}
 		}
 	}
-	for _, value := range authored {
+	for _, value := range authoredStyleRoots(root) {
 		walkObjects(value, func(item map[string]any) {
 			typeName := stringValue(item["type"])
 			if typeName == "linearGradient" || typeName == "radialGradient" {
@@ -384,11 +385,7 @@ func validateProtocolDesignSystem(root map[string]any, entries []protocolNode) [
 			known[kind][stringValue(mapValue(raw)["id"])] = true
 		}
 	}
-	roots := []any{design}
-	for _, entry := range entries {
-		roots = append(roots, entry.value)
-	}
-	for _, rootValue := range roots {
+	for _, rootValue := range authoredStyleRoots(root) {
 		walkObjects(rootValue, func(item map[string]any) {
 			kind := stringValue(item["type"])
 			if ids, ok := known[kind]; ok && !ids[stringValue(item["id"])] {
@@ -470,11 +467,7 @@ func validateProtocolAssets(root map[string]any, entries []protocolNode) []strin
 			}
 		}
 	}
-	roots := []any{mapValue(root["designSystem"])}
-	for _, entry := range entries {
-		roots = append(roots, entry.value)
-	}
-	for _, item := range roots {
+	for _, item := range authoredStyleRoots(root) {
 		walkObjects(item, func(value map[string]any) {
 			kind := stringValue(value["type"])
 			if (kind != "image" && kind != "video") || value["fallbackColor"] == nil {
@@ -924,6 +917,20 @@ func numberValue(value any) float64 {
 	default:
 		return -1
 	}
+}
+
+// authoredStyleRoots returns the roots whose subtrees carry authored style
+// material: the design system and each screen's layout tree. walkObjects
+// recurses generically, so walking these roots visits every authored object
+// exactly once — walking every collected node entry instead re-visits a node
+// once per ancestor, which on a deep document multiplies the traversal by its
+// depth for no additional coverage.
+func authoredStyleRoots(root map[string]any) []any {
+	result := []any{mapValue(root["designSystem"])}
+	for _, raw := range arrayValue(root["screens"]) {
+		result = append(result, mapValue(mapValue(raw)["layout"]))
+	}
+	return result
 }
 
 func walkObjects(value any, visit func(map[string]any)) {

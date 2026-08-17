@@ -58,10 +58,59 @@ func PreferredDeliveryVersion(values []string) string {
 	return ""
 }
 
+// SDKCapabilityEnvelope is the payload-derived half of delivery negotiation:
+// the compatibility contracts a Release requires of its reader. A Release is
+// immutable, so its envelope can be parsed once and reused for every request
+// serving that Release instead of re-reading the entire multi-megabyte payload
+// per poll; ParseSDKCapabilityEnvelope produces it and the Service caches it
+// by content hash.
+type SDKCapabilityEnvelope struct {
+	experiment       []deliveryExperimentContractEnvelope
+	paywallProtocols []deliveryProtocolCompatibility
+}
+
+type deliveryExperimentContractEnvelope struct {
+	Version             string   `json:"version"`
+	RequiredFeatures    []string `json:"requiredFeatures"`
+	BucketingAlgorithms []string `json:"bucketingAlgorithms"`
+	SchedulePolicies    []string `json:"schedulePolicies"`
+}
+
+// ParseSDKCapabilityEnvelope extracts the compatibility envelope from a
+// Release payload.
+func ParseSDKCapabilityEnvelope(payload json.RawMessage) (SDKCapabilityEnvelope, error) {
+	var envelope struct {
+		ConfigurationDeliveryVersion string `json:"configurationDeliveryVersion"`
+		Release                      struct {
+			Compatibility struct {
+				PaywallProtocols []deliveryProtocolCompatibility      `json:"paywallProtocols"`
+				Experiment       []deliveryExperimentContractEnvelope `json:"experimentAssignmentContracts"`
+			} `json:"compatibility"`
+		} `json:"release"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != DeliveryVersion {
+		return SDKCapabilityEnvelope{}, unsupportedCapability("configurationDeliveryVersion", "", DeliveryVersion, CapabilityUnavailable)
+	}
+	return SDKCapabilityEnvelope{
+		experiment:       envelope.Release.Compatibility.Experiment,
+		paywallProtocols: envelope.Release.Compatibility.PaywallProtocols,
+	}, nil
+}
+
 // ValidateSDKCapabilityPayload enforces the closed Delivery v3 request
 // contract and verifies that the selected immutable Release can be accepted
 // atomically by the requesting reader.
 func ValidateSDKCapabilityPayload(request SDKCapabilityRequest, payload json.RawMessage) error {
+	envelope, err := ParseSDKCapabilityEnvelope(payload)
+	if err != nil {
+		return err
+	}
+	return ValidateSDKCapabilityEnvelope(request, envelope)
+}
+
+// ValidateSDKCapabilityEnvelope is ValidateSDKCapabilityPayload against an
+// already-parsed envelope; the per-request work is the request checks only.
+func ValidateSDKCapabilityEnvelope(request SDKCapabilityRequest, envelope SDKCapabilityEnvelope) error {
 	if err := requireExactUnique("configurationDeliveryVersion", request.SupportedConfigurationDeliveryVersions, DeliveryVersion, 8); err != nil {
 		return err
 	}
@@ -77,28 +126,10 @@ func ValidateSDKCapabilityPayload(request SDKCapabilityRequest, payload json.Raw
 	if err := requireKnownUnique("experimentSchedulePolicy", request.SupportedExperimentSchedulePolicies, supportedExperimentSchedulePolicies, 8); err != nil {
 		return err
 	}
-	var envelope struct {
-		ConfigurationDeliveryVersion string `json:"configurationDeliveryVersion"`
-		Release                      struct {
-			Compatibility struct {
-				PaywallProtocols []deliveryProtocolCompatibility `json:"paywallProtocols"`
-				Experiment       []struct {
-					Version             string   `json:"version"`
-					RequiredFeatures    []string `json:"requiredFeatures"`
-					BucketingAlgorithms []string `json:"bucketingAlgorithms"`
-					SchedulePolicies    []string `json:"schedulePolicies"`
-				} `json:"experimentAssignmentContracts"`
-			} `json:"compatibility"`
-			ExperimentAssignments []json.RawMessage `json:"experimentAssignments"`
-		} `json:"release"`
-	}
-	if err := json.Unmarshal(payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != DeliveryVersion {
-		return unsupportedCapability("configurationDeliveryVersion", "", DeliveryVersion, CapabilityUnavailable)
-	}
 	features := stringSet(request.SupportedExperimentFeatures)
 	algorithms := stringSet(request.SupportedExperimentBucketingAlgorithms)
 	policies := stringSet(request.SupportedExperimentSchedulePolicies)
-	for _, contract := range envelope.Release.Compatibility.Experiment {
+	for _, contract := range envelope.experiment {
 		if contract.Version != "1" {
 			return unsupportedCapability("experimentAssignmentContractVersion", "", contract.Version, CapabilityUnsupported)
 		}
@@ -118,7 +149,7 @@ func ValidateSDKCapabilityPayload(request SDKCapabilityRequest, payload json.Raw
 			}
 		}
 	}
-	return validatePaywallNegotiation(request, envelope.Release.Compatibility.PaywallProtocols)
+	return validatePaywallNegotiation(request, envelope.paywallProtocols)
 }
 
 // requireKnownUnique accepts a non-empty, bounded, duplicate-free list drawn

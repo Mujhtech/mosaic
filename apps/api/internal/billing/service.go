@@ -11,6 +11,7 @@ import (
 	"io"
 	mathrand "math/rand/v2"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -60,6 +61,17 @@ type Service struct {
 	lineages    LineageBinder
 	submissions SubmissionBinder
 
+	// Short-TTL caches for per-job lookups whose sources change only through
+	// rare operator actions; see credential_cache.go for the revocation
+	// latency they trade.
+	enabledFlags  *ttlCache[bool]
+	appleSecrets  *ttlCache[appleCredentialMaterial]
+	googleSecrets *ttlCache[googleCredentialMaterial]
+
+	// rtdnCursor rotates RTDN pulls across tenant credentials, one credential
+	// per job invocation, so every tenant gets the same job budget.
+	rtdnCursor atomic.Int64
+
 	intakeAccepted    metric.Int64Counter
 	intakeRejected    metric.Int64Counter
 	signatureFailure  metric.Int64Counter
@@ -92,14 +104,6 @@ func WithClock(now func() time.Time) ServiceOption {
 	return func(s *Service) {
 		if now != nil {
 			s.now = now
-		}
-	}
-}
-
-func WithRandom(random io.Reader) ServiceOption {
-	return func(s *Service) {
-		if random != nil {
-			s.random = random
 		}
 	}
 }
@@ -144,6 +148,10 @@ func NewService(repository Repository, cipher providercredential.SubjectCipher, 
 		jitter:     mathrand.New(mathrand.NewPCG(uint64(time.Now().UnixNano()), 0x9E3779B97F4A7C15)),
 		tracer:     otel.Tracer("github.com/Mujhtech/mosaic/apps/api/billing"),
 		retention:  90 * 24 * time.Hour,
+
+		enabledFlags:  newTTLCache[bool](credentialCacheTTL),
+		appleSecrets:  newTTLCache[appleCredentialMaterial](credentialCacheTTL),
+		googleSecrets: newTTLCache[googleCredentialMaterial](credentialCacheTTL),
 	}
 	service.intakeAccepted, _ = meter.Int64Counter("mosaic.billing.intake.accepted")
 	service.intakeRejected, _ = meter.Int64Counter("mosaic.billing.intake.rejected")
@@ -749,17 +757,6 @@ func safeFailure(err error, code string) error {
 	return &SafeError{Code: code, Kind: fmt.Sprintf("%T", err)}
 }
 
-// logSafely writes an operator line with identifiers only.
-func logSafely(ctx context.Context, message string, fields map[string]string) {
-	event := zerolog.Ctx(ctx).Info()
-	for key, value := range fields {
-		if value != "" {
-			event = event.Str(key, value)
-		}
-	}
-	event.Msg(message)
-}
-
 // billingEnabled reports whether a Project may record billing data, failing
 // **closed** when the setting cannot be read.
 //
@@ -776,13 +773,20 @@ func logSafely(ctx context.Context, message string, fields map[string]string) {
 // work is parked rather than failed. The cost of the permissive choice is
 // storing bearer material for a tenant that asked Mosaic not to.
 func (s *Service) billingEnabled(ctx context.Context, projectID string) bool {
+	now := s.now()
+	if enabled, ok := s.enabledFlags.get(projectID, now); ok {
+		return enabled
+	}
 	enabled, err := s.repository.BillingEnabled(ctx, projectID)
 	if err != nil {
+		// A read failure is treated as disabled but never cached: the next job
+		// must re-ask rather than pin every job of the TTL window to one blip.
 		zerolog.Ctx(ctx).Error().
 			Str("project_id", projectID).
 			Str("billing_error_kind", fmt.Sprintf("%T", err)).
 			Msg("billing enablement could not be read; treating the Project as disabled")
 		return false
 	}
+	s.enabledFlags.put(projectID, enabled, now)
 	return enabled
 }

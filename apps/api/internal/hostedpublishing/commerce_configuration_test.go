@@ -132,6 +132,7 @@ func TestNativeCommerceConfigurationContainsExactMappingsGrantsAndObservation(t 
 		Application{ID: "application_1", ProjectID: "project_1", Platform: "android"},
 		[]string{"product_1"},
 		now,
+		newCommercePublishMaterial(nil),
 	)
 	if err != nil {
 		t.Fatalf("build native sidecar: %v", err)
@@ -233,6 +234,7 @@ func TestNativeCommerceConfigurationServesAppStoreConnectImports(t *testing.T) {
 				Application{ID: "application_1", ProjectID: "project_1", Platform: "ios"},
 				[]string{"product_1"},
 				now,
+				newCommercePublishMaterial(nil),
 			)
 			if err != nil {
 				t.Fatalf("publish an App Store Connect backed iOS Release: %v", err)
@@ -319,7 +321,7 @@ func TestCommerceConfigurationUsesStoreAndCanonicalSDKLookupReferences(t *testin
 				tx, release,
 				Environment{ID: "environment_1", ProjectID: "project_1"},
 				Application{ID: "application_1", ProjectID: "project_1", Platform: "ios"},
-				[]string{"product_1"}, now,
+				[]string{"product_1"}, now, newCommercePublishMaterial(nil),
 			)
 			if err != nil {
 				t.Fatalf("build sidecar: %v", err)
@@ -424,6 +426,7 @@ func TestCommerceConfigurationRequiresMappingForEveryProductGrant(t *testing.T) 
 		Application{ID: "application_1", ProjectID: "project_1", Platform: "ios"},
 		[]string{"product_1"},
 		now,
+		newCommercePublishMaterial(nil),
 	)
 	if !errors.Is(err, ErrProviderReadiness) {
 		t.Fatalf("sidecar error = %v, want provider readiness failure", err)

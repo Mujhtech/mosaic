@@ -3,7 +3,6 @@ package analyticspostgres
 import (
 	"context"
 	"encoding/csv"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -228,15 +227,14 @@ func (r *Repository) ExportRows(ctx context.Context, job analytics.Job, writer i
 			if err = rows.Scan(&value); err != nil {
 				return 0, err
 			}
-			var document any
-			if err = json.Unmarshal([]byte(value), &document); err != nil {
+			// The row is already one compact JSON document rendered by
+			// Postgres; decoding it into an interface tree and re-encoding it
+			// per row only reorders keys, at the cost of two full parses on
+			// exports that can span millions of events.
+			if _, err = io.WriteString(writer, value); err != nil {
 				return 0, err
 			}
-			encoded, err := json.Marshal(document)
-			if err != nil {
-				return 0, err
-			}
-			if _, err = fmt.Fprintf(writer, "%s\n", encoded); err != nil {
+			if _, err = io.WriteString(writer, "\n"); err != nil {
 				return 0, err
 			}
 			count++

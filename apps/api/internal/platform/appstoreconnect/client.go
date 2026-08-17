@@ -33,11 +33,11 @@ const (
 	defaultOperationTTL = 60 * time.Second
 	maxOperationTTL     = 5 * time.Minute
 	// Apple caps `limit` at 200 for the collections this adapter reads.
-	defaultPageLimit    = 200
-	defaultMaxPages     = 200
-	defaultMaxRetries   = 20
-	defaultMaxRetryWait = 5 * time.Second
-	rateLimitDomainKey  = "app_store_connect"
+	defaultPageLimit       = 200
+	defaultMaxPages        = 200
+	defaultMaxRetries      = 20
+	defaultMaxRetryWait    = 5 * time.Second
+	rateLimitCredentialKey = "app_store_connect:"
 
 	// Apple's platform vocabulary is not Mosaic's. The catalog boundary already
 	// uses RevenueCat's neutral store names, so an App Store application is
@@ -118,6 +118,10 @@ func New(config Config) (*Client, error) {
 	}).DialContext
 	transport.ResponseHeaderTimeout = config.RequestTimeout
 	transport.TLSHandshakeTimeout = config.ConnectTimeout
+	// The default of 2 idle connections per host discards completed
+	// connections as soon as more than two callers overlap, forcing fresh
+	// TCP+TLS handshakes on a single-host client.
+	transport.MaxIdleConnsPerHost = 16
 	return &Client{
 		baseURL: parsed,
 		httpClient: &http.Client{
@@ -136,8 +140,10 @@ func New(config Config) (*Client, error) {
 		maxRetries:       defaultMaxRetries,
 		maxRetryWait:     defaultMaxRetryWait,
 		// Apple documents roughly 3600 requests per hour per key. The limiter
-		// keeps a large catalog import well inside that without relying on 429.
-		limiter: ratelimit.New(50, 10, 1),
+		// keeps a large catalog import well inside that without relying on
+		// 429, with one bucket per tenant credential because the limit Apple
+		// enforces is per key.
+		limiter: ratelimit.New(50, 10, 256),
 		now:     func() time.Time { return time.Now().UTC() },
 	}, nil
 }
@@ -384,7 +390,17 @@ func (c *Client) get(ctx context.Context, budget *operationBudget, credential Cr
 		if ctx.Err() != nil {
 			return timeoutError(ctx.Err())
 		}
-		if allowed, delay := c.limiter.Allow(rateLimitDomainKey); !allowed {
+		// Allow only debits a token when it admits the caller, so a denied
+		// caller must re-acquire after waiting; proceeding after one sleep
+		// would let every concurrently denied goroutine fire at once. The
+		// bucket is keyed per credential because Apple's limit is per key: a
+		// single shared bucket lets one tenant's catalog import starve every
+		// other tenant on this instance.
+		for {
+			allowed, delay := c.limiter.Allow(rateLimitCredentialKey + credential.IssuerID + "/" + credential.KeyID)
+			if allowed {
+				break
+			}
 			if err := wait(ctx, delay); err != nil {
 				return timeoutError(err)
 			}

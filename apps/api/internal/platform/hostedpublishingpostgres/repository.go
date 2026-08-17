@@ -391,10 +391,18 @@ func (r reader) Assets(projectID string) []hostedpublishing.Asset {
 	return many(r, `SELECT `+assetColumns+` FROM assets WHERE project_id=$1 AND status<>'deleted' ORDER BY id`, scanAsset, projectID)
 }
 
+// AssetUsage counts drafts by their current revision only, scoped to the
+// asset's project. The URL match has no index, so its cost must stay bounded
+// by the project's live drafts — an unscoped scan over every historical
+// autosave revision grows without limit, and a superseded autosave is not a
+// reference anyone can still see.
 func (r reader) AssetUsage(assetID string) hostedpublishing.AssetUsage {
 	var value hostedpublishing.AssetUsage
 	err := r.q.QueryRow(r.ctx, `SELECT
-		(SELECT count(*) FROM paywall_draft_revisions d WHERE d.document::text LIKE '%' || (SELECT public_url FROM assets WHERE id=$1) || '%'),
+		(SELECT count(*) FROM paywall_draft_revisions d
+			JOIN paywall_drafts p ON p.id = d.draft_id AND p.current_revision = d.revision
+			WHERE d.project_id = (SELECT project_id FROM assets WHERE id=$1)
+			AND d.document::text LIKE '%' || (SELECT public_url FROM assets WHERE id=$1) || '%'),
 		(SELECT count(*) FROM paywall_version_assets WHERE asset_id=$1),
 		(SELECT count(*) FROM configuration_release_assets WHERE asset_id=$1)`, assetID).Scan(&value.DraftReferences, &value.VersionReferences, &value.ReleaseReferences)
 	r.fail(err)
@@ -585,8 +593,29 @@ func (r reader) Release(id string) (hostedpublishing.Release, bool) {
 	return one(r, `SELECT `+releaseColumns+` FROM configuration_releases WHERE id=$1`, scanRelease, id)
 }
 
+// Releases serves the release history listing, which renders metadata only
+// (Release.Payload is json:"-"), so the multi-megabyte payload_bytes column is
+// left out: reading it would transfer and heap-copy every payload ever
+// published in the environment per listing.
 func (r reader) Releases(environmentID string) []hostedpublishing.Release {
-	return many(r, `SELECT `+releaseColumns+` FROM configuration_releases WHERE environment_id=$1 ORDER BY release_number DESC`, scanRelease, environmentID)
+	return many(r, `SELECT id,project_id,environment_id,release_number,delivery_contract_version,content_hash,source_release_id,rollback_source_release_id,published_by_actor_id,published_at FROM configuration_releases WHERE environment_id=$1 ORDER BY release_number DESC`, scanReleaseSummary, environmentID)
+}
+
+func scanReleaseSummary(row pgx.Row) (hostedpublishing.Release, error) {
+	var value hostedpublishing.Release
+	var source, rollback *string
+	err := row.Scan(&value.ID, &value.ProjectID, &value.EnvironmentID, &value.ReleaseNumber, &value.DeliveryContractVersion, &value.ContentHash, &source, &rollback, &value.PublishedByActorID, &value.PublishedAt)
+	if err != nil {
+		return value, err
+	}
+	if source != nil {
+		value.SourceReleaseID = *source
+	}
+	if rollback != nil {
+		value.RollbackSourceReleaseID = *rollback
+	}
+	value.PublishedAt = utc(value.PublishedAt)
+	return value, nil
 }
 
 func scanReleasePlacement(row pgx.Row) (hostedpublishing.ReleasePlacement, error) {
@@ -638,10 +667,11 @@ func (r reader) PublicationRequest(environmentID, operation, keyHash string) (ho
 }
 
 func (r reader) APIKeyByPrefix(prefix string) (hostedpublishing.APIKeyRecord, bool) {
-	return one(r, `SELECT id,environment_id,kind,prefix,secret_digest,revoked_at FROM api_keys WHERE prefix=$1`, func(row pgx.Row) (hostedpublishing.APIKeyRecord, error) {
+	return one(r, `SELECT id,environment_id,kind,prefix,secret_digest,revoked_at,last_used_at FROM api_keys WHERE prefix=$1`, func(row pgx.Row) (hostedpublishing.APIKeyRecord, error) {
 		var value hostedpublishing.APIKeyRecord
-		err := row.Scan(&value.ID, &value.EnvironmentID, &value.Kind, &value.Prefix, &value.SecretDigest, &value.RevokedAt)
+		err := row.Scan(&value.ID, &value.EnvironmentID, &value.Kind, &value.Prefix, &value.SecretDigest, &value.RevokedAt, &value.LastUsedAt)
 		value.RevokedAt = utcPtr(value.RevokedAt)
+		value.LastUsedAt = utcPtr(value.LastUsedAt)
 		return value, err
 	}, prefix)
 }

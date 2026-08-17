@@ -13,6 +13,7 @@ import (
 
 var keyPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,62}$`)
 var nonWhitespacePattern = regexp.MustCompile(`\S`)
+var storefrontCountryPattern = regexp.MustCompile(`^$|^[A-Z]{2}$`)
 
 // revenueCatSecretPattern and jsonDocumentPattern are the transport-level
 // shapes of the two server-connected credentials. Neither proves the credential
@@ -360,7 +361,7 @@ func (request *providerMappingObservationRequest) Validate() error {
 			"",
 		)),
 		validation.Field(&request.Metadata.StorefrontCountryCode,
-			validation.Match(regexp.MustCompile(`^$|^[A-Z]{2}$`))),
+			validation.Match(storefrontCountryPattern)),
 		validation.Field(&request.Metadata.TestScenario, validation.In(
 			cloudworkspace.ProviderObservationScenarioProductLoad,
 			cloudworkspace.ProviderObservationScenarioConfigurationAcceptance,

@@ -126,6 +126,10 @@ func New(config Config) (*Client, error) {
 	transport.DialContext = (&net.Dialer{Timeout: config.ConnectTimeout, KeepAlive: 30 * time.Second}).DialContext
 	transport.ResponseHeaderTimeout = config.RequestTimeout
 	transport.TLSHandshakeTimeout = config.ConnectTimeout
+	// The default of 2 idle connections per host discards completed
+	// connections as soon as more than two callers overlap, forcing fresh
+	// TCP+TLS handshakes on a single-host client.
+	transport.MaxIdleConnsPerHost = 16
 	return &Client{
 		production: production,
 		sandbox:    sandbox,

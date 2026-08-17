@@ -7,6 +7,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -24,6 +25,12 @@ type Service struct {
 	assetBase         string
 	assetLimit        int64
 	commerceValidator *CommerceConfigurationValidator
+
+	// envelopes caches each Release's parsed capability envelope by content
+	// hash. Releases are immutable, so entries never go stale; the map resets
+	// at a small cap to stay bounded.
+	envelopeMu sync.Mutex
+	envelopes  map[string]SDKCapabilityEnvelope
 }
 
 type ServiceOption func(*Service)
@@ -58,6 +65,7 @@ func NewService(repository Repository, options ...ServiceOption) *Service {
 		tracer:     otel.Tracer("github.com/Mujhtech/mosaic/apps/api/hostedpublishing"),
 		validator:  NewProtocolValidator(nil),
 		assetLimit: 10 << 20,
+		envelopes:  make(map[string]SDKCapabilityEnvelope),
 	}
 	for _, option := range options {
 		option(service)
@@ -545,24 +553,28 @@ func (s *Service) AuthenticateSDKKeyVersions(ctx context.Context, rawKey string,
 	}
 	presented := digestString(rawKey)
 	var result SDKConfiguration
-	err := s.repository.Transact(ctx, func(tx Transaction) error {
-		key, ok := tx.APIKeyByPrefix(parts[0])
+	var key APIKeyRecord
+	// The SDK poll is the read-dominant hot path, so it runs under View
+	// rather than opening a write transaction per request; the only write —
+	// the throttled usage touch — happens separately below.
+	err := s.repository.View(ctx, func(reader Reader) error {
+		var ok bool
+		key, ok = reader.APIKeyByPrefix(parts[0])
 		if !ok || key.Kind != "public_sdk" || key.RevokedAt != nil || subtle.ConstantTimeCompare([]byte(presented), []byte(hexDigest(key.SecretDigest))) != 1 {
 			return ErrUnauthenticated
 		}
-		environment, ok := tx.Environment(key.EnvironmentID)
+		environment, ok := reader.Environment(key.EnvironmentID)
 		if !ok {
 			return ErrUnauthenticated
 		}
-		state, ok := tx.ReleaseState(environment.ID)
+		state, ok := reader.ReleaseState(environment.ID)
 		if !ok || state.CurrentReleaseID == "" {
 			return ErrNoCurrentRelease
 		}
-		release, ok := tx.Release(state.CurrentReleaseID)
+		release, ok := reader.Release(state.CurrentReleaseID)
 		if !ok || release.EnvironmentID != environment.ID {
 			return ErrNoCurrentRelease
 		}
-		tx.TouchAPIKey(key.ID)
 		supported := false
 		for _, version := range supportedVersions {
 			if version == DeliveryVersion {
@@ -579,7 +591,62 @@ func (s *Service) AuthenticateSDKKeyVersions(ctx context.Context, rawKey string,
 		result = SDKConfiguration{Release: release, Payload: release.Payload, ContentHash: release.ContentHash, DeliveryContractVersion: release.DeliveryContractVersion, Environment: environment, APIKeyID: key.ID}
 		return nil
 	})
-	return result, err
+	if err != nil {
+		return SDKConfiguration{}, err
+	}
+	s.touchAPIKey(ctx, key)
+	envelope, err := s.capabilityEnvelopeFor(result.Payload, result.ContentHash)
+	if err != nil {
+		return SDKConfiguration{}, err
+	}
+	result.CapabilityEnvelope = envelope
+	return result, nil
+}
+
+// apiKeyTouchGranularity mirrors the interval guard inside TouchAPIKey's SQL:
+// last-used tracking is deliberately coarse so a fleet of polling SDKs does
+// not turn the delivery path into a write-per-request workload.
+const apiKeyTouchGranularity = 15 * time.Minute
+
+// touchAPIKey records SDK key usage in its own short write transaction, and
+// only when the tracking window has elapsed. The SQL guard stays authoritative
+// under races; this check only avoids opening a transaction that would update
+// nothing. Best-effort by design: delivery must not fail because a usage
+// timestamp could not be written.
+func (s *Service) touchAPIKey(ctx context.Context, key APIKeyRecord) {
+	if key.LastUsedAt != nil && s.now().Sub(*key.LastUsedAt) < apiKeyTouchGranularity {
+		return
+	}
+	_ = s.repository.Transact(ctx, func(tx Transaction) error {
+		tx.TouchAPIKey(key.ID)
+		return nil
+	})
+}
+
+// capabilityEnvelopeFor parses a Release's capability envelope, serving it
+// from the per-content-hash cache when possible.
+func (s *Service) capabilityEnvelopeFor(payload json.RawMessage, contentHash string) (SDKCapabilityEnvelope, error) {
+	if contentHash != "" {
+		s.envelopeMu.Lock()
+		cached, ok := s.envelopes[contentHash]
+		s.envelopeMu.Unlock()
+		if ok {
+			return cached, nil
+		}
+	}
+	envelope, err := ParseSDKCapabilityEnvelope(payload)
+	if err != nil {
+		return SDKCapabilityEnvelope{}, err
+	}
+	if contentHash != "" {
+		s.envelopeMu.Lock()
+		if len(s.envelopes) >= 256 {
+			clear(s.envelopes)
+		}
+		s.envelopes[contentHash] = envelope
+		s.envelopeMu.Unlock()
+	}
+	return envelope, nil
 }
 
 func (s *Service) AuthenticateSDKCommerceKey(ctx context.Context, rawKey, applicationID, sdkPlatform string) (SDKCommerceConfiguration, error) {
@@ -589,18 +656,22 @@ func (s *Service) AuthenticateSDKCommerceKey(ctx context.Context, rawKey, applic
 	}
 	presented := digestString(rawKey)
 	var result SDKCommerceConfiguration
-	err := s.repository.Transact(ctx, func(tx Transaction) error {
-		key, ok := tx.APIKeyByPrefix(parts[0])
+	var key APIKeyRecord
+	// Read-dominant SDK path: authenticate under View and record the throttled
+	// usage touch separately, exactly as AuthenticateSDKKeyVersions does.
+	err := s.repository.View(ctx, func(reader Reader) error {
+		var ok bool
+		key, ok = reader.APIKeyByPrefix(parts[0])
 		if !ok || key.Kind != "public_sdk" || key.RevokedAt != nil ||
 			subtle.ConstantTimeCompare([]byte(presented), []byte(hexDigest(key.SecretDigest))) != 1 {
 			return ErrUnauthenticated
 		}
-		environment, ok := tx.Environment(key.EnvironmentID)
+		environment, ok := reader.Environment(key.EnvironmentID)
 		if !ok {
 			return ErrUnauthenticated
 		}
 		var application Application
-		for _, candidate := range tx.Applications(environment.ProjectID) {
+		for _, candidate := range reader.Applications(environment.ProjectID) {
 			if candidate.ID == applicationID {
 				application = candidate
 				break
@@ -612,11 +683,11 @@ func (s *Service) AuthenticateSDKCommerceKey(ctx context.Context, rawKey, applic
 		if (sdkPlatform == "ios" || sdkPlatform == "android") && sdkPlatform != application.Platform {
 			return unsupportedCapability("sdkPlatform", sdkPlatform, "", CapabilityUnsupported)
 		}
-		state, ok := tx.ReleaseState(environment.ID)
+		state, ok := reader.ReleaseState(environment.ID)
 		if !ok || state.CurrentReleaseID == "" {
 			return ErrNoCurrentRelease
 		}
-		snapshot, ok := tx.CommerceConfiguration(state.CurrentReleaseID, application.ID)
+		snapshot, ok := reader.CommerceConfiguration(state.CurrentReleaseID, application.ID)
 		if !ok || snapshot.ProjectID != environment.ProjectID ||
 			snapshot.EnvironmentID != environment.ID ||
 			snapshot.ApplicationID != application.ID ||
@@ -624,13 +695,16 @@ func (s *Service) AuthenticateSDKCommerceKey(ctx context.Context, rawKey, applic
 			snapshot.ConfigurationReleaseID != state.CurrentReleaseID {
 			return ErrNotFound
 		}
-		tx.TouchAPIKey(key.ID)
 		result = SDKCommerceConfiguration{
 			Snapshot: snapshot, Environment: environment, APIKeyID: key.ID,
 		}
 		return nil
 	})
-	return result, err
+	if err != nil {
+		return SDKCommerceConfiguration{}, err
+	}
+	s.touchAPIKey(ctx, key)
+	return result, nil
 }
 
 func hexDigest(value []byte) string {

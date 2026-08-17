@@ -328,6 +328,10 @@ type APIKeyRecord struct {
 	Prefix        string
 	SecretDigest  []byte
 	RevokedAt     *time.Time
+	// LastUsedAt lets the delivery path decide client-side whether the
+	// 15-minute usage-tracking window has elapsed, so the read-dominant SDK
+	// poll does not open a write transaction just to find out it has not.
+	LastUsedAt *time.Time
 }
 
 type AuditEvent struct {
@@ -364,6 +368,10 @@ type SDKConfiguration struct {
 	DeliveryContractVersion string
 	Environment             Environment
 	APIKeyID                string
+	// CapabilityEnvelope is the Release's parsed compatibility envelope,
+	// resolved once per Release rather than re-read from the full payload on
+	// every poll.
+	CapabilityEnvelope SDKCapabilityEnvelope
 }
 
 type SDKCommerceConfiguration struct {

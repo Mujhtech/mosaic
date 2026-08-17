@@ -264,11 +264,3 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 	}
 	response.Error(w, r, response.NewAPIError(status, code, message))
 }
-
-func CookieToken(r *http.Request) string {
-	cookie, err := r.Cookie(browserauth.SessionCookieName)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(cookie.Value)
-}

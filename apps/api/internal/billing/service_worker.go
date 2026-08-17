@@ -530,29 +530,11 @@ func (s *Service) appleCredential(ctx context.Context, input RawInput, scope app
 		return appstoreserver.Credential{}, "", err
 	}
 	input.CredentialID = credentialID
-	credential, envelope, class, organizationID, bundleID, err := s.repository.CredentialSecretFor(ctx, input.ProjectID, input.CredentialID)
-	if err != nil || credential.Status != "active" {
-		return appstoreserver.Credential{}, credentialID, ErrCredentialUnusable
-	}
-	plaintext, err := s.cipher.DecryptSubject(providercredential.Envelope{
-		Version: envelope.Version, Algorithm: envelope.Algorithm, KeyID: envelope.KeyID,
-		Nonce: envelope.Nonce, Ciphertext: envelope.Ciphertext,
-		CredentialClass: class, Fingerprint: envelope.Fingerprint,
-	}, providercredential.SubjectScope{
-		OrganizationID:  organizationID,
-		ProjectID:       input.ProjectID,
-		SubjectKind:     providercredential.SubjectStoreServerCredential,
-		SubjectID:       input.CredentialID,
-		CredentialClass: class,
-	})
+	material, err := s.appleCredentialMaterial(ctx, input.ProjectID, input.CredentialID)
 	if err != nil {
-		return appstoreserver.Credential{}, credentialID, ErrCredentialUnusable
+		return appstoreserver.Credential{}, credentialID, err
 	}
-	defer zero(plaintext)
-	key, err := appstoreserver.ParsePrivateKey(plaintext)
-	if err != nil {
-		return appstoreserver.Credential{}, credentialID, ErrCredentialUnusable
-	}
+	credential, bundleID, key := material.credential, material.bundleID, material.key
 	// The `bid` must name the Application this input belongs to. The fallback
 	// from CredentialSecretFor is the credential's first scoped Application,
 	// which is correct only for a single-Application credential; for a team with
@@ -599,6 +581,43 @@ func (s *Service) appleCredential(ctx context.Context, input RawInput, scope app
 		IssuerID: credential.AppleIssuerID, KeyID: credential.AppleKeyID, PrivateKey: key,
 		BundleID: bundleID, Sandbox: credential.StoreEnvironment == StoreSandbox,
 	}, credentialID, nil
+}
+
+// appleCredentialMaterial resolves, decrypts, and parses the credential's
+// input-invariant material, serving from the short-TTL cache when possible;
+// see credential_cache.go for why and for the revocation-latency bound.
+func (s *Service) appleCredentialMaterial(ctx context.Context, projectID, credentialID string) (appleCredentialMaterial, error) {
+	now := s.now()
+	cacheKey := credentialCacheKey(projectID, credentialID)
+	if material, ok := s.appleSecrets.get(cacheKey, now); ok {
+		return material, nil
+	}
+	credential, envelope, class, organizationID, bundleID, err := s.repository.CredentialSecretFor(ctx, projectID, credentialID)
+	if err != nil || credential.Status != "active" {
+		return appleCredentialMaterial{}, ErrCredentialUnusable
+	}
+	plaintext, err := s.cipher.DecryptSubject(providercredential.Envelope{
+		Version: envelope.Version, Algorithm: envelope.Algorithm, KeyID: envelope.KeyID,
+		Nonce: envelope.Nonce, Ciphertext: envelope.Ciphertext,
+		CredentialClass: class, Fingerprint: envelope.Fingerprint,
+	}, providercredential.SubjectScope{
+		OrganizationID:  organizationID,
+		ProjectID:       projectID,
+		SubjectKind:     providercredential.SubjectStoreServerCredential,
+		SubjectID:       credentialID,
+		CredentialClass: class,
+	})
+	if err != nil {
+		return appleCredentialMaterial{}, ErrCredentialUnusable
+	}
+	defer zero(plaintext)
+	key, err := appstoreserver.ParsePrivateKey(plaintext)
+	if err != nil {
+		return appleCredentialMaterial{}, ErrCredentialUnusable
+	}
+	material := appleCredentialMaterial{credential: credential, bundleID: bundleID, key: key}
+	s.appleSecrets.put(cacheKey, material, now)
+	return material, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -1233,36 +1252,60 @@ func (s *Service) googleCredential(ctx context.Context, input RawInput) (*google
 		return nil, StoreServerCredential{}, "", err
 	}
 	input.CredentialID = credentialID
-	credential, envelope, class, organizationID, packageName, err := s.repository.CredentialSecretFor(ctx, input.ProjectID, input.CredentialID)
-	if err != nil || credential.Status != "active" {
-		return nil, StoreServerCredential{}, "", ErrCredentialUnusable
+	material, err := s.googleCredentialMaterial(ctx, input.ProjectID, input.CredentialID)
+	if err != nil {
+		// The partially populated credential row still travels with the error
+		// so callers can stamp provenance on the attempt they record.
+		return nil, material.credential, material.packageName, err
 	}
+	packageName := material.packageName
 	if input.MigrationValidation != nil {
 		packageName, err = s.repository.ProviderApplicationIdentifier(ctx, input.CredentialID, input.MigrationValidation.ExpectedApplicationID)
 		if err != nil || packageName == "" {
-			return nil, credential, "", ErrApplicationNotScoped
+			return nil, material.credential, "", ErrApplicationNotScoped
 		}
 	}
+	return material.account, material.credential, packageName, nil
+}
+
+// googleCredentialMaterial resolves, decrypts, and parses the credential's
+// input-invariant material, serving from the short-TTL cache when possible;
+// see credential_cache.go for why and for the revocation-latency bound. On
+// failure the returned material carries whatever was already resolved (the
+// credential row, the default package name) and is never cached.
+func (s *Service) googleCredentialMaterial(ctx context.Context, projectID, credentialID string) (googleCredentialMaterial, error) {
+	now := s.now()
+	cacheKey := credentialCacheKey(projectID, credentialID)
+	if material, ok := s.googleSecrets.get(cacheKey, now); ok {
+		return material, nil
+	}
+	credential, envelope, class, organizationID, packageName, err := s.repository.CredentialSecretFor(ctx, projectID, credentialID)
+	if err != nil || credential.Status != "active" {
+		return googleCredentialMaterial{}, ErrCredentialUnusable
+	}
+	material := googleCredentialMaterial{credential: credential, packageName: packageName}
 	plaintext, err := s.cipher.DecryptSubject(providercredential.Envelope{
 		Version: envelope.Version, Algorithm: envelope.Algorithm, KeyID: envelope.KeyID,
 		Nonce: envelope.Nonce, Ciphertext: envelope.Ciphertext,
 		CredentialClass: class, Fingerprint: envelope.Fingerprint,
 	}, providercredential.SubjectScope{
 		OrganizationID:  organizationID,
-		ProjectID:       input.ProjectID,
+		ProjectID:       projectID,
 		SubjectKind:     providercredential.SubjectStoreServerCredential,
-		SubjectID:       input.CredentialID,
+		SubjectID:       credentialID,
 		CredentialClass: class,
 	})
 	if err != nil {
-		return nil, credential, packageName, ErrCredentialUnusable
+		return material, ErrCredentialUnusable
 	}
 	defer zero(plaintext)
 	account, err := googleplay.ParseServiceAccount(plaintext)
 	if err != nil {
-		return nil, credential, packageName, ErrCredentialUnusable
+		return material, ErrCredentialUnusable
 	}
-	return account, credential, packageName, nil
+	material.account = account
+	s.googleSecrets.put(cacheKey, material, now)
+	return material, nil
 }
 
 // ---------------------------------------------------------------------------

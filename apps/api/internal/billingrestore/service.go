@@ -56,28 +56,6 @@ type Service struct {
 
 type Option func(*Service)
 
-func WithClock(now func() time.Time) Option {
-	return func(s *Service) {
-		if now != nil {
-			s.now = now
-		}
-	}
-}
-
-func WithRandom(random io.Reader) Option {
-	return func(s *Service) {
-		if random != nil {
-			s.random = random
-		}
-	}
-}
-
-// WithJitter fixes the retry jitter source. Tests use it so a reschedule is
-// reproducible; production leaves it nil and gets a per-process source.
-func WithJitter(jitter *mathrand.Rand) Option {
-	return func(s *Service) { s.jitter = jitter }
-}
-
 func NewService(repository Repository, keys KeyAuthenticator, options ...Option) *Service {
 	meter := otel.Meter("mosaic/billingrestore")
 	service := &Service{

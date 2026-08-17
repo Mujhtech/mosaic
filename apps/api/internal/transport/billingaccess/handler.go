@@ -266,9 +266,12 @@ type authoritySyncRequestMetadata struct {
 	Capabilities              []string `json:"capabilities"`
 }
 
+// Compiled once: Validate runs on every SDK authority sync.
+var snapshotAuthorityDigestPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+
 func (p authoritySyncPayload) Validate() error {
 	digestRule := validation.When(p.KnownSnapshotAuthorityDigest != "",
-		validation.Match(regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)))
+		validation.Match(snapshotAuthorityDigestPattern))
 	return validation.ValidateStruct(&p,
 		validation.Field(&p.KnownAuthorityEpoch, validation.NilOrNotEmpty, validation.Min(0)),
 		validation.Field(&p.KnownSnapshotVersion, validation.NilOrNotEmpty, validation.Min(0)),

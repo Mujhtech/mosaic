@@ -33,6 +33,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -105,10 +107,14 @@ func ParseServiceAccount(raw []byte) (*ServiceAccount, error) {
 }
 
 // tokenCache holds one access token per (service account, scope set). Tokens
-// are process-local and never persisted.
+// are process-local and never persisted. The singleflight group collapses
+// concurrent mints for the same key: without it, every caller that finds the
+// cache cold — or inside the refresh margin — signs and posts its own token
+// exchange, turning each expiry into a burst of duplicate requests at Google.
 type tokenCache struct {
 	mutex  sync.Mutex
 	tokens map[string]cachedToken
+	mints  singleflight.Group
 }
 
 type cachedToken struct {
@@ -122,15 +128,35 @@ func newTokenCache() *tokenCache { return &tokenCache{tokens: make(map[string]ca
 // the cache is cold or the cached token is inside the refresh margin.
 func (c *Client) accessToken(ctx context.Context, account *ServiceAccount, scopes ...string) (string, error) {
 	key := account.ClientEmail + "\x00" + strings.Join(scopes, " ")
-	now := c.now()
 
 	c.tokens.mutex.Lock()
-	if cached, ok := c.tokens.tokens[key]; ok && cached.expiresAt.After(now.Add(refreshMargin)) {
+	if cached, ok := c.tokens.tokens[key]; ok && cached.expiresAt.After(c.now().Add(refreshMargin)) {
 		c.tokens.mutex.Unlock()
 		return cached.value, nil
 	}
 	c.tokens.mutex.Unlock()
 
+	value, err, _ := c.tokens.mints.Do(key, func() (any, error) {
+		// Re-check under the flight: a caller that queued behind the winning
+		// mint finds the fresh token here instead of minting its own.
+		c.tokens.mutex.Lock()
+		if cached, ok := c.tokens.tokens[key]; ok && cached.expiresAt.After(c.now().Add(refreshMargin)) {
+			c.tokens.mutex.Unlock()
+			return cached.value, nil
+		}
+		c.tokens.mutex.Unlock()
+		return c.mintToken(ctx, account, key, scopes...)
+	})
+	if err != nil {
+		return "", err
+	}
+	return value.(string), nil
+}
+
+// mintToken signs a fresh JWT-bearer assertion, exchanges it, and caches the
+// result. Callers reach it only through the tokenCache singleflight group.
+func (c *Client) mintToken(ctx context.Context, account *ServiceAccount, key string, scopes ...string) (string, error) {
+	now := c.now()
 	assertion, err := signAssertion(account, strings.Join(scopes, " "), now)
 	if err != nil {
 		return "", err
@@ -167,6 +193,15 @@ func (c *Client) accessToken(ctx context.Context, account *ServiceAccount, scope
 	}
 
 	c.tokens.mutex.Lock()
+	// Entries for rotated or offboarded service accounts are never asked for
+	// again, so without this sweep the cache — and the stale bearer tokens in
+	// it — grows monotonically with credential cardinality for the process
+	// lifetime.
+	for cachedKey, cached := range c.tokens.tokens {
+		if !cached.expiresAt.After(now) {
+			delete(c.tokens.tokens, cachedKey)
+		}
+	}
 	c.tokens.tokens[key] = cachedToken{value: response.AccessToken, expiresAt: now.Add(time.Duration(expiresIn) * time.Second)}
 	c.tokens.mutex.Unlock()
 	return response.AccessToken, nil

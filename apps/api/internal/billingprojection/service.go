@@ -34,14 +34,6 @@ type Service struct {
 
 type Option func(*Service)
 
-func WithClock(now func() time.Time) Option {
-	return func(s *Service) {
-		if now != nil {
-			s.now = now
-		}
-	}
-}
-
 func NewService(repository Repository, options ...Option) *Service {
 	meter := otel.Meter("mosaic/billingprojection")
 	service := &Service{

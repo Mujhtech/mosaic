@@ -26,11 +26,6 @@ func Routes(service *cloudworkspace.Service, resolver authn.Resolver) http.Handl
 	return router
 }
 
-func RegisterProjectDetailRoute(router chi.Router, service *cloudworkspace.Service, resolver authn.Resolver) {
-	handler := &Handler{service: service}
-	router.With(authn.Middleware(resolver)).Get("/projects/{projectId}", handler.getProject)
-}
-
 func RegisterRoutes(router chi.Router, service *cloudworkspace.Service, resolver authn.Resolver) {
 	router.Group(func(router chi.Router) {
 		router.Use(authn.Middleware(resolver))

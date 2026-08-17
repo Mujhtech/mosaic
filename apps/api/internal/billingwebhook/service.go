@@ -57,19 +57,6 @@ func WithClock(now func() time.Time) Option {
 	}
 }
 
-func WithRandom(random io.Reader) Option {
-	return func(s *Service) {
-		if random != nil {
-			s.random = random
-		}
-	}
-}
-
-// WithJitter makes the retry schedule deterministic for tests.
-func WithJitter(source *mathrand.Rand) Option {
-	return func(s *Service) { s.jitter = source }
-}
-
 func NewService(repository Repository, cipher providercredential.SubjectCipher, policy *Policy, options ...Option) *Service {
 	if policy == nil {
 		policy = NewPolicy()

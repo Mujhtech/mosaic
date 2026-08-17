@@ -33,7 +33,7 @@ type Replay struct {
 	// RuleVersion selects the projection semantics to replay under. Zero means
 	// the active version. A version this build does not derive under is refused
 	// with ErrUnsupportedRuleVersion rather than approximated by the active
-	// engine — see ImplementedRuleVersions.
+	// engine — see implementedRuleVersions.
 	RuleVersion int
 }
 

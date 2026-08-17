@@ -26,15 +26,6 @@ type Service struct {
 
 type Option func(*Service)
 
-// WithClock makes publish timestamps deterministic for tests.
-func WithClock(now func() time.Time) Option {
-	return func(s *Service) {
-		if now != nil {
-			s.now = now
-		}
-	}
-}
-
 func NewService(repository Repository, options ...Option) *Service {
 	service := &Service{
 		repository: repository,

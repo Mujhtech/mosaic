@@ -141,37 +141,54 @@ func (s *Service) ProcessNextRTDN(ctx context.Context, workerID string) (bool, e
 	if err != nil {
 		return false, safeFailure(err, "billing_credential_scan_failed")
 	}
-	processedAny := false
-	for _, identity := range credentials {
+	if len(credentials) == 0 {
+		return false, nil
+	}
+	// One credential per invocation, rotating. Pulling every tenant in one
+	// job budget means that once tenant-count times per-pull cost exceeds the
+	// budget, every credential later in the slice fails on context deadline
+	// each cycle — the same tail tenants, every time, falsely marked degraded
+	// and systematically behind on notifications. The worker's round-robin
+	// already re-invokes this family continuously, so rotation preserves
+	// throughput while giving every tenant the same budget.
+	start := int(s.rtdnCursor.Load())
+	for offset := range credentials {
+		index := (start + offset) % len(credentials)
+		identity := credentials[index]
 		// A disabled Project records nothing. Skipping before the pull also
 		// avoids acknowledging messages Mosaic would then refuse to store,
 		// which would lose them permanently.
 		if !s.billingEnabled(ctx, identity.ProjectID) {
 			continue
 		}
+		s.rtdnCursor.Store(int64((index + 1) % len(credentials)))
 		processed, err := s.pullOne(ctx, identity)
 		if err != nil {
-			// One tenant's misconfiguration must not stop every other tenant's
-			// notifications, so the loop continues and the failure is recorded
-			// against that credential's health.
+			// A cancelled or expired context is the worker's budget running
+			// out, not this tenant's configuration failing; recording degraded
+			// health for that would raise a false operator alarm.
+			if ctx.Err() != nil {
+				return false, nil
+			}
+			// The failure is recorded against this credential's health and the
+			// rotation moves on, so one tenant's misconfiguration never stops
+			// any other tenant's notifications.
 			_ = s.repository.UpdateCredentialHealth(ctx, identity.ProjectID, identity.CredentialID,
 				"degraded", "rtdn_pull_failed", false, s.now())
-			continue
+			return false, nil
 		}
-		processedAny = processedAny || processed
+		return processed, nil
 	}
-	return processedAny, nil
+	return false, nil
 }
 
 func (s *Service) pullOne(ctx context.Context, identity IntakeIdentity) (bool, error) {
 	ctx, span := s.tracer.Start(ctx, "billing.intake.google")
 	defer span.End()
 
-	credential, _, _, _, _, err := s.repository.CredentialSecretFor(ctx, identity.ProjectID, identity.CredentialID)
-	if err != nil {
-		return false, err
-	}
-	account, _, _, err := s.googleCredential(ctx, RawInput{
+	// googleCredential already resolves the credential row alongside the
+	// parsed service account, so one call serves both needs.
+	account, credential, _, err := s.googleCredential(ctx, RawInput{
 		ProjectID: identity.ProjectID, CredentialID: identity.CredentialID, Provider: ProviderGooglePlay,
 	})
 	if err != nil {

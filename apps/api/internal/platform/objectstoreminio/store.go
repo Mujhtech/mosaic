@@ -106,7 +106,15 @@ func (s *Store) Put(ctx context.Context, key string, reader io.Reader, size int6
 	span.SetAttributes(attribute.Int64("objectstore.size_bytes", size))
 	ctx, cancel := context.WithTimeout(ctx, s.operationTimeout)
 	defer cancel()
-	_, err := s.client.PutObject(ctx, s.bucket, key, reader, size, minio.PutObjectOptions{ContentType: mediaType})
+	options := minio.PutObjectOptions{ContentType: mediaType}
+	if size < 0 {
+		// For unknown-size streams minio-go sizes its part buffer for the S3
+		// 5 TiB object ceiling — one ~528 MiB allocation per Put. 16 MiB parts
+		// still allow 160 GiB objects, far beyond anything stored here, without
+		// the half-gigabyte buffer.
+		options.PartSize = 16 << 20
+	}
+	_, err := s.client.PutObject(ctx, s.bucket, key, reader, size, options)
 	if err != nil {
 		return finish(span, fmt.Errorf("put object: %w", err))
 	}

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -47,16 +48,13 @@ type DeliveryRateLimiter interface {
 type Handler struct {
 	service *hostedpublishing.Service
 	limiter DeliveryRateLimiter
-}
 
-func RegisterRoutes(router chi.Router, service *hostedpublishing.Service, resolver authn.Resolver, limiters ...DeliveryRateLimiter) {
-	router.Group(func(router chi.Router) {
-		router.Use(authn.Middleware(resolver))
-		router.Route("/projects/{projectId}", func(router chi.Router) {
-			RegisterProjectRoutes(router, service)
-		})
-	})
-	RegisterPublicRoutes(router, service, limiters...)
+	// gzipCache holds the compressed representation of recently served
+	// Releases by content hash. A publish points every polling SDK at a new
+	// payload within one max-age window, and without the cache each of those
+	// misses re-compresses the same immutable bytes. Bounded by reset.
+	gzipMu    sync.Mutex
+	gzipCache map[string][]byte
 }
 
 // RegisterProjectRoutes mounts the authenticated publishing routes.
@@ -194,10 +192,6 @@ func (request *publishRequest) Validate() error {
 		validation.Field(&request.DraftID, validation.Required),
 		validation.Field(&request.ExpectedRevision, validation.Min(int64(1))))
 }
-
-type emptyRequest struct{}
-
-func (*emptyRequest) Validate() error { return nil }
 
 func decodeAndValidate(w http.ResponseWriter, r *http.Request, target interface{ Validate() error }) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxDocumentRequestBytes)
@@ -698,6 +692,36 @@ func representationETag(payload []byte) string {
 	return `"sha256-` + digestBytes(payload) + `"`
 }
 
+// gzipRepresentationFor compresses a Release payload, serving the cached
+// representation when this content hash was compressed before. Releases are
+// immutable, so a hit is always byte-identical to a fresh compression — which
+// the conditional-request contract requires.
+func (h *Handler) gzipRepresentationFor(contentHash string, payload []byte) ([]byte, error) {
+	if contentHash == "" {
+		return gzipRepresentation(payload)
+	}
+	h.gzipMu.Lock()
+	cached, ok := h.gzipCache[contentHash]
+	h.gzipMu.Unlock()
+	if ok {
+		return cached, nil
+	}
+	compressed, err := gzipRepresentation(payload)
+	if err != nil {
+		return nil, err
+	}
+	h.gzipMu.Lock()
+	if h.gzipCache == nil {
+		h.gzipCache = make(map[string][]byte)
+	}
+	if len(h.gzipCache) >= 8 {
+		clear(h.gzipCache)
+	}
+	h.gzipCache[contentHash] = compressed
+	h.gzipMu.Unlock()
+	return compressed, nil
+}
+
 func digestBytes(payload []byte) string {
 	// Reuse the domain's stable digest without exporting key material.
 	return hostedpublishing.ContentHash(payload)
@@ -740,24 +764,29 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	deliveryVersion := configuration.DeliveryContractVersion
-	if err := hostedpublishing.ValidateSDKCapabilityPayload(capabilities, configuration.Payload); err != nil {
+	if err := hostedpublishing.ValidateSDKCapabilityEnvelope(capabilities, configuration.CapabilityEnvelope); err != nil {
 		writeError(w, r, err)
 		return
 	}
 	if !h.allowDelivery(w, r, "key:"+configuration.APIKeyID) {
 		return
 	}
-	payload := []byte(configuration.Payload)
+	// The ETag is derived from the release's stored content hash — identical to
+	// a digest of the identity payload — with a representation suffix for the
+	// gzip variant, so a Not Modified answer never has to copy or compress the
+	// payload. Every SDK re-polls at max-age=60, and almost all of those polls
+	// are 304s, so the conditional check must stay ahead of the expensive work.
+	contentHash := configuration.ContentHash
+	if contentHash == "" {
+		contentHash = digestBytes(configuration.Payload)
+	}
+	compress := len(configuration.Payload) >= 1024 && headerContains(r.Header.Get("Accept-Encoding"), "gzip")
+	etag := `"sha256-` + contentHash + `"`
 	encoding := ""
-	if len(payload) >= 1024 && headerContains(r.Header.Get("Accept-Encoding"), "gzip") {
-		payload, err = gzipRepresentation(payload)
-		if err != nil {
-			writeError(w, r, err)
-			return
-		}
+	if compress {
+		etag = `"sha256-` + contentHash + `-gzip"`
 		encoding = "gzip"
 	}
-	etag := representationETag(payload)
 	w.Header().Set("Cache-Control", "private, max-age=60, stale-if-error=86400")
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Vary", "Authorization, Accept-Encoding, Mosaic-SDK-Platform, Mosaic-SDK-Version, Mosaic-Configuration-Versions, Mosaic-Paywall-Protocol-Versions, Mosaic-Paywall-Capabilities, Mosaic-Placement-Decision-Versions, Mosaic-Decision-Features, Mosaic-Bucketing-Algorithms, Mosaic-Experiment-Assignment-Versions, Mosaic-Experiment-Features, Mosaic-Experiment-Bucketing-Algorithms, Mosaic-Experiment-Schedule-Policies, Mosaic-App-Version")
@@ -768,6 +797,14 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 		recordDelivery(r, "configuration", true)
 		response.Representation(w, http.StatusNotModified, "application/vnd.mosaic.configuration+json;version="+deliveryVersion, nil)
 		return
+	}
+	payload := []byte(configuration.Payload)
+	if compress {
+		payload, err = h.gzipRepresentationFor(configuration.ContentHash, payload)
+		if err != nil {
+			writeError(w, r, err)
+			return
+		}
 	}
 	recordDelivery(r, "configuration", false)
 	response.Representation(w, http.StatusOK, "application/vnd.mosaic.configuration+json;version="+deliveryVersion, payload)

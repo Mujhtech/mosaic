@@ -40,14 +40,6 @@ func WithClock(now func() time.Time) Option {
 	}
 }
 
-func WithRandom(random io.Reader) Option {
-	return func(s *Service) {
-		if random != nil {
-			s.random = random
-		}
-	}
-}
-
 // NewService builds the identity service.
 //
 // The key authenticator and the reprojector are constructor arguments rather

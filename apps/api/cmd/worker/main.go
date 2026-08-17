@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -75,6 +76,9 @@ func main() {
 type jobFamily struct {
 	name    string
 	process func(context.Context, string) (bool, error)
+	// interval is how long this family's loop waits after a poll that found
+	// no work, so each domain keeps its own configured cadence.
+	interval time.Duration
 }
 
 // migrationSourceObjectDeleter keeps retention deletion pinned to the private
@@ -397,48 +401,41 @@ func run() (runErr error) {
 
 	families := make([]jobFamily, 0, 24)
 	if providerService != nil {
-		families = append(families, jobFamily{"provider_sync", providerService.ProcessNextProviderSync})
+		families = append(families, jobFamily{"provider_sync", providerService.ProcessNextProviderSync, cfg.Providers.WorkerPollInterval})
 	}
 	if billingService != nil {
-		// Validation runs first in the round-robin because a store notification
-		// waiting on validation is the latency an operator actually sees.
-		// Projection runs immediately after it: a validated fact that has not
-		// been projected has not yet changed anyone's access, so the two
-		// latencies are one user-visible number.
+		// Billing families carry their own poll interval so store-notification
+		// latency — validation plus projection is the one user-visible number —
+		// is never coupled to analytics aggregation load.
 		families = append(families,
-			jobFamily{"billing_validation", billingService.ProcessNextValidation},
-			jobFamily{"billing_identity_binding", billingService.ProcessNextIdentityBinding},
-			jobFamily{"billing_projection", projectionService.ProcessNextProjection},
-			// A restore's outcome is only knowable once validation and
-			// projection have moved, so it runs immediately after them: any
-			// later in the round robin and every restore would observe the
-			// previous poll's state and reschedule itself once more than it
-			// needed to.
-			jobFamily{"billing_restore_sync", restoreService.ProcessNextRestoreSync},
+			jobFamily{"billing_validation", billingService.ProcessNextValidation, cfg.Billing.WorkerPollInterval},
+			jobFamily{"billing_identity_binding", billingService.ProcessNextIdentityBinding, cfg.Billing.WorkerPollInterval},
+			jobFamily{"billing_projection", projectionService.ProcessNextProjection, cfg.Billing.WorkerPollInterval},
+			jobFamily{"billing_restore_sync", restoreService.ProcessNextRestoreSync, cfg.Billing.WorkerPollInterval},
 			// Delivery runs strictly outside the projection transaction. A
 			// destination that is down produces retries and eventually an
 			// exhausted delivery; it never rolls back an entitlement change and
 			// never blocks a projection.
-			jobFamily{"billing_webhook_delivery", webhookService.ProcessNextDelivery},
-			jobFamily{"billing_rtdn", billingService.ProcessNextRTDN},
-			jobFamily{"billing_reconciliation", billingService.ProcessNextReconciliation},
-			jobFamily{"billing_replay", billingService.ProcessNextReplay},
-			jobFamily{"billing_retention", billingService.ProcessRetention},
+			jobFamily{"billing_webhook_delivery", webhookService.ProcessNextDelivery, cfg.Billing.WorkerPollInterval},
+			jobFamily{"billing_rtdn", billingService.ProcessNextRTDN, cfg.Billing.WorkerPollInterval},
+			jobFamily{"billing_reconciliation", billingService.ProcessNextReconciliation, cfg.Billing.WorkerPollInterval},
+			jobFamily{"billing_replay", billingService.ProcessNextReplay, cfg.Billing.WorkerPollInterval},
+			jobFamily{"billing_retention", billingService.ProcessRetention, cfg.Billing.WorkerPollInterval},
 		)
 	}
 	if migrationSourcePull != nil {
 		families = append(families,
-			jobFamily{"billing_migration_source_pull", migrationSourcePull.ProcessNext},
-			jobFamily{"billing_migration_import_validation", migrationSourceExecution.ProcessNextImport},
-			jobFamily{"billing_migration_prepared_snapshot", migrationSourceExecution.ProcessNextRun},
-			jobFamily{"billing_migration_final_delta", migrationSourceExecution.ProcessNextFinalDelta},
-			jobFamily{"billing_migration_transition_delivery", migrationTransitionDelivery.ProcessOne},
-			jobFamily{"billing_migration_retention", migrationRetention.ProcessNext},
+			jobFamily{"billing_migration_source_pull", migrationSourcePull.ProcessNext, cfg.Migration.WorkerPollInterval},
+			jobFamily{"billing_migration_import_validation", migrationSourceExecution.ProcessNextImport, cfg.Migration.WorkerPollInterval},
+			jobFamily{"billing_migration_prepared_snapshot", migrationSourceExecution.ProcessNextRun, cfg.Migration.WorkerPollInterval},
+			jobFamily{"billing_migration_final_delta", migrationSourceExecution.ProcessNextFinalDelta, cfg.Migration.WorkerPollInterval},
+			jobFamily{"billing_migration_transition_delivery", migrationTransitionDelivery.ProcessOne, cfg.Migration.WorkerPollInterval},
+			jobFamily{"billing_migration_retention", migrationRetention.ProcessNext, cfg.Migration.WorkerPollInterval},
 		)
 	}
 	families = append(families,
-		jobFamily{"analytics", analyticsService.ProcessNextJob},
-		jobFamily{"experiment_schedule", experimentService.ProcessNextSchedule},
+		jobFamily{"analytics", analyticsService.ProcessNextJob, cfg.Analytics.WorkerPollInterval},
+		jobFamily{"experiment_schedule", experimentService.ProcessNextSchedule, cfg.Analytics.WorkerPollInterval},
 	)
 
 	logger.Info().
@@ -448,53 +445,65 @@ func run() (runErr error) {
 		Msg("worker started")
 
 	// Jobs run on a context detached from the signal context so a job in flight
-	// during SIGTERM can still commit its outcome. The budget bounds it.
-	jobBudget := cfg.Worker.JobShutdownBudget
-	next := 0
-	for {
-		processedAny := false
-		for range families {
-			family := families[next%len(families)]
-			next++
-			// processOne logs its own failure through the job context, which
-			// carries the job, tenant, and trace identifiers this loop does not
-			// have.
-			processed, _ := processOne(runContext, jobBudget, family, workerID, logger)
-			processedAny = processedAny || processed
-		}
-		select {
-		case err := <-healthErrors:
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				return fmt.Errorf("serve worker health listener: %w", err)
+	// during SIGTERM can still commit its outcome. The execution timeout bounds
+	// a normal run; once the signal lands, each in-flight job keeps only the
+	// shutdown budget.
+	executionTimeout := cfg.Worker.JobExecutionTimeout
+	shutdownBudget := cfg.Worker.JobShutdownBudget
+	// One loop per family. The families lease work from independent queues
+	// with FOR UPDATE SKIP LOCKED, so they are safe to run concurrently — and
+	// a single serial loop head-of-line blocks every family behind one slow
+	// provider call: an Apple validation riding out its response timeouts
+	// would delay projection, webhooks, and analytics by that amount every
+	// round. Concurrency is bounded by the family count; the database pool
+	// remains the shared brake underneath.
+	//
+	// workContext ends either with the SIGTERM context or when the health
+	// listener fails, so every family loop stops starting new jobs in both
+	// shutdown paths.
+	workContext, stopWork := context.WithCancel(runContext)
+	defer stopWork()
+	var workers sync.WaitGroup
+	for _, family := range families {
+		workers.Add(1)
+		go func(family jobFamily) {
+			defer workers.Done()
+			for {
+				if workContext.Err() != nil {
+					return
+				}
+				// processOne logs its own failure through the job context,
+				// which carries the job, tenant, and trace identifiers this
+				// loop does not have.
+				processed, _ := processOne(workContext, executionTimeout, shutdownBudget, family, workerID, logger)
+				if processed {
+					continue
+				}
+				select {
+				case <-workContext.Done():
+					return
+				case <-time.After(family.interval):
+				}
 			}
-		default:
-		}
-		if runContext.Err() != nil {
-			logger.Info().Msg("worker stopped gracefully")
-			return nil
-		}
-		if processedAny {
-			continue
-		}
-		interval := cfg.Analytics.WorkerPollInterval
-		if providerService != nil && cfg.Providers.WorkerPollInterval < interval {
-			interval = cfg.Providers.WorkerPollInterval
-		}
-		// Billing carries its own interval so store-notification latency is not
-		// coupled to analytics aggregation load.
-		if billingService != nil && cfg.Billing.WorkerPollInterval < interval {
-			interval = cfg.Billing.WorkerPollInterval
-		}
-		if migrationSourcePull != nil && cfg.Migration.WorkerPollInterval < interval {
-			interval = cfg.Migration.WorkerPollInterval
-		}
-		select {
-		case <-runContext.Done():
-			logger.Info().Msg("worker stopped gracefully")
-			return nil
-		case <-time.After(interval):
-		}
+		}(family)
 	}
+	var healthErr error
+	select {
+	case err := <-healthErrors:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			healthErr = fmt.Errorf("serve worker health listener: %w", err)
+		}
+		stopWork()
+	case <-runContext.Done():
+	}
+	// In-flight jobs finish on their detached contexts within the shutdown
+	// budget before the deferred pool and telemetry teardown may run.
+	workers.Wait()
+	if healthErr != nil {
+		return healthErr
+	}
+	logger.Info().Msg("worker stopped gracefully")
+	return nil
 }
 
 // processOne runs one job on a detached context with a completion budget and
@@ -505,10 +514,19 @@ func run() (runErr error) {
 // jobtelemetry.Annotate once it knows what it leased, which adds the job id,
 // tenant identifiers, and trace id. Without that read-back the line would name
 // only the family and the worker, which no runbook step can act on.
-func processOne(runContext context.Context, budget time.Duration, family jobFamily, workerID string, logger zerolog.Logger) (bool, error) {
+func processOne(runContext context.Context, executionTimeout, shutdownBudget time.Duration, family jobFamily, workerID string, logger zerolog.Logger) (bool, error) {
 	jobLogger := logger.With().Str("job_family", family.name).Str("worker_id", workerID).Logger()
-	jobContext, cancel := context.WithTimeout(context.WithoutCancel(runContext), budget)
+	jobContext, cancel := context.WithTimeout(context.WithoutCancel(runContext), executionTimeout)
 	defer cancel()
+	// The two limits are distinct on purpose: the execution timeout is sized
+	// for the job leases so long-running provider syncs can actually finish,
+	// while the shutdown budget keeps the post-SIGTERM drain inside the
+	// deployment's termination grace. When the signal lands mid-job, the job's
+	// deadline tightens to the budget from that moment.
+	stop := context.AfterFunc(runContext, func() {
+		time.AfterFunc(shutdownBudget, cancel)
+	})
+	defer stop()
 	jobContext = jobLogger.WithContext(jobContext)
 	started := time.Now()
 	processed, err := family.process(jobContext, workerID)

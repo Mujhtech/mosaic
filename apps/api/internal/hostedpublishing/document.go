@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -89,37 +88,6 @@ func analyzeDocumentWithValidator(document json.RawMessage, validator *ProtocolV
 	return analysis
 }
 
-func containsHostedAsset(value any) bool {
-	switch typed := value.(type) {
-	case map[string]any:
-		for key, child := range typed {
-			if key == "source" {
-				if source, ok := child.(map[string]any); ok && source["type"] == "remote" {
-					return true
-				}
-			}
-			if key == "mosaicAssetId" || key == "hostedAssetId" {
-				return true
-			}
-			if key == "url" {
-				if url, ok := child.(string); ok && strings.Contains(url, "/v1/sdk/assets/") {
-					return true
-				}
-			}
-			if containsHostedAsset(child) {
-				return true
-			}
-		}
-	case []any:
-		for _, child := range typed {
-			if containsHostedAsset(child) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func validationStatus(summary ValidationSummary) string {
 	if len(summary.Errors) == 0 {
 		return "valid"
@@ -170,11 +138,4 @@ func validationError(summary ValidationSummary) error {
 
 func draftETagMatches(value string, draft Draft) bool {
 	return strings.TrimSpace(value) == DraftETag(draft.ID, draft.CurrentRevision)
-}
-
-func requireNonempty(value, name string) error {
-	if strings.TrimSpace(value) == "" {
-		return fmt.Errorf("%s is required", name)
-	}
-	return nil
 }

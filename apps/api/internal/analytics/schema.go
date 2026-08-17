@@ -51,5 +51,12 @@ func (v *SchemaValidator) ValidateEvent(raw []byte) error {
 	if err := json.Unmarshal(raw, &document); err != nil {
 		return err
 	}
+	return v.ValidateDocument(document)
+}
+
+// ValidateDocument validates an already-decoded event document, so a caller
+// that has parsed the body once — the batch ingest loop parses every event
+// anyway — does not pay a second full parse just to reach the schema check.
+func (v *SchemaValidator) ValidateDocument(document any) error {
 	return v.event.Validate(document)
 }

@@ -176,6 +176,72 @@ type commerceNativeObservation struct {
 	ExpiresAt   string `json:"expiresAt,omitempty"`
 }
 
+// commercePublishMaterial memoizes the application-invariant inputs of a
+// publish's per-application commerce builds: product rows, entitlement-key
+// sets, grant counts, and the release digest — which requires scanning the
+// full release payload. Without it a publish with A applications repeats each
+// of those reads A times inside the transaction holding the publish lock.
+type commercePublishMaterial struct {
+	products        map[string]Product
+	entitlementKeys map[string][]string
+	grantCounts     map[string]int
+
+	digest       string
+	digestErr    error
+	digestSolved bool
+}
+
+// newCommercePublishMaterial seeds the memo with the products the publish
+// already validated and fetched.
+func newCommercePublishMaterial(products map[string]Product) *commercePublishMaterial {
+	seeded := make(map[string]Product, len(products))
+	for id, product := range products {
+		seeded[id] = product
+	}
+	return &commercePublishMaterial{
+		products:        seeded,
+		entitlementKeys: make(map[string][]string),
+		grantCounts:     make(map[string]int),
+	}
+}
+
+func (m *commercePublishMaterial) releaseDigest(release Release) (string, error) {
+	if !m.digestSolved {
+		m.digest, m.digestErr = configurationReleaseDigest(release.Payload)
+		m.digestSolved = true
+	}
+	return m.digest, m.digestErr
+}
+
+func (m *commercePublishMaterial) product(reader Reader, productID string) (Product, bool) {
+	if product, ok := m.products[productID]; ok {
+		return product, true
+	}
+	product, ok := reader.Product(productID)
+	if ok {
+		m.products[productID] = product
+	}
+	return product, ok
+}
+
+func (m *commercePublishMaterial) productEntitlementKeys(reader Reader, productID string) []string {
+	if keys, ok := m.entitlementKeys[productID]; ok {
+		return keys
+	}
+	keys := reader.ProductEntitlementKeys(productID)
+	m.entitlementKeys[productID] = keys
+	return keys
+}
+
+func (m *commercePublishMaterial) productGrantCount(reader Reader, productID string) int {
+	if count, ok := m.grantCounts[productID]; ok {
+		return count
+	}
+	count := reader.ProductGrantCount(productID)
+	m.grantCounts[productID] = count
+	return count
+}
+
 func configurationReleaseDigest(payload json.RawMessage) (string, error) {
 	var envelope struct {
 		Release struct {
@@ -244,13 +310,13 @@ func minTimePointer(current *time.Time, candidate *time.Time) *time.Time {
 	return current
 }
 
-func (s *Service) buildCommerceConfiguration(tx Transaction, release Release, environment Environment, application Application, productIDs []string, now time.Time) (CommerceConfigurationSnapshot, error) {
+func (s *Service) buildCommerceConfiguration(tx Transaction, release Release, environment Environment, application Application, productIDs []string, now time.Time, material *commercePublishMaterial) (CommerceConfigurationSnapshot, error) {
 	assignment, ok := tx.ProviderAssignment(environment.ID, application.ID)
 	if !ok {
 		return CommerceConfigurationSnapshot{}, ErrProviderReadiness
 	}
 	if assignment.ActivationKind == "native_store" {
-		return s.buildNativeCommerceConfiguration(tx, release, environment, application, productIDs, now, assignment)
+		return s.buildNativeCommerceConfiguration(tx, release, environment, application, productIDs, now, assignment, material)
 	}
 	connection, ok := tx.ProviderConnection(assignment.ConnectionID)
 	if !ok || connection.ProjectID != environment.ProjectID || connection.Status != "active" || connection.HealthStatus != "healthy" {
@@ -299,11 +365,11 @@ func (s *Service) buildCommerceConfiguration(tx Transaction, release Release, en
 				PackageIdentifier: mapping.ProviderPackageIdentifier,
 			}
 		}
-		product, ok := tx.Product(mapping.ProductID)
+		product, ok := material.product(tx, mapping.ProductID)
 		if !ok || product.ProjectID != environment.ProjectID {
 			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
 		}
-		keys := tx.ProductEntitlementKeys(mapping.ProductID)
+		keys := material.productEntitlementKeys(tx, mapping.ProductID)
 		if len(keys) == 0 {
 			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
 		}
@@ -318,7 +384,7 @@ func (s *Service) buildCommerceConfiguration(tx Transaction, release Release, en
 		expiresAt = minTimePointer(expiresAt, snapshot.ExpiresAt)
 	}
 	for _, productID := range expectedProducts {
-		grantCount := tx.ProductGrantCount(productID)
+		grantCount := material.productGrantCount(tx, productID)
 		if grantCount == 0 || providerEntitlementCoverageIssue(
 			tx, connection.ID, environment.ID, application.ID, productID, grantCount,
 		) != "" {
@@ -338,7 +404,7 @@ func (s *Service) buildCommerceConfiguration(tx Transaction, release Release, en
 			ProviderEntitlementIdentifier: mapping.ProviderEntitlementIdentifier,
 		})
 	}
-	releaseDigest, err := configurationReleaseDigest(release.Payload)
+	releaseDigest, err := material.releaseDigest(release)
 	if err != nil {
 		return CommerceConfigurationSnapshot{}, err
 	}
@@ -369,12 +435,12 @@ func (s *Service) buildCommerceConfiguration(tx Transaction, release Release, en
 		ProductMappings: productMappings, EntitlementMappings: entitlementMappings,
 		Freshness: freshness, Diagnostics: []map[string]any{},
 	}
-	material, err := json.Marshal(document)
+	encoded, err := json.Marshal(document)
 	if err != nil {
 		return CommerceConfigurationSnapshot{}, err
 	}
 	var canonicalMaterial map[string]any
-	if err := json.Unmarshal(material, &canonicalMaterial); err != nil {
+	if err := json.Unmarshal(encoded, &canonicalMaterial); err != nil {
 		return CommerceConfigurationSnapshot{}, err
 	}
 	delete(canonicalMaterial, "contentDigest")
@@ -469,7 +535,7 @@ func nativeCommerceMappings(provider string, mappings []CommerceProductMapping) 
 	return result
 }
 
-func (s *Service) buildNativeCommerceConfiguration(tx Transaction, release Release, environment Environment, application Application, productIDs []string, now time.Time, assignment ProviderAssignment) (CommerceConfigurationSnapshot, error) {
+func (s *Service) buildNativeCommerceConfiguration(tx Transaction, release Release, environment Environment, application Application, productIDs []string, now time.Time, assignment ProviderAssignment, material *commercePublishMaterial) (CommerceConfigurationSnapshot, error) {
 	identity, capabilities, recoveryMode, err := nativeProviderIdentity(assignment.Provider)
 	if err != nil {
 		return CommerceConfigurationSnapshot{}, err
@@ -496,11 +562,11 @@ func (s *Service) buildNativeCommerceConfiguration(tx Transaction, release Relea
 		if mapping.ProductID != expectedProducts[index] || mapping.ProviderProductIdentifier == "" {
 			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
 		}
-		product, ok := tx.Product(mapping.ProductID)
+		product, ok := material.product(tx, mapping.ProductID)
 		if !ok || product.ProjectID != environment.ProjectID {
 			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
 		}
-		keys := tx.ProductEntitlementKeys(mapping.ProductID)
+		keys := material.productEntitlementKeys(tx, mapping.ProductID)
 		if len(keys) == 0 {
 			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
 		}
@@ -539,7 +605,7 @@ func (s *Service) buildNativeCommerceConfiguration(tx Transaction, release Relea
 			observationEnvironment = "unknown"
 		}
 	}
-	releaseDigest, err := configurationReleaseDigest(release.Payload)
+	releaseDigest, err := material.releaseDigest(release)
 	if err != nil {
 		return CommerceConfigurationSnapshot{}, err
 	}
@@ -571,12 +637,12 @@ func (s *Service) buildNativeCommerceConfiguration(tx Transaction, release Relea
 		ProductMappings: productMappings, EntitlementMappings: []commerceEntitlementMapping{},
 		Freshness: freshness, Diagnostics: []map[string]any{},
 	}
-	material, err := json.Marshal(document)
+	encoded, err := json.Marshal(document)
 	if err != nil {
 		return CommerceConfigurationSnapshot{}, err
 	}
 	var canonicalMaterial map[string]any
-	if err := json.Unmarshal(material, &canonicalMaterial); err != nil {
+	if err := json.Unmarshal(encoded, &canonicalMaterial); err != nil {
 		return CommerceConfigurationSnapshot{}, err
 	}
 	delete(canonicalMaterial, "contentDigest")

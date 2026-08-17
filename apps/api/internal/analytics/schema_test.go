@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -11,6 +12,17 @@ import (
 )
 
 type batchVersionRepository struct{ Repository }
+
+// Ingest authenticates before it validates events, so the fake must answer
+// the auth and settings reads that now precede the per-event rejections these
+// tests assert.
+func (batchVersionRepository) AuthenticateSDKKey(context.Context, string) (Scope, error) {
+	return Scope{APIKeyID: "key_test", ProjectID: "project_test", EnvironmentID: "environment_test", ApplicationID: "application_test"}, nil
+}
+
+func (batchVersionRepository) Settings(context.Context, string, string) (Settings, error) {
+	return Settings{CollectionEnabled: true}, nil
+}
 
 func protocolPath(t *testing.T, parts ...string) string {
 	t.Helper()

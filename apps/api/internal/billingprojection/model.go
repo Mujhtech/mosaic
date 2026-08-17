@@ -35,12 +35,6 @@ const RuleVersion = ActiveRuleVersion
 // the selection plumbing below already carries it.
 var implementedRuleVersions = []int{ActiveRuleVersion}
 
-// ImplementedRuleVersions reports the rule versions this build can replay
-// under, in ascending order.
-func ImplementedRuleVersions() []int {
-	return append([]int(nil), implementedRuleVersions...)
-}
-
 // RuleVersionImplemented reports whether this build derives under a rule
 // version. Zero means "the active version" and is always implemented.
 func RuleVersionImplemented(version int) bool {

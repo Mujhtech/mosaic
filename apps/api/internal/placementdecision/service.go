@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -644,9 +643,4 @@ func (s *Service) Overrides(ctx context.Context, actor Actor, projectID, environ
 		return nil
 	})
 	return result, err
-}
-
-func tokenMatches(raw string, digestValue []byte) bool {
-	sum := sha256.Sum256([]byte(raw))
-	return subtle.ConstantTimeCompare(sum[:], digestValue) == 1
 }

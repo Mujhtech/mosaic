@@ -368,9 +368,10 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 			tx.SaveReleaseAsset(release.ID, environment.ID, project.ID, assetID)
 		}
 		if shouldBuildCommerceConfigurations(productIDs, providerIssues) {
+			material := newCommercePublishMaterial(products)
 			for _, application := range tx.Applications(project.ID) {
 				commerceConfiguration, err := s.buildCommerceConfiguration(
-					tx, release, environment, application, productIDs, now,
+					tx, release, environment, application, productIDs, now, material,
 				)
 				if err != nil {
 					return err
@@ -496,31 +497,77 @@ func providerPublicationIssues(reader Reader, environment Environment, products 
 		productIDs = append(productIDs, productID)
 	}
 	sort.Strings(productIDs)
+	// Everything that varies by only one axis of the product × application
+	// grid is fetched once per value of that axis. This readiness sweep runs
+	// inside the transaction holding the environment's publish lock, where a
+	// per-pair fetch pattern turns P products and A applications into P×A
+	// sequential round-trips that serialize every publish behind them.
+	grantCounts := make(map[string]int, len(productIDs))
+	for _, productID := range productIDs {
+		grantCounts[productID] = reader.ProductGrantCount(productID)
+	}
+	type applicationMaterial struct {
+		assignment        ProviderAssignment
+		hasAssignment     bool
+		platformMismatch  bool
+		connection        ProviderConnection
+		hasConnection     bool
+		environmentScoped bool
+		applicationScoped bool
+		nativeByProduct   map[string][]CommerceProductMapping
+	}
+	materials := make([]applicationMaterial, len(applications))
+	for index, application := range applications {
+		material := applicationMaterial{}
+		material.assignment, material.hasAssignment = reader.ProviderAssignment(environment.ID, application.ID)
+		if material.hasAssignment {
+			if material.assignment.ActivationKind == "native_store" {
+				material.platformMismatch = (material.assignment.Provider == "app_store" && application.Platform != "ios") ||
+					(material.assignment.Provider == "google_play" && application.Platform != "android")
+				if !material.platformMismatch {
+					// One batched read per application; the query orders by
+					// (product_id, id), so grouping by Product preserves the
+					// exact order a single-product read would return.
+					material.nativeByProduct = make(map[string][]CommerceProductMapping)
+					for _, mapping := range reader.ProviderMappingsForNativeCommerce(
+						material.assignment.Provider, environment.ID, application.ID, application.Platform, productIDs,
+					) {
+						material.nativeByProduct[mapping.ProductID] = append(material.nativeByProduct[mapping.ProductID], mapping)
+					}
+				}
+			} else {
+				material.connection, material.hasConnection = reader.ProviderConnection(material.assignment.ConnectionID)
+				if material.hasConnection && material.connection.ProjectID == environment.ProjectID && material.connection.Status != "revoked" {
+					material.environmentScoped = reader.ProviderConnectionEnvironmentScoped(material.connection.ID, environment.ID)
+					material.applicationScoped = reader.ProviderConnectionApplicationScoped(material.connection.ID, application.ID)
+				}
+			}
+		}
+		materials[index] = material
+	}
 	issues := make([]ProviderPublicationIssue, 0)
 	for _, productID := range productIDs {
 		product := products[productID]
-		for _, application := range applications {
+		for applicationIndex, application := range applications {
+			material := materials[applicationIndex]
 			if product.Status != "connected" {
 				issues = append(issues, publicationIssue("productUnavailable", product, application, "product", product.ID, "connectProduct"))
 			}
-			grantCount := reader.ProductGrantCount(product.ID)
+			grantCount := grantCounts[product.ID]
 			if grantCount == 0 {
 				issues = append(issues, publicationIssue("productUnavailable", product, application, "product", product.ID, "grantEntitlement"))
 			}
-			assignment, ok := reader.ProviderAssignment(environment.ID, application.ID)
-			if !ok {
+			if !material.hasAssignment {
 				issues = append(issues, publicationIssue("providerUnavailable", product, application, "provider_assignment", environment.ID+":"+application.ID, "assignProviderConnection"))
 				continue
 			}
+			assignment := material.assignment
 			if assignment.ActivationKind == "native_store" {
-				if (assignment.Provider == "app_store" && application.Platform != "ios") ||
-					(assignment.Provider == "google_play" && application.Platform != "android") {
+				if material.platformMismatch {
 					issues = append(issues, publicationIssue("scopeMismatch", product, application, "provider_assignment", environment.ID+":"+application.ID, "selectCompatibleProvider"))
 					continue
 				}
-				mappings := nativeCommerceMappings(assignment.Provider, reader.ProviderMappingsForNativeCommerce(
-					assignment.Provider, environment.ID, application.ID, application.Platform, []string{product.ID},
-				))
+				mappings := nativeCommerceMappings(assignment.Provider, material.nativeByProduct[product.ID])
 				switch len(mappings) {
 				case 0:
 					issues = append(issues, publicationIssue("mappingMissing", product, application, "product", product.ID, "createNativeProviderMapping"))
@@ -558,8 +605,8 @@ func providerPublicationIssues(reader Reader, environment Environment, products 
 			if product.MetadataSource != "provider" {
 				issues = append(issues, publicationIssue("metadataStale", product, application, "product", product.ID, "syncProviderMetadata"))
 			}
-			connection, ok := reader.ProviderConnection(assignment.ConnectionID)
-			if !ok || connection.ProjectID != environment.ProjectID {
+			connection := material.connection
+			if !material.hasConnection || connection.ProjectID != environment.ProjectID {
 				issues = append(issues, publicationIssue("scopeMismatch", product, application, "provider_connection", assignment.ConnectionID, "assignProviderConnection"))
 				continue
 			}
@@ -570,8 +617,7 @@ func providerPublicationIssues(reader Reader, environment Environment, products 
 			if connection.Status != "active" || connection.HealthStatus != "healthy" {
 				issues = append(issues, publicationIssue("providerUnavailable", product, application, "provider_connection", connection.ID, "testOrReconnectProvider"))
 			}
-			if !reader.ProviderConnectionEnvironmentScoped(connection.ID, environment.ID) ||
-				!reader.ProviderConnectionApplicationScoped(connection.ID, application.ID) {
+			if !material.environmentScoped || !material.applicationScoped {
 				issues = append(issues, publicationIssue("scopeMismatch", product, application, "provider_connection", connection.ID, "updateConnectionScopes"))
 			}
 			if environment.Mode == "production" && connection.Mode != "production" {

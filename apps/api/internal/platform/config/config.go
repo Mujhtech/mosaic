@@ -261,7 +261,17 @@ type HTTPConfig struct {
 }
 
 type WorkerConfig struct {
-	HealthAddress     string        `envconfig:"MOSAIC_WORKER_HEALTH_ADDRESS" default:":8081"`
+	HealthAddress string `envconfig:"MOSAIC_WORKER_HEALTH_ADDRESS" default:":8081"`
+	// JobExecutionTimeout bounds one job's normal run. The default matches the
+	// 2-minute job leases: a longer timeout would let a job outlive its lease
+	// and run concurrently with the worker that re-claims it, and a much
+	// shorter one silently caps work the lease was sized for — a paginated
+	// provider sync that cannot finish inside the timeout retries forever
+	// without making progress.
+	JobExecutionTimeout time.Duration `envconfig:"MOSAIC_WORKER_JOB_EXECUTION_TIMEOUT" default:"2m"`
+	// JobShutdownBudget bounds how much longer an in-flight job may run once
+	// SIGTERM lands, so its outcome still commits while the drain stays inside
+	// the deployment's termination grace.
 	JobShutdownBudget time.Duration `envconfig:"MOSAIC_WORKER_JOB_SHUTDOWN_BUDGET" default:"30s"`
 	ScheduleLease     time.Duration `envconfig:"MOSAIC_WORKER_SCHEDULE_LEASE" default:"2m"`
 }
@@ -867,7 +877,11 @@ func (cfg Config) validateWorker(report *problems) {
 		report.add("MOSAIC_WORKER_HEALTH_ADDRESS must be a host:port address")
 	}
 	report.requirePositive(map[string]time.Duration{
-		"MOSAIC_WORKER_JOB_SHUTDOWN_BUDGET": cfg.Worker.JobShutdownBudget,
-		"MOSAIC_WORKER_SCHEDULE_LEASE":      cfg.Worker.ScheduleLease,
+		"MOSAIC_WORKER_JOB_EXECUTION_TIMEOUT": cfg.Worker.JobExecutionTimeout,
+		"MOSAIC_WORKER_JOB_SHUTDOWN_BUDGET":   cfg.Worker.JobShutdownBudget,
+		"MOSAIC_WORKER_SCHEDULE_LEASE":        cfg.Worker.ScheduleLease,
 	})
+	if cfg.Worker.JobExecutionTimeout < cfg.Worker.JobShutdownBudget {
+		report.add("MOSAIC_WORKER_JOB_EXECUTION_TIMEOUT must not be shorter than MOSAIC_WORKER_JOB_SHUTDOWN_BUDGET")
+	}
 }

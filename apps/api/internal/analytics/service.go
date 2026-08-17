@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -47,8 +46,19 @@ func NewService(repository Repository, objects ObjectStore, validator ...*Schema
 // rules. It returns a stable permanent-rejection code, or an empty string when
 // the event is accepted. Tests exercise this rather than reimplementing the path.
 func (s *Service) ValidateRawEvent(raw []byte, sentAt, now time.Time) (Candidate, string) {
+	var document any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return Candidate{}, RejectSchemaInvalid
+	}
+	return s.validateEventDocument(raw, document, sentAt, now)
+}
+
+// validateEventDocument runs the schema and semantic checks against a document
+// the caller already decoded, so the batch loop parses each event body twice
+// (once generically, once into the typed Event) instead of four times.
+func (s *Service) validateEventDocument(raw []byte, document any, sentAt, now time.Time) (Candidate, string) {
 	if s.validator != nil {
-		if err := s.validator.ValidateEvent(raw); err != nil {
+		if err := s.validator.ValidateDocument(document); err != nil {
 			if strings.Contains(err.Error(), "additionalProperties") ||
 				strings.Contains(err.Error(), "unevaluatedProperties") {
 				return Candidate{}, RejectUnknownField
@@ -74,42 +84,9 @@ func (s *Service) Ingest(ctx context.Context, rawKey string, batch Batch) (Inges
 	if !ok {
 		return IngestionResponse{}, ErrInvalidBatch
 	}
-	seen := make(map[string]struct{}, len(batch.Events))
-	results := make(map[string]EventResult, len(batch.Events))
-	candidates := make([]Candidate, 0, len(batch.Events))
-	orderedIDs := make([]string, 0, len(batch.Events))
-	for _, raw := range batch.Events {
-		var identity struct {
-			EventID            string `json:"eventId"`
-			EventSchemaVersion string `json:"eventSchemaVersion"`
-		}
-		if err := json.Unmarshal(raw, &identity); err != nil || !validID(identity.EventID) {
-			return IngestionResponse{}, ErrInvalidBatch
-		}
-		if identity.EventSchemaVersion != EventSchemaVersion {
-			return IngestionResponse{}, ErrInvalidBatch
-		}
-		eventID := identity.EventID
-		orderedIDs = append(orderedIDs, eventID)
-		if _, duplicate := seen[eventID]; duplicate {
-			return IngestionResponse{}, ErrInvalidBatch
-		}
-		seen[eventID] = struct{}{}
-		if len(raw) > MaxEventBytes {
-			results[eventID] = EventResult{EventID: eventID, Status: "permanently_rejected", Code: "event_too_large"}
-			continue
-		}
-		candidate, code := s.ValidateRawEvent(raw, sentAt, now)
-		if code != "" {
-			results[eventID] = EventResult{EventID: eventID, Status: "permanently_rejected", Code: code}
-			continue
-		}
-		var canonical any
-		_ = json.Unmarshal(raw, &canonical)
-		candidate.Raw, _ = json.Marshal(canonical)
-		candidate.Digest = sha256.Sum256(candidate.Raw)
-		candidates = append(candidates, candidate)
-	}
+	// Authentication runs before any per-event work: schema validation is the
+	// expensive part of ingest, and a revoked or invented key must not be able
+	// to spend that CPU on whole batches for free.
 	scope, err := s.repository.AuthenticateSDKKey(ctx, rawKey)
 	if err != nil {
 		span.RecordError(err)
@@ -121,6 +98,44 @@ func (s *Service) Ingest(ctx context.Context, rawKey string, batch Batch) (Inges
 	}
 	if !settings.CollectionEnabled {
 		return IngestionResponse{}, ErrCollectionDisabled
+	}
+	seen := make(map[string]struct{}, len(batch.Events))
+	results := make(map[string]EventResult, len(batch.Events))
+	candidates := make([]Candidate, 0, len(batch.Events))
+	orderedIDs := make([]string, 0, len(batch.Events))
+	for _, raw := range batch.Events {
+		// One generic parse serves the identity peek, the schema validator,
+		// and the canonical re-encoding below.
+		var document any
+		if err := json.Unmarshal(raw, &document); err != nil {
+			return IngestionResponse{}, ErrInvalidBatch
+		}
+		object, _ := document.(map[string]any)
+		eventID, _ := object["eventId"].(string)
+		schemaVersion, _ := object["eventSchemaVersion"].(string)
+		if object == nil || !validID(eventID) {
+			return IngestionResponse{}, ErrInvalidBatch
+		}
+		if schemaVersion != EventSchemaVersion {
+			return IngestionResponse{}, ErrInvalidBatch
+		}
+		orderedIDs = append(orderedIDs, eventID)
+		if _, duplicate := seen[eventID]; duplicate {
+			return IngestionResponse{}, ErrInvalidBatch
+		}
+		seen[eventID] = struct{}{}
+		if len(raw) > MaxEventBytes {
+			results[eventID] = EventResult{EventID: eventID, Status: "permanently_rejected", Code: "event_too_large"}
+			continue
+		}
+		candidate, code := s.validateEventDocument(raw, document, sentAt, now)
+		if code != "" {
+			results[eventID] = EventResult{EventID: eventID, Status: "permanently_rejected", Code: code}
+			continue
+		}
+		candidate.Raw, _ = json.Marshal(document)
+		candidate.Digest = sha256.Sum256(candidate.Raw)
+		candidates = append(candidates, candidate)
 	}
 	if len(candidates) > 0 {
 		persisted, err := s.repository.Ingest(ctx, scope, batch.BatchID, candidates, now)
@@ -379,7 +394,4 @@ func (s *Service) processExport(ctx context.Context, job Job, now time.Time) err
 func RequestDigest(projectID, kind, identity string) string {
 	value := sha256.Sum256([]byte("mosaic-privacy-v1\x00" + projectID + "\x00" + kind + "\x00" + identity))
 	return hex.EncodeToString(value[:])
-}
-func IsKnownError(err error) bool {
-	return errors.Is(err, ErrUnauthenticated) || errors.Is(err, ErrForbidden) || errors.Is(err, ErrNotFound) || errors.Is(err, ErrCollectionDisabled) || errors.Is(err, ErrInvalidBatch) || errors.Is(err, ErrRateLimited) || errors.Is(err, ErrConflict)
 }

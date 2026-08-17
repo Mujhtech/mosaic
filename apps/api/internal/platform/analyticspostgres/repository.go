@@ -199,16 +199,22 @@ func (r *Repository) Ingest(ctx context.Context, scope analytics.Scope, batchID 
 	if err != nil {
 		return nil, err
 	}
+	// The application row depends only on the batch scope, so it is read once
+	// rather than once per event; a missing row rejects every event the same
+	// way the per-event lookup did.
+	var platform string
+	applicationKnown := true
+	err = tx.QueryRow(ctx, `SELECT platform FROM applications WHERE id=$1 AND project_id=$2`, scope.ApplicationID, scope.ProjectID).Scan(&platform)
+	if errors.Is(err, pgx.ErrNoRows) {
+		applicationKnown = false
+	} else if err != nil {
+		return nil, err
+	}
 	for _, candidate := range candidates {
 		e := candidate.Event
-		var platform string
-		err = tx.QueryRow(ctx, `SELECT platform FROM applications WHERE id=$1 AND project_id=$2`, scope.ApplicationID, scope.ProjectID).Scan(&platform)
-		if errors.Is(err, pgx.ErrNoRows) || err == nil && platform != e.Context.Platform {
+		if !applicationKnown || platform != e.Context.Platform {
 			results[e.EventID] = analytics.EventResult{EventID: e.EventID, Status: "permanently_rejected", Code: "attribution_scope_mismatch"}
 			continue
-		}
-		if err != nil {
-			return nil, err
 		}
 		if !attributionExists(ctx, tx, scope, e) {
 			results[e.EventID] = analytics.EventResult{EventID: e.EventID, Status: "permanently_rejected", Code: "attribution_not_found"}

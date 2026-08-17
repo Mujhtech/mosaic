@@ -1,6 +1,7 @@
 package billingwebhook
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -80,42 +81,12 @@ func WithSelfHostedAllowlist(enabled bool) PolicyOption {
 	return func(p *Policy) { p.allowPrivate = enabled }
 }
 
-// WithTimeouts overrides the connect and total bounds.
-func WithTimeouts(connect, total time.Duration) PolicyOption {
-	return func(p *Policy) {
-		if connect > 0 {
-			p.connectTimeout = connect
-		}
-		if total > 0 {
-			p.totalTimeout = total
-		}
-	}
-}
-
-// WithMaxResponseBytes overrides the response read ceiling.
-func WithMaxResponseBytes(limit int64) PolicyOption {
-	return func(p *Policy) {
-		if limit > 0 {
-			p.maxResponseBytes = limit
-		}
-	}
-}
-
 // WithResolver replaces DNS resolution. Tests use it to express a rebinding
 // host; nothing in production does.
 func WithResolver(resolve func(ctx context.Context, host string) ([]netip.Addr, error)) PolicyOption {
 	return func(p *Policy) {
 		if resolve != nil {
 			p.resolve = resolve
-		}
-	}
-}
-
-// WithDialer replaces the raw dial. The address screen still runs around it.
-func WithDialer(dial func(ctx context.Context, network, address string) (net.Conn, error)) PolicyOption {
-	return func(p *Policy) {
-		if dial != nil {
-			p.dial = dial
 		}
 	}
 }
@@ -342,7 +313,7 @@ func (p *Policy) Send(ctx context.Context, target Target, header http.Header, bo
 	}
 	defer transport.CloseIdleConnections()
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, target.URL.String(), strings.NewReader(string(body)))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, target.URL.String(), bytes.NewReader(body))
 	if err != nil {
 		return Result{}, ErrInvalid
 	}

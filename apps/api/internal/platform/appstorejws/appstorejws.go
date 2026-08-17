@@ -105,25 +105,8 @@ type Verifier struct {
 	now       func() time.Time
 }
 
-// Option customizes a Verifier. Both options exist for tests and for operators
-// with unusual clock discipline; neither can weaken the trust anchor.
+// Option customizes a Verifier; no option can weaken the trust anchor.
 type Option func(*Verifier)
-
-func WithClockSkew(skew time.Duration) Option {
-	return func(v *Verifier) {
-		if skew > 0 {
-			v.clockSkew = skew
-		}
-	}
-}
-
-func WithClock(now func() time.Time) Option {
-	return func(v *Verifier) {
-		if now != nil {
-			v.now = now
-		}
-	}
-}
 
 // WithRoot replaces the trust anchor. It exists so tests can verify a
 // synthetic chain without weakening production, and is never called from

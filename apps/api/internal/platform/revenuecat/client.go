@@ -5,6 +5,8 @@ package revenuecat
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -26,17 +28,17 @@ import (
 )
 
 const (
-	DefaultBaseURL      = "https://api.revenuecat.com/v2"
-	defaultBodyLimit    = int64(2 << 20)
-	defaultMaxAttempts  = 3
-	defaultOperationTTL = 60 * time.Second
-	maxOperationTTL     = 5 * time.Minute
-	defaultPageLimit    = 100
-	defaultMaxPages     = 200
-	defaultMaxRetries   = 20
-	defaultMaxRetryWait = 5 * time.Second
-	rateLimitDomainKey  = "project_configuration"
-	authorizationPrefix = "Bearer "
+	DefaultBaseURL        = "https://api.revenuecat.com/v2"
+	defaultBodyLimit      = int64(2 << 20)
+	defaultMaxAttempts    = 3
+	defaultOperationTTL   = 60 * time.Second
+	maxOperationTTL       = 5 * time.Minute
+	defaultPageLimit      = 100
+	defaultMaxPages       = 200
+	defaultMaxRetries     = 20
+	defaultMaxRetryWait   = 5 * time.Second
+	rateLimitDomainPrefix = "project_configuration:"
+	authorizationPrefix   = "Bearer "
 )
 
 type Config struct {
@@ -101,6 +103,10 @@ func New(config Config) (*Client, error) {
 	}).DialContext
 	transport.ResponseHeaderTimeout = config.RequestTimeout
 	transport.TLSHandshakeTimeout = config.ConnectTimeout
+	// The default of 2 idle connections per host discards completed
+	// connections as soon as more than two callers overlap, forcing fresh
+	// TCP+TLS handshakes on a single-host client.
+	transport.MaxIdleConnsPerHost = 16
 	return &Client{
 		baseURL: parsed,
 		httpClient: &http.Client{
@@ -116,8 +122,10 @@ func New(config Config) (*Client, error) {
 		maxPages:         defaultMaxPages,
 		maxRetries:       defaultMaxRetries,
 		maxRetryWait:     defaultMaxRetryWait,
-		limiter:          ratelimit.New(60, 4, 1),
-		now:              func() time.Time { return time.Now().UTC() },
+		// One bucket per tenant secret; the limit RevenueCat enforces is per
+		// project key, not per Mosaic instance.
+		limiter: ratelimit.New(60, 4, 256),
+		now:     func() time.Time { return time.Now().UTC() },
 	}, nil
 }
 
@@ -447,12 +455,30 @@ func cloneValues(source url.Values) url.Values {
 	return result
 }
 
+// rateLimitCredentialKey names a tenant's limiter bucket by a digest of its
+// secret rather than the secret itself, so key material never sits in the
+// limiter's table.
+func rateLimitCredentialKey(secret []byte) string {
+	digest := sha256.Sum256(secret)
+	return rateLimitDomainPrefix + hex.EncodeToString(digest[:8])
+}
+
 func (c *Client) get(ctx context.Context, budget *operationBudget, secret []byte, path string, query url.Values, target any) error {
 	for attempt := 0; attempt < c.maxAttempts; attempt++ {
 		if ctx.Err() != nil {
 			return timeoutError(ctx.Err())
 		}
-		if allowed, delay := c.limiter.Allow(rateLimitDomainKey); !allowed {
+		// Allow only debits a token when it admits the caller, so a denied
+		// caller must re-acquire after waiting; proceeding after one sleep
+		// would let every concurrently denied goroutine fire at once. The
+		// bucket is keyed per tenant secret because RevenueCat enforces its
+		// limit per project key: one shared bucket lets a single tenant's
+		// migration pull starve every other tenant on this instance.
+		for {
+			allowed, delay := c.limiter.Allow(rateLimitCredentialKey(secret))
+			if allowed {
+				break
+			}
 			if err := wait(ctx, delay); err != nil {
 				return timeoutError(err)
 			}

@@ -343,27 +343,6 @@ func releaseCapabilities(t *testing.T, payload []byte) []string {
 	return values
 }
 
-func decisionCapabilities(t *testing.T, payload []byte) ([]string, []string) {
-	t.Helper()
-	var envelope struct {
-		Release struct {
-			Compatibility struct {
-				Contracts []struct {
-					RequiredFeatures    []string `json:"requiredFeatures"`
-					BucketingAlgorithms []string `json:"bucketingAlgorithms"`
-				} `json:"placementDecisionContracts"`
-			} `json:"compatibility"`
-		} `json:"release"`
-	}
-	if err := json.Unmarshal(payload, &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if len(envelope.Release.Compatibility.Contracts) != 1 {
-		t.Fatalf("fixture placement compatibility = %#v", envelope.Release.Compatibility.Contracts)
-	}
-	return envelope.Release.Compatibility.Contracts[0].RequiredFeatures, envelope.Release.Compatibility.Contracts[0].BucketingAlgorithms
-}
-
 var _ hostedpublishing.Repository = deliveryTestRepository{}
 
 type deliveryObjectStore struct{ content []byte }

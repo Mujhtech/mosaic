@@ -91,6 +91,12 @@ func (p *SourcePullProcessor) ProcessNext(ctx context.Context, workerID string) 
 	ingested := make(chan ingestResult, 1)
 	go func() {
 		object, _, ingestErr := p.ingestor.Ingest(ctx, ReserveSourceObject{SourceObject: SourceObject{SourceObjectScope: SourceObjectScope{ProjectID: lease.ProjectID, ProgramID: lease.ProgramID, ObjectID: objectID, AdapterVersion: AdapterVersion, SchemaVersion: "revenuecat-migration-source-v2"}, ReservationKey: fmt.Sprintf("source-pull:%s:%d", lease.ID, lease.LeaseGeneration), ReservationDigest: reservationDigest[:], SourceChannel: SourceChannelRevenueCat}}, reader)
+		// Ingest can return before the producer is done — a reservation
+		// conflict, a failed store write. Closing the read end makes the
+		// producer's next Write fail instead of blocking forever on a pipe
+		// nobody drains; io.Pipe writes are not context-aware, and this loop is
+		// the whole worker.
+		_ = reader.CloseWithError(ingestErr)
 		ingested <- ingestResult{object: object, err: ingestErr}
 	}()
 	pulled, pullErr := p.provider.PullSource(ctx, lease.ExternalProjectID, secret, lease.StartingCursor, writer)

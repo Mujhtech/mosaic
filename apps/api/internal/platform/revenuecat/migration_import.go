@@ -37,9 +37,12 @@ type MigrationPullRecord struct {
 	QuarantineReason                                      string
 }
 
+// MigrationEvidencePage records the boundary of one fetched page. The page
+// body itself is streamed to the evidence writer and the digest as it arrives;
+// retaining copies here would pin up to maxPages x bodyLimit of dead heap for
+// the rest of the pull.
 type MigrationEvidencePage struct {
 	Endpoint, Resource, Cursor string
-	Body                       []byte
 }
 
 type MigrationPullResult struct {
@@ -140,7 +143,7 @@ func (c *Client) PullMigrationEvidence(ctx context.Context, externalProjectID st
 			if err := writeMigrationEvidencePage(output, hash, path, resource, cursor, raw); err != nil {
 				return "", nil, err
 			}
-			result.Pages = append(result.Pages, MigrationEvidencePage{Endpoint: path, Resource: resource, Cursor: cursor, Body: append([]byte(nil), raw...)})
+			result.Pages = append(result.Pages, MigrationEvidencePage{Endpoint: path, Resource: resource, Cursor: cursor})
 			var page listResponse[json.RawMessage]
 			if err := json.Unmarshal(raw, &page); err != nil {
 				return "", nil, &providercatalog.Error{Code: providercatalog.ErrorInvalidResponse}
@@ -246,7 +249,7 @@ func (c *Client) PullMigrationEvidence(ctx context.Context, externalProjectID st
 			if err := writeMigrationEvidencePage(output, hash, productsPath+"?expand=items.app", "products", cursor, raw); err != nil {
 				return err
 			}
-			result.Pages = append(result.Pages, MigrationEvidencePage{Endpoint: productsPath + "?expand=items.app", Resource: "products", Cursor: cursor, Body: append([]byte(nil), raw...)})
+			result.Pages = append(result.Pages, MigrationEvidencePage{Endpoint: productsPath + "?expand=items.app", Resource: "products", Cursor: cursor})
 			var page listResponse[json.RawMessage]
 			if json.Unmarshal(raw, &page) != nil {
 				return &providercatalog.Error{Code: providercatalog.ErrorInvalidResponse}
