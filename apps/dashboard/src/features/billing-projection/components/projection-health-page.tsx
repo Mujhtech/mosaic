@@ -25,6 +25,7 @@ import {
   WorkspacePage,
 } from "@/features/orgs/components/workspace-page";
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import type { BillingProjectionHealth } from "@/generated/api";
 import { useOrganizationAccess } from "@/hooks/use-organization-access";
 import {
   billingHealthHref,
@@ -144,79 +145,13 @@ export function ProjectionHealthPage({
           </WorkflowPanel>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric
-            label="Projection queue"
-            recovery={
-              queueStuck
-                ? `The oldest queued projection has waited ${formatDurationSeconds(oldestQueued)}. Committed access state is falling behind the facts.`
-                : undefined
-            }
-            tone={queueStuck ? "attention" : "neutral"}
-            value={
-              isReportedCount(data?.projectionQueueDepth)
-                ? `${data.projectionQueueDepth} queued`
-                : NOT_REPORTED_LABEL
-            }
-          />
-          <Metric
-            label="Oldest queued projection"
-            tone={queueStuck ? "attention" : "neutral"}
-            value={formatDurationSeconds(oldestQueued)}
-          />
-          <Metric
-            label="Failed projection jobs"
-            tone={reportedCountTone(
-              data?.projectionFailedJobs,
-              "negative",
-              "positive"
-            )}
-            value={formatReportedCount(data?.projectionFailedJobs)}
-          />
-          <Metric
-            label="Projection failures in the last hour"
-            recovery="A rate signal the queue depth cannot give: a queue that drains while failing is still wrong."
-            tone={reportedCountTone(
-              data?.projectionFailuresLastHour,
-              "attention",
-              "neutral"
-            )}
-            value={formatReportedCount(data?.projectionFailuresLastHour)}
-          />
-        </div>
+        <ProjectionQueueMetrics
+          data={data}
+          oldestQueued={oldestQueued}
+          queueStuck={queueStuck}
+        />
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric
-            label="Customers with stale committed state"
-            tone={reportedCountTone(
-              data?.staleCustomers,
-              "attention",
-              "positive"
-            )}
-            value={formatReportedCount(data?.staleCustomers)}
-          />
-          <Metric
-            label="Never-projected customers"
-            recovery="A customer with no committed projection is answered with a valid snapshot carrying no entries and a pending projection status. That is undetermined, not inactive."
-            tone={reportedCountTone(
-              data?.neverProjectedCustomers,
-              "attention",
-              "neutral"
-            )}
-            value={formatReportedCount(data?.neverProjectedCustomers)}
-          />
-          <Metric
-            label="Entries stating undetermined access"
-            recovery="How often Mosaic is declining to answer. Rising here means evidence is missing or stale, not that customers are churning."
-            tone={reportedCountTone(unknownEntries, "attention", "positive")}
-            value={formatReportedCount(unknownEntries)}
-          />
-          <Metric
-            label="Last projection committed"
-            tone="neutral"
-            value={formatBillingTimestamp(data?.lastProjectionCommittedAt)}
-          />
-        </div>
+        <CommittedStateMetrics data={data} unknownEntries={unknownEntries} />
 
         <WorkflowPanel
           description="An identity conflict freezes its disputed subject and grants neither candidate anything. A spike is security-relevant: it can mean someone is probing whether an asserted identifier will attach them to another person's purchases."
@@ -249,55 +184,7 @@ export function ProjectionHealthPage({
           </div>
         </WorkflowPanel>
 
-        <WorkflowPanel
-          description="Restore and webhook delivery are read-only numbers here. Webhook destinations are configured through the API in this phase; there is no webhook management surface in the dashboard."
-          title="Restore and delivery backlog"
-        >
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric
-              label="Restore backlog"
-              tone={reportedCountTone(
-                data?.restoreBacklog,
-                "attention",
-                "neutral"
-              )}
-              value={formatReportedCount(data?.restoreBacklog)}
-            />
-            <Metric
-              label="Failed restore jobs"
-              tone={reportedCountTone(
-                data?.restoreFailedJobs,
-                "negative",
-                "positive"
-              )}
-              value={formatReportedCount(data?.restoreFailedJobs)}
-            />
-            <Metric
-              label="Webhook delivery backlog"
-              tone={reportedCountTone(
-                data?.webhookDeliveryBacklog,
-                "attention",
-                "neutral"
-              )}
-              value={formatReportedCount(data?.webhookDeliveryBacklog)}
-            />
-            <Metric
-              label="Exhausted webhook deliveries"
-              recovery="An exhausted delivery means an application backend was never told about a change it may act on. The events themselves are retained."
-              tone={reportedCountTone(
-                data?.webhookDeliveriesExhausted,
-                "negative",
-                "positive"
-              )}
-              value={formatReportedCount(data?.webhookDeliveriesExhausted)}
-            />
-          </div>
-          <p className="mt-3 text-muted-foreground text-xs leading-5">
-            {isReportedCount(data?.activeWebhookDestinations)
-              ? `${data.activeWebhookDestinations} active webhook destination(s) in this Mosaic Environment.`
-              : "The number of active webhook destinations in this Mosaic Environment was not reported."}
-          </p>
-        </WorkflowPanel>
+        <RestoreAndDeliveryPanel data={data} />
 
         <WorkflowPanel
           description="New projections are computed under the active rule version. More than one version recorded with no replay in flight means a promotion was prepared and never run."
@@ -332,52 +219,213 @@ export function ProjectionHealthPage({
           onReplay={(request) => replay.mutateAsync(request)}
         />
 
-        <WorkflowPanel title="Where to look next">
-          <ul className="list-disc space-y-2 pl-5 text-sm leading-6">
-            <li>
-              <a
-                className="font-semibold text-primary"
-                href={billingHealthHref(scope) ?? "#"}
-              >
-                Billing health
-              </a>{" "}
-              — whether store input is still becoming facts at all. A stalled
-              intake pipeline shows up there first.
-            </li>
-            <li>
-              <a
-                className="font-semibold text-primary"
-                href={billingQuarantineHref(scope) ?? "#"}
-              >
-                Quarantine
-              </a>{" "}
-              — inputs that could not safely proceed. Unresolved Products here
-              become undetermined Entitlements above.
-            </li>
-            <li>
-              <a
-                className="font-semibold text-primary"
-                href={billingIdentityConflictsHref(scope) ?? "#"}
-              >
-                Identity conflicts
-              </a>{" "}
-              — inspect disputed customer claims and the Purchase Lineages
-              frozen until an operator resolves them.
-            </li>
-            <li>
-              <a
-                className="font-semibold text-primary"
-                href={billingRestoresHref(scope) ?? "#"}
-              >
-                Restore jobs
-              </a>{" "}
-              — inspect validation-pending and failed restore work without
-              treating restore as an immediate access decision.
-            </li>
-          </ul>
-        </WorkflowPanel>
+        <WhereToLookNextPanel scope={scope} />
       </HostedResourceBoundary>
     </WorkspacePage>
+  );
+}
+
+function ProjectionQueueMetrics({
+  data,
+  oldestQueued,
+  queueStuck,
+}: {
+  data: BillingProjectionHealth | undefined;
+  oldestQueued: number | undefined;
+  queueStuck: boolean;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <Metric
+        label="Projection queue"
+        recovery={
+          queueStuck
+            ? `The oldest queued projection has waited ${formatDurationSeconds(oldestQueued)}. Committed access state is falling behind the facts.`
+            : undefined
+        }
+        tone={queueStuck ? "attention" : "neutral"}
+        value={
+          isReportedCount(data?.projectionQueueDepth)
+            ? `${data.projectionQueueDepth} queued`
+            : NOT_REPORTED_LABEL
+        }
+      />
+      <Metric
+        label="Oldest queued projection"
+        tone={queueStuck ? "attention" : "neutral"}
+        value={formatDurationSeconds(oldestQueued)}
+      />
+      <Metric
+        label="Failed projection jobs"
+        tone={reportedCountTone(
+          data?.projectionFailedJobs,
+          "negative",
+          "positive"
+        )}
+        value={formatReportedCount(data?.projectionFailedJobs)}
+      />
+      <Metric
+        label="Projection failures in the last hour"
+        recovery="A rate signal the queue depth cannot give: a queue that drains while failing is still wrong."
+        tone={reportedCountTone(
+          data?.projectionFailuresLastHour,
+          "attention",
+          "neutral"
+        )}
+        value={formatReportedCount(data?.projectionFailuresLastHour)}
+      />
+    </div>
+  );
+}
+
+function CommittedStateMetrics({
+  data,
+  unknownEntries,
+}: {
+  data: BillingProjectionHealth | undefined;
+  unknownEntries: number | undefined;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <Metric
+        label="Customers with stale committed state"
+        tone={reportedCountTone(data?.staleCustomers, "attention", "positive")}
+        value={formatReportedCount(data?.staleCustomers)}
+      />
+      <Metric
+        label="Never-projected customers"
+        recovery="A customer with no committed projection is answered with a valid snapshot carrying no entries and a pending projection status. That is undetermined, not inactive."
+        tone={reportedCountTone(
+          data?.neverProjectedCustomers,
+          "attention",
+          "neutral"
+        )}
+        value={formatReportedCount(data?.neverProjectedCustomers)}
+      />
+      <Metric
+        label="Entries stating undetermined access"
+        recovery="How often Mosaic is declining to answer. Rising here means evidence is missing or stale, not that customers are churning."
+        tone={reportedCountTone(unknownEntries, "attention", "positive")}
+        value={formatReportedCount(unknownEntries)}
+      />
+      <Metric
+        label="Last projection committed"
+        tone="neutral"
+        value={formatBillingTimestamp(data?.lastProjectionCommittedAt)}
+      />
+    </div>
+  );
+}
+
+function RestoreAndDeliveryPanel({
+  data,
+}: {
+  data: BillingProjectionHealth | undefined;
+}) {
+  return (
+    <WorkflowPanel
+      description="Restore and webhook delivery are read-only numbers here. Webhook destinations are configured through the API in this phase; there is no webhook management surface in the dashboard."
+      title="Restore and delivery backlog"
+    >
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric
+          label="Restore backlog"
+          tone={reportedCountTone(data?.restoreBacklog, "attention", "neutral")}
+          value={formatReportedCount(data?.restoreBacklog)}
+        />
+        <Metric
+          label="Failed restore jobs"
+          tone={reportedCountTone(
+            data?.restoreFailedJobs,
+            "negative",
+            "positive"
+          )}
+          value={formatReportedCount(data?.restoreFailedJobs)}
+        />
+        <Metric
+          label="Webhook delivery backlog"
+          tone={reportedCountTone(
+            data?.webhookDeliveryBacklog,
+            "attention",
+            "neutral"
+          )}
+          value={formatReportedCount(data?.webhookDeliveryBacklog)}
+        />
+        <Metric
+          label="Exhausted webhook deliveries"
+          recovery="An exhausted delivery means an application backend was never told about a change it may act on. The events themselves are retained."
+          tone={reportedCountTone(
+            data?.webhookDeliveriesExhausted,
+            "negative",
+            "positive"
+          )}
+          value={formatReportedCount(data?.webhookDeliveriesExhausted)}
+        />
+      </div>
+      <p className="mt-3 text-muted-foreground text-xs leading-5">
+        {isReportedCount(data?.activeWebhookDestinations)
+          ? `${data.activeWebhookDestinations} active webhook destination(s) in this Mosaic Environment.`
+          : "The number of active webhook destinations in this Mosaic Environment was not reported."}
+      </p>
+    </WorkflowPanel>
+  );
+}
+
+/**
+ * Projection health is one of four adjacent surfaces, and the wrong one is
+ * often the one an operator lands on. These links say what question each of
+ * the others answers so the next click is a decision rather than a guess.
+ */
+function WhereToLookNextPanel({
+  scope,
+}: {
+  scope: { environmentId: string; organizationId: string; projectId: string };
+}) {
+  return (
+    <WorkflowPanel title="Where to look next">
+      <ul className="list-disc space-y-2 pl-5 text-sm leading-6">
+        <li>
+          <a
+            className="font-semibold text-primary"
+            href={billingHealthHref(scope) ?? "#"}
+          >
+            Billing health
+          </a>{" "}
+          — whether store input is still becoming facts at all. A stalled intake
+          pipeline shows up there first.
+        </li>
+        <li>
+          <a
+            className="font-semibold text-primary"
+            href={billingQuarantineHref(scope) ?? "#"}
+          >
+            Quarantine
+          </a>{" "}
+          — inputs that could not safely proceed. Unresolved Products here
+          become undetermined Entitlements above.
+        </li>
+        <li>
+          <a
+            className="font-semibold text-primary"
+            href={billingIdentityConflictsHref(scope) ?? "#"}
+          >
+            Identity conflicts
+          </a>{" "}
+          — inspect disputed customer claims and the Purchase Lineages frozen
+          until an operator resolves them.
+        </li>
+        <li>
+          <a
+            className="font-semibold text-primary"
+            href={billingRestoresHref(scope) ?? "#"}
+          >
+            Restore jobs
+          </a>{" "}
+          — inspect validation-pending and failed restore work without treating
+          restore as an immediate access decision.
+        </li>
+      </ul>
+    </WorkflowPanel>
   );
 }
 

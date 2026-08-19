@@ -42,24 +42,36 @@ interface NativeProviderMappingSheetProps {
   triggerLabel?: string;
 }
 
-export function NativeProviderMappingSheet({
+/**
+ * The sheet's own form, kept beside it so the sections below can be typed
+ * against exactly this form rather than against a hand-written approximation of
+ * it. Splitting the sheet is what made this necessary; the form's shape,
+ * defaults, and submission are unchanged.
+ */
+function useNativeProviderMappingForm({
   application,
   environment,
   initialValue,
-  mode = "create",
+  onSaved,
   onSubmit,
+  platformCompatible,
   product,
   provider,
-  triggerLabel,
-}: NativeProviderMappingSheetProps) {
-  const [open, setOpen] = useState(false);
-  const [submitError, setSubmitError] = useState<Error | null>(null);
-  const providerLabel = nativeProviderLabel(provider);
-  const platformCompatible = nativeProviderMatchesPlatform(
-    provider,
-    application.platform
-  );
-  const form = useForm({
+  providerLabel,
+  setSubmitError,
+}: {
+  application: Application;
+  environment: Environment;
+  initialValue?: NativeProviderMappingSheetProps["initialValue"];
+  onSaved: () => void;
+  onSubmit: (input: NativeProviderMappingInput) => Promise<void>;
+  platformCompatible: boolean;
+  product: Product;
+  provider: NativeProviderKind;
+  providerLabel: string;
+  setSubmitError: (error: Error | null) => void;
+}) {
+  return useForm({
     defaultValues: {
       googleBasePlanId: initialValue?.googleBasePlanId ?? "",
       googleOfferId: initialValue?.googleOfferId ?? "",
@@ -99,7 +111,7 @@ export function NativeProviderMappingSheet({
       }
       try {
         await onSubmit(input);
-        setOpen(false);
+        onSaved();
       } catch (error) {
         setSubmitError(
           error instanceof Error
@@ -108,6 +120,41 @@ export function NativeProviderMappingSheet({
         );
       }
     },
+  });
+}
+
+type NativeProviderMappingForm = ReturnType<
+  typeof useNativeProviderMappingForm
+>;
+
+export function NativeProviderMappingSheet({
+  application,
+  environment,
+  initialValue,
+  mode = "create",
+  onSubmit,
+  product,
+  provider,
+  triggerLabel,
+}: NativeProviderMappingSheetProps) {
+  const [open, setOpen] = useState(false);
+  const [submitError, setSubmitError] = useState<Error | null>(null);
+  const providerLabel = nativeProviderLabel(provider);
+  const platformCompatible = nativeProviderMatchesPlatform(
+    provider,
+    application.platform
+  );
+  const form = useNativeProviderMappingForm({
+    application,
+    environment,
+    initialValue,
+    onSaved: () => setOpen(false),
+    onSubmit,
+    platformCompatible,
+    product,
+    provider,
+    providerLabel,
+    setSubmitError,
   });
 
   return (
@@ -151,28 +198,11 @@ export function NativeProviderMappingSheet({
           }}
         >
           <div className="space-y-5 p-5">
-            <dl className="grid gap-3 rounded border bg-muted/40 p-4 text-xs sm:grid-cols-2">
-              <ScopeField
-                label="Mosaic Product"
-                value={`${product.internalName} · ${product.key}`}
-              />
-              <ScopeField
-                label="Product type"
-                value={
-                  product.type === "subscription"
-                    ? "Subscription"
-                    : "One-time non-consumable"
-                }
-              />
-              <ScopeField
-                label="Mosaic Environment"
-                value={`${environment.name} · ${environment.mode}`}
-              />
-              <ScopeField
-                label="Application"
-                value={`${application.name} · ${application.platform.toUpperCase()}`}
-              />
-            </dl>
+            <MappingScopeSummary
+              application={application}
+              environment={environment}
+              product={product}
+            />
             {platformCompatible ? null : (
               <p
                 className="rounded border border-current p-3 text-destructive text-sm"
@@ -184,198 +214,19 @@ export function NativeProviderMappingSheet({
               </p>
             )}
 
-            <form.Field
-              name="providerProductIdentifier"
-              validators={{
-                onSubmit: ({ value }) =>
-                  validateNativeProviderMapping({
-                    applicationId: application.id,
-                    environmentId: environment.id,
-                    productType: product.type,
-                    provider,
-                    providerProductIdentifier: value,
-                  }).providerProductIdentifier,
-              }}
-            >
-              {(field) => (
-                <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel htmlFor={`native-product-id-${provider}`}>
-                    {provider === "app_store"
-                      ? "StoreKit Product ID"
-                      : "Google Play Product ID"}
-                  </FieldLabel>
-                  <Input
-                    aria-invalid={field.state.meta.errors.length > 0}
-                    autoComplete="off"
-                    id={`native-product-id-${provider}`}
-                    onBlur={field.handleBlur}
-                    onChange={(event) =>
-                      field.handleChange(event.currentTarget.value)
-                    }
-                    placeholder={
-                      provider === "app_store"
-                        ? "com.example.pro.monthly"
-                        : "pro_subscription"
-                    }
-                    spellCheck={false}
-                    value={field.state.value}
-                  />
-                  <FieldDescription>
-                    Exact identifier only. Mosaic never matches by display name,
-                    price, period, or similarity.
-                    {provider === "google_play"
-                      ? " One Google Product ID can map to only one Mosaic Product in this Environment and Application so purchase recovery remains unambiguous."
-                      : null}
-                  </FieldDescription>
-                  <FieldError
-                    errors={field.state.meta.errors.map((message) => ({
-                      message,
-                    }))}
-                  />
-                </Field>
-              )}
-            </form.Field>
+            <ProviderProductIdentifierField
+              application={application}
+              environment={environment}
+              form={form}
+              product={product}
+              provider={provider}
+            />
 
             {provider === "google_play" && product.type === "subscription" ? (
-              <>
-                <form.Field
-                  name="googleBasePlanId"
-                  validators={{
-                    onSubmit: ({ value }) =>
-                      value.trim()
-                        ? undefined
-                        : "Enter the exact base plan ID.",
-                  }}
-                >
-                  {(field) => (
-                    <Field data-invalid={field.state.meta.errors.length > 0}>
-                      <FieldLabel htmlFor="google-base-plan-id">
-                        Base plan ID
-                      </FieldLabel>
-                      <Input
-                        aria-invalid={field.state.meta.errors.length > 0}
-                        id="google-base-plan-id"
-                        onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.currentTarget.value)
-                        }
-                        placeholder="monthly"
-                        spellCheck={false}
-                        value={field.state.value}
-                      />
-                      <FieldDescription>
-                        Required for subscriptions and kept inside this Provider
-                        Product Mapping.
-                      </FieldDescription>
-                      <FieldError
-                        errors={field.state.meta.errors.map((message) => ({
-                          message,
-                        }))}
-                      />
-                    </Field>
-                  )}
-                </form.Field>
-
-                <form.Field name="offerSelection">
-                  {(field) => (
-                    <fieldset className="space-y-2">
-                      <legend className="font-medium text-sm">Offer</legend>
-                      <label className="flex items-start gap-3 rounded border p-3 text-sm">
-                        <input
-                          checked={field.state.value === "none"}
-                          className="mt-0.5 size-4 accent-primary"
-                          name="google-offer-selection"
-                          onChange={() => {
-                            field.handleChange("none");
-                            form.setFieldValue("googleOfferId", "");
-                          }}
-                          type="radio"
-                        />
-                        <span>
-                          <span className="block font-medium">No offer</span>
-                          <span className="mt-0.5 block text-muted-foreground text-xs">
-                            Use the exact regular base plan.
-                          </span>
-                        </span>
-                      </label>
-                      <label className="flex items-start gap-3 rounded border p-3 text-sm">
-                        <input
-                          checked={field.state.value === "specific"}
-                          className="mt-0.5 size-4 accent-primary"
-                          name="google-offer-selection"
-                          onChange={() => field.handleChange("specific")}
-                          type="radio"
-                        />
-                        <span>
-                          <span className="block font-medium">
-                            Use a specific offer
-                          </span>
-                          <span className="mt-0.5 block text-muted-foreground text-xs">
-                            Require an exact offer ID. The runtime resolves its
-                            current offer token; Mosaic never stores or guesses
-                            that token.
-                          </span>
-                        </span>
-                      </label>
-                    </fieldset>
-                  )}
-                </form.Field>
-
-                <form.Subscribe
-                  selector={(state) => state.values.offerSelection}
-                >
-                  {(offerSelection) =>
-                    offerSelection === "specific" ? (
-                      <form.Field
-                        name="googleOfferId"
-                        validators={{
-                          onSubmit: ({ value }) =>
-                            value.trim()
-                              ? undefined
-                              : "Enter the exact offer ID.",
-                        }}
-                      >
-                        {(field) => (
-                          <Field
-                            data-invalid={field.state.meta.errors.length > 0}
-                          >
-                            <FieldLabel htmlFor="google-offer-id">
-                              Offer ID
-                            </FieldLabel>
-                            <Input
-                              aria-invalid={field.state.meta.errors.length > 0}
-                              id="google-offer-id"
-                              onBlur={field.handleBlur}
-                              onChange={(event) =>
-                                field.handleChange(event.currentTarget.value)
-                              }
-                              placeholder="intro"
-                              spellCheck={false}
-                              value={field.state.value}
-                            />
-                            <FieldError
-                              errors={field.state.meta.errors.map(
-                                (message) => ({ message })
-                              )}
-                            />
-                          </Field>
-                        )}
-                      </form.Field>
-                    ) : null
-                  }
-                </form.Subscribe>
-              </>
+              <GoogleSubscriptionFields form={form} />
             ) : null}
 
-            <div className="rounded border border-border bg-muted/35 p-4 text-sm">
-              <p className="font-semibold">Test evidence remains separate</p>
-              <p className="mt-1 text-muted-foreground text-xs leading-5">
-                Mosaic Environment: {environment.name}. Store context will be
-                shown separately as StoreKit Configuration, Apple Sandbox,
-                Google Play test, Production, or Unknown after an authenticated
-                test client reports an observation.
-              </p>
-            </div>
+            <TestEvidenceNotice environment={environment} />
 
             {submitError ? (
               <p className="text-destructive text-sm" role="alert">
@@ -411,6 +262,248 @@ export function NativeProviderMappingSheet({
         </form>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function MappingScopeSummary({
+  application,
+  environment,
+  product,
+}: {
+  application: Application;
+  environment: Environment;
+  product: Product;
+}) {
+  return (
+    <dl className="grid gap-3 rounded border bg-muted/40 p-4 text-xs sm:grid-cols-2">
+      <ScopeField
+        label="Mosaic Product"
+        value={`${product.internalName} · ${product.key}`}
+      />
+      <ScopeField
+        label="Product type"
+        value={
+          product.type === "subscription"
+            ? "Subscription"
+            : "One-time non-consumable"
+        }
+      />
+      <ScopeField
+        label="Mosaic Environment"
+        value={`${environment.name} · ${environment.mode}`}
+      />
+      <ScopeField
+        label="Application"
+        value={`${application.name} · ${application.platform.toUpperCase()}`}
+      />
+    </dl>
+  );
+}
+
+function ProviderProductIdentifierField({
+  application,
+  environment,
+  form,
+  product,
+  provider,
+}: {
+  application: Application;
+  environment: Environment;
+  form: NativeProviderMappingForm;
+  product: Product;
+  provider: NativeProviderKind;
+}) {
+  return (
+    <form.Field
+      name="providerProductIdentifier"
+      validators={{
+        onSubmit: ({ value }) =>
+          validateNativeProviderMapping({
+            applicationId: application.id,
+            environmentId: environment.id,
+            productType: product.type,
+            provider,
+            providerProductIdentifier: value,
+          }).providerProductIdentifier,
+      }}
+    >
+      {(field) => (
+        <Field data-invalid={field.state.meta.errors.length > 0}>
+          <FieldLabel htmlFor={`native-product-id-${provider}`}>
+            {provider === "app_store"
+              ? "StoreKit Product ID"
+              : "Google Play Product ID"}
+          </FieldLabel>
+          <Input
+            aria-invalid={field.state.meta.errors.length > 0}
+            autoComplete="off"
+            id={`native-product-id-${provider}`}
+            onBlur={field.handleBlur}
+            onChange={(event) => field.handleChange(event.currentTarget.value)}
+            placeholder={
+              provider === "app_store"
+                ? "com.example.pro.monthly"
+                : "pro_subscription"
+            }
+            spellCheck={false}
+            value={field.state.value}
+          />
+          <FieldDescription>
+            Exact identifier only. Mosaic never matches by display name, price,
+            period, or similarity.
+            {provider === "google_play"
+              ? " One Google Product ID can map to only one Mosaic Product in this Environment and Application so purchase recovery remains unambiguous."
+              : null}
+          </FieldDescription>
+          <FieldError
+            errors={field.state.meta.errors.map((message) => ({
+              message,
+            }))}
+          />
+        </Field>
+      )}
+    </form.Field>
+  );
+}
+
+/**
+ * Base plan and offer only exist for a Google Play subscription, and only an
+ * exact offer ID is ever accepted — the runtime resolves its current offer
+ * token, which Mosaic never stores or guesses.
+ */
+function GoogleSubscriptionFields({
+  form,
+}: {
+  form: NativeProviderMappingForm;
+}) {
+  return (
+    <>
+      <form.Field
+        name="googleBasePlanId"
+        validators={{
+          onSubmit: ({ value }) =>
+            value.trim() ? undefined : "Enter the exact base plan ID.",
+        }}
+      >
+        {(field) => (
+          <Field data-invalid={field.state.meta.errors.length > 0}>
+            <FieldLabel htmlFor="google-base-plan-id">Base plan ID</FieldLabel>
+            <Input
+              aria-invalid={field.state.meta.errors.length > 0}
+              id="google-base-plan-id"
+              onBlur={field.handleBlur}
+              onChange={(event) =>
+                field.handleChange(event.currentTarget.value)
+              }
+              placeholder="monthly"
+              spellCheck={false}
+              value={field.state.value}
+            />
+            <FieldDescription>
+              Required for subscriptions and kept inside this Provider Product
+              Mapping.
+            </FieldDescription>
+            <FieldError
+              errors={field.state.meta.errors.map((message) => ({
+                message,
+              }))}
+            />
+          </Field>
+        )}
+      </form.Field>
+
+      <form.Field name="offerSelection">
+        {(field) => (
+          <fieldset className="space-y-2">
+            <legend className="font-medium text-sm">Offer</legend>
+            <label className="flex items-start gap-3 rounded border p-3 text-sm">
+              <input
+                checked={field.state.value === "none"}
+                className="mt-0.5 size-4 accent-primary"
+                name="google-offer-selection"
+                onChange={() => {
+                  field.handleChange("none");
+                  form.setFieldValue("googleOfferId", "");
+                }}
+                type="radio"
+              />
+              <span>
+                <span className="block font-medium">No offer</span>
+                <span className="mt-0.5 block text-muted-foreground text-xs">
+                  Use the exact regular base plan.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 rounded border p-3 text-sm">
+              <input
+                checked={field.state.value === "specific"}
+                className="mt-0.5 size-4 accent-primary"
+                name="google-offer-selection"
+                onChange={() => field.handleChange("specific")}
+                type="radio"
+              />
+              <span>
+                <span className="block font-medium">Use a specific offer</span>
+                <span className="mt-0.5 block text-muted-foreground text-xs">
+                  Require an exact offer ID. The runtime resolves its current
+                  offer token; Mosaic never stores or guesses that token.
+                </span>
+              </span>
+            </label>
+          </fieldset>
+        )}
+      </form.Field>
+
+      <form.Subscribe selector={(state) => state.values.offerSelection}>
+        {(offerSelection) =>
+          offerSelection === "specific" ? (
+            <form.Field
+              name="googleOfferId"
+              validators={{
+                onSubmit: ({ value }) =>
+                  value.trim() ? undefined : "Enter the exact offer ID.",
+              }}
+            >
+              {(field) => (
+                <Field data-invalid={field.state.meta.errors.length > 0}>
+                  <FieldLabel htmlFor="google-offer-id">Offer ID</FieldLabel>
+                  <Input
+                    aria-invalid={field.state.meta.errors.length > 0}
+                    id="google-offer-id"
+                    onBlur={field.handleBlur}
+                    onChange={(event) =>
+                      field.handleChange(event.currentTarget.value)
+                    }
+                    placeholder="intro"
+                    spellCheck={false}
+                    value={field.state.value}
+                  />
+                  <FieldError
+                    errors={field.state.meta.errors.map((message) => ({
+                      message,
+                    }))}
+                  />
+                </Field>
+              )}
+            </form.Field>
+          ) : null
+        }
+      </form.Subscribe>
+    </>
+  );
+}
+
+function TestEvidenceNotice({ environment }: { environment: Environment }) {
+  return (
+    <div className="rounded border border-border bg-muted/35 p-4 text-sm">
+      <p className="font-semibold">Test evidence remains separate</p>
+      <p className="mt-1 text-muted-foreground text-xs leading-5">
+        Mosaic Environment: {environment.name}. Store context will be shown
+        separately as StoreKit Configuration, Apple Sandbox, Google Play test,
+        Production, or Unknown after an authenticated test client reports an
+        observation.
+      </p>
+    </div>
   );
 }
 

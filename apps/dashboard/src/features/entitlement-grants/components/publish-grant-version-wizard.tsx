@@ -36,6 +36,11 @@ import type { Entitlement, GrantVersionImpact, Product } from "@/generated/api";
 
 type PurchaseType = "auto_renewable_subscription" | "non_consumable";
 
+interface SelectOption {
+  label: string;
+  value: string;
+}
+
 interface PublishGrantVersionWizardProps {
   canManage: boolean;
   entitlementId: string;
@@ -105,15 +110,15 @@ export function PublishGrantVersionWizard({
    * blast radius that describes a proposal they have since edited.
    */
   function update(patch: Partial<GrantProposal>) {
-    setProposal((current) => {
-      const next = { ...current, ...patch };
-      if (proposalFingerprint(next) !== proposalFingerprint(current)) {
-        setImpact(undefined);
-        setPreviewedFingerprint(undefined);
-        setStep("shape");
-      }
-      return next;
-    });
+    // Computed outside the updater: React may replay updater functions, so a
+    // setState nested inside one can fire for renders that never commit.
+    const next = { ...proposal, ...patch };
+    if (proposalFingerprint(next) !== proposalFingerprint(proposal)) {
+      setImpact(undefined);
+      setPreviewedFingerprint(undefined);
+      setStep("shape");
+    }
+    setProposal(next);
   }
 
   const productOptions = products.map((product) => ({
@@ -220,215 +225,19 @@ export function PublishGrantVersionWizard({
           </ol>
 
           {step === "shape" ? (
-            <>
-              <Field>
-                <FieldLabel htmlFor="grant-version-product">Product</FieldLabel>
-                <Select
-                  items={productOptions}
-                  onValueChange={(value) => update({ productId: value })}
-                  value={proposal.productId}
-                >
-                  <SelectTrigger id="grant-version-product">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {productOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="grant-version-entitlement">
-                  Entitlement
-                </FieldLabel>
-                <Select
-                  items={entitlementOptions}
-                  onValueChange={(value) => update({ entitlementId: value })}
-                  value={proposal.entitlementId}
-                >
-                  <SelectTrigger id="grant-version-entitlement">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {entitlementOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FieldDescription>
-                  One version history belongs to one (Product, Entitlement)
-                  pair.
-                </FieldDescription>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="grant-version-start">
-                  Takes effect at (local time)
-                </FieldLabel>
-                <Input
-                  id="grant-version-start"
-                  onChange={(event) =>
-                    update({
-                      effectiveStart: toIsoInstant(event.currentTarget.value),
-                    })
-                  }
-                  type="datetime-local"
-                  value={toLocalInput(proposal.effectiveStart)}
-                />
-                <FieldDescription>
-                  The projection engine selects a version by each
-                  purchase&rsquo;s own effective time, not by now. A change that
-                  silently applied to yesterday is the failure grant versioning
-                  exists to prevent, so backdating is a separate, checked
-                  choice.
-                </FieldDescription>
-              </Field>
-
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  checked={proposal.retroactive === true}
-                  className="mt-1"
-                  onChange={(event) =>
-                    update({ retroactive: event.currentTarget.checked })
-                  }
-                  type="checkbox"
-                />
-                <span>
-                  Backdate this version
-                  <span className="block text-muted-foreground text-xs leading-5">
-                    A retroactive version may add Entitlements or widen access
-                    policy, never remove or narrow either. Taking access from a
-                    customer who did nothing wrong is the one shape Mosaic
-                    refuses.
-                  </span>
-                </span>
-              </label>
-
-              <fieldset className="space-y-2">
-                <legend className="font-semibold text-sm">
-                  Purchase types this version covers
-                </legend>
-                {(
-                  [
-                    "auto_renewable_subscription",
-                    "non_consumable",
-                  ] as PurchaseType[]
-                ).map((type) => (
-                  <label className="flex items-center gap-2 text-sm" key={type}>
-                    <input
-                      checked={(proposal.supportedPurchaseTypes ?? []).includes(
-                        type
-                      )}
-                      onChange={(event) =>
-                        update({
-                          supportedPurchaseTypes: event.currentTarget.checked
-                            ? [...(proposal.supportedPurchaseTypes ?? []), type]
-                            : (proposal.supportedPurchaseTypes ?? []).filter(
-                                (item) => item !== type
-                              ),
-                        })
-                      }
-                      type="checkbox"
-                    />
-                    {type === "auto_renewable_subscription"
-                      ? "Auto-renewable subscription"
-                      : "Non-consumable"}
-                  </label>
-                ))}
-              </fieldset>
-
-              <fieldset className="space-y-3">
-                <legend className="font-semibold text-sm">
-                  Subscription states that grant access
-                </legend>
-                {grantPolicyFields.map((field) => (
-                  <label className="flex items-start gap-2 text-sm" key={field}>
-                    <input
-                      checked={proposal[field] === true}
-                      className="mt-1"
-                      onChange={(event) =>
-                        update({ [field]: event.currentTarget.checked })
-                      }
-                      type="checkbox"
-                    />
-                    <span>
-                      {grantPolicyLabel(field)}
-                      {grantPolicyNote(field) ? (
-                        <span className="block text-muted-foreground text-xs leading-5">
-                          {grantPolicyNote(field)}
-                        </span>
-                      ) : null}
-                    </span>
-                  </label>
-                ))}
-                <p className="text-muted-foreground text-xs leading-5">
-                  {PAUSE_POLICY_NOTE}
-                </p>
-              </fieldset>
-            </>
+            <ShapeStep
+              entitlementOptions={entitlementOptions}
+              productOptions={productOptions}
+              proposal={proposal}
+              update={update}
+            />
           ) : null}
 
           {step !== "shape" && impact ? (
-            <div className="space-y-3">
-              <div className="rounded border p-4">
-                <p className="font-semibold text-sm leading-6">
-                  {impactHeadline(impact)}
-                </p>
-                <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <ImpactRow
-                    label="Purchases currently granting access"
-                    value={impact.impactedActiveSources}
-                  />
-                  <ImpactRow
-                    label="Billing Customers citing this Product"
-                    value={impact.impactedCustomers}
-                  />
-                  <ImpactRow
-                    label="Entitlements a reprojection would re-derive"
-                    value={impact.impactedEntitlements}
-                  />
-                  <ImpactRow
-                    label="Products a reprojection would re-derive"
-                    value={impact.impactedProducts}
-                  />
-                </dl>
-                {impactCountsComplete ? null : (
-                  <p
-                    className="mt-3 rounded border border-destructive/35 bg-destructive/10 p-3 text-sm leading-6"
-                    role="alert"
-                  >
-                    At least one count above is unknown — the preview did not
-                    report it. Publishing stays unavailable until the blast
-                    radius is fully stated: an unknown count is not a zero, and
-                    this confirmation exists to state how many customers could
-                    lose access.
-                  </p>
-                )}
-                <p className="mt-3 text-muted-foreground text-xs leading-5">
-                  Every count is from current committed state — the snapshot
-                  each customer&rsquo;s pointer names, not the whole snapshot
-                  history. Previewing writes nothing, not even an audit event.
-                </p>
-              </div>
-
-              {impact.additiveSuperset === false ? (
-                <div className="rounded border border-destructive/35 bg-destructive/10 p-4">
-                  <StatusPill
-                    label="Publish would be refused"
-                    tone="negative"
-                  />
-                  <p className="mt-2 text-sm leading-6">
-                    {narrowingCodeExplanation(impact.narrowingCode)}
-                  </p>
-                </div>
-              ) : null}
-            </div>
+            <ImpactSummary
+              countsComplete={impactCountsComplete}
+              impact={impact}
+            />
           ) : null}
 
           {step === "publish" ? (
@@ -512,6 +321,232 @@ export function PublishGrantVersionWizard({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Step one. Every field here feeds the proposal fingerprint, so `update` — not
+ * a local setter — owns each change: it is what discards a stale preview.
+ */
+function ShapeStep({
+  entitlementOptions,
+  productOptions,
+  proposal,
+  update,
+}: {
+  entitlementOptions: readonly SelectOption[];
+  productOptions: readonly SelectOption[];
+  proposal: GrantProposal;
+  update: (patch: Partial<GrantProposal>) => void;
+}) {
+  return (
+    <>
+      <Field>
+        <FieldLabel htmlFor="grant-version-product">Product</FieldLabel>
+        <Select
+          items={productOptions}
+          onValueChange={(value) => update({ productId: value })}
+          value={proposal.productId}
+        >
+          <SelectTrigger id="grant-version-product">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {productOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor="grant-version-entitlement">Entitlement</FieldLabel>
+        <Select
+          items={entitlementOptions}
+          onValueChange={(value) => update({ entitlementId: value })}
+          value={proposal.entitlementId}
+        >
+          <SelectTrigger id="grant-version-entitlement">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {entitlementOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldDescription>
+          One version history belongs to one (Product, Entitlement) pair.
+        </FieldDescription>
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor="grant-version-start">
+          Takes effect at (local time)
+        </FieldLabel>
+        <Input
+          id="grant-version-start"
+          onChange={(event) =>
+            update({
+              effectiveStart: toIsoInstant(event.currentTarget.value),
+            })
+          }
+          type="datetime-local"
+          value={toLocalInput(proposal.effectiveStart)}
+        />
+        <FieldDescription>
+          The projection engine selects a version by each purchase&rsquo;s own
+          effective time, not by now. A change that silently applied to
+          yesterday is the failure grant versioning exists to prevent, so
+          backdating is a separate, checked choice.
+        </FieldDescription>
+      </Field>
+
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          checked={proposal.retroactive === true}
+          className="mt-1"
+          onChange={(event) =>
+            update({ retroactive: event.currentTarget.checked })
+          }
+          type="checkbox"
+        />
+        <span>
+          Backdate this version
+          <span className="block text-muted-foreground text-xs leading-5">
+            A retroactive version may add Entitlements or widen access policy,
+            never remove or narrow either. Taking access from a customer who did
+            nothing wrong is the one shape Mosaic refuses.
+          </span>
+        </span>
+      </label>
+
+      <fieldset className="space-y-2">
+        <legend className="font-semibold text-sm">
+          Purchase types this version covers
+        </legend>
+        {(
+          ["auto_renewable_subscription", "non_consumable"] as PurchaseType[]
+        ).map((type) => (
+          <label className="flex items-center gap-2 text-sm" key={type}>
+            <input
+              checked={(proposal.supportedPurchaseTypes ?? []).includes(type)}
+              onChange={(event) =>
+                update({
+                  supportedPurchaseTypes: event.currentTarget.checked
+                    ? [...(proposal.supportedPurchaseTypes ?? []), type]
+                    : (proposal.supportedPurchaseTypes ?? []).filter(
+                        (item) => item !== type
+                      ),
+                })
+              }
+              type="checkbox"
+            />
+            {type === "auto_renewable_subscription"
+              ? "Auto-renewable subscription"
+              : "Non-consumable"}
+          </label>
+        ))}
+      </fieldset>
+
+      <fieldset className="space-y-3">
+        <legend className="font-semibold text-sm">
+          Subscription states that grant access
+        </legend>
+        {grantPolicyFields.map((field) => (
+          <label className="flex items-start gap-2 text-sm" key={field}>
+            <input
+              checked={proposal[field] === true}
+              className="mt-1"
+              onChange={(event) =>
+                update({ [field]: event.currentTarget.checked })
+              }
+              type="checkbox"
+            />
+            <span>
+              {grantPolicyLabel(field)}
+              {grantPolicyNote(field) ? (
+                <span className="block text-muted-foreground text-xs leading-5">
+                  {grantPolicyNote(field)}
+                </span>
+              ) : null}
+            </span>
+          </label>
+        ))}
+        <p className="text-muted-foreground text-xs leading-5">
+          {PAUSE_POLICY_NOTE}
+        </p>
+      </fieldset>
+    </>
+  );
+}
+
+/**
+ * Step two: the blast radius. Publishing stays unavailable while any count is
+ * unreported, so this is the only screen that can state the cost of the change.
+ */
+function ImpactSummary({
+  countsComplete,
+  impact,
+}: {
+  countsComplete: boolean;
+  impact: GrantVersionImpact;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="rounded border p-4">
+        <p className="font-semibold text-sm leading-6">
+          {impactHeadline(impact)}
+        </p>
+        <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+          <ImpactRow
+            label="Purchases currently granting access"
+            value={impact.impactedActiveSources}
+          />
+          <ImpactRow
+            label="Billing Customers citing this Product"
+            value={impact.impactedCustomers}
+          />
+          <ImpactRow
+            label="Entitlements a reprojection would re-derive"
+            value={impact.impactedEntitlements}
+          />
+          <ImpactRow
+            label="Products a reprojection would re-derive"
+            value={impact.impactedProducts}
+          />
+        </dl>
+        {countsComplete ? null : (
+          <p
+            className="mt-3 rounded border border-destructive/35 bg-destructive/10 p-3 text-sm leading-6"
+            role="alert"
+          >
+            At least one count above is unknown — the preview did not report it.
+            Publishing stays unavailable until the blast radius is fully stated:
+            an unknown count is not a zero, and this confirmation exists to
+            state how many customers could lose access.
+          </p>
+        )}
+        <p className="mt-3 text-muted-foreground text-xs leading-5">
+          Every count is from current committed state — the snapshot each
+          customer&rsquo;s pointer names, not the whole snapshot history.
+          Previewing writes nothing, not even an audit event.
+        </p>
+      </div>
+
+      {impact.additiveSuperset === false ? (
+        <div className="rounded border border-destructive/35 bg-destructive/10 p-4">
+          <StatusPill label="Publish would be refused" tone="negative" />
+          <p className="mt-2 text-sm leading-6">
+            {narrowingCodeExplanation(impact.narrowingCode)}
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

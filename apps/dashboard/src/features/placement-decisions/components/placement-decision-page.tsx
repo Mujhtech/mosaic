@@ -8,7 +8,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -59,6 +59,7 @@ import type {
   AssignmentPolicy,
   AttributeDefinition,
   DecisionOutcome,
+  DecisionValidation,
   NamedFallback,
   PlacementDecisionDetail,
   PlacementRule,
@@ -116,7 +117,7 @@ export function PlacementDecisionPage({
               paywallId: paywall.id,
               projectId,
             });
-            const [latest] = [...published].sort(
+            const [latest] = published.toSorted(
               (left, right) => right.versionNumber - left.versionNumber
             );
             return latest
@@ -223,10 +224,7 @@ function DecisionWorkspace({
   paywalls: readonly HostedPaywallListItem[];
   scope: { environmentId: string; placementId: string; projectId: string };
 }) {
-  const handleClick2 = useCallback(() => setConfirmingRuleSetArchive(true), []);
   const [tab, setTab] = useState<DetailTab>("overview");
-  const [confirmingRuleSetArchive, setConfirmingRuleSetArchive] =
-    useState(false);
   const queryClient = useQueryClient();
   const save = useMutation(
     saveRuleSetMutationOptions(scope, adapter, queryClient)
@@ -234,58 +232,6 @@ function DecisionWorkspace({
   const validation = useMutation(
     validateRuleSetMutationOptions(scope, adapter)
   );
-  const placementUpdate = useMutation({
-    mutationFn: (input: { description?: string; name: string }) =>
-      adapter.updatePlacement(scope, input),
-    onSuccess: (updated) =>
-      queryClient.setQueryData<PlacementDecisionDetail>(
-        placementDecisionKeys.detail(scope, adapter),
-        (current) => (current ? { ...current, ...updated } : current)
-      ),
-  });
-  const alias = useMutation({
-    mutationFn: (key: string) => adapter.createAlias(scope, key),
-    onSuccess: (created) =>
-      queryClient.setQueryData<PlacementDecisionDetail>(
-        placementDecisionKeys.detail(scope, adapter),
-        (current) =>
-          current
-            ? { ...current, aliases: [...current.aliases, created] }
-            : current
-      ),
-  });
-  const archive = useMutation({
-    mutationFn: () => adapter.archivePlacement(scope),
-    onSuccess: () =>
-      queryClient.setQueryData<PlacementDecisionDetail>(
-        placementDecisionKeys.detail(scope, adapter),
-        (current) => (current ? { ...current, status: "archived" } : current)
-      ),
-  });
-  const handleClick = useCallback(() => archive.mutate(), [archive]);
-  const archiveRuleSet = useMutation({
-    mutationFn: () => adapter.archiveRuleSet(scope, detail.draft.ruleSetId),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: placementDecisionKeys.detail(scope, adapter),
-      }),
-  });
-  // Archiving a Placement or its rule set previously rendered the raw server
-  // message. Mosaic-owned copy plus the correlation ID is the documented
-  // support path, and a coded refusal here can name the page that resolves it.
-  const handleConfirm = useCallback(() => {
-    archiveRuleSet.mutate(undefined, {
-      onSuccess: () => setConfirmingRuleSetArchive(false),
-    });
-  }, [archiveRuleSet]);
-  const archiveError = archiveRuleSet.error ?? archive.error;
-  const archiveFailure = archiveError
-    ? describeApiError(archiveError, {
-        environmentId: scope.environmentId,
-        organizationId,
-        projectId: scope.projectId,
-      })
-    : null;
   const form = useForm({
     defaultValues: detail.draft,
     onSubmit: async ({ value }) => {
@@ -295,9 +241,14 @@ function DecisionWorkspace({
   });
   // TanStack Form's instance type is deep enough that naming it in a dependency
   // array trips TS2589, so the callbacks read it through a ref instead. The
-  // instance is stable across renders, so the behaviour is unchanged.
+  // instance is stable across renders, so the behaviour is unchanged. The ref
+  // is written in an effect rather than during render, because React can
+  // replay or discard render work and a render-time mutation leaks out of
+  // renders that never commit.
   const formRef = useRef(form);
-  formRef.current = form;
+  useEffect(() => {
+    formRef.current = form;
+  }, [form]);
   const handleClick7 = useCallback(() => {
     formRef.current.handleSubmit();
   }, []);
@@ -320,6 +271,13 @@ function DecisionWorkspace({
       }),
   });
   const handleClick6 = useCallback(() => publish.mutate(), [publish]);
+  const handleLoadServerRevision = useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: placementDecisionKeys.detail(scope, adapter),
+      }),
+    [adapter, queryClient, scope]
+  );
   const issues =
     validation.data?.issues ?? detail.draft.validation?.issues ?? [];
   const updateRules = (next: readonly PlacementRule[]) =>
@@ -340,16 +298,6 @@ function DecisionWorkspace({
       ).setFieldValue("fallbacks", next),
     []
   );
-  const handleClick3 = useCallback(() => {
-    const { fallbacks } = formRef.current.state.values;
-    updateFallbacks([
-      ...fallbacks,
-      {
-        key: `fallback_${fallbacks.length + 1}`,
-        outcome: { type: "no_paywall" },
-      },
-    ]);
-  }, [updateFallbacks]);
   const updateDefaultOutcome = (next: DecisionOutcome) =>
     (
       form as unknown as {
@@ -370,135 +318,14 @@ function DecisionWorkspace({
 
   return (
     <div className="space-y-5">
-      <div className="rounded border border-border p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="font-mono text-sm">{detail.key}</p>
-            <p className="mt-1 text-muted-foreground text-xs">
-              Stable Placement key · {detail.status} ·{" "}
-              {detail.draftOrigin === "not_configured"
-                ? "no decision rules configured yet"
-                : `saved revision ${detail.draft.revision}`}
-              {detail.publishedVersion
-                ? ` · published v${detail.publishedVersion.version}`
-                : " · not published"}
-            </p>
-            {detail.draftOrigin === "not_configured" ? (
-              // Distinguishes "nobody has written rules here" from "a saved
-              // rule set happens to be empty". The starting point below exists
-              // only in this browser until it is saved.
-              <p className="mt-1 text-muted-foreground text-xs leading-5">
-                This Placement has no rule set on the server. What you see below
-                is an unsaved starting point; nothing is created until you save.
-              </p>
-            ) : null}
-          </div>
-          <Button
-            disabled={
-              archive.isPending ||
-              detail.status === "archived" ||
-              detail.usage.ruleSetCount > 0
-            }
-            onClick={handleClick}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <ArchiveIcon aria-hidden />
-            {detail.status === "archived"
-              ? "Placement archived"
-              : "Archive Placement"}
-          </Button>
-        </div>
-        {(() => {
-          if (detail.status === "archived") {
-            return (
-              <p className="mt-3 text-muted-foreground text-sm" role="status">
-                This Placement is archived and cannot receive decision changes.
-              </p>
-            );
-          }
-          if (detail.usage.ruleSetCount > 0) {
-            return (
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded border border-border bg-muted/30 p-3">
-                <div>
-                  <p className="font-medium text-sm">
-                    Archive the active decision settings first
-                  </p>
-                  <p className="mt-1 text-muted-foreground text-xs">
-                    This preserves published version history and removes the
-                    active decision settings so the Placement can then be
-                    archived. Archiving decision settings cannot be undone;
-                    rebuilding them means recreating every rule by hand.
-                  </p>
-                </div>
-                <Button
-                  disabled={archiveRuleSet.isPending}
-                  onClick={handleClick2}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  <ArchiveIcon aria-hidden />
-                  {archiveRuleSet.isPending
-                    ? "Archiving decision settings…"
-                    : "Archive settings"}
-                </Button>
-                <ArchiveRuleSetConfirmation
-                  onConfirm={handleConfirm}
-                  onOpenChange={setConfirmingRuleSetArchive}
-                  open={confirmingRuleSetArchive}
-                  pending={archiveRuleSet.isPending}
-                  placementKey={detail.key}
-                />
-              </div>
-            );
-          }
-          return null;
-        })()}
-        {archiveFailure ? (
-          <div className="mt-3 space-y-2">
-            <p className="text-destructive text-sm" role="alert">
-              {archiveFailure.description}
-            </p>
-            <ApiErrorDetails details={archiveFailure.details} />
-            {archiveFailure.recovery ? (
-              <ApiErrorRecoveryAction recovery={archiveFailure.recovery} />
-            ) : null}
-            {archiveFailure.correlationId ? (
-              <RequestIdCopy requestId={archiveFailure.correlationId} />
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+      <PlacementSummaryCard
+        adapter={adapter}
+        detail={detail}
+        organizationId={organizationId}
+        scope={scope}
+      />
 
-      <div
-        aria-label="Placement decision"
-        className="flex flex-wrap gap-1 rounded border border-border p-1"
-        role="tablist"
-      >
-        {(["overview", "rules", "simulator", "overrides"] as const).map(
-          (item) => (
-            <Button
-              aria-selected={tab === item}
-              key={item}
-              onClick={() => setTab(item)}
-              role="tab"
-              size="sm"
-              type="button"
-              variant={tab === item ? "secondary" : "ghost"}
-            >
-              {item === "overrides"
-                ? "Test Overrides"
-                : {
-                    overview: "Overview",
-                    rules: "Rules",
-                    simulator: "Simulator",
-                  }[item]}
-            </Button>
-          )
-        )}
-      </div>
+      <DecisionTabList onTabChange={setTab} tab={tab} />
 
       {tab === "overview" ? (
         <div className="space-y-6">
@@ -506,56 +333,11 @@ function DecisionWorkspace({
             aria-labelledby="placement-overview-heading"
             className="grid gap-5 xl:grid-cols-2"
           >
-            <div className="rounded border border-border p-4">
-              <h2 className="font-semibold" id="placement-overview-heading">
-                Placement details
-              </h2>
-              <form
-                className="mt-4 space-y-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const data = new FormData(event.currentTarget);
-                  placementUpdate.mutate({
-                    description:
-                      String(data.get("description") ?? "") || undefined,
-                    name: String(data.get("name") ?? ""),
-                  });
-                }}
-              >
-                <Field>
-                  <FieldLabel htmlFor="placement-detail-name">
-                    Internal name
-                  </FieldLabel>
-                  <Input
-                    defaultValue={detail.name}
-                    id="placement-detail-name"
-                    name="name"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="placement-detail-description">
-                    Description
-                  </FieldLabel>
-                  <Input
-                    defaultValue={detail.description}
-                    id="placement-detail-description"
-                    name="description"
-                  />
-                </Field>
-                <Button
-                  disabled={placementUpdate.isPending}
-                  size="sm"
-                  type="submit"
-                >
-                  Save details
-                </Button>
-                {placementUpdate.error ? (
-                  <p className="text-destructive text-sm" role="alert">
-                    {placementUpdate.error.message}
-                  </p>
-                ) : null}
-              </form>
-            </div>
+            <PlacementDetailsForm
+              adapter={adapter}
+              detail={detail}
+              scope={scope}
+            />
             <form.Subscribe
               selector={(state) => ({
                 assignmentPolicy: state.values.assignmentPolicy,
@@ -564,105 +346,29 @@ function DecisionWorkspace({
               })}
             >
               {({ assignmentPolicy, defaultOutcome, fallbacks }) => (
-                <div className="space-y-4 rounded border border-border p-4">
-                  <div>
-                    <h2 className="font-semibold">Default decision</h2>
-                    <p className="mt-1 text-muted-foreground text-sm">
-                      Used when no Rule wins. Existing simple bindings compile
-                      here as a default Paywall.
-                    </p>
-                  </div>
-                  <OutcomeEditor
-                    fallbacks={fallbacks}
-                    id="default-outcome"
-                    label="When no Rule matches"
-                    onChange={updateDefaultOutcome}
-                    paywalls={paywalls}
-                    value={defaultOutcome}
-                  />
-                  <Field>
-                    <FieldLabel htmlFor="assignment-policy">
-                      Rollout assignment identity
-                    </FieldLabel>
-                    <Select
-                      items={ASSIGNMENT_POLICY_OPTIONS}
-                      onValueChange={(value) =>
-                        updateAssignmentPolicy(
-                          value as PlacementRuleSetDraft["assignmentPolicy"]
-                        )
-                      }
-                      value={assignmentPolicy}
-                    >
-                      <SelectTrigger id="assignment-policy">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ASSIGNMENT_POLICY_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-muted-foreground text-xs">
-                      Identification can change rollout only when a user-based
-                      policy is selected. Assignment values are never shown in
-                      traces.
-                    </p>
-                  </Field>
-                </div>
+                <DefaultDecisionCard
+                  assignmentPolicy={assignmentPolicy}
+                  defaultOutcome={defaultOutcome}
+                  fallbacks={fallbacks}
+                  onAssignmentPolicyChange={updateAssignmentPolicy}
+                  onDefaultOutcomeChange={updateDefaultOutcome}
+                  paywalls={paywalls}
+                />
               )}
             </form.Subscribe>
           </section>
 
-          <section
-            aria-labelledby="fallbacks-heading"
-            className="rounded border border-border p-4"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="font-semibold" id="fallbacks-heading">
-                  Named fallbacks
-                </h2>
-                <p className="mt-1 text-muted-foreground text-sm">
-                  Explicit recovery paths for incompatible content, missing
-                  Product mappings, unavailable providers, and unknown Access
-                  state.
-                </p>
-              </div>
-              <Button
-                onClick={handleClick3}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Add fallback
-              </Button>
-            </div>
-            <form.Subscribe selector={(state) => state.values.fallbacks}>
-              {(fallbacks) =>
-                fallbacks.length === 0 ? (
-                  <EmptyState
-                    className="mt-4"
-                    description="Add a named fallback before referencing one from a Rule or Paywall-unavailability outcome."
-                    title="No named fallbacks"
-                  />
-                ) : (
-                  <FallbackList
-                    fallbacks={fallbacks}
-                    onChange={updateFallbacks}
-                    paywalls={paywalls}
-                  />
-                )
-              }
-            </form.Subscribe>
-          </section>
+          <form.Subscribe selector={(state) => state.values.fallbacks}>
+            {(fallbacks) => (
+              <NamedFallbacksSection
+                fallbacks={fallbacks}
+                onChange={updateFallbacks}
+                paywalls={paywalls}
+              />
+            )}
+          </form.Subscribe>
 
-          <AliasAndUsage
-            detail={detail}
-            error={alias.error?.message}
-            onCreateAlias={(key) => alias.mutate(key)}
-          />
+          <AliasAndUsage adapter={adapter} detail={detail} scope={scope} />
           <AttributeDefinitions adapter={adapter} projectId={scope.projectId} />
         </div>
       ) : null}
@@ -703,115 +409,525 @@ function DecisionWorkspace({
       ) : null}
 
       {tab === "overview" || tab === "rules" ? (
-        <section
-          aria-labelledby="decision-actions-heading"
-          className="sticky bottom-3 z-10 rounded border border-border bg-background p-4 shadow-lg"
-        >
-          <h2 className="sr-only" id="decision-actions-heading">
-            Draft actions
-          </h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              disabled={save.isPending}
-              onClick={handleClick4}
-              type="button"
-            >
-              <FloppyDiskIcon aria-hidden />
-              {save.isPending ? "Saving…" : "Save changes"}
-            </Button>
-            <Button
-              disabled={validation.isPending || form.state.isDirty}
-              onClick={handleClick5}
-              type="button"
-              variant="outline"
-            >
-              {validation.isPending ? "Validating…" : "Validate for release"}
-            </Button>
-            <Button
-              disabled={
-                form.state.isDirty ||
-                publish.isPending ||
-                !validation.data?.valid
-              }
-              onClick={handleClick6}
-              type="button"
-              variant="outline"
-            >
-              {publish.isPending ? "Publishing…" : "Publish decision rules"}
-            </Button>
-            <Link
-              className="ms-auto font-medium text-primary text-sm"
-              params={(prev) => ({
-                ...prev,
-                ...workspaceScopeParams(prev),
-              })}
-              to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases"
-            >
-              Review release history
-            </Link>
-          </div>
-          {form.state.isDirty ? (
-            <p className="mt-2 text-muted-foreground text-xs" role="status">
-              Save changes before validation. Unsaved work remains in this form
-              if the server reports a revision conflict.
-            </p>
-          ) : null}
-          {save.error ? (
-            <div
-              className="mt-3 rounded border border-destructive/25 bg-destructive/5 p-3"
-              role="alert"
-            >
-              <p className="text-destructive text-sm">{save.error.message}</p>
-              <div className="mt-2 flex gap-2">
-                <Button
-                  onClick={handleClick7}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  Retry with local work
-                </Button>
-                <Button
-                  onClick={() =>
-                    queryClient.invalidateQueries({
-                      queryKey: placementDecisionKeys.detail(scope, adapter),
-                    })
-                  }
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  Load server revision
-                </Button>
-              </div>
-            </div>
-          ) : null}
-          {publish.data ? (
-            <p className="mt-2 text-primary text-sm" role="status">
-              Decision version {publish.data.version} is immutable and ready for
-              the next Configuration Release.
-            </p>
-          ) : null}
-          {publish.error ? (
-            <p className="mt-2 text-destructive text-sm" role="alert">
-              {publish.error.message} Validate again, resolve the linked
-              blocker, or reload the latest saved revision.
-            </p>
-          ) : null}
-          {validation.data ? (
-            <ValidationSummary
-              issues={validation.data.issues}
-              onOpenRule={openRule}
-              valid={validation.data.valid}
-            />
-          ) : null}
-        </section>
+        <DraftActionBar
+          isDirty={form.state.isDirty}
+          onLoadServerRevision={handleLoadServerRevision}
+          onOpenRule={openRule}
+          onPublish={handleClick6}
+          onRetryWithLocalWork={handleClick7}
+          onSave={handleClick4}
+          onValidate={handleClick5}
+          pendingAction={draftPendingAction({
+            publishing: publish.isPending,
+            saving: save.isPending,
+            validating: validation.isPending,
+          })}
+          publishErrorMessage={publish.error?.message}
+          publishedVersion={publish.data?.version}
+          saveErrorMessage={save.error?.message}
+          validationResult={validation.data}
+        />
       ) : null}
     </div>
   );
 }
 
-function FallbackList({
+/**
+ * The Placement identity card. It owns archiving because both archive paths —
+ * the Placement itself and its active decision settings — are reachable only
+ * from here, and their failure copy belongs beside the buttons that caused it.
+ */
+function PlacementSummaryCard({
+  adapter,
+  detail,
+  organizationId,
+  scope,
+}: {
+  adapter: ReturnType<typeof usePlacementDecisionsAdapter>;
+  detail: PlacementDecisionDetail;
+  organizationId: string;
+  scope: { environmentId: string; placementId: string; projectId: string };
+}) {
+  const queryClient = useQueryClient();
+  const [confirmingRuleSetArchive, setConfirmingRuleSetArchive] =
+    useState(false);
+  const handleClick2 = useCallback(() => setConfirmingRuleSetArchive(true), []);
+  const archive = useMutation({
+    mutationFn: () => adapter.archivePlacement(scope),
+    onSuccess: () =>
+      queryClient.setQueryData<PlacementDecisionDetail>(
+        placementDecisionKeys.detail(scope, adapter),
+        (current) => (current ? { ...current, status: "archived" } : current)
+      ),
+  });
+  const handleClick = useCallback(() => archive.mutate(), [archive]);
+  const archiveRuleSet = useMutation({
+    mutationFn: () => adapter.archiveRuleSet(scope, detail.draft.ruleSetId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: placementDecisionKeys.detail(scope, adapter),
+      }),
+  });
+  // Archiving a Placement or its rule set previously rendered the raw server
+  // message. Mosaic-owned copy plus the correlation ID is the documented
+  // support path, and a coded refusal here can name the page that resolves it.
+  const handleConfirm = useCallback(() => {
+    archiveRuleSet.mutate(undefined, {
+      onSuccess: () => setConfirmingRuleSetArchive(false),
+    });
+  }, [archiveRuleSet]);
+  const archiveError = archiveRuleSet.error ?? archive.error;
+  const archiveFailure = archiveError
+    ? describeApiError(archiveError, {
+        environmentId: scope.environmentId,
+        organizationId,
+        projectId: scope.projectId,
+      })
+    : null;
+
+  return (
+    <div className="rounded border border-border p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-mono text-sm">{detail.key}</p>
+          <p className="mt-1 text-muted-foreground text-xs">
+            Stable Placement key · {detail.status} ·{" "}
+            {detail.draftOrigin === "not_configured"
+              ? "no decision rules configured yet"
+              : `saved revision ${detail.draft.revision}`}
+            {detail.publishedVersion
+              ? ` · published v${detail.publishedVersion.version}`
+              : " · not published"}
+          </p>
+          {detail.draftOrigin === "not_configured" ? (
+            // Distinguishes "nobody has written rules here" from "a saved
+            // rule set happens to be empty". The starting point below exists
+            // only in this browser until it is saved.
+            <p className="mt-1 text-muted-foreground text-xs leading-5">
+              This Placement has no rule set on the server. What you see below
+              is an unsaved starting point; nothing is created until you save.
+            </p>
+          ) : null}
+        </div>
+        <Button
+          disabled={
+            archive.isPending ||
+            detail.status === "archived" ||
+            detail.usage.ruleSetCount > 0
+          }
+          onClick={handleClick}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <ArchiveIcon aria-hidden />
+          {detail.status === "archived"
+            ? "Placement archived"
+            : "Archive Placement"}
+        </Button>
+      </div>
+      {(() => {
+        if (detail.status === "archived") {
+          return (
+            <p className="mt-3 text-muted-foreground text-sm" role="status">
+              This Placement is archived and cannot receive decision changes.
+            </p>
+          );
+        }
+        if (detail.usage.ruleSetCount > 0) {
+          return (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded border border-border bg-muted/30 p-3">
+              <div>
+                <p className="font-medium text-sm">
+                  Archive the active decision settings first
+                </p>
+                <p className="mt-1 text-muted-foreground text-xs">
+                  This preserves published version history and removes the
+                  active decision settings so the Placement can then be
+                  archived. Archiving decision settings cannot be undone;
+                  rebuilding them means recreating every rule by hand.
+                </p>
+              </div>
+              <Button
+                disabled={archiveRuleSet.isPending}
+                onClick={handleClick2}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <ArchiveIcon aria-hidden />
+                {archiveRuleSet.isPending
+                  ? "Archiving decision settings…"
+                  : "Archive settings"}
+              </Button>
+              <ArchiveRuleSetConfirmation
+                onConfirm={handleConfirm}
+                onOpenChange={setConfirmingRuleSetArchive}
+                open={confirmingRuleSetArchive}
+                pending={archiveRuleSet.isPending}
+                placementKey={detail.key}
+              />
+            </div>
+          );
+        }
+        return null;
+      })()}
+      {archiveFailure ? (
+        <div className="mt-3 space-y-2">
+          <p className="text-destructive text-sm" role="alert">
+            {archiveFailure.description}
+          </p>
+          <ApiErrorDetails details={archiveFailure.details} />
+          {archiveFailure.recovery ? (
+            <ApiErrorRecoveryAction recovery={archiveFailure.recovery} />
+          ) : null}
+          {archiveFailure.correlationId ? (
+            <RequestIdCopy requestId={archiveFailure.correlationId} />
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DecisionTabList({
+  onTabChange,
+  tab,
+}: {
+  onTabChange: (tab: DetailTab) => void;
+  tab: DetailTab;
+}) {
+  return (
+    <div
+      aria-label="Placement decision"
+      className="flex flex-wrap gap-1 rounded border border-border p-1"
+      role="tablist"
+    >
+      {(["overview", "rules", "simulator", "overrides"] as const).map(
+        (item) => (
+          <Button
+            aria-selected={tab === item}
+            key={item}
+            onClick={() => onTabChange(item)}
+            role="tab"
+            size="sm"
+            type="button"
+            variant={tab === item ? "secondary" : "ghost"}
+          >
+            {item === "overrides"
+              ? "Test Overrides"
+              : {
+                  overview: "Overview",
+                  rules: "Rules",
+                  simulator: "Simulator",
+                }[item]}
+          </Button>
+        )
+      )}
+    </div>
+  );
+}
+
+function PlacementDetailsForm({
+  adapter,
+  detail,
+  scope,
+}: {
+  adapter: ReturnType<typeof usePlacementDecisionsAdapter>;
+  detail: PlacementDecisionDetail;
+  scope: { environmentId: string; placementId: string; projectId: string };
+}) {
+  const queryClient = useQueryClient();
+  const placementUpdate = useMutation({
+    mutationFn: (input: { description?: string; name: string }) =>
+      adapter.updatePlacement(scope, input),
+    onSuccess: (updated) =>
+      queryClient.setQueryData<PlacementDecisionDetail>(
+        placementDecisionKeys.detail(scope, adapter),
+        (current) => (current ? { ...current, ...updated } : current)
+      ),
+  });
+
+  return (
+    <div className="rounded border border-border p-4">
+      <h2 className="font-semibold" id="placement-overview-heading">
+        Placement details
+      </h2>
+      {/* Client-rendered authenticated SPA: no server actions in this
+          stack, and nothing here works without JS. */}
+      <form
+        className="mt-4 space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          placementUpdate.mutate({
+            description: String(data.get("description") ?? "") || undefined,
+            name: String(data.get("name") ?? ""),
+          });
+        }}
+      >
+        <Field>
+          <FieldLabel htmlFor="placement-detail-name">Internal name</FieldLabel>
+          <Input
+            defaultValue={detail.name}
+            id="placement-detail-name"
+            name="name"
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="placement-detail-description">
+            Description
+          </FieldLabel>
+          <Input
+            defaultValue={detail.description}
+            id="placement-detail-description"
+            name="description"
+          />
+        </Field>
+        <Button disabled={placementUpdate.isPending} size="sm" type="submit">
+          Save details
+        </Button>
+        {placementUpdate.error ? (
+          <p className="text-destructive text-sm" role="alert">
+            {placementUpdate.error.message}
+          </p>
+        ) : null}
+      </form>
+    </div>
+  );
+}
+
+function DefaultDecisionCard({
+  assignmentPolicy,
+  defaultOutcome,
+  fallbacks,
+  onAssignmentPolicyChange,
+  onDefaultOutcomeChange,
+  paywalls,
+}: {
+  assignmentPolicy: AssignmentPolicy;
+  defaultOutcome: DecisionOutcome;
+  fallbacks: readonly NamedFallback[];
+  onAssignmentPolicyChange: (next: AssignmentPolicy) => void;
+  onDefaultOutcomeChange: (next: DecisionOutcome) => void;
+  paywalls: readonly HostedPaywallListItem[];
+}) {
+  return (
+    <div className="space-y-4 rounded border border-border p-4">
+      <div>
+        <h2 className="font-semibold">Default decision</h2>
+        <p className="mt-1 text-muted-foreground text-sm">
+          Used when no Rule wins. Existing simple bindings compile here as a
+          default Paywall.
+        </p>
+      </div>
+      <OutcomeEditor
+        fallbacks={fallbacks}
+        id="default-outcome"
+        label="When no Rule matches"
+        onChange={onDefaultOutcomeChange}
+        paywalls={paywalls}
+        value={defaultOutcome}
+      />
+      <Field>
+        <FieldLabel htmlFor="assignment-policy">
+          Rollout assignment identity
+        </FieldLabel>
+        <Select
+          items={ASSIGNMENT_POLICY_OPTIONS}
+          onValueChange={(value) =>
+            onAssignmentPolicyChange(
+              value as PlacementRuleSetDraft["assignmentPolicy"]
+            )
+          }
+          value={assignmentPolicy}
+        >
+          <SelectTrigger id="assignment-policy">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ASSIGNMENT_POLICY_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-muted-foreground text-xs">
+          Identification can change rollout only when a user-based policy is
+          selected. Assignment values are never shown in traces.
+        </p>
+      </Field>
+    </div>
+  );
+}
+
+/**
+ * The three mutations behind this bar are mutually exclusive in practice —
+ * each button disables while its own request is in flight — so they arrive as
+ * one discriminated value rather than three independent booleans that could
+ * encode states the UI has no rendering for.
+ */
+type DraftPendingAction = "publishing" | "saving" | "validating";
+
+/** Save is checked first: it is the only action available while dirty. */
+function draftPendingAction(pending: {
+  publishing: boolean;
+  saving: boolean;
+  validating: boolean;
+}): DraftPendingAction | undefined {
+  if (pending.saving) {
+    return "saving";
+  }
+  if (pending.validating) {
+    return "validating";
+  }
+  return pending.publishing ? "publishing" : undefined;
+}
+
+function DraftActionBar({
+  isDirty,
+  onLoadServerRevision,
+  onOpenRule,
+  onPublish,
+  onRetryWithLocalWork,
+  onSave,
+  onValidate,
+  pendingAction,
+  publishErrorMessage,
+  publishedVersion,
+  saveErrorMessage,
+  validationResult,
+}: {
+  isDirty: boolean;
+  pendingAction?: DraftPendingAction;
+  onLoadServerRevision: () => void;
+  onOpenRule: (ruleId: string) => void;
+  onPublish: () => void;
+  onRetryWithLocalWork: () => void;
+  onSave: () => void;
+  onValidate: () => void;
+  publishErrorMessage?: string;
+  publishedVersion?: number;
+  saveErrorMessage?: string;
+  validationResult?: DecisionValidation;
+}) {
+  return (
+    <section
+      aria-labelledby="decision-actions-heading"
+      className="sticky bottom-3 z-10 rounded border border-border bg-background p-4 shadow-lg"
+    >
+      <h2 className="sr-only" id="decision-actions-heading">
+        Draft actions
+      </h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          disabled={pendingAction === "saving"}
+          onClick={onSave}
+          type="button"
+        >
+          <FloppyDiskIcon aria-hidden />
+          {pendingAction === "saving" ? "Saving…" : "Save changes"}
+        </Button>
+        <Button
+          disabled={pendingAction === "validating" || isDirty}
+          onClick={onValidate}
+          type="button"
+          variant="outline"
+        >
+          {pendingAction === "validating"
+            ? "Validating…"
+            : "Validate for release"}
+        </Button>
+        <Button
+          disabled={
+            isDirty ||
+            pendingAction === "publishing" ||
+            !validationResult?.valid
+          }
+          onClick={onPublish}
+          type="button"
+          variant="outline"
+        >
+          {pendingAction === "publishing"
+            ? "Publishing…"
+            : "Publish decision rules"}
+        </Button>
+        <Link
+          className="ms-auto font-medium text-primary text-sm"
+          params={(prev) => ({
+            ...prev,
+            ...workspaceScopeParams(prev),
+          })}
+          to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases"
+        >
+          Review release history
+        </Link>
+      </div>
+      {isDirty ? (
+        <p className="mt-2 text-muted-foreground text-xs" role="status">
+          Save changes before validation. Unsaved work remains in this form if
+          the server reports a revision conflict.
+        </p>
+      ) : null}
+      {saveErrorMessage ? (
+        <div
+          className="mt-3 rounded border border-destructive/25 bg-destructive/5 p-3"
+          role="alert"
+        >
+          <p className="text-destructive text-sm">{saveErrorMessage}</p>
+          <div className="mt-2 flex gap-2">
+            <Button
+              onClick={onRetryWithLocalWork}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Retry with local work
+            </Button>
+            <Button
+              onClick={onLoadServerRevision}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              Load server revision
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {publishedVersion === undefined ? null : (
+        <p className="mt-2 text-primary text-sm" role="status">
+          Decision version {publishedVersion} is immutable and ready for the
+          next Configuration Release.
+        </p>
+      )}
+      {publishErrorMessage ? (
+        <p className="mt-2 text-destructive text-sm" role="alert">
+          {publishErrorMessage} Validate again, resolve the linked blocker, or
+          reload the latest saved revision.
+        </p>
+      ) : null}
+      {validationResult ? (
+        <ValidationSummary
+          issues={validationResult.issues}
+          onOpenRule={onOpenRule}
+          valid={validationResult.valid}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * Named fallbacks own their own row identity. The fallback key is the field an
+ * operator edits, so keying a row on it would remount the row and drop focus on
+ * every keystroke; keying on the array index would move a half-typed key onto a
+ * different fallback after a removal. Each row therefore carries a minted id
+ * that is created with the row and discarded with it, and adding lives here so
+ * that a new row and its id are created in the same handler.
+ */
+function NamedFallbacksSection({
   fallbacks,
   onChange,
   paywalls,
@@ -820,71 +936,136 @@ function FallbackList({
   onChange: (fallbacks: readonly NamedFallback[]) => void;
   paywalls: Parameters<typeof OutcomeEditor>[0]["paywalls"];
 }) {
+  const nextRowId = useRef(fallbacks.length);
+  const [rowIds, setRowIds] = useState<number[]>(() =>
+    Array.from({ length: fallbacks.length }, (_, index) => index)
+  );
+  const handleAdd = useCallback(() => {
+    const mintedId = nextRowId.current;
+    nextRowId.current += 1;
+    setRowIds((current) => [...current, mintedId]);
+    onChange([
+      ...fallbacks,
+      {
+        key: `fallback_${fallbacks.length + 1}`,
+        outcome: { type: "no_paywall" },
+      },
+    ]);
+  }, [fallbacks, onChange]);
+  const handleRemove = useCallback(
+    (index: number) => {
+      setRowIds((current) =>
+        current.filter((_, itemIndex) => itemIndex !== index)
+      );
+      onChange(fallbacks.filter((_, itemIndex) => itemIndex !== index));
+    },
+    [fallbacks, onChange]
+  );
+
   return (
-    <ul className="mt-4 space-y-3">
-      {fallbacks.map((fallback, index) => (
-        <li
-          className="grid gap-3 rounded border p-3 lg:grid-cols-[14rem_1fr_auto]"
-          // biome-ignore lint/suspicious/noArrayIndexKey: the fallback key is the field being edited, so keying on it would remount the row and drop focus on every keystroke; every input in the row is controlled, so a reused row still renders the right values
-          key={`${fallback.key}:${index}`}
-        >
-          <Field>
-            <FieldLabel htmlFor={`fallback-${index}-key`}>
-              Fallback key
-            </FieldLabel>
-            <Input
-              id={`fallback-${index}-key`}
-              onChange={(event) =>
-                onChange(
-                  fallbacks.map((item, itemIndex) =>
-                    itemIndex === index
-                      ? { ...item, key: event.currentTarget.value }
-                      : item
+    <section
+      aria-labelledby="fallbacks-heading"
+      className="rounded border border-border p-4"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-semibold" id="fallbacks-heading">
+            Named fallbacks
+          </h2>
+          <p className="mt-1 text-muted-foreground text-sm">
+            Explicit recovery paths for incompatible content, missing Product
+            mappings, unavailable providers, and unknown Access state.
+          </p>
+        </div>
+        <Button onClick={handleAdd} size="sm" type="button" variant="outline">
+          Add fallback
+        </Button>
+      </div>
+      {fallbacks.length === 0 ? (
+        <EmptyState
+          className="mt-4"
+          description="Add a named fallback before referencing one from a Rule or Paywall-unavailability outcome."
+          title="No named fallbacks"
+        />
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {fallbacks.map((fallback, index) => (
+            <li
+              className="grid gap-3 rounded border p-3 lg:grid-cols-[14rem_1fr_auto]"
+              key={rowIds[index]}
+            >
+              <Field>
+                <FieldLabel htmlFor={`fallback-${index}-key`}>
+                  Fallback key
+                </FieldLabel>
+                <Input
+                  id={`fallback-${index}-key`}
+                  onChange={(event) =>
+                    onChange(
+                      fallbacks.map((item, itemIndex) =>
+                        itemIndex === index
+                          ? { ...item, key: event.currentTarget.value }
+                          : item
+                      )
+                    )
+                  }
+                  value={fallback.key}
+                />
+              </Field>
+              <OutcomeEditor
+                fallbacks={fallbacks.filter(
+                  (_, itemIndex) => itemIndex !== index
+                )}
+                id={`fallback-${index}`}
+                onChange={(outcome) =>
+                  onChange(
+                    fallbacks.map((item, itemIndex) =>
+                      itemIndex === index ? { ...item, outcome } : item
+                    )
                   )
-                )
-              }
-              value={fallback.key}
-            />
-          </Field>
-          <OutcomeEditor
-            fallbacks={fallbacks.filter((_, itemIndex) => itemIndex !== index)}
-            id={`fallback-${index}`}
-            onChange={(outcome) =>
-              onChange(
-                fallbacks.map((item, itemIndex) =>
-                  itemIndex === index ? { ...item, outcome } : item
-                )
-              )
-            }
-            paywalls={paywalls}
-            value={fallback.outcome}
-          />
-          <Button
-            aria-label={`Remove fallback ${fallback.key}`}
-            onClick={() =>
-              onChange(fallbacks.filter((_, itemIndex) => itemIndex !== index))
-            }
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            Remove
-          </Button>
-        </li>
-      ))}
-    </ul>
+                }
+                paywalls={paywalls}
+                value={fallback.outcome}
+              />
+              <Button
+                aria-label={`Remove fallback ${fallback.key}`}
+                onClick={() => handleRemove(index)}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
 function AliasAndUsage({
+  adapter,
   detail,
-  error,
-  onCreateAlias,
+  scope,
 }: {
+  adapter: ReturnType<typeof usePlacementDecisionsAdapter>;
   detail: PlacementDecisionDetail;
-  error?: string;
-  onCreateAlias: (key: string) => void;
+  scope: { environmentId: string; placementId: string; projectId: string };
 }) {
+  const queryClient = useQueryClient();
+  const alias = useMutation({
+    mutationFn: (key: string) => adapter.createAlias(scope, key),
+    onSuccess: (created) =>
+      queryClient.setQueryData<PlacementDecisionDetail>(
+        placementDecisionKeys.detail(scope, adapter),
+        (current) =>
+          current
+            ? { ...current, aliases: [...current.aliases, created] }
+            : current
+      ),
+  });
+
   return (
     <section
       aria-labelledby="alias-heading"
@@ -898,6 +1079,8 @@ function AliasAndUsage({
           Keys are never edited in place. Add an old key as an alias to keep
           installed application calls working.
         </p>
+        {/* Client-rendered authenticated SPA: no server actions in this
+            stack, and nothing here works without JS. */}
         <form
           className="mt-3 flex gap-2"
           onSubmit={(event) => {
@@ -906,7 +1089,7 @@ function AliasAndUsage({
               "alias"
             ) as HTMLInputElement;
             if (input.value.trim()) {
-              onCreateAlias(input.value.trim());
+              alias.mutate(input.value.trim());
             }
           }}
         >
@@ -920,9 +1103,9 @@ function AliasAndUsage({
             Add alias
           </Button>
         </form>
-        {error ? (
+        {alias.error ? (
           <p className="mt-2 text-destructive text-sm" role="alert">
-            {error}
+            {alias.error.message}
           </p>
         ) : null}
         <ul className="mt-3 space-y-1 text-sm">

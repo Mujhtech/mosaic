@@ -1,6 +1,11 @@
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useState,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -24,7 +29,10 @@ import {
   experimentsQueryOptions,
 } from "../queries/experiment-queries";
 import {
+  type ExperimentListItem,
   type ExperimentScope,
+  type MutualExclusionGroupOption,
+  type MutualExclusionGroupVersion,
   validateMutualExclusionAllocation,
 } from "../types/experiment";
 
@@ -109,16 +117,14 @@ export function MutualExclusionGroupManager({
   });
 
   function toggle(experimentId: string) {
-    setSelected((current) => {
-      const next = current.includes(experimentId)
-        ? current.filter((id) => id !== experimentId)
-        : [...current, experimentId];
-      const even = next.length ? 100 / next.length : 0;
-      setAllocations(
-        Object.fromEntries(next.map((id) => [id, even.toFixed(2)]))
-      );
-      return next;
-    });
+    // Computed outside the updater: React may replay updater functions, so a
+    // setState nested inside one can fire for renders that never commit.
+    const next = selected.includes(experimentId)
+      ? selected.filter((id) => id !== experimentId)
+      : [...selected, experimentId];
+    const even = next.length ? 100 / next.length : 0;
+    setSelected(next);
+    setAllocations(Object.fromEntries(next.map((id) => [id, even.toFixed(2)])));
   }
 
   const beginVersion = useCallback(
@@ -138,6 +144,7 @@ export function MutualExclusionGroupManager({
   const selectedGroup = groups.data?.find(
     (group) => group.id === selectedGroupId
   );
+  const selectedIds = new Set(selected);
   const pending = createGroup.isPending || createVersion.isPending;
 
   return (
@@ -166,63 +173,17 @@ export function MutualExclusionGroupManager({
           }}
         >
           {groups.data?.length ? (
-            <ul
-              aria-label="Existing mutual-exclusion groups"
-              className="grid gap-2"
-            >
-              {groups.data.map((group) => (
-                <li
-                  className="flex flex-wrap items-center justify-between gap-2 rounded border p-3 text-sm"
-                  key={group.id}
-                >
-                  <div>
-                    <strong>{group.name}</strong>
-                    <span className="ml-2 text-muted-foreground">
-                      Active Version {group.versionId}
-                    </span>
-                  </div>
-                  <Button
-                    onClick={() => beginVersion(group.id)}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    Create next Version
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <ExistingGroupList
+              groups={groups.data}
+              onBeginVersion={beginVersion}
+            />
           ) : null}
           {selectedGroup ? (
-            <div className="rounded border bg-muted/20 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-semibold text-sm">
-                  New immutable Version for {selectedGroup.name}
-                </p>
-                <Button
-                  onClick={handleClick}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  Create a different group
-                </Button>
-              </div>
-              {versions.data?.length ? (
-                <ol
-                  aria-label="Immutable group Version history"
-                  className="mt-2 flex flex-wrap gap-2 text-muted-foreground text-xs"
-                >
-                  {versions.data.map((version) => (
-                    <li className="rounded border px-2 py-1" key={version.id}>
-                      v{version.versionNumber} · {version.members.length}{" "}
-                      members · {(version.holdoutBasisPoints / 100).toFixed(2)}%
-                      holdout
-                    </li>
-                  ))}
-                </ol>
-              ) : null}
-            </div>
+            <SelectedGroupSummary
+              onCreateDifferentGroup={handleClick}
+              selectedGroup={selectedGroup}
+              versions={versions.data}
+            />
           ) : null}
           <div className="grid gap-4 md:grid-cols-2">
             <form.Field name="name">
@@ -268,72 +229,13 @@ export function MutualExclusionGroupManager({
               )}
             </form.Field>
           </div>
-          <fieldset className="grid gap-2">
-            <legend className="font-semibold text-sm">
-              Experiment members
-            </legend>
-            {eligible.length ? (
-              eligible.map((experiment) => {
-                const experimentId = experiment.id;
-                const checked = selected.includes(experimentId);
-                return (
-                  <div
-                    className="grid gap-2 rounded border p-3 sm:grid-cols-[1fr_11rem] sm:items-center"
-                    key={experiment.id}
-                  >
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        checked={checked}
-                        onChange={() => toggle(experimentId)}
-                        type="checkbox"
-                      />
-                      <span>
-                        <strong>{experiment.name}</strong>
-                        <span className="ml-2 text-muted-foreground">
-                          {experiment.status === "draft"
-                            ? "Draft root"
-                            : `Stable root · ${experiment.status}`}
-                        </span>
-                      </span>
-                    </label>
-                    <Field>
-                      <FieldLabel
-                        className="sr-only"
-                        htmlFor={`group-allocation-${experiment.id}`}
-                      >
-                        Group allocation for {experiment.name}
-                      </FieldLabel>
-                      <Input
-                        disabled={!checked}
-                        id={`group-allocation-${experiment.id}`}
-                        min="0.01"
-                        onChange={(event) =>
-                          setAllocations((current) => ({
-                            ...current,
-                            [experimentId]: event.currentTarget.value,
-                          }))
-                        }
-                        step="0.01"
-                        type="number"
-                        value={allocations[experimentId] ?? "0"}
-                      />
-                      <p className="text-muted-foreground text-xs">
-                        % ·{" "}
-                        {Math.round(
-                          Number(allocations[experimentId] ?? 0) * 100
-                        )}{" "}
-                        bp
-                      </p>
-                    </Field>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-muted-foreground text-sm">
-                Create at least two Experiment drafts before creating a group.
-              </p>
-            )}
-          </fieldset>
+          <MemberFieldset
+            allocations={allocations}
+            eligible={eligible}
+            onAllocationChange={setAllocations}
+            onToggle={toggle}
+            selectedIds={selectedIds}
+          />
           <form.Field name="holdoutPercent">
             {(field) => (
               <Field className="max-w-48">
@@ -401,5 +303,158 @@ export function MutualExclusionGroupManager({
         </form>
       </details>
     </WorkflowPanel>
+  );
+}
+
+function ExistingGroupList({
+  groups,
+  onBeginVersion,
+}: {
+  groups: readonly MutualExclusionGroupOption[];
+  onBeginVersion: (groupId: string) => void;
+}) {
+  return (
+    <ul aria-label="Existing mutual-exclusion groups" className="grid gap-2">
+      {groups.map((group) => (
+        <li
+          className="flex flex-wrap items-center justify-between gap-2 rounded border p-3 text-sm"
+          key={group.id}
+        >
+          <div>
+            <strong>{group.name}</strong>
+            <span className="ml-2 text-muted-foreground">
+              Active Version {group.versionId}
+            </span>
+          </div>
+          <Button
+            onClick={() => onBeginVersion(group.id)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Create next Version
+          </Button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SelectedGroupSummary({
+  onCreateDifferentGroup,
+  selectedGroup,
+  versions,
+}: {
+  onCreateDifferentGroup: () => void;
+  selectedGroup: MutualExclusionGroupOption;
+  versions: readonly MutualExclusionGroupVersion[] | undefined;
+}) {
+  return (
+    <div className="rounded border bg-muted/20 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-semibold text-sm">
+          New immutable Version for {selectedGroup.name}
+        </p>
+        <Button
+          onClick={onCreateDifferentGroup}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          Create a different group
+        </Button>
+      </div>
+      {versions?.length ? (
+        <ol
+          aria-label="Immutable group Version history"
+          className="mt-2 flex flex-wrap gap-2 text-muted-foreground text-xs"
+        >
+          {versions.map((version) => (
+            <li className="rounded border px-2 py-1" key={version.id}>
+              v{version.versionNumber} · {version.members.length} members ·{" "}
+              {(version.holdoutBasisPoints / 100).toFixed(2)}% holdout
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </div>
+  );
+}
+
+function MemberFieldset({
+  allocations,
+  eligible,
+  onAllocationChange,
+  onToggle,
+  selectedIds,
+}: {
+  allocations: Record<string, string>;
+  eligible: readonly ExperimentListItem[];
+  onAllocationChange: Dispatch<SetStateAction<Record<string, string>>>;
+  onToggle: (experimentId: string) => void;
+  selectedIds: ReadonlySet<string>;
+}) {
+  return (
+    <fieldset className="grid gap-2">
+      <legend className="font-semibold text-sm">Experiment members</legend>
+      {eligible.length ? (
+        eligible.map((experiment) => {
+          const experimentId = experiment.id;
+          const checked = selectedIds.has(experimentId);
+          return (
+            <div
+              className="grid gap-2 rounded border p-3 sm:grid-cols-[1fr_11rem] sm:items-center"
+              key={experiment.id}
+            >
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  checked={checked}
+                  onChange={() => onToggle(experimentId)}
+                  type="checkbox"
+                />
+                <span>
+                  <strong>{experiment.name}</strong>
+                  <span className="ml-2 text-muted-foreground">
+                    {experiment.status === "draft"
+                      ? "Draft root"
+                      : `Stable root · ${experiment.status}`}
+                  </span>
+                </span>
+              </label>
+              <Field>
+                <FieldLabel
+                  className="sr-only"
+                  htmlFor={`group-allocation-${experiment.id}`}
+                >
+                  Group allocation for {experiment.name}
+                </FieldLabel>
+                <Input
+                  disabled={!checked}
+                  id={`group-allocation-${experiment.id}`}
+                  min="0.01"
+                  onChange={(event) =>
+                    onAllocationChange((current) => ({
+                      ...current,
+                      [experimentId]: event.currentTarget.value,
+                    }))
+                  }
+                  step="0.01"
+                  type="number"
+                  value={allocations[experimentId] ?? "0"}
+                />
+                <p className="text-muted-foreground text-xs">
+                  % · {Math.round(Number(allocations[experimentId] ?? 0) * 100)}{" "}
+                  bp
+                </p>
+              </Field>
+            </div>
+          );
+        })
+      ) : (
+        <p className="text-muted-foreground text-sm">
+          Create at least two Experiment drafts before creating a group.
+        </p>
+      )}
+    </fieldset>
   );
 }

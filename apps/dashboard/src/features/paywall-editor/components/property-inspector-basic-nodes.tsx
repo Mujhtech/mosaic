@@ -18,17 +18,19 @@ import {
   DocumentBackgroundEditor,
 } from "@/features/paywall-editor/components/property-inspector-background";
 import {
-  alignmentOptions,
   CompactOptionField,
-  distributionOptions,
   Field,
-  FLOW_OPTIONS,
   InspectorSection,
+  useInspectorContext,
+} from "@/features/paywall-editor/components/property-inspector-core";
+import {
+  alignmentOptions,
+  distributionOptions,
+  FLOW_OPTIONS,
   PRODUCT_VARIABLE_TOKENS,
   type ScrollContainer,
   updateScrollContainer,
-  useInspectorContext,
-} from "@/features/paywall-editor/components/property-inspector-core";
+} from "@/features/paywall-editor/components/property-inspector-core-support";
 import {
   CheckboxField,
   ColorField,

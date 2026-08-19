@@ -4,7 +4,7 @@ import type { CanvasDeviceGeometry } from "@/features/paywall-editor/components/
 import {
   alignmentStyle,
   distributionStyle,
-} from "@/features/paywall-editor/components/canvas-preview-node-primitives";
+} from "@/features/paywall-editor/components/canvas-preview-node-primitives-support";
 import type {
   MosaicDocument,
   Screen,

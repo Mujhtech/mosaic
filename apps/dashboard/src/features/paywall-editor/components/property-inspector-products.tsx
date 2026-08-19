@@ -7,21 +7,23 @@ import { LayerTypeIcon } from "@/features/paywall-editor/components/layer-type-i
 import {
   AdvancedSection,
   ControlAccessibilitySection,
-  seedOptionalLocalizedText,
 } from "@/features/paywall-editor/components/property-inspector-accessibility";
+import { seedOptionalLocalizedText } from "@/features/paywall-editor/components/property-inspector-accessibility-support";
 import {
   BackgroundSection,
   BorderSection,
 } from "@/features/paywall-editor/components/property-inspector-background";
 import {
-  alignmentOptions,
   CompactOptionField,
-  FLOW_OPTIONS,
   InspectorSection,
-  PRODUCT_VARIABLE_TOKENS,
   TwoColumn,
   useInspectorContext,
 } from "@/features/paywall-editor/components/property-inspector-core";
+import {
+  alignmentOptions,
+  FLOW_OPTIONS,
+  PRODUCT_VARIABLE_TOKENS,
+} from "@/features/paywall-editor/components/property-inspector-core-support";
 import {
   CheckboxField,
   LocalizedField,

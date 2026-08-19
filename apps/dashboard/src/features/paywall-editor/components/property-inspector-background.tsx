@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components -- internal inspector modules colocate private controls with their supporting types and transforms. */
 import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/ssr/EyeSlash";
 import { MinusIcon } from "@phosphor-icons/react/dist/ssr/Minus";
@@ -9,6 +8,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
 import { InspectorColorControl } from "@/features/paywall-editor/components/inspector-color-control";
+import { updateAppearance } from "@/features/paywall-editor/components/property-inspector-background-support";
 import {
   type AppearanceValue,
   CONTROL_CLASS,
@@ -39,19 +39,7 @@ import {
   updateGradientStopPosition,
 } from "@/features/paywall-editor/utils/style-authoring";
 
-export function updateAppearance(
-  node: ProtocolNode,
-  updater: (appearance: AppearanceValue) => AppearanceValue
-) {
-  return {
-    ...node,
-    appearance: updater(
-      ("appearance" in node ? node.appearance : undefined) ?? {}
-    ),
-  } as ProtocolNode;
-}
-
-export function defaultBackground(
+function defaultBackground(
   type: ProtocolBackground["type"],
   document: MosaicDocument
 ): ProtocolBackground | undefined {
@@ -607,7 +595,7 @@ export function BackgroundSection({ node }: { node: ProtocolNode }) {
   );
 }
 
-export function ShadowSection({ node }: { node: ProtocolNode }) {
+function ShadowSection({ node }: { node: ProtocolNode }) {
   const { document } = useInspectorContext();
   const editor = useEditorActions();
   const appearance = ("appearance" in node ? node.appearance : undefined) ?? {};
@@ -723,7 +711,7 @@ export function ShadowSection({ node }: { node: ProtocolNode }) {
   );
 }
 
-export function BorderFields({ node }: { node: ProtocolNode }) {
+function BorderFields({ node }: { node: ProtocolNode }) {
   const editor = useEditorActions();
   const appearance = ("appearance" in node ? node.appearance : undefined) ?? {};
   const border = appearance.border ?? {

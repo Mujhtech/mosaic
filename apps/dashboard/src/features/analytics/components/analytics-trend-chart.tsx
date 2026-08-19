@@ -3,12 +3,14 @@ import { useMemo, useState } from "react";
 
 import { ChartChip } from "@/components/charts/chart-chip";
 import {
-  COMPACT_TREND_PLOT_HEIGHT,
   TrendChart,
   type TrendChartSeries,
   TrendMessage,
-  trendFrameHeight,
 } from "@/components/charts/trend-chart";
+import {
+  COMPACT_TREND_PLOT_HEIGHT,
+  trendFrameHeight,
+} from "@/components/charts/trend-frame";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AnalyticsMetricSeries } from "@/generated/api";

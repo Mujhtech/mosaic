@@ -53,7 +53,16 @@ import {
   WorkspacePage,
 } from "@/features/orgs/components/workspace-page";
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
-import type { BillingSubscriptionSnapshot } from "@/generated/api";
+import type {
+  BillingCustomerSummary,
+  BillingEntitlementSnapshot,
+  BillingOneTimePurchase,
+  BillingProjectionStatus,
+  BillingPurchaseLineage,
+  BillingSubscriptionSnapshot,
+  OperatorBillingCustomerAlias,
+  OperatorBillingIdentityConflict,
+} from "@/generated/api";
 import { useOrganizationAccess } from "@/hooks/use-organization-access";
 import {
   billingCustomersHref,
@@ -188,294 +197,38 @@ export function CustomerDetailPage({
       </p>
 
       <HostedResourceBoundary state={state}>
-        <WorkflowPanel title="Customer">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusPill
-              label={customerStatusLabel(customer?.status)}
-              tone={customerStatusTone(customer?.status)}
-            />
-            <StatusPill
-              label={customerIdentityLabel(customer ?? {})}
-              tone="neutral"
-            />
-            {customer?.hasOpenIdentityConflict ? (
-              <StatusPill label="Open identity conflict" tone="attention" />
-            ) : null}
-            {customer?.diagnosticsStatus &&
-            customer.diagnosticsStatus !== "none" ? (
-              <StatusPill
-                label={customerDiagnosticsLabel(customer.diagnosticsStatus)}
-                tone="attention"
-              />
-            ) : null}
-          </div>
+        <CustomerIdentityPanel
+          currentSnapshot={currentSnapshot}
+          customer={customer}
+          environmentName={environmentName}
+          projectionStatus={projectionStatus}
+        />
 
-          <p className="mt-3 text-sm leading-6">
-            {customerIdentityExplanation(customer ?? {})}
-          </p>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <ScopeBadge>
-              <span className="mr-1 text-muted-foreground/80">
-                Identity scope:
-              </span>
-              Project-wide
-            </ScopeBadge>
-            <ScopeBadge>
-              <span className="mr-1 text-muted-foreground/80">
-                Access scope:
-              </span>
-              {environmentName}
-            </ScopeBadge>
-          </div>
-
-          {/* As of and last projected are two clocks, exactly as occurred-at and
-              recorded-at are on the ledger. Merging them would hide a projection
-              that ran recently but reasoned about a stale instant. */}
-          <dl className="mt-3">
-            <DefinitionRow
-              label="Current snapshot version"
-              value={
-                customer?.snapshotVersion === undefined
-                  ? "Never projected in this Environment"
-                  : String(customer.snapshotVersion)
-              }
-            />
-            <DefinitionRow
-              label="As of (the instant the projection reasoned about)"
-              value={formatEntitlementInstant(currentSnapshot?.asOf)}
-            />
-            <DefinitionRow
-              label="Last projected at (when the run committed)"
-              value={formatEntitlementInstant(
-                projectionStatus?.lastProjectedAt ?? customer?.lastProjectedAt
-              )}
-            />
-            <DefinitionRow
-              label="Projection rule version"
-              value={String(currentSnapshot?.projectionRuleVersion ?? "—")}
-            />
-          </dl>
-          <p className="mt-2 text-muted-foreground text-xs leading-5">
-            {AUTHORITATIVE_TIMESTAMP_NOTE}
-          </p>
-        </WorkflowPanel>
-
-        <WorkflowPanel title="Projection status">
-          <StatusPill
-            label={projectionStatusLabel(projectionStatus?.state)}
-            tone={projectionStatusTone(projectionStatus?.state)}
-          />
-          <p className="mt-2 text-sm leading-6">
-            {projectionStatusExplanation(projectionStatus?.state)}
-          </p>
-          {projectionStatus?.pendingFactCount ? (
-            <p className="mt-1 text-muted-foreground text-sm leading-6">
-              {projectionStatus.pendingFactCount} fact(s) recorded but not yet
-              projected. Until they are, entries derived from them read
-              undetermined rather than inactive.
-            </p>
-          ) : null}
-          {projectionRefetchInterval(
-            projectionStatus?.state,
-            recomputeQueued
-          ) ? (
-            <p
-              className="mt-1 text-muted-foreground text-sm leading-6"
-              role="status"
-            >
-              Watching for the projection to commit. This page re-reads every
-              few seconds and stops on its own once the projection reports
-              current.
-            </p>
-          ) : null}
-
-          {access.canManage ? (
-            <div className="mt-4">
-              {/* Deliberately not called "restore". No operator action can make
-                  a store replay a person's purchases; this recomputes access
-                  from facts Mosaic already holds. */}
-              <Button
-                disabled={sync.isPending}
-                onClick={handleClick}
-                type="button"
-              >
-                {sync.isPending ? "Queueing…" : "Recompute projection"}
-              </Button>
-              <p className="mt-2 text-muted-foreground text-xs leading-5">
-                Queues a recomputation of this customer&rsquo;s committed access
-                from the facts Mosaic already holds. It is not a device restore
-                and cannot pull purchases from a store — for that, see{" "}
-                <a
-                  className="font-semibold text-primary"
-                  href={billingRestoresHref(scope) ?? "#"}
-                >
-                  restores
-                </a>
-                . Requests coalesce, so clicking twice produces one projection.
-              </p>
-              {sync.isSuccess ? (
-                <p className="mt-2 text-sm leading-6" role="status">
-                  Queued. The snapshot version moves once the projection
-                  commits; a projection that changes nothing does not advance
-                  it.
-                </p>
-              ) : null}
-              {sync.error ? (
-                <p className="mt-2 text-destructive text-sm" role="alert">
-                  {sync.error.message}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </WorkflowPanel>
+        <ProjectionStatusPanel
+          canManage={access.canManage}
+          onRecompute={handleClick}
+          projectionStatus={projectionStatus}
+          queueError={sync.error}
+          recomputeQueued={recomputeQueued}
+          restoresHref={billingRestoresHref(scope) ?? "#"}
+          syncPending={sync.isPending}
+        />
 
         {(detail.data?.identityConflicts ?? []).length > 0 ? (
-          <WorkflowPanel
-            description="While a conflict is open the disputed subject is frozen and neither candidate is granted anything, so everything else on this page is the last committed state rather than the current one."
-            title="Identity conflicts"
-          >
-            <ul className="space-y-2">
-              {(detail.data?.identityConflicts ?? []).map((conflict) => (
-                <li className="rounded border p-3" key={conflict.conflictId}>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <a
-                      className="break-all font-mono font-semibold text-primary text-sm"
-                      href={
-                        billingIdentityConflictHref(
-                          scope,
-                          conflict.conflictId ?? ""
-                        ) ?? "#"
-                      }
-                    >
-                      {conflict.conflictId}
-                    </a>
-                    <StatusPill
-                      label={conflict.status === "open" ? "Open" : "Resolved"}
-                      tone={
-                        conflict.status === "open" ? "attention" : "neutral"
-                      }
-                    />
-                  </div>
-                  <p className="mt-1 text-muted-foreground text-xs">
-                    Scope {conflict.scope ?? "—"} · opened{" "}
-                    {formatEntitlementInstant(conflict.openedAt)}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </WorkflowPanel>
+          <IdentityConflictsPanel
+            conflicts={detail.data?.identityConflicts ?? []}
+            scope={scope}
+          />
         ) : null}
 
         <EntitlementExplanationPanel scope={scope} snapshot={currentSnapshot} />
 
-        <WorkflowPanel
-          description="Types and protected representations only. There is no alias value and no alias digest on this surface: a digest is still a stable per-person identifier, so rendering one would recreate the tracking key digest-only storage exists to avoid."
-          title="Aliases"
-        >
-          {(detail.data?.aliases ?? []).length === 0 ? (
-            <p className="text-sm leading-6">
-              No alias is recorded. For a purchase-anchored customer that is
-              expected: the purchase is anchored to the store&rsquo;s own chain,
-              not to a person.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {(detail.data?.aliases ?? []).map((alias) => (
-                <li className="rounded border p-3" key={alias.aliasId}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-sm">
-                      {aliasTypeLabel(alias.aliasType)}
-                    </span>
-                    <StatusPill
-                      label={verificationStatusLabel(alias.verificationStatus)}
-                      tone={
-                        alias.verificationStatus === "verified"
-                          ? "positive"
-                          : "neutral"
-                      }
-                    />
-                    <StatusPill
-                      label={alias.active ? "Active" : "Ended"}
-                      tone={alias.active ? "positive" : "neutral"}
-                    />
-                  </div>
-                  <p className="mt-1 text-muted-foreground text-xs">
-                    {sourceAuthorityLabel(alias.sourceAuthority)} ·{" "}
-                    {formatEntitlementInstant(alias.effectiveStart)}
-                    {alias.effectiveEnd
-                      ? ` → ${formatEntitlementInstant(alias.effectiveEnd)}`
-                      : " → active"}
-                  </p>
-                  {aliasTypeNote(alias.aliasType) ? (
-                    <p className="mt-1 text-muted-foreground text-xs leading-5">
-                      {aliasTypeNote(alias.aliasType)}
-                    </p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </WorkflowPanel>
+        <CustomerAliasesPanel aliases={detail.data?.aliases ?? []} />
 
-        <WorkflowPanel
-          description="The store-account-derived anchors a purchase belongs to. They survive reinstall, clear-data, and device changes, which is what lets a reinstalling customer resolve back to the same purchases."
-          title="Purchase lineages"
-        >
-          {(detail.data?.purchaseLineages ?? []).length === 0 ? (
-            <p className="text-sm leading-6">
-              No purchase lineage is recorded for this customer in this Mosaic
-              Environment.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {(detail.data?.purchaseLineages ?? []).map((lineage) => (
-                <li
-                  className="rounded border p-3"
-                  key={lineage.purchaseLineageId}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="break-all font-mono text-xs">
-                      {lineage.purchaseLineageId}
-                    </span>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <StatusPill
-                        label={providerLabel(lineage.provider)}
-                        tone="neutral"
-                      />
-                      {lineage.projectionFrozen ? (
-                        <StatusPill
-                          label="Projection frozen"
-                          tone="attention"
-                        />
-                      ) : null}
-                      {lineage.diagnosticStatus &&
-                      lineage.diagnosticStatus !== "none" ? (
-                        <StatusPill
-                          label={lineageDiagnosticLabel(
-                            lineage.diagnosticStatus
-                          )}
-                          tone="attention"
-                        />
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <EnvironmentBadges
-                      mosaicEnvironmentName={environmentName}
-                      storeEnvironment={lineage.storeEnvironment}
-                    />
-                  </div>
-                  {lineage.projectionFrozen ? (
-                    <p className="mt-2 text-muted-foreground text-xs leading-5">
-                      {PROJECTION_FROZEN_NOTE}
-                    </p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </WorkflowPanel>
+        <PurchaseLineagesPanel
+          environmentName={environmentName}
+          lineages={detail.data?.purchaseLineages ?? []}
+        />
 
         <CustomerSubscriptionsPanel
           customerId={customerId}
@@ -487,52 +240,405 @@ export function CustomerDetailPage({
           totalCount={embeddedSubscriptionTotal(detail.data)}
         />
 
-        <WorkflowPanel
-          description="Non-consumable purchases. A permanent source has no finite end Mosaic can state, which is not the same as having expired."
-          title="One-time purchases"
-        >
-          {(detail.data?.oneTimePurchases ?? []).length === 0 ? (
-            <p className="text-sm leading-6">
-              No one-time purchase is recorded for this customer.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {(detail.data?.oneTimePurchases ?? []).map((purchase) => (
-                <li
-                  className="rounded border p-3"
-                  key={purchase.oneTimePurchaseInstanceId}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="break-all font-mono text-xs">
-                      {purchase.oneTimePurchaseInstanceId}
-                    </span>
-                    <StatusPill
-                      label={oneTimeValidityLabel(purchase.validityState)}
-                      tone={oneTimeValidityTone(purchase.validityState)}
-                    />
-                  </div>
-                  <p className="mt-1 text-muted-foreground text-xs">
-                    {providerLabel(purchase.provider)} · acquired{" "}
-                    {formatEntitlementInstant(purchase.acquiredAt)}
-                  </p>
-                  {purchase.mosaicProductId ? (
-                    <a
-                      className="mt-1 inline-flex font-semibold text-primary text-xs"
-                      href={
-                        catalogProductHref(scope, purchase.mosaicProductId) ??
-                        "#"
-                      }
-                    >
-                      Product
-                    </a>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </WorkflowPanel>
+        <OneTimePurchasesPanel
+          purchases={detail.data?.oneTimePurchases ?? []}
+          scope={scope}
+        />
       </HostedResourceBoundary>
     </WorkspacePage>
+  );
+}
+
+/**
+ * Identity, scopes, and the two clocks the projection is read against.
+ */
+function CustomerIdentityPanel({
+  currentSnapshot,
+  customer,
+  environmentName,
+  projectionStatus,
+}: {
+  currentSnapshot: BillingEntitlementSnapshot | undefined;
+  customer: BillingCustomerSummary | undefined;
+  environmentName: string;
+  projectionStatus: BillingProjectionStatus | undefined;
+}) {
+  return (
+    <WorkflowPanel title="Customer">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusPill
+          label={customerStatusLabel(customer?.status)}
+          tone={customerStatusTone(customer?.status)}
+        />
+        <StatusPill
+          label={customerIdentityLabel(customer ?? {})}
+          tone="neutral"
+        />
+        {customer?.hasOpenIdentityConflict ? (
+          <StatusPill label="Open identity conflict" tone="attention" />
+        ) : null}
+        {customer?.diagnosticsStatus &&
+        customer.diagnosticsStatus !== "none" ? (
+          <StatusPill
+            label={customerDiagnosticsLabel(customer.diagnosticsStatus)}
+            tone="attention"
+          />
+        ) : null}
+      </div>
+
+      <p className="mt-3 text-sm leading-6">
+        {customerIdentityExplanation(customer ?? {})}
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <ScopeBadge>
+          <span className="mr-1 text-muted-foreground/80">Identity scope:</span>
+          Project-wide
+        </ScopeBadge>
+        <ScopeBadge>
+          <span className="mr-1 text-muted-foreground/80">Access scope:</span>
+          {environmentName}
+        </ScopeBadge>
+      </div>
+
+      {/* As of and last projected are two clocks, exactly as occurred-at and
+          recorded-at are on the ledger. Merging them would hide a projection
+          that ran recently but reasoned about a stale instant. */}
+      <dl className="mt-3">
+        <DefinitionRow
+          label="Current snapshot version"
+          value={
+            customer?.snapshotVersion === undefined
+              ? "Never projected in this Environment"
+              : String(customer.snapshotVersion)
+          }
+        />
+        <DefinitionRow
+          label="As of (the instant the projection reasoned about)"
+          value={formatEntitlementInstant(currentSnapshot?.asOf)}
+        />
+        <DefinitionRow
+          label="Last projected at (when the run committed)"
+          value={formatEntitlementInstant(
+            projectionStatus?.lastProjectedAt ?? customer?.lastProjectedAt
+          )}
+        />
+        <DefinitionRow
+          label="Projection rule version"
+          value={String(currentSnapshot?.projectionRuleVersion ?? "—")}
+        />
+      </dl>
+      <p className="mt-2 text-muted-foreground text-xs leading-5">
+        {AUTHORITATIVE_TIMESTAMP_NOTE}
+      </p>
+    </WorkflowPanel>
+  );
+}
+
+/**
+ * What the projection is doing, and the one action that queues another run.
+ */
+function ProjectionStatusPanel({
+  canManage,
+  onRecompute,
+  projectionStatus,
+  queueError,
+  recomputeQueued,
+  restoresHref,
+  syncPending,
+}: {
+  canManage: boolean;
+  onRecompute: () => void;
+  projectionStatus: BillingProjectionStatus | undefined;
+  queueError: Error | null;
+  recomputeQueued: boolean;
+  restoresHref: string;
+  syncPending: boolean;
+}) {
+  return (
+    <WorkflowPanel title="Projection status">
+      <StatusPill
+        label={projectionStatusLabel(projectionStatus?.state)}
+        tone={projectionStatusTone(projectionStatus?.state)}
+      />
+      <p className="mt-2 text-sm leading-6">
+        {projectionStatusExplanation(projectionStatus?.state)}
+      </p>
+      {projectionStatus?.pendingFactCount ? (
+        <p className="mt-1 text-muted-foreground text-sm leading-6">
+          {projectionStatus.pendingFactCount} fact(s) recorded but not yet
+          projected. Until they are, entries derived from them read undetermined
+          rather than inactive.
+        </p>
+      ) : null}
+      {projectionRefetchInterval(projectionStatus?.state, recomputeQueued) ? (
+        <p
+          className="mt-1 text-muted-foreground text-sm leading-6"
+          role="status"
+        >
+          Watching for the projection to commit. This page re-reads every few
+          seconds and stops on its own once the projection reports current.
+        </p>
+      ) : null}
+
+      {canManage ? (
+        <div className="mt-4">
+          {/* Deliberately not called "restore". No operator action can make
+              a store replay a person's purchases; this recomputes access
+              from facts Mosaic already holds. */}
+          <Button disabled={syncPending} onClick={onRecompute} type="button">
+            {syncPending ? "Queueing…" : "Recompute projection"}
+          </Button>
+          <p className="mt-2 text-muted-foreground text-xs leading-5">
+            Queues a recomputation of this customer&rsquo;s committed access
+            from the facts Mosaic already holds. It is not a device restore and
+            cannot pull purchases from a store — for that, see{" "}
+            <a className="font-semibold text-primary" href={restoresHref}>
+              restores
+            </a>
+            . Requests coalesce, so clicking twice produces one projection.
+          </p>
+          {recomputeQueued ? (
+            <p className="mt-2 text-sm leading-6" role="status">
+              Queued. The snapshot version moves once the projection commits; a
+              projection that changes nothing does not advance it.
+            </p>
+          ) : null}
+          {queueError ? (
+            <p className="mt-2 text-destructive text-sm" role="alert">
+              {queueError.message}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </WorkflowPanel>
+  );
+}
+
+/**
+ * Open and resolved disputes over who a subject belongs to.
+ */
+function IdentityConflictsPanel({
+  conflicts,
+  scope,
+}: {
+  conflicts: readonly OperatorBillingIdentityConflict[];
+  scope: WorkspaceScope;
+}) {
+  return (
+    <WorkflowPanel
+      description="While a conflict is open the disputed subject is frozen and neither candidate is granted anything, so everything else on this page is the last committed state rather than the current one."
+      title="Identity conflicts"
+    >
+      <ul className="space-y-2">
+        {conflicts.map((conflict) => (
+          <li className="rounded border p-3" key={conflict.conflictId}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <a
+                className="break-all font-mono font-semibold text-primary text-sm"
+                href={
+                  billingIdentityConflictHref(
+                    scope,
+                    conflict.conflictId ?? ""
+                  ) ?? "#"
+                }
+              >
+                {conflict.conflictId}
+              </a>
+              <StatusPill
+                label={conflict.status === "open" ? "Open" : "Resolved"}
+                tone={conflict.status === "open" ? "attention" : "neutral"}
+              />
+            </div>
+            <p className="mt-1 text-muted-foreground text-xs">
+              Scope {conflict.scope ?? "—"} · opened{" "}
+              {formatEntitlementInstant(conflict.openedAt)}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </WorkflowPanel>
+  );
+}
+
+/**
+ * Alias types and their protected representations, never alias values.
+ */
+function CustomerAliasesPanel({
+  aliases,
+}: {
+  aliases: readonly OperatorBillingCustomerAlias[];
+}) {
+  return (
+    <WorkflowPanel
+      description="Types and protected representations only. There is no alias value and no alias digest on this surface: a digest is still a stable per-person identifier, so rendering one would recreate the tracking key digest-only storage exists to avoid."
+      title="Aliases"
+    >
+      {aliases.length === 0 ? (
+        <p className="text-sm leading-6">
+          No alias is recorded. For a purchase-anchored customer that is
+          expected: the purchase is anchored to the store&rsquo;s own chain, not
+          to a person.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {aliases.map((alias) => (
+            <li className="rounded border p-3" key={alias.aliasId}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-sm">
+                  {aliasTypeLabel(alias.aliasType)}
+                </span>
+                <StatusPill
+                  label={verificationStatusLabel(alias.verificationStatus)}
+                  tone={
+                    alias.verificationStatus === "verified"
+                      ? "positive"
+                      : "neutral"
+                  }
+                />
+                <StatusPill
+                  label={alias.active ? "Active" : "Ended"}
+                  tone={alias.active ? "positive" : "neutral"}
+                />
+              </div>
+              <p className="mt-1 text-muted-foreground text-xs">
+                {sourceAuthorityLabel(alias.sourceAuthority)} ·{" "}
+                {formatEntitlementInstant(alias.effectiveStart)}
+                {alias.effectiveEnd
+                  ? ` → ${formatEntitlementInstant(alias.effectiveEnd)}`
+                  : " → active"}
+              </p>
+              {aliasTypeNote(alias.aliasType) ? (
+                <p className="mt-1 text-muted-foreground text-xs leading-5">
+                  {aliasTypeNote(alias.aliasType)}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </WorkflowPanel>
+  );
+}
+
+/**
+ * The store-account anchors this customer's purchases belong to.
+ */
+function PurchaseLineagesPanel({
+  environmentName,
+  lineages,
+}: {
+  environmentName: string;
+  lineages: readonly BillingPurchaseLineage[];
+}) {
+  return (
+    <WorkflowPanel
+      description="The store-account-derived anchors a purchase belongs to. They survive reinstall, clear-data, and device changes, which is what lets a reinstalling customer resolve back to the same purchases."
+      title="Purchase lineages"
+    >
+      {lineages.length === 0 ? (
+        <p className="text-sm leading-6">
+          No purchase lineage is recorded for this customer in this Mosaic
+          Environment.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {lineages.map((lineage) => (
+            <li className="rounded border p-3" key={lineage.purchaseLineageId}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="break-all font-mono text-xs">
+                  {lineage.purchaseLineageId}
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusPill
+                    label={providerLabel(lineage.provider)}
+                    tone="neutral"
+                  />
+                  {lineage.projectionFrozen ? (
+                    <StatusPill label="Projection frozen" tone="attention" />
+                  ) : null}
+                  {lineage.diagnosticStatus &&
+                  lineage.diagnosticStatus !== "none" ? (
+                    <StatusPill
+                      label={lineageDiagnosticLabel(lineage.diagnosticStatus)}
+                      tone="attention"
+                    />
+                  ) : null}
+                </div>
+              </div>
+              <div className="mt-2">
+                <EnvironmentBadges
+                  mosaicEnvironmentName={environmentName}
+                  storeEnvironment={lineage.storeEnvironment}
+                />
+              </div>
+              {lineage.projectionFrozen ? (
+                <p className="mt-2 text-muted-foreground text-xs leading-5">
+                  {PROJECTION_FROZEN_NOTE}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </WorkflowPanel>
+  );
+}
+
+/**
+ * Non-consumable purchases, whose permanence is not an expiry Mosaic can state.
+ */
+function OneTimePurchasesPanel({
+  purchases,
+  scope,
+}: {
+  purchases: readonly BillingOneTimePurchase[];
+  scope: WorkspaceScope;
+}) {
+  return (
+    <WorkflowPanel
+      description="Non-consumable purchases. A permanent source has no finite end Mosaic can state, which is not the same as having expired."
+      title="One-time purchases"
+    >
+      {purchases.length === 0 ? (
+        <p className="text-sm leading-6">
+          No one-time purchase is recorded for this customer.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {purchases.map((purchase) => (
+            <li
+              className="rounded border p-3"
+              key={purchase.oneTimePurchaseInstanceId}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="break-all font-mono text-xs">
+                  {purchase.oneTimePurchaseInstanceId}
+                </span>
+                <StatusPill
+                  label={oneTimeValidityLabel(purchase.validityState)}
+                  tone={oneTimeValidityTone(purchase.validityState)}
+                />
+              </div>
+              <p className="mt-1 text-muted-foreground text-xs">
+                {providerLabel(purchase.provider)} · acquired{" "}
+                {formatEntitlementInstant(purchase.acquiredAt)}
+              </p>
+              {purchase.mosaicProductId ? (
+                <a
+                  className="mt-1 inline-flex font-semibold text-primary text-xs"
+                  href={
+                    catalogProductHref(scope, purchase.mosaicProductId) ?? "#"
+                  }
+                >
+                  Product
+                </a>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </WorkflowPanel>
   );
 }
 

@@ -20,7 +20,10 @@ import {
 import {
   catalogKey,
   nextProviderImportAttempt,
+  type ProviderCatalogEntitlementView,
+  type ProviderCatalogOfferingView,
   type ProviderCatalogPreviewView,
+  type ProviderCatalogProductView,
   type ProviderImportAttempt,
   type ProviderImportResultView,
   type ProviderProductImportSelection,
@@ -43,6 +46,11 @@ interface ProductDraft {
   key: string;
   providerOfferingIdentifier: string;
   providerPackageIdentifier: string;
+}
+
+interface SelectOption {
+  label: string;
+  value: string;
 }
 
 const AVAILABILITY_OPTIONS = [
@@ -102,23 +110,6 @@ export function ProviderCatalogImport({
     label: `${application.name} · ${application.platform.toUpperCase()}`,
     value: application.id,
   }));
-  const productTargetOptions = [
-    { label: "Create new Mosaic Product", value: "" },
-    ...products
-      .filter((candidate) => candidate.status !== "archived")
-      .map((candidate) => ({
-        label: `Map to ${candidate.internalName}`,
-        value: candidate.id,
-      })),
-  ];
-  const entitlementTargetOptions = [
-    { label: "Do not grant", value: "" },
-    { label: "Create Mosaic Access definition", value: "new" },
-    ...entitlements.map((existing) => ({
-      label: `Grant ${existing.name}`,
-      value: existing.id,
-    })),
-  ];
   const visibleProducts = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return preview.products.filter((product) => {
@@ -248,359 +239,59 @@ export function ProviderCatalogImport({
     submit();
   }, [submit]);
   const failedProductIds =
-    result?.items
-      .filter((item) => item.status !== "imported")
-      .flatMap((item) => {
-        const product = preview.products.find(
-          (candidate) => candidate.id === item.providerProductIdentifier
-        );
-        return product ? [product.id] : [];
-      }) ?? [];
+    result?.items.flatMap((item) => {
+      if (item.status === "imported") {
+        return [];
+      }
+      const product = preview.products.find(
+        (candidate) => candidate.id === item.providerProductIdentifier
+      );
+      return product ? [product.id] : [];
+    }) ?? [];
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <label
-          className="font-medium text-sm"
-          htmlFor={`${fieldIds}-search-provider-catalog`}
-        >
-          Search provider catalog
-          <Input
-            className="mt-2"
-            id={`${fieldIds}-search-provider-catalog`}
-            onChange={(event) => setSearch(event.currentTarget.value)}
-            placeholder="Product name or store ID"
-            value={search}
-          />
-        </label>
-        <div className="font-medium text-sm">
-          <label htmlFor="catalog-availability">Availability</label>
-          <Select
-            items={AVAILABILITY_OPTIONS}
-            onValueChange={(value) =>
-              setAvailability(value as "all" | "importable")
-            }
-            value={availability}
-          >
-            <SelectTrigger className="mt-2" id="catalog-availability">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {AVAILABILITY_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-end text-muted-foreground text-xs">
-          Observed {preview.observedAt}
-        </div>
-      </div>
+      <CatalogSearchFilters
+        availability={availability}
+        fieldIds={fieldIds}
+        observedAt={preview.observedAt}
+        onAvailabilityChange={setAvailability}
+        onSearchChange={setSearch}
+        search={search}
+      />
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="font-medium text-sm">
-          <label htmlFor="catalog-environment">Mosaic Environment</label>
-          <Select
-            items={environmentOptions}
-            onValueChange={(value) => setSelectedEnvironmentId(value)}
-            value={selectedEnvironmentId}
-          >
-            <SelectTrigger className="mt-2" id="catalog-environment">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {environmentOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="font-medium text-sm">
-          <label htmlFor="catalog-application">Mosaic Application</label>
-          <Select
-            items={applicationOptions}
-            onValueChange={(value) => setSelectedApplicationId(value)}
-            value={selectedApplicationId}
-          >
-            <SelectTrigger className="mt-2" id="catalog-application">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {applicationOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <CatalogImportTargets
+        applicationOptions={applicationOptions}
+        environmentOptions={environmentOptions}
+        onApplicationChange={setSelectedApplicationId}
+        onEnvironmentChange={setSelectedEnvironmentId}
+        selectedApplicationId={selectedApplicationId}
+        selectedEnvironmentId={selectedEnvironmentId}
+      />
 
-      {visibleProducts.length === 0 ? (
-        <div className="rounded border border-dashed p-4">
-          <p className="font-semibold text-sm">No provider Products match</p>
-          <p className="mt-1 text-muted-foreground text-sm">
-            Adjust search or include unavailable provider Products for
-            diagnosis.
-          </p>
-        </div>
-      ) : (
-        <ul className="space-y-3">
-          {visibleProducts.map((product) => {
-            const rowIds = `${fieldIds}-${product.id}`;
-            const draft = productDraft(product.id);
-            const selected = selectedIds.has(product.id);
-            const packageMappingOptions = [
-              { label: "Use direct Product mapping", value: "" },
-              ...preview.offerings.flatMap((offering) =>
-                offering.packages
-                  .filter((providerPackage) =>
-                    providerPackage.productIds.includes(product.id)
-                  )
-                  .map((providerPackage) => ({
-                    label: `${offering.displayName || offering.lookupKey} · ${providerPackage.displayName || providerPackage.lookupKey}`,
-                    value: `${offering.id}\u0000${providerPackage.id}`,
-                  }))
-              ),
-            ];
-            return (
-              <li className="rounded border p-4" key={product.id}>
-                <div className="flex items-start gap-3">
-                  <input
-                    aria-label={`Import ${product.displayName || product.storeIdentifier}`}
-                    checked={selected}
-                    className="mt-1 size-4 accent-primary"
-                    disabled={!product.importable}
-                    onChange={(event) =>
-                      toggleProduct(product.id, event.currentTarget.checked)
-                    }
-                    type="checkbox"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="font-medium">
-                          {product.displayName || product.storeIdentifier}
-                        </p>
-                        <p className="mt-0.5 break-all font-mono text-muted-foreground text-xs">
-                          {product.storeIdentifier}
-                        </p>
-                      </div>
-                      <span className="rounded-full border bg-muted px-2.5 py-1 text-xs">
-                        {product.type} · {product.state}
-                      </span>
-                    </div>
-
-                    {selected ? (
-                      <div className="mt-4 space-y-3">
-                        <div className="font-medium text-xs">
-                          <label
-                            htmlFor={`catalog-product-target-${product.id}`}
-                          >
-                            Mosaic Product target
-                          </label>
-                          <Select
-                            items={productTargetOptions}
-                            onValueChange={(value) =>
-                              updateDraft(product.id, {
-                                existingProductId: value,
-                              })
-                            }
-                            value={draft.existingProductId}
-                          >
-                            <SelectTrigger
-                              className="mt-1"
-                              id={`catalog-product-target-${product.id}`}
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {productTargetOptions.map((option) => (
-                                <SelectItem
-                                  key={option.value}
-                                  value={option.value}
-                                >
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {draft.existingProductId ? null : (
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <label
-                              className="font-medium text-xs"
-                              htmlFor={`${rowIds}-internal-name`}
-                            >
-                              Internal name
-                              <Input
-                                className="mt-1"
-                                id={`${rowIds}-internal-name`}
-                                onChange={(event) =>
-                                  updateDraft(product.id, {
-                                    internalName: event.currentTarget.value,
-                                  })
-                                }
-                                value={draft.internalName}
-                              />
-                            </label>
-                            <label
-                              className="font-medium text-xs"
-                              htmlFor={`${rowIds}-product-key`}
-                            >
-                              Product key
-                              <Input
-                                className="mt-1"
-                                id={`${rowIds}-product-key`}
-                                onChange={(event) =>
-                                  updateDraft(product.id, {
-                                    key: catalogKey(event.currentTarget.value),
-                                  })
-                                }
-                                value={draft.key}
-                              />
-                            </label>
-                          </div>
-                        )}
-
-                        {preview.entitlements.length > 0 ? (
-                          <section
-                            aria-label={`Access granted by ${product.displayName || product.storeIdentifier}`}
-                            className="rounded border p-3"
-                          >
-                            <p className="font-semibold text-xs">
-                              Access granted by this Product
-                            </p>
-                            <p className="mt-1 text-muted-foreground text-xs">
-                              Grants are configured independently for each
-                              Product. Nothing is applied to the rest of the
-                              import batch.
-                            </p>
-                            <div className="mt-3 grid gap-2">
-                              {preview.entitlements.map((entitlement) => (
-                                <div
-                                  className="grid gap-2 sm:grid-cols-2"
-                                  key={entitlement.id}
-                                >
-                                  <span className="text-xs">
-                                    <span className="block font-medium">
-                                      {entitlement.displayName ||
-                                        entitlement.lookupKey}
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                      {entitlement.lookupKey}
-                                    </span>
-                                  </span>
-                                  <Select
-                                    items={entitlementTargetOptions}
-                                    onValueChange={(value) =>
-                                      setEntitlementTargets((current) => ({
-                                        ...current,
-                                        [product.id]: {
-                                          ...current[product.id],
-                                          [entitlement.id]: value,
-                                        },
-                                      }))
-                                    }
-                                    value={
-                                      entitlementTargets[product.id]?.[
-                                        entitlement.id
-                                      ] ?? ""
-                                    }
-                                  >
-                                    <SelectTrigger
-                                      aria-label={`Mosaic Access for ${entitlement.displayName || entitlement.lookupKey} on ${product.displayName || product.storeIdentifier}`}
-                                      className="w-auto min-w-48"
-                                    >
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {entitlementTargetOptions.map(
-                                        (option) => (
-                                          <SelectItem
-                                            key={option.value}
-                                            value={option.value}
-                                          >
-                                            {option.label}
-                                          </SelectItem>
-                                        )
-                                      )}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              ))}
-                            </div>
-                          </section>
-                        ) : null}
-
-                        {packageMappingOptions.length > 1 ? (
-                          <Collapsible>
-                            <CollapsibleTrigger className="flex items-center gap-1 rounded font-medium text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                              Advanced {providerOfferingLabel(provider)}
-                              <CaretDownIcon aria-hidden />
-                            </CollapsibleTrigger>
-                            <CollapsibleContent className="mt-2">
-                              <div className="font-medium text-xs">
-                                <label
-                                  htmlFor={`catalog-package-${product.id}`}
-                                >
-                                  Exact {providerOfferingLabel(provider)}{" "}
-                                  mapping
-                                </label>
-                                <Select
-                                  items={packageMappingOptions}
-                                  onValueChange={(value) => {
-                                    const [offeringId = "", packageId = ""] =
-                                      value.split("\u0000");
-                                    updateDraft(product.id, {
-                                      providerOfferingIdentifier: offeringId,
-                                      providerPackageIdentifier: packageId,
-                                    });
-                                  }}
-                                  value={
-                                    draft.providerOfferingIdentifier
-                                      ? `${draft.providerOfferingIdentifier}\u0000${draft.providerPackageIdentifier}`
-                                      : ""
-                                  }
-                                >
-                                  <SelectTrigger
-                                    className="mt-1"
-                                    id={`catalog-package-${product.id}`}
-                                  >
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {packageMappingOptions.map((option) => (
-                                      <SelectItem
-                                        key={option.value}
-                                        value={option.value}
-                                      >
-                                        {option.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <p className="mt-2 text-muted-foreground text-xs">
-                                Hidden by default because provider grouping is
-                                an adapter detail, not Mosaic Catalog hierarchy.
-                              </p>
-                            </CollapsibleContent>
-                          </Collapsible>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <ProviderCatalogProductList
+        catalogProducts={visibleProducts}
+        entitlementTargets={entitlementTargets}
+        fieldIds={fieldIds}
+        mosaicEntitlements={entitlements}
+        mosaicProducts={products}
+        offerings={preview.offerings}
+        onEntitlementChange={(productId, entitlementId, value) =>
+          setEntitlementTargets((current) => ({
+            ...current,
+            [productId]: {
+              ...current[productId],
+              [entitlementId]: value,
+            },
+          }))
+        }
+        onToggle={toggleProduct}
+        onUpdateDraft={updateDraft}
+        previewEntitlements={preview.entitlements}
+        productDraft={productDraft}
+        provider={provider}
+        selectedIds={selectedIds}
+      />
 
       {result ? (
         <ImportResult
@@ -614,35 +305,580 @@ export function ProviderCatalogImport({
           {error}
         </p>
       ) : null}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          disabled={
-            isImporting ||
-            selectedIds.size === 0 ||
-            !selectedApplicationId ||
-            !selectedEnvironmentId
+      <CatalogImportActions
+        failedCount={failedProductIds.length}
+        importDisabled={
+          isImporting ||
+          selectedIds.size === 0 ||
+          !selectedApplicationId ||
+          !selectedEnvironmentId
+        }
+        isImporting={isImporting}
+        onImport={handleClick}
+        onRetryFailed={() => {
+          submit(failedProductIds);
+        }}
+        selectedCount={selectedIds.size}
+      />
+    </div>
+  );
+}
+
+/**
+ * Every provider Product the filters admit, each with the Mosaic target it maps
+ * onto once selected.
+ */
+function ProviderCatalogProductList({
+  catalogProducts,
+  entitlementTargets,
+  fieldIds,
+  mosaicEntitlements,
+  mosaicProducts,
+  offerings,
+  onEntitlementChange,
+  onToggle,
+  onUpdateDraft,
+  previewEntitlements,
+  productDraft,
+  provider,
+  selectedIds,
+}: {
+  catalogProducts: readonly ProviderCatalogProductView[];
+  entitlementTargets: Record<string, Record<string, string>>;
+  fieldIds: string;
+  mosaicEntitlements: readonly Entitlement[];
+  mosaicProducts: readonly Product[];
+  offerings: readonly ProviderCatalogOfferingView[];
+  onEntitlementChange: (
+    productId: string,
+    entitlementId: string,
+    value: string
+  ) => void;
+  onToggle: (productId: string, checked: boolean) => void;
+  onUpdateDraft: (productId: string, change: Partial<ProductDraft>) => void;
+  previewEntitlements: readonly ProviderCatalogEntitlementView[];
+  productDraft: (productId: string) => ProductDraft;
+  provider?: ProviderConnection["provider"];
+  selectedIds: ReadonlySet<string>;
+}) {
+  const productTargetOptions = [
+    { label: "Create new Mosaic Product", value: "" },
+    ...mosaicProducts.flatMap((candidate) =>
+      candidate.status === "archived"
+        ? []
+        : [
+            {
+              label: `Map to ${candidate.internalName}`,
+              value: candidate.id,
+            },
+          ]
+    ),
+  ];
+  const entitlementTargetOptions = [
+    { label: "Do not grant", value: "" },
+    { label: "Create Mosaic Access definition", value: "new" },
+    ...mosaicEntitlements.map((existing) => ({
+      label: `Grant ${existing.name}`,
+      value: existing.id,
+    })),
+  ];
+
+  if (catalogProducts.length === 0) {
+    return (
+      <div className="rounded border border-dashed p-4">
+        <p className="font-semibold text-sm">No provider Products match</p>
+        <p className="mt-1 text-muted-foreground text-sm">
+          Adjust search or include unavailable provider Products for diagnosis.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ul className="space-y-3">
+      {catalogProducts.map((product) => (
+        <ProviderProductRow
+          draft={productDraft(product.id)}
+          entitlementTargetOptions={entitlementTargetOptions}
+          entitlementTargets={entitlementTargets[product.id]}
+          key={product.id}
+          offerings={offerings}
+          onEntitlementChange={(entitlementId, value) =>
+            onEntitlementChange(product.id, entitlementId, value)
           }
-          onClick={handleClick}
+          onToggle={(checked) => onToggle(product.id, checked)}
+          onUpdateDraft={(change) => onUpdateDraft(product.id, change)}
+          previewEntitlements={previewEntitlements}
+          product={product}
+          productTargetOptions={productTargetOptions}
+          provider={provider}
+          rowIds={`${fieldIds}-${product.id}`}
+          selected={selectedIds.has(product.id)}
+        />
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Import and, when part of a batch failed, retry only the failed items — the
+ * idempotency key makes the retry safe to repeat.
+ */
+function CatalogImportActions({
+  failedCount,
+  importDisabled,
+  isImporting,
+  onImport,
+  onRetryFailed,
+  selectedCount,
+}: {
+  failedCount: number;
+  importDisabled: boolean;
+  isImporting: boolean;
+  onImport: () => void;
+  onRetryFailed: () => void;
+  selectedCount: number;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button disabled={importDisabled} onClick={onImport} type="button">
+        {isImporting
+          ? "Importing safely…"
+          : `Import ${selectedCount} Product(s)`}
+      </Button>
+      {failedCount > 0 ? (
+        <Button
+          disabled={isImporting}
+          onClick={onRetryFailed}
           type="button"
+          variant="outline"
         >
-          {isImporting
-            ? "Importing safely…"
-            : `Import ${selectedIds.size} Product(s)`}
+          Retry {failedCount} failed item(s)
         </Button>
-        {failedProductIds.length > 0 ? (
-          <Button
-            disabled={isImporting}
-            onClick={() => {
-              submit(failedProductIds);
-            }}
-            type="button"
-            variant="outline"
-          >
-            Retry {failedProductIds.length} failed item(s)
-          </Button>
-        ) : null}
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Narrows the provider catalog without changing what an import would do.
+ */
+function CatalogSearchFilters({
+  availability,
+  fieldIds,
+  observedAt,
+  onAvailabilityChange,
+  onSearchChange,
+  search,
+}: {
+  availability: "all" | "importable";
+  fieldIds: string;
+  observedAt: string;
+  onAvailabilityChange: (availability: "all" | "importable") => void;
+  onSearchChange: (search: string) => void;
+  search: string;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <label
+        className="font-medium text-sm"
+        htmlFor={`${fieldIds}-search-provider-catalog`}
+      >
+        Search provider catalog
+        <Input
+          className="mt-2"
+          id={`${fieldIds}-search-provider-catalog`}
+          onChange={(event) => onSearchChange(event.currentTarget.value)}
+          placeholder="Product name or store ID"
+          value={search}
+        />
+      </label>
+      <div className="font-medium text-sm">
+        <label htmlFor="catalog-availability">Availability</label>
+        <Select
+          items={AVAILABILITY_OPTIONS}
+          onValueChange={(value) =>
+            onAvailabilityChange(value as "all" | "importable")
+          }
+          value={availability}
+        >
+          <SelectTrigger className="mt-2" id="catalog-availability">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {AVAILABILITY_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex items-end text-muted-foreground text-xs">
+        Observed {observedAt}
       </div>
     </div>
+  );
+}
+
+/**
+ * The one Environment and one Application every selected Product is imported
+ * into. Mosaic never infers either from a provider identifier.
+ */
+function CatalogImportTargets({
+  applicationOptions,
+  environmentOptions,
+  onApplicationChange,
+  onEnvironmentChange,
+  selectedApplicationId,
+  selectedEnvironmentId,
+}: {
+  applicationOptions: readonly SelectOption[];
+  environmentOptions: readonly SelectOption[];
+  onApplicationChange: (applicationId: string) => void;
+  onEnvironmentChange: (environmentId: string) => void;
+  selectedApplicationId: string;
+  selectedEnvironmentId: string;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="font-medium text-sm">
+        <label htmlFor="catalog-environment">Mosaic Environment</label>
+        <Select
+          items={environmentOptions}
+          onValueChange={(value) => onEnvironmentChange(value)}
+          value={selectedEnvironmentId}
+        >
+          <SelectTrigger className="mt-2" id="catalog-environment">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {environmentOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="font-medium text-sm">
+        <label htmlFor="catalog-application">Mosaic Application</label>
+        <Select
+          items={applicationOptions}
+          onValueChange={(value) => onApplicationChange(value)}
+          value={selectedApplicationId}
+        >
+          <SelectTrigger className="mt-2" id="catalog-application">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {applicationOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One provider Product and, once selected, the Mosaic target it maps onto.
+ */
+function ProviderProductRow({
+  draft,
+  entitlementTargetOptions,
+  entitlementTargets,
+  offerings,
+  onEntitlementChange,
+  onToggle,
+  onUpdateDraft,
+  previewEntitlements,
+  product,
+  productTargetOptions,
+  provider,
+  rowIds,
+  selected,
+}: {
+  draft: ProductDraft;
+  entitlementTargetOptions: readonly SelectOption[];
+  entitlementTargets: Record<string, string> | undefined;
+  offerings: readonly ProviderCatalogOfferingView[];
+  onEntitlementChange: (entitlementId: string, value: string) => void;
+  onToggle: (checked: boolean) => void;
+  onUpdateDraft: (change: Partial<ProductDraft>) => void;
+  previewEntitlements: readonly ProviderCatalogEntitlementView[];
+  product: ProviderCatalogProductView;
+  productTargetOptions: readonly SelectOption[];
+  provider?: ProviderConnection["provider"];
+  rowIds: string;
+  selected: boolean;
+}) {
+  const packageMappingOptions = [
+    { label: "Use direct Product mapping", value: "" },
+    ...offerings.flatMap((offering) =>
+      offering.packages.flatMap((providerPackage) =>
+        providerPackage.productIds.includes(product.id)
+          ? [
+              {
+                label: `${offering.displayName || offering.lookupKey} · ${providerPackage.displayName || providerPackage.lookupKey}`,
+                value: `${offering.id}\u0000${providerPackage.id}`,
+              },
+            ]
+          : []
+      )
+    ),
+  ];
+  return (
+    <li className="rounded border p-4">
+      <div className="flex items-start gap-3">
+        <input
+          aria-label={`Import ${product.displayName || product.storeIdentifier}`}
+          checked={selected}
+          className="mt-1 size-4 accent-primary"
+          disabled={!product.importable}
+          onChange={(event) => onToggle(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="font-medium">
+                {product.displayName || product.storeIdentifier}
+              </p>
+              <p className="mt-0.5 break-all font-mono text-muted-foreground text-xs">
+                {product.storeIdentifier}
+              </p>
+            </div>
+            <span className="rounded-full border bg-muted px-2.5 py-1 text-xs">
+              {product.type} · {product.state}
+            </span>
+          </div>
+
+          {selected ? (
+            <div className="mt-4 space-y-3">
+              <div className="font-medium text-xs">
+                <label htmlFor={`catalog-product-target-${product.id}`}>
+                  Mosaic Product target
+                </label>
+                <Select
+                  items={productTargetOptions}
+                  onValueChange={(value) =>
+                    onUpdateDraft({ existingProductId: value })
+                  }
+                  value={draft.existingProductId}
+                >
+                  <SelectTrigger
+                    className="mt-1"
+                    id={`catalog-product-target-${product.id}`}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {productTargetOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {draft.existingProductId ? null : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label
+                    className="font-medium text-xs"
+                    htmlFor={`${rowIds}-internal-name`}
+                  >
+                    Internal name
+                    <Input
+                      className="mt-1"
+                      id={`${rowIds}-internal-name`}
+                      onChange={(event) =>
+                        onUpdateDraft({
+                          internalName: event.currentTarget.value,
+                        })
+                      }
+                      value={draft.internalName}
+                    />
+                  </label>
+                  <label
+                    className="font-medium text-xs"
+                    htmlFor={`${rowIds}-product-key`}
+                  >
+                    Product key
+                    <Input
+                      className="mt-1"
+                      id={`${rowIds}-product-key`}
+                      onChange={(event) =>
+                        onUpdateDraft({
+                          key: catalogKey(event.currentTarget.value),
+                        })
+                      }
+                      value={draft.key}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {previewEntitlements.length > 0 ? (
+                <ProviderProductAccessGrants
+                  entitlements={previewEntitlements}
+                  entitlementTargetOptions={entitlementTargetOptions}
+                  entitlementTargets={entitlementTargets}
+                  onEntitlementChange={onEntitlementChange}
+                  product={product}
+                />
+              ) : null}
+
+              {packageMappingOptions.length > 1 ? (
+                <ProviderPackageMappingField
+                  draft={draft}
+                  onUpdateDraft={onUpdateDraft}
+                  options={packageMappingOptions}
+                  product={product}
+                  provider={provider}
+                />
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * The Mosaic Access each provider entitlement maps onto, configured per Product
+ * rather than applied across the batch.
+ */
+function ProviderProductAccessGrants({
+  entitlementTargetOptions,
+  entitlementTargets,
+  entitlements,
+  onEntitlementChange,
+  product,
+}: {
+  entitlementTargetOptions: readonly SelectOption[];
+  entitlementTargets: Record<string, string> | undefined;
+  entitlements: readonly ProviderCatalogEntitlementView[];
+  onEntitlementChange: (entitlementId: string, value: string) => void;
+  product: ProviderCatalogProductView;
+}) {
+  return (
+    <section
+      aria-label={`Access granted by ${product.displayName || product.storeIdentifier}`}
+      className="rounded border p-3"
+    >
+      <p className="font-semibold text-xs">Access granted by this Product</p>
+      <p className="mt-1 text-muted-foreground text-xs">
+        Grants are configured independently for each Product. Nothing is applied
+        to the rest of the import batch.
+      </p>
+      <div className="mt-3 grid gap-2">
+        {entitlements.map((entitlement) => (
+          <div className="grid gap-2 sm:grid-cols-2" key={entitlement.id}>
+            <span className="text-xs">
+              <span className="block font-medium">
+                {entitlement.displayName || entitlement.lookupKey}
+              </span>
+              <span className="text-muted-foreground">
+                {entitlement.lookupKey}
+              </span>
+            </span>
+            <Select
+              items={entitlementTargetOptions}
+              onValueChange={(value) =>
+                onEntitlementChange(entitlement.id, value)
+              }
+              value={entitlementTargets?.[entitlement.id] ?? ""}
+            >
+              <SelectTrigger
+                aria-label={`Mosaic Access for ${entitlement.displayName || entitlement.lookupKey} on ${product.displayName || product.storeIdentifier}`}
+                className="w-auto min-w-48"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {entitlementTargetOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Exact provider grouping, hidden by default because it is an adapter detail
+ * rather than Mosaic Catalog hierarchy.
+ */
+function ProviderPackageMappingField({
+  draft,
+  onUpdateDraft,
+  options,
+  product,
+  provider,
+}: {
+  draft: ProductDraft;
+  onUpdateDraft: (change: Partial<ProductDraft>) => void;
+  options: readonly SelectOption[];
+  product: ProviderCatalogProductView;
+  provider?: ProviderConnection["provider"];
+}) {
+  return (
+    <Collapsible>
+      <CollapsibleTrigger className="flex items-center gap-1 rounded font-medium text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        Advanced {providerOfferingLabel(provider)}
+        <CaretDownIcon aria-hidden />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2">
+        <div className="font-medium text-xs">
+          <label htmlFor={`catalog-package-${product.id}`}>
+            Exact {providerOfferingLabel(provider)} mapping
+          </label>
+          <Select
+            items={options}
+            onValueChange={(value) => {
+              const [offeringId = "", packageId = ""] = value.split("\u0000");
+              onUpdateDraft({
+                providerOfferingIdentifier: offeringId,
+                providerPackageIdentifier: packageId,
+              });
+            }}
+            value={
+              draft.providerOfferingIdentifier
+                ? `${draft.providerOfferingIdentifier}\u0000${draft.providerPackageIdentifier}`
+                : ""
+            }
+          >
+            <SelectTrigger
+              className="mt-1"
+              id={`catalog-package-${product.id}`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="mt-2 text-muted-foreground text-xs">
+          Hidden by default because provider grouping is an adapter detail, not
+          Mosaic Catalog hierarchy.
+        </p>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -685,14 +921,16 @@ function ImportResult({
       </p>
       {failureCount > 0 ? (
         <ul className="mt-3 space-y-1 text-xs">
-          {result.items
-            .filter((item) => item.status !== "imported")
-            .map((item) => (
-              <li key={item.providerProductIdentifier}>
-                {item.providerProductIdentifier} ·{" "}
-                {item.errorCode ?? item.status}
-              </li>
-            ))}
+          {result.items.flatMap((item) =>
+            item.status === "imported"
+              ? []
+              : [
+                  <li key={item.providerProductIdentifier}>
+                    {item.providerProductIdentifier} ·{" "}
+                    {item.errorCode ?? item.status}
+                  </li>,
+                ]
+          )}
         </ul>
       ) : null}
       <div className="mt-3 flex flex-wrap gap-3 font-semibold text-xs">

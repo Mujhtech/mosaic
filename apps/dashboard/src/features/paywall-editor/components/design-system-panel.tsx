@@ -10,30 +10,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  BackgroundEditor,
-  ColorControl,
   countTokenReferences,
-  FIELD_CLASS,
-  MotionEditor,
-  nextTokenId,
   type PendingDelete,
   replaceTokenReferences,
-  SectionHeading,
-  ShadowEditor,
-  TokenActions,
-  TokenSummary,
   tokensFor,
   withDuplicatedToken,
   withMovedToken,
   withoutToken,
-} from "@/features/paywall-editor/components/design-system-controls";
+} from "@/features/paywall-editor/components/design-system-controls-support";
+import {
+  BackgroundTokenSection,
+  ColorTokenSection,
+  MotionTokenSection,
+  ShadowTokenSection,
+} from "@/features/paywall-editor/components/design-system-token-sections";
 import {
   useEditorActions,
   useEditorStore,
 } from "@/features/paywall-editor/stores/editor-store-context";
 import type {
   MosaicDocument,
-  MotionToken,
   PaywallDesignSystem,
 } from "@/features/paywall-editor/types/editor";
 import { cloneValue } from "@/features/paywall-editor/utils/clone";
@@ -43,16 +39,9 @@ import {
 } from "@/features/paywall-editor/utils/document-version";
 import type { DesignCategory } from "@/features/paywall-editor/utils/style-authoring";
 import {
-  appendBackgroundAsset,
-  defaultMediaBackground,
   isSafeTokenReplacement,
   tokenReferenceType,
 } from "@/features/paywall-editor/utils/style-authoring";
-import type {
-  MosaicPaywallV04BackgroundToken,
-  MosaicPaywallV04ColorToken,
-  MosaicPaywallV04ShadowToken,
-} from "@/lib/mosaic-protocol";
 
 /**
  * "Detach" plus every token that can safely stand in for the one being deleted.
@@ -65,19 +54,21 @@ function tokenReplacementOptions(
 ) {
   return [
     { label: "Detach current values", value: "detach" },
-    ...tokensFor(designSystem, pendingDelete.category)
-      .filter((token) =>
-        isSafeTokenReplacement(
-          designSystem,
-          pendingDelete.category,
-          pendingDelete.id,
-          token.id
-        )
+    ...tokensFor(designSystem, pendingDelete.category).flatMap((token) =>
+      isSafeTokenReplacement(
+        designSystem,
+        pendingDelete.category,
+        pendingDelete.id,
+        token.id
       )
-      .map((token) => ({
-        label: `Replace usages with ${token.name}`,
-        value: token.id,
-      })),
+        ? [
+            {
+              label: `Replace usages with ${token.name}`,
+              value: token.id,
+            },
+          ]
+        : []
+    ),
   ];
 }
 
@@ -105,42 +96,6 @@ export function DesignSystemPanel() {
         designSystem: updater(current.designSystem),
       })
     );
-  }
-
-  function updateColor(
-    id: string,
-    updater: (token: MosaicPaywallV04ColorToken) => MosaicPaywallV04ColorToken
-  ) {
-    updateSystem((current) => ({
-      ...current,
-      colors: current.colors.map((token) =>
-        token.id === id ? updater(token) : token
-      ),
-    }));
-  }
-  function updateBackground(
-    id: string,
-    updater: (
-      token: MosaicPaywallV04BackgroundToken
-    ) => MosaicPaywallV04BackgroundToken
-  ) {
-    updateSystem((current) => ({
-      ...current,
-      backgrounds: current.backgrounds.map((token) =>
-        token.id === id ? updater(token) : token
-      ),
-    }));
-  }
-  function updateShadow(
-    id: string,
-    updater: (token: MosaicPaywallV04ShadowToken) => MosaicPaywallV04ShadowToken
-  ) {
-    updateSystem((current) => ({
-      ...current,
-      shadows: current.shadows.map((token) =>
-        token.id === id ? updater(token) : token
-      ),
-    }));
   }
 
   function deleteNow(category: DesignCategory, id: string) {
@@ -213,124 +168,12 @@ export function DesignSystemPanel() {
     }
   }
 
-  function addColor() {
-    const id = nextTokenId(designSystem.colors, "colour");
-    updateSystem((current) => ({
-      ...current,
-      colors: [
-        ...current.colors,
-        { id, name: `Colour ${current.colors.length + 1}`, value: "#087F73FF" },
-      ],
-    }));
-    setOpenEditor({ category: "colors", id });
-  }
-
-  function addBackground() {
-    const id = nextTokenId(designSystem.backgrounds, "background");
-    updateSystem((current) => ({
-      ...current,
-      backgrounds: [
-        ...current.backgrounds,
-        {
-          id,
-          name: `Background ${current.backgrounds.length + 1}`,
-          value: { type: "color", value: "surface.default" },
-        },
-      ],
-    }));
-    setOpenEditor({ category: "backgrounds", id });
-  }
-
-  function addShadow() {
-    const id = nextTokenId(designSystem.shadows, "shadow");
-    updateSystem((current) => ({
-      ...current,
-      shadows: [
-        ...current.shadows,
-        {
-          id,
-          name: `Shadow ${current.shadows.length + 1}`,
-          value: {
-            type: "shadow",
-            color: "#00000033",
-            offsetX: 0,
-            offsetY: 8,
-            blurRadius: 24,
-          },
-        },
-      ],
-    }));
-    setOpenEditor({ category: "shadows", id });
-  }
-
-  function addMediaBackground(id: string, type: "image" | "video") {
-    editor.updateDocument((current) => {
-      const result = appendBackgroundAsset(current, type);
-      return withDocumentParts(result.document, {
-        designSystem: {
-          ...result.document.designSystem,
-          backgrounds: result.document.designSystem.backgrounds.map((token) =>
-            token.id === id
-              ? {
-                  ...token,
-                  value: defaultMediaBackground(type, result.assetId),
-                }
-              : token
-          ),
-        },
-      });
-    });
-  }
-
   function toggleEditor(category: DesignCategory, id: string) {
     setOpenEditor((current) =>
       current?.category === category && current.id === id
         ? null
         : { category, id }
     );
-  }
-
-  function updateMotion(
-    id: string,
-    updater: (token: MotionToken) => MotionToken
-  ) {
-    updateSystem((current) =>
-      "motions" in current
-        ? {
-            ...current,
-            motions: current.motions.map((token) =>
-              token.id === id ? updater(token) : token
-            ),
-          }
-        : current
-    );
-  }
-
-  function addMotion() {
-    const id = nextTokenId(motions, "motion");
-    updateSystem((current) =>
-      "motions" in current
-        ? {
-            ...current,
-            motions: [
-              ...current.motions,
-              {
-                id,
-                name: `Motion ${current.motions.length + 1}`,
-                // A 240ms decelerate is the contract's own entrance example: an
-                // entrance is the first motion anyone authors, and the loop
-                // floor of 500ms would be the wrong default for it.
-                value: {
-                  type: "motion",
-                  durationMilliseconds: 240,
-                  easing: "decelerate",
-                },
-              },
-            ],
-          }
-        : current
-    );
-    setOpenEditor({ category: "motions", id });
   }
 
   function move(category: DesignCategory, id: string, offset: -1 | 1) {
@@ -403,304 +246,53 @@ export function DesignSystemPanel() {
         </StatusMessage>
       ) : null}
 
-      <section className="space-y-3 border-border border-t pt-4">
-        <SectionHeading
-          count={designSystem.colors.length}
-          label="Colours"
-          onAdd={addColor}
-        />
-        {designSystem.colors.length === 0 ? (
-          <p className="rounded border border-dashed p-3 text-muted-foreground text-xs">
-            Add colours to make them available at the top of every colour
-            picker.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {designSystem.colors.map((token, index) => (
-              <li className="rounded border border-border p-1" key={token.id}>
-                <div className="flex items-center gap-1">
-                  <TokenSummary
-                    editorId={`design-colour-editor-${token.id}`}
-                    name={token.name}
-                    onToggle={() => toggleEditor("colors", token.id)}
-                    open={
-                      openEditor?.category === "colors" &&
-                      openEditor.id === token.id
-                    }
-                    summary={
-                      typeof token.value === "string"
-                        ? token.value
-                        : `Linked · ${token.value.id}`
-                    }
-                  />
-                  <TokenActions
-                    canMoveDown={index < designSystem.colors.length - 1}
-                    canMoveUp={index > 0}
-                    name={token.name}
-                    onDelete={() => requestDelete("colors", token.id)}
-                    onDuplicate={() => duplicate("colors", token.id)}
-                    onMove={(offset) => move("colors", token.id, offset)}
-                  />
-                </div>
-                {openEditor?.category === "colors" &&
-                openEditor.id === token.id ? (
-                  <div
-                    className="space-y-2 border-border border-t p-2"
-                    id={`design-colour-editor-${token.id}`}
-                  >
-                    <input
-                      aria-label={`Name for ${token.name}`}
-                      className={`${FIELD_CLASS} w-full`}
-                      maxLength={80}
-                      onChange={(event) =>
-                        updateColor(token.id, (current) => ({
-                          ...current,
-                          name: event.target.value,
-                        }))
-                      }
-                      value={token.name}
-                    />
-                    <ColorControl
-                      document={document}
-                      id={`design-colour-${token.id}`}
-                      label={token.name}
-                      onChange={(value) =>
-                        updateColor(token.id, (current) => ({
-                          ...current,
-                          value,
-                        }))
-                      }
-                      value={token.value}
-                    />
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <ColorTokenSection
+        document={document}
+        onDelete={requestDelete}
+        onDuplicate={duplicate}
+        onMove={move}
+        onOpenEditor={setOpenEditor}
+        onToggleEditor={toggleEditor}
+        openEditor={openEditor}
+        tokens={designSystem.colors}
+        updateSystem={updateSystem}
+      />
 
-      <section className="space-y-3 border-border border-t pt-4">
-        <SectionHeading
-          count={designSystem.backgrounds.length}
-          label="Backgrounds"
-          onAdd={addBackground}
-        />
-        {designSystem.backgrounds.length === 0 ? (
-          <p className="rounded border border-dashed p-3 text-muted-foreground text-xs">
-            Add a reusable colour, gradient, image, or video background.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {designSystem.backgrounds.map((token, index) => (
-              <li className="rounded border border-border p-1" key={token.id}>
-                <div className="flex items-center gap-1">
-                  <TokenSummary
-                    editorId={`design-background-editor-${token.id}`}
-                    name={token.name}
-                    onToggle={() => toggleEditor("backgrounds", token.id)}
-                    open={
-                      openEditor?.category === "backgrounds" &&
-                      openEditor.id === token.id
-                    }
-                    summary={token.value.type.replace(/([A-Z])/g, " $1")}
-                  />
-                  <TokenActions
-                    canMoveDown={index < designSystem.backgrounds.length - 1}
-                    canMoveUp={index > 0}
-                    name={token.name}
-                    onDelete={() => requestDelete("backgrounds", token.id)}
-                    onDuplicate={() => duplicate("backgrounds", token.id)}
-                    onMove={(offset) => move("backgrounds", token.id, offset)}
-                  />
-                </div>
-                {openEditor?.category === "backgrounds" &&
-                openEditor.id === token.id ? (
-                  <div
-                    className="space-y-2 border-border border-t p-2"
-                    id={`design-background-editor-${token.id}`}
-                  >
-                    <input
-                      aria-label={`Name for ${token.name}`}
-                      className={`${FIELD_CLASS} w-full`}
-                      maxLength={80}
-                      onChange={(event) =>
-                        updateBackground(token.id, (current) => ({
-                          ...current,
-                          name: event.target.value,
-                        }))
-                      }
-                      value={token.name}
-                    />
-                    <BackgroundEditor
-                      document={document}
-                      id={`design-background-${token.id}`}
-                      onAddMedia={(type) => addMediaBackground(token.id, type)}
-                      onChange={(value) =>
-                        updateBackground(token.id, (current) => ({
-                          ...current,
-                          value,
-                        }))
-                      }
-                      value={token.value}
-                    />
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <BackgroundTokenSection
+        document={document}
+        onDelete={requestDelete}
+        onDuplicate={duplicate}
+        onMove={move}
+        onOpenEditor={setOpenEditor}
+        onToggleEditor={toggleEditor}
+        openEditor={openEditor}
+        tokens={designSystem.backgrounds}
+        updateDocument={editor.updateDocument}
+        updateSystem={updateSystem}
+      />
 
-      <section className="space-y-3 border-border border-t pt-4">
-        <SectionHeading
-          count={designSystem.shadows.length}
-          label="Shadows"
-          onAdd={addShadow}
-        />
-        {designSystem.shadows.length === 0 ? (
-          <p className="rounded border border-dashed p-3 text-muted-foreground text-xs">
-            Add a reusable native shadow effect.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {designSystem.shadows.map((token, index) => (
-              <li className="rounded border border-border p-1" key={token.id}>
-                <div className="flex items-center gap-1">
-                  <TokenSummary
-                    editorId={`design-shadow-editor-${token.id}`}
-                    name={token.name}
-                    onToggle={() => toggleEditor("shadows", token.id)}
-                    open={
-                      openEditor?.category === "shadows" &&
-                      openEditor.id === token.id
-                    }
-                    summary={
-                      token.value.type === "shadow"
-                        ? `${token.value.blurRadius}px blur`
-                        : "Linked"
-                    }
-                  />
-                  <TokenActions
-                    canMoveDown={index < designSystem.shadows.length - 1}
-                    canMoveUp={index > 0}
-                    name={token.name}
-                    onDelete={() => requestDelete("shadows", token.id)}
-                    onDuplicate={() => duplicate("shadows", token.id)}
-                    onMove={(offset) => move("shadows", token.id, offset)}
-                  />
-                </div>
-                {openEditor?.category === "shadows" &&
-                openEditor.id === token.id ? (
-                  <div
-                    className="space-y-2 border-border border-t p-2"
-                    id={`design-shadow-editor-${token.id}`}
-                  >
-                    <input
-                      aria-label={`Name for ${token.name}`}
-                      className={`${FIELD_CLASS} w-full`}
-                      maxLength={80}
-                      onChange={(event) =>
-                        updateShadow(token.id, (current) => ({
-                          ...current,
-                          name: event.target.value,
-                        }))
-                      }
-                      value={token.name}
-                    />
-                    <ShadowEditor
-                      document={document}
-                      id={`design-shadow-${token.id}`}
-                      onChange={(value) =>
-                        updateShadow(token.id, (current) => ({
-                          ...current,
-                          value,
-                        }))
-                      }
-                      value={token.value}
-                    />
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <ShadowTokenSection
+        document={document}
+        onDelete={requestDelete}
+        onDuplicate={duplicate}
+        onMove={move}
+        onOpenEditor={setOpenEditor}
+        onToggleEditor={toggleEditor}
+        openEditor={openEditor}
+        tokens={designSystem.shadows}
+        updateSystem={updateSystem}
+      />
 
-      <section className="space-y-3 border-border border-t pt-4">
-        <SectionHeading
-          count={motions.length}
-          label="Motion"
-          onAdd={addMotion}
-        />
-        {motions.length === 0 ? (
-          <p className="rounded border border-dashed p-3 text-muted-foreground text-xs">
-            Add a reusable duration and easing curve. A motion token that
-            nothing references is rejected, so add one when a node needs it.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {motions.map((token, index) => (
-              <li className="rounded border border-border p-1" key={token.id}>
-                <div className="flex items-center gap-1">
-                  <TokenSummary
-                    editorId={`design-motion-editor-${token.id}`}
-                    name={token.name}
-                    onToggle={() => toggleEditor("motions", token.id)}
-                    open={
-                      openEditor?.category === "motions" &&
-                      openEditor.id === token.id
-                    }
-                    summary={
-                      token.value.type === "motion"
-                        ? `${token.value.durationMilliseconds}ms ${token.value.easing}`
-                        : "Linked"
-                    }
-                  />
-                  <TokenActions
-                    canMoveDown={index < motions.length - 1}
-                    canMoveUp={index > 0}
-                    name={token.name}
-                    onDelete={() => requestDelete("motions", token.id)}
-                    onDuplicate={() => duplicate("motions", token.id)}
-                    onMove={(offset) => move("motions", token.id, offset)}
-                  />
-                </div>
-                {openEditor?.category === "motions" &&
-                openEditor.id === token.id ? (
-                  <div
-                    className="space-y-2 border-border border-t p-2"
-                    id={`design-motion-editor-${token.id}`}
-                  >
-                    <input
-                      aria-label={`Name for ${token.name}`}
-                      className={`${FIELD_CLASS} w-full`}
-                      maxLength={80}
-                      onChange={(event) =>
-                        updateMotion(token.id, (current) => ({
-                          ...current,
-                          name: event.target.value,
-                        }))
-                      }
-                      value={token.name}
-                    />
-                    <MotionEditor
-                      id={`design-motion-${token.id}`}
-                      onChange={(value) =>
-                        updateMotion(token.id, (current) => ({
-                          ...current,
-                          value,
-                        }))
-                      }
-                      value={token.value}
-                    />
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <MotionTokenSection
+        onDelete={requestDelete}
+        onDuplicate={duplicate}
+        onMove={move}
+        onOpenEditor={setOpenEditor}
+        onToggleEditor={toggleEditor}
+        openEditor={openEditor}
+        tokens={motions}
+        updateSystem={updateSystem}
+      />
     </section>
   );
 }

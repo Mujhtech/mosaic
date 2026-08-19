@@ -13,6 +13,13 @@ import {
 } from "react";
 
 import {
+  DEFAULT_TREND_PLOT_HEIGHT,
+  PAD_LEFT,
+  PAD_RIGHT,
+  PAD_TOP,
+  trendFrameHeight,
+} from "@/components/charts/trend-frame";
+import {
   dateTickIndices,
   formatTrendAxisTick,
   formatTrendDay,
@@ -23,13 +30,6 @@ import {
   trendAxisScale,
 } from "@/components/charts/trend-scale";
 
-const PAD_TOP = 12;
-const PAD_LEFT = 44;
-const PAD_RIGHT = 12;
-export const DEFAULT_TREND_PLOT_HEIGHT = 200;
-/** A trend read beside a table rather than as the page's subject. */
-export const COMPACT_TREND_PLOT_HEIGHT = 108;
-const X_AXIS_BAND = 26;
 /** Used until the container reports a width, and in non-layout environments. */
 const FALLBACK_WIDTH = 720;
 const MIN_PLOT_WIDTH = 240;
@@ -40,11 +40,6 @@ const MAX_DATE_LABELS = 7;
 const END_DOT_RADIUS = 4;
 const ACTIVE_DOT_RADIUS = 4.5;
 const PARTIAL_DASH = "4 3";
-
-/** The drawn height of the frame, so a message or skeleton can match it. */
-export function trendFrameHeight(plotHeight = DEFAULT_TREND_PLOT_HEIGHT) {
-  return PAD_TOP + plotHeight + X_AXIS_BAND;
-}
 
 export interface TrendChartSeries {
   key: string;
@@ -362,10 +357,6 @@ export function TrendMessage({
   );
 }
 
-export function trendSeriesColor(slot: TrendSeriesSlot) {
-  return seriesColor(slot);
-}
-
 function seriesColor(slot: TrendSeriesSlot) {
   return `var(--mosaic-chart-series-${slot})`;
 }
@@ -422,17 +413,21 @@ function areaPath(
   y: (value: number) => number,
   baseline: number
 ) {
-  return segments
-    .filter((segment) => segment.points.length > 1)
-    .map((segment) => {
-      const [first] = segment.points;
-      const last = segment.points.at(-1);
-      if (!(first && last)) {
-        return "";
-      }
-      return `${linePath(segment.points, x, y)} L${x(last.index).toFixed(2)} ${baseline} L${x(first.index).toFixed(2)} ${baseline} Z`;
-    })
-    .join(" ");
+  const parts: string[] = [];
+  for (const segment of segments) {
+    if (segment.points.length <= 1) {
+      continue;
+    }
+    const [first] = segment.points;
+    const last = segment.points.at(-1);
+    if (!(first && last)) {
+      continue;
+    }
+    parts.push(
+      `${linePath(segment.points, x, y)} L${x(last.index).toFixed(2)} ${baseline} L${x(first.index).toFixed(2)} ${baseline} Z`
+    );
+  }
+  return parts.join(" ");
 }
 
 function lastMeasured(points: readonly TrendPoint[]) {

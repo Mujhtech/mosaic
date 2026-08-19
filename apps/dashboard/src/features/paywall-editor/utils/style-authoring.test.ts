@@ -4,7 +4,7 @@ import {
   withDuplicatedToken,
   withMovedToken,
   withoutToken,
-} from "@/features/paywall-editor/components/design-system-controls";
+} from "@/features/paywall-editor/components/design-system-controls-support";
 import type { PaywallDesignSystem } from "@/features/paywall-editor/types/editor";
 import {
   clampGradientAngle,

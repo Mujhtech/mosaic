@@ -75,18 +75,15 @@ const STORE_ENVIRONMENT_OPTIONS = [
   { label: "Production", value: "production" },
 ];
 
-export function ConnectStoreCredentialSheet({
-  applications,
-  applicationsHref,
-  environments,
-  environmentsHref,
-  onCreate,
-}: ConnectStoreCredentialSheetProps) {
-  const [open, setOpen] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const fieldIds = useId();
-
-  const form = useForm({
+/**
+ * The form instance is owned by `ConnectStoreCredentialSheet`. The field
+ * sections below are presentation splits of that one form, so they receive the
+ * instance rather than creating their own.
+ */
+function useStoreCredentialForm(
+  submit: (value: StoreCredentialFormValues) => Promise<void>
+) {
+  return useForm({
     defaultValues: {
       applications: [] as StoreCredentialFormValues["applications"],
       appleIssuerId: "",
@@ -100,31 +97,47 @@ export function ConnectStoreCredentialSheet({
       storeEnvironment:
         "sandbox" as StoreCredentialFormValues["storeEnvironment"],
     },
-    onSubmit: async ({ value }) => {
-      setSubmitError(null);
-      try {
-        await onCreate(
-          buildCreateStoreCredentialRequest(value, (applicationId) =>
-            applications.find((item) => item.id === applicationId)?.platform ===
-            "android"
-              ? "android"
-              : "ios"
-          )
-        );
-        form.reset();
-        setOpen(false);
-      } catch (error) {
-        setSubmitError(
-          error instanceof Error
-            ? error.message
-            : "Mosaic could not store this Store Server Credential."
-        );
-      } finally {
-        // Cleared on every path: a failed attempt must not leave key material
-        // sitting in a form field behind a sheet the operator walked away from.
-        form.setFieldValue("secret", "");
-      }
-    },
+    onSubmit: ({ value }) => submit(value),
+  });
+}
+
+type StoreCredentialForm = ReturnType<typeof useStoreCredentialForm>;
+
+export function ConnectStoreCredentialSheet({
+  applications,
+  applicationsHref,
+  environments,
+  environmentsHref,
+  onCreate,
+}: ConnectStoreCredentialSheetProps) {
+  const [open, setOpen] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const fieldIds = useId();
+
+  const form = useStoreCredentialForm(async (value) => {
+    setSubmitError(null);
+    try {
+      await onCreate(
+        buildCreateStoreCredentialRequest(value, (applicationId) =>
+          applications.find((item) => item.id === applicationId)?.platform ===
+          "android"
+            ? "android"
+            : "ios"
+        )
+      );
+      form.reset();
+      setOpen(false);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Mosaic could not store this Store Server Credential."
+      );
+    } finally {
+      // Cleared on every path: a failed attempt must not leave key material
+      // sitting in a form field behind a sheet the operator walked away from.
+      form.setFieldValue("secret", "");
+    }
   });
 
   const provider = useStore(form.store, (state) => state.values.provider);
@@ -133,20 +146,6 @@ export function ConnectStoreCredentialSheet({
     (state) => state.values.storeEnvironment
   );
   const secretValue = useStore(form.store, (state) => state.values.secret);
-  const compatibleEnvironments = environments.filter((environment) =>
-    storeEnvironmentMatchesMode(environment.mode, storeEnvironment)
-  );
-  const environmentOptions = [
-    { label: "Select an Environment", value: "" },
-    ...compatibleEnvironments.map((environment) => ({
-      label: `${environment.name} · ${environment.mode}`,
-      value: environment.id,
-    })),
-  ];
-  const googleSummary =
-    provider === "google_play" && secretValue.trim().length > 0
-      ? readGoogleServiceAccount(secretValue)
-      : undefined;
 
   return (
     <Sheet
@@ -180,468 +179,38 @@ export function ConnectStoreCredentialSheet({
           }}
         >
           <div className="space-y-5 p-5">
-            <form.Field name="provider">
-              {(field) => (
-                <Field>
-                  <FieldLabel htmlFor="store-credential-provider">
-                    Store
-                  </FieldLabel>
-                  <Select
-                    items={STORE_PROVIDER_OPTIONS}
-                    onValueChange={(value) => {
-                      field.handleChange(
-                        value as StoreCredentialFormValues["provider"]
-                      );
-                      form.setFieldValue("secret", "");
-                    }}
-                    value={field.state.value}
-                  >
-                    <SelectTrigger id="store-credential-provider">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STORE_PROVIDER_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              )}
-            </form.Field>
+            <StoreProviderField form={form} />
 
-            <form.Field
-              name="name"
-              validators={{
-                onSubmit: ({ value }) =>
-                  (() => {
-                    if (value.trim().length === 0) {
-                      return "Enter a name for this connection.";
-                    }
-                    if (value.length > 120) {
-                      return "Use 120 characters or fewer.";
-                    }
-                  })(),
-              }}
-            >
-              {(field) => (
-                <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel htmlFor="store-credential-name">
-                    Connection name
-                  </FieldLabel>
-                  <Input
-                    aria-invalid={field.state.meta.errors.length > 0}
-                    id="store-credential-name"
-                    onBlur={field.handleBlur}
-                    onChange={(event) =>
-                      field.handleChange(event.currentTarget.value)
-                    }
-                    placeholder="App Store sandbox"
-                    value={field.state.value}
-                  />
-                  <FieldError
-                    errors={field.state.meta.errors.map((message) => ({
-                      message,
-                    }))}
-                  />
-                </Field>
-              )}
-            </form.Field>
+            <ConnectionNameField form={form} />
 
-            <form.Field name="storeEnvironment">
-              {(field) => (
-                <Field>
-                  <FieldLabel htmlFor="store-credential-store-environment">
-                    Store Environment
-                  </FieldLabel>
-                  <Select
-                    items={STORE_ENVIRONMENT_OPTIONS}
-                    onValueChange={(value) => {
-                      const next =
-                        value as StoreCredentialFormValues["storeEnvironment"];
-                      field.handleChange(next);
-                      const selected = environments.find(
-                        (item) =>
-                          item.id === form.getFieldValue("environmentId")
-                      );
-                      if (
-                        selected &&
-                        !storeEnvironmentMatchesMode(selected.mode, next)
-                      ) {
-                        form.setFieldValue("environmentId", "");
-                      }
-                    }}
-                    value={field.state.value}
-                  >
-                    <SelectTrigger id="store-credential-store-environment">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STORE_ENVIRONMENT_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FieldDescription>
-                    Sandbox and production are separate connections and never
-                    mix. This is the store&rsquo;s own classification, not your
-                    Mosaic Environment.
-                  </FieldDescription>
-                </Field>
-              )}
-            </form.Field>
+            <StoreEnvironmentField environments={environments} form={form} />
 
-            <form.Field
-              name="environmentId"
-              validators={{
-                onSubmit: ({ value }) =>
-                  value.length === 0
-                    ? "Select a Mosaic Environment."
-                    : undefined,
-              }}
-            >
-              {(field) => (
-                <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel htmlFor="store-credential-environment">
-                    Mosaic Environment
-                  </FieldLabel>
-                  {compatibleEnvironments.length === 0 ? (
-                    <div className="rounded border border-dashed p-3 text-xs">
-                      <p className="text-muted-foreground">
-                        No Mosaic Environment matches this Store Environment. A
-                        production Store Environment needs a production Mosaic
-                        Environment.
-                      </p>
-                      <a
-                        className="mt-2 inline-flex font-semibold text-primary"
-                        href={environmentsHref}
-                      >
-                        Create an Environment
-                      </a>
-                    </div>
-                  ) : (
-                    <Select
-                      items={environmentOptions}
-                      onValueChange={(value) => field.handleChange(value)}
-                      value={field.state.value}
-                    >
-                      <SelectTrigger
-                        aria-invalid={field.state.meta.errors.length > 0}
-                        id="store-credential-environment"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {environmentOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <FieldError
-                    errors={field.state.meta.errors.map((message) => ({
-                      message,
-                    }))}
-                  />
-                </Field>
-              )}
-            </form.Field>
+            <MosaicEnvironmentField
+              environments={environments}
+              environmentsHref={environmentsHref}
+              form={form}
+              storeEnvironment={storeEnvironment}
+            />
 
-            <form.Field
-              name="applications"
-              validators={{
-                onSubmit: ({ value }) => {
-                  if (value.length === 0) {
-                    return "Select at least one Application.";
-                  }
-                  return value.some((item) =>
-                    validateProviderApplicationIdentifier(
-                      item.providerApplicationIdentifier
-                    )
-                  )
-                    ? "Enter the store identifier for every selected Application."
-                    : undefined;
-                },
-              }}
-            >
-              {(field) => (
-                <fieldset className="space-y-2">
-                  <legend className="font-medium text-sm">
-                    Application scope
-                  </legend>
-                  <p className="text-muted-foreground text-xs leading-5">
-                    A verified notification is accepted only for an Application
-                    listed here. Mosaic matches the store&rsquo;s own bundle ID
-                    or package name against these values.
-                  </p>
-                  {applications.length === 0 ? (
-                    <div className="rounded border border-dashed p-3 text-xs">
-                      <p className="text-muted-foreground">
-                        Register an Application before adding a Store Server
-                        Credential.
-                      </p>
-                      <a
-                        className="mt-2 inline-flex font-semibold text-primary"
-                        href={applicationsHref}
-                      >
-                        Register an Application
-                      </a>
-                    </div>
-                  ) : (
-                    <div className="grid gap-2">
-                      {applications.map((application) => {
-                        const rowIds = `${fieldIds}-${application.id}`;
-                        const selected = field.state.value.find(
-                          (item) => item.applicationId === application.id
-                        );
-                        return (
-                          <div
-                            className="rounded border p-3 text-sm"
-                            key={application.id}
-                          >
-                            <label className="flex items-start gap-3">
-                              <input
-                                checked={Boolean(selected)}
-                                className="mt-0.5 size-4 accent-primary"
-                                onChange={(event) =>
-                                  field.handleChange(
-                                    event.currentTarget.checked
-                                      ? [
-                                          ...field.state.value,
-                                          {
-                                            applicationId: application.id,
-                                            providerApplicationIdentifier:
-                                              application.identifier,
-                                          },
-                                        ]
-                                      : field.state.value.filter(
-                                          (item) =>
-                                            item.applicationId !==
-                                            application.id
-                                        )
-                                  )
-                                }
-                                type="checkbox"
-                              />
-                              <span>
-                                <span className="block font-medium">
-                                  {application.name}
-                                </span>
-                                <span className="mt-0.5 block text-muted-foreground text-xs">
-                                  {application.platform.toUpperCase()} ·{" "}
-                                  {application.identifier}
-                                </span>
-                              </span>
-                            </label>
-                            {selected ? (
-                              <label
-                                className="mt-3 block space-y-1 font-medium text-xs"
-                                htmlFor={`${rowIds}-field-1`}
-                              >
-                                {provider === "app_store"
-                                  ? "Bundle ID"
-                                  : "Package name"}
-                                <Input
-                                  id={`${rowIds}-field-1`}
-                                  onChange={(event) =>
-                                    field.handleChange(
-                                      field.state.value.map((item) =>
-                                        item.applicationId === application.id
-                                          ? {
-                                              ...item,
-                                              providerApplicationIdentifier:
-                                                event.currentTarget.value,
-                                            }
-                                          : item
-                                      )
-                                    )
-                                  }
-                                  spellCheck={false}
-                                  value={selected.providerApplicationIdentifier}
-                                />
-                              </label>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {field.state.meta.errors[0] ? (
-                    <p className="text-destructive text-sm" role="alert">
-                      {field.state.meta.errors[0]}
-                    </p>
-                  ) : null}
-                </fieldset>
-              )}
-            </form.Field>
+            <ApplicationScopeField
+              applications={applications}
+              applicationsHref={applicationsHref}
+              fieldIds={fieldIds}
+              form={form}
+              provider={provider}
+            />
 
             {provider === "app_store" ? (
-              <>
-                <form.Field
-                  name="appleIssuerId"
-                  validators={{
-                    onSubmit: ({ value }) => validateAppleIssuerId(value),
-                  }}
-                >
-                  {(field) => (
-                    <Field data-invalid={field.state.meta.errors.length > 0}>
-                      <FieldLabel htmlFor="store-credential-issuer">
-                        Issuer ID
-                      </FieldLabel>
-                      <Input
-                        aria-invalid={field.state.meta.errors.length > 0}
-                        id="store-credential-issuer"
-                        onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.currentTarget.value)
-                        }
-                        placeholder="00000000-0000-0000-0000-000000000000"
-                        spellCheck={false}
-                        value={field.state.value}
-                      />
-                      <FieldDescription>
-                        App Store Connect · Users and Access · Integrations. Not
-                        a secret.
-                      </FieldDescription>
-                      <FieldError
-                        errors={field.state.meta.errors.map((message) => ({
-                          message,
-                        }))}
-                      />
-                    </Field>
-                  )}
-                </form.Field>
-
-                <form.Field
-                  name="appleKeyId"
-                  validators={{
-                    onSubmit: ({ value }) => validateAppleKeyId(value),
-                  }}
-                >
-                  {(field) => (
-                    <Field data-invalid={field.state.meta.errors.length > 0}>
-                      <FieldLabel htmlFor="store-credential-key-id">
-                        Key ID
-                      </FieldLabel>
-                      <Input
-                        aria-invalid={field.state.meta.errors.length > 0}
-                        id="store-credential-key-id"
-                        onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.currentTarget.value)
-                        }
-                        placeholder="ABCDE12345"
-                        spellCheck={false}
-                        value={field.state.value}
-                      />
-                      <FieldError
-                        errors={field.state.meta.errors.map((message) => ({
-                          message,
-                        }))}
-                      />
-                    </Field>
-                  )}
-                </form.Field>
-              </>
+              <AppleCredentialFields form={form} />
             ) : (
-              <>
-                <form.Field name="googlePubSubProjectId">
-                  {(field) => (
-                    <Field>
-                      <FieldLabel htmlFor="store-credential-pubsub-project">
-                        Pub/Sub project ID
-                      </FieldLabel>
-                      <Input
-                        id="store-credential-pubsub-project"
-                        onChange={(event) =>
-                          field.handleChange(event.currentTarget.value)
-                        }
-                        spellCheck={false}
-                        value={field.state.value}
-                      />
-                    </Field>
-                  )}
-                </form.Field>
-                <form.Field name="googlePubSubSubscriptionId">
-                  {(field) => (
-                    <Field>
-                      <FieldLabel htmlFor="store-credential-pubsub-subscription">
-                        Pub/Sub subscription ID
-                      </FieldLabel>
-                      <Input
-                        id="store-credential-pubsub-subscription"
-                        onChange={(event) =>
-                          field.handleChange(event.currentTarget.value)
-                        }
-                        spellCheck={false}
-                        value={field.state.value}
-                      />
-                      <FieldDescription>
-                        Mosaic pulls notifications from this subscription.
-                        Google Play needs no inbound Mosaic address.
-                      </FieldDescription>
-                    </Field>
-                  )}
-                </form.Field>
-              </>
+              <GooglePubSubFields form={form} />
             )}
 
-            <form.Field
-              name="secret"
-              validators={{
-                onSubmit: ({ value }) =>
-                  form.getFieldValue("provider") === "app_store"
-                    ? validateApplePrivateKey(value)
-                    : validateGoogleServiceAccount(value),
-              }}
-            >
-              {(field) => (
-                <SecretKeyField
-                  accept={
-                    provider === "app_store"
-                      ? ".p8,.pem"
-                      : ".json,application/json"
-                  }
-                  description="Read in this browser, sent once over TLS, encrypted by the API, cleared from this form after the attempt, and never returned or shown again. Mosaic checks only the file format here; the store decides whether the key works."
-                  errors={field.state.meta.errors.filter(
-                    (message): message is string => typeof message === "string"
-                  )}
-                  extra={
-                    googleSummary && "summary" in googleSummary ? (
-                      <p
-                        className="text-muted-foreground text-xs"
-                        role="status"
-                      >
-                        Service account:{" "}
-                        <strong>{googleSummary.summary.clientEmail}</strong>
-                        {googleSummary.summary.projectId
-                          ? ` · project ${googleSummary.summary.projectId}`
-                          : ""}
-                      </p>
-                    ) : null
-                  }
-                  fileKindLabel={
-                    provider === "app_store"
-                      ? ".p8 key file"
-                      : "service-account JSON file"
-                  }
-                  id="store-credential-secret"
-                  label={
-                    provider === "app_store"
-                      ? "In-App Purchase key (.p8)"
-                      : "Service-account JSON key"
-                  }
-                  onBlur={field.handleBlur}
-                  onChange={field.handleChange}
-                  value={field.state.value}
-                />
-              )}
-            </form.Field>
+            <StoreSecretField
+              form={form}
+              provider={provider}
+              secretValue={secretValue}
+            />
 
             {submitError ? (
               <div
@@ -671,5 +240,529 @@ export function ConnectStoreCredentialSheet({
         </form>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function StoreProviderField({ form }: { form: StoreCredentialForm }) {
+  return (
+    <form.Field name="provider">
+      {(field) => (
+        <Field>
+          <FieldLabel htmlFor="store-credential-provider">Store</FieldLabel>
+          <Select
+            items={STORE_PROVIDER_OPTIONS}
+            onValueChange={(value) => {
+              field.handleChange(
+                value as StoreCredentialFormValues["provider"]
+              );
+              form.setFieldValue("secret", "");
+            }}
+            value={field.state.value}
+          >
+            <SelectTrigger id="store-credential-provider">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STORE_PROVIDER_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      )}
+    </form.Field>
+  );
+}
+
+function ConnectionNameField({ form }: { form: StoreCredentialForm }) {
+  return (
+    <form.Field
+      name="name"
+      validators={{
+        onSubmit: ({ value }) =>
+          (() => {
+            if (value.trim().length === 0) {
+              return "Enter a name for this connection.";
+            }
+            if (value.length > 120) {
+              return "Use 120 characters or fewer.";
+            }
+          })(),
+      }}
+    >
+      {(field) => (
+        <Field data-invalid={field.state.meta.errors.length > 0}>
+          <FieldLabel htmlFor="store-credential-name">
+            Connection name
+          </FieldLabel>
+          <Input
+            aria-invalid={field.state.meta.errors.length > 0}
+            id="store-credential-name"
+            onBlur={field.handleBlur}
+            onChange={(event) => field.handleChange(event.currentTarget.value)}
+            placeholder="App Store sandbox"
+            value={field.state.value}
+          />
+          <FieldError
+            errors={field.state.meta.errors.map((message) => ({
+              message,
+            }))}
+          />
+        </Field>
+      )}
+    </form.Field>
+  );
+}
+
+function StoreEnvironmentField({
+  environments,
+  form,
+}: {
+  environments: readonly Environment[];
+  form: StoreCredentialForm;
+}) {
+  return (
+    <form.Field name="storeEnvironment">
+      {(field) => (
+        <Field>
+          <FieldLabel htmlFor="store-credential-store-environment">
+            Store Environment
+          </FieldLabel>
+          <Select
+            items={STORE_ENVIRONMENT_OPTIONS}
+            onValueChange={(value) => {
+              const next =
+                value as StoreCredentialFormValues["storeEnvironment"];
+              field.handleChange(next);
+              const selected = environments.find(
+                (item) => item.id === form.getFieldValue("environmentId")
+              );
+              if (
+                selected &&
+                !storeEnvironmentMatchesMode(selected.mode, next)
+              ) {
+                form.setFieldValue("environmentId", "");
+              }
+            }}
+            value={field.state.value}
+          >
+            <SelectTrigger id="store-credential-store-environment">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STORE_ENVIRONMENT_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FieldDescription>
+            Sandbox and production are separate connections and never mix. This
+            is the store&rsquo;s own classification, not your Mosaic
+            Environment.
+          </FieldDescription>
+        </Field>
+      )}
+    </form.Field>
+  );
+}
+
+function MosaicEnvironmentField({
+  environments,
+  environmentsHref,
+  form,
+  storeEnvironment,
+}: {
+  environments: readonly Environment[];
+  environmentsHref: string;
+  form: StoreCredentialForm;
+  storeEnvironment: StoreCredentialFormValues["storeEnvironment"];
+}) {
+  const compatibleEnvironments = environments.filter((environment) =>
+    storeEnvironmentMatchesMode(environment.mode, storeEnvironment)
+  );
+  const environmentOptions = [
+    { label: "Select an Environment", value: "" },
+    ...compatibleEnvironments.map((environment) => ({
+      label: `${environment.name} · ${environment.mode}`,
+      value: environment.id,
+    })),
+  ];
+
+  return (
+    <form.Field
+      name="environmentId"
+      validators={{
+        onSubmit: ({ value }) =>
+          value.length === 0 ? "Select a Mosaic Environment." : undefined,
+      }}
+    >
+      {(field) => (
+        <Field data-invalid={field.state.meta.errors.length > 0}>
+          <FieldLabel htmlFor="store-credential-environment">
+            Mosaic Environment
+          </FieldLabel>
+          {compatibleEnvironments.length === 0 ? (
+            <div className="rounded border border-dashed p-3 text-xs">
+              <p className="text-muted-foreground">
+                No Mosaic Environment matches this Store Environment. A
+                production Store Environment needs a production Mosaic
+                Environment.
+              </p>
+              <a
+                className="mt-2 inline-flex font-semibold text-primary"
+                href={environmentsHref}
+              >
+                Create an Environment
+              </a>
+            </div>
+          ) : (
+            <Select
+              items={environmentOptions}
+              onValueChange={(value) => field.handleChange(value)}
+              value={field.state.value}
+            >
+              <SelectTrigger
+                aria-invalid={field.state.meta.errors.length > 0}
+                id="store-credential-environment"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {environmentOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <FieldError
+            errors={field.state.meta.errors.map((message) => ({
+              message,
+            }))}
+          />
+        </Field>
+      )}
+    </form.Field>
+  );
+}
+
+function ApplicationScopeField({
+  applications,
+  applicationsHref,
+  fieldIds,
+  form,
+  provider,
+}: {
+  applications: readonly Application[];
+  applicationsHref: string;
+  fieldIds: string;
+  form: StoreCredentialForm;
+  provider: StoreCredentialFormValues["provider"];
+}) {
+  return (
+    <form.Field
+      name="applications"
+      validators={{
+        onSubmit: ({ value }) => {
+          if (value.length === 0) {
+            return "Select at least one Application.";
+          }
+          return value.some((item) =>
+            validateProviderApplicationIdentifier(
+              item.providerApplicationIdentifier
+            )
+          )
+            ? "Enter the store identifier for every selected Application."
+            : undefined;
+        },
+      }}
+    >
+      {(field) => (
+        <fieldset className="space-y-2">
+          <legend className="font-medium text-sm">Application scope</legend>
+          <p className="text-muted-foreground text-xs leading-5">
+            A verified notification is accepted only for an Application listed
+            here. Mosaic matches the store&rsquo;s own bundle ID or package name
+            against these values.
+          </p>
+          {applications.length === 0 ? (
+            <div className="rounded border border-dashed p-3 text-xs">
+              <p className="text-muted-foreground">
+                Register an Application before adding a Store Server Credential.
+              </p>
+              <a
+                className="mt-2 inline-flex font-semibold text-primary"
+                href={applicationsHref}
+              >
+                Register an Application
+              </a>
+            </div>
+          ) : (
+            <div className="grid gap-2">
+              {applications.map((application) => {
+                const rowIds = `${fieldIds}-${application.id}`;
+                const selected = field.state.value.find(
+                  (item) => item.applicationId === application.id
+                );
+                return (
+                  <div
+                    className="rounded border p-3 text-sm"
+                    key={application.id}
+                  >
+                    <label className="flex items-start gap-3">
+                      <input
+                        checked={Boolean(selected)}
+                        className="mt-0.5 size-4 accent-primary"
+                        onChange={(event) =>
+                          field.handleChange(
+                            event.currentTarget.checked
+                              ? [
+                                  ...field.state.value,
+                                  {
+                                    applicationId: application.id,
+                                    providerApplicationIdentifier:
+                                      application.identifier,
+                                  },
+                                ]
+                              : field.state.value.filter(
+                                  (item) =>
+                                    item.applicationId !== application.id
+                                )
+                          )
+                        }
+                        type="checkbox"
+                      />
+                      <span>
+                        <span className="block font-medium">
+                          {application.name}
+                        </span>
+                        <span className="mt-0.5 block text-muted-foreground text-xs">
+                          {application.platform.toUpperCase()} ·{" "}
+                          {application.identifier}
+                        </span>
+                      </span>
+                    </label>
+                    {selected ? (
+                      <label
+                        className="mt-3 block space-y-1 font-medium text-xs"
+                        htmlFor={`${rowIds}-field-1`}
+                      >
+                        {provider === "app_store"
+                          ? "Bundle ID"
+                          : "Package name"}
+                        <Input
+                          id={`${rowIds}-field-1`}
+                          onChange={(event) =>
+                            field.handleChange(
+                              field.state.value.map((item) =>
+                                item.applicationId === application.id
+                                  ? {
+                                      ...item,
+                                      providerApplicationIdentifier:
+                                        event.currentTarget.value,
+                                    }
+                                  : item
+                              )
+                            )
+                          }
+                          spellCheck={false}
+                          value={selected.providerApplicationIdentifier}
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {field.state.meta.errors[0] ? (
+            <p className="text-destructive text-sm" role="alert">
+              {field.state.meta.errors[0]}
+            </p>
+          ) : null}
+        </fieldset>
+      )}
+    </form.Field>
+  );
+}
+
+function AppleCredentialFields({ form }: { form: StoreCredentialForm }) {
+  return (
+    <>
+      <form.Field
+        name="appleIssuerId"
+        validators={{
+          onSubmit: ({ value }) => validateAppleIssuerId(value),
+        }}
+      >
+        {(field) => (
+          <Field data-invalid={field.state.meta.errors.length > 0}>
+            <FieldLabel htmlFor="store-credential-issuer">Issuer ID</FieldLabel>
+            <Input
+              aria-invalid={field.state.meta.errors.length > 0}
+              id="store-credential-issuer"
+              onBlur={field.handleBlur}
+              onChange={(event) =>
+                field.handleChange(event.currentTarget.value)
+              }
+              placeholder="00000000-0000-0000-0000-000000000000"
+              spellCheck={false}
+              value={field.state.value}
+            />
+            <FieldDescription>
+              App Store Connect · Users and Access · Integrations. Not a secret.
+            </FieldDescription>
+            <FieldError
+              errors={field.state.meta.errors.map((message) => ({
+                message,
+              }))}
+            />
+          </Field>
+        )}
+      </form.Field>
+
+      <form.Field
+        name="appleKeyId"
+        validators={{
+          onSubmit: ({ value }) => validateAppleKeyId(value),
+        }}
+      >
+        {(field) => (
+          <Field data-invalid={field.state.meta.errors.length > 0}>
+            <FieldLabel htmlFor="store-credential-key-id">Key ID</FieldLabel>
+            <Input
+              aria-invalid={field.state.meta.errors.length > 0}
+              id="store-credential-key-id"
+              onBlur={field.handleBlur}
+              onChange={(event) =>
+                field.handleChange(event.currentTarget.value)
+              }
+              placeholder="ABCDE12345"
+              spellCheck={false}
+              value={field.state.value}
+            />
+            <FieldError
+              errors={field.state.meta.errors.map((message) => ({
+                message,
+              }))}
+            />
+          </Field>
+        )}
+      </form.Field>
+    </>
+  );
+}
+
+function GooglePubSubFields({ form }: { form: StoreCredentialForm }) {
+  return (
+    <>
+      <form.Field name="googlePubSubProjectId">
+        {(field) => (
+          <Field>
+            <FieldLabel htmlFor="store-credential-pubsub-project">
+              Pub/Sub project ID
+            </FieldLabel>
+            <Input
+              id="store-credential-pubsub-project"
+              onChange={(event) =>
+                field.handleChange(event.currentTarget.value)
+              }
+              spellCheck={false}
+              value={field.state.value}
+            />
+          </Field>
+        )}
+      </form.Field>
+      <form.Field name="googlePubSubSubscriptionId">
+        {(field) => (
+          <Field>
+            <FieldLabel htmlFor="store-credential-pubsub-subscription">
+              Pub/Sub subscription ID
+            </FieldLabel>
+            <Input
+              id="store-credential-pubsub-subscription"
+              onChange={(event) =>
+                field.handleChange(event.currentTarget.value)
+              }
+              spellCheck={false}
+              value={field.state.value}
+            />
+            <FieldDescription>
+              Mosaic pulls notifications from this subscription. Google Play
+              needs no inbound Mosaic address.
+            </FieldDescription>
+          </Field>
+        )}
+      </form.Field>
+    </>
+  );
+}
+
+function StoreSecretField({
+  form,
+  provider,
+  secretValue,
+}: {
+  form: StoreCredentialForm;
+  provider: StoreCredentialFormValues["provider"];
+  secretValue: string;
+}) {
+  const googleSummary =
+    provider === "google_play" && secretValue.trim().length > 0
+      ? readGoogleServiceAccount(secretValue)
+      : undefined;
+
+  return (
+    <form.Field
+      name="secret"
+      validators={{
+        onSubmit: ({ value }) =>
+          form.getFieldValue("provider") === "app_store"
+            ? validateApplePrivateKey(value)
+            : validateGoogleServiceAccount(value),
+      }}
+    >
+      {(field) => (
+        <SecretKeyField
+          accept={
+            provider === "app_store" ? ".p8,.pem" : ".json,application/json"
+          }
+          description="Read in this browser, sent once over TLS, encrypted by the API, cleared from this form after the attempt, and never returned or shown again. Mosaic checks only the file format here; the store decides whether the key works."
+          errors={field.state.meta.errors.filter(
+            (message): message is string => typeof message === "string"
+          )}
+          extra={
+            googleSummary && "summary" in googleSummary ? (
+              <p className="text-muted-foreground text-xs" role="status">
+                Service account:{" "}
+                <strong>{googleSummary.summary.clientEmail}</strong>
+                {googleSummary.summary.projectId
+                  ? ` · project ${googleSummary.summary.projectId}`
+                  : ""}
+              </p>
+            ) : null
+          }
+          fileKindLabel={
+            provider === "app_store"
+              ? ".p8 key file"
+              : "service-account JSON file"
+          }
+          id="store-credential-secret"
+          label={
+            provider === "app_store"
+              ? "In-App Purchase key (.p8)"
+              : "Service-account JSON key"
+          }
+          onBlur={field.handleBlur}
+          onChange={field.handleChange}
+          value={field.state.value}
+        />
+      )}
+    </form.Field>
   );
 }

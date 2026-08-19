@@ -13,12 +13,14 @@ import {
 } from "@/features/paywall-editor/components/property-inspector-background";
 import {
   CompactOptionField,
-  distributionOptions,
-  FLOW_OPTIONS,
   InspectorSection,
   TwoColumn,
   useInspectorContext,
 } from "@/features/paywall-editor/components/property-inspector-core";
+import {
+  distributionOptions,
+  FLOW_OPTIONS,
+} from "@/features/paywall-editor/components/property-inspector-core-support";
 import {
   ColorField,
   LocalizedField,

@@ -1,18 +1,20 @@
-/* eslint-disable react-refresh/only-export-components -- internal inspector modules colocate private controls with their supporting types and transforms. */
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
+import { seedOptionalLocalizedText } from "@/features/paywall-editor/components/property-inspector-accessibility-support";
 import {
   CONTROL_CLASS,
-  type ControlNode,
   Field,
   InspectorSection,
-  isControlNode,
   TwoColumn,
   useInspectorContext,
 } from "@/features/paywall-editor/components/property-inspector-core";
+import {
+  type ControlNode,
+  isControlNode,
+} from "@/features/paywall-editor/components/property-inspector-core-support";
 import {
   CheckboxField,
   LocalizedField,
@@ -22,30 +24,9 @@ import {
 import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
 import type {
   LocalizedText,
-  MosaicDocument,
   ProtocolNode,
 } from "@/features/paywall-editor/types/editor";
-import { updateNode } from "@/features/paywall-editor/utils/document-tree-traversal";
-import { createSeededLocalizedText } from "@/features/paywall-editor/utils/editor-transforms";
 import { markerLabel } from "@/features/paywall-editor/utils/marker";
-
-export function seedOptionalLocalizedText(options: {
-  defaultValue: string;
-  keyBase: string;
-  nodeId: string;
-  update: (node: ProtocolNode, text: LocalizedText) => ProtocolNode;
-}) {
-  return (document: MosaicDocument) => {
-    const seeded = createSeededLocalizedText({
-      document,
-      defaultValue: options.defaultValue,
-      keyBase: options.keyBase,
-    });
-    return updateNode(seeded.document, options.nodeId, (node) =>
-      options.update(node, seeded.text)
-    );
-  };
-}
 
 export function ControlAccessibilitySection({ node }: { node: ControlNode }) {
   const { disabled } = useInspectorContext();
@@ -301,7 +282,7 @@ export interface AdvancedProperty {
   readonly value: string;
 }
 
-export function addLocalizationKey(
+function addLocalizationKey(
   properties: AdvancedProperty[],
   address: string,
   label: string,
@@ -317,7 +298,7 @@ export function addLocalizationKey(
   });
 }
 
-export function addControlLocalizationKeys(
+function addControlLocalizationKeys(
   properties: AdvancedProperty[],
   node: ControlNode
 ) {
@@ -335,7 +316,7 @@ export function addControlLocalizationKeys(
   );
 }
 
-export function advancedProperties(node: ProtocolNode) {
+function advancedProperties(node: ProtocolNode) {
   const properties: AdvancedProperty[] = [
     { address: "id", label: "Component ID", value: node.id },
     { address: "type", label: "Component type", value: node.type },

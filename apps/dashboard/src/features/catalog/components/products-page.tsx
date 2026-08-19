@@ -37,6 +37,7 @@ import {
   WorkspacePage,
 } from "@/features/orgs/components/workspace-page";
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import type { Product } from "@/generated/api";
 import { describeReturnDestination } from "@/lib/routing/workspace-hrefs";
 import { workspaceScopeParams } from "@/lib/routing/workspace-params";
 
@@ -285,134 +286,167 @@ export function ProductsPage({
           {describeReturnDestination(returnTo)}
         </a>
       ) : null}
-      <WorkflowPanel
-        description="Import and synchronization begin from one explicit, tested Provider Connection."
-        title="Connected Catalog"
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            className={buttonVariants({ variant: "outline" })}
-            params={(prev) => ({
-              ...prev,
-              ...workspaceScopeParams(prev),
-            })}
-            to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers"
-          >
-            Review Purchase setup
-          </Link>
-          <p className="text-muted-foreground text-xs">
-            Provider catalog IDs stay behind mappings; Paywalls continue
-            referencing stable Mosaic Product IDs.
-          </p>
-        </div>
-      </WorkflowPanel>
-      <WorkflowPanel title="Filters">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <label className="font-medium text-sm" htmlFor={`${fieldIds}-search`}>
-            Search
-            <Input
-              className="mt-2"
-              id={`${fieldIds}-search`}
-              onChange={(event) =>
-                onFiltersChange({
-                  ...filters,
-                  search: event.target.value || undefined,
-                })
-              }
-              placeholder="Search Products"
-              value={filters.search ?? ""}
-            />
-          </label>
-          <div className="font-medium text-sm">
-            <label htmlFor="product-status-filter">Status</label>
-            <Select
-              items={STATUS_FILTER_OPTIONS}
-              onValueChange={(value) =>
-                onFiltersChange({
-                  ...filters,
-                  status: (value || undefined) as ProductFilters["status"],
-                })
-              }
-              value={filters.status ?? ""}
-            >
-              <SelectTrigger className="mt-2" id="product-status-filter">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_FILTER_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="font-medium text-sm">
-            <label htmlFor="product-type-filter">Type</label>
-            <Select
-              items={TYPE_FILTER_OPTIONS}
-              onValueChange={(value) =>
-                onFiltersChange({
-                  ...filters,
-                  type: (value || undefined) as ProductFilters["type"],
-                })
-              }
-              value={filters.type ?? ""}
-            >
-              <SelectTrigger className="mt-2" id="product-type-filter">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TYPE_FILTER_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </WorkflowPanel>
+      <ConnectedCatalogPanel />
+      <ProductFilterControls
+        fieldIds={fieldIds}
+        filters={filters}
+        onFiltersChange={onFiltersChange}
+      />
       <HostedResourceBoundary state={state}>
         <WorkflowPanel title="Products">
-          <ul className="divide-y">
-            {items.map((product) => (
-              <li
-                className="flex items-center justify-between gap-4 py-4"
-                key={product.id}
-              >
-                <span>
-                  <span className="block font-semibold text-sm">
-                    {product.internalName}
-                  </span>
-                  <span className="mt-1 block text-muted-foreground text-xs">
-                    {product.type === "subscription"
-                      ? "Subscription"
-                      : "One-time"}{" "}
-                    ·{" "}
-                    {product.metadataSource === "mock"
-                      ? "Mock metadata"
-                      : "Provider metadata"}{" "}
-                    · {product.status.replaceAll("_", " ")}
-                  </span>
-                </span>
-                <Link
-                  className="font-medium text-primary text-sm hover:underline"
-                  params={(prev) => ({
-                    ...prev,
-                    ...workspaceScopeParams(prev),
-                    productId: product.id,
-                  })}
-                  search={returnTo ? { returnTo } : {}}
-                  to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId"
-                >
-                  {returnTo ? "Open mappings" : "View usage"}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <ProductList items={items} returnTo={returnTo} />
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>
+  );
+}
+
+function ConnectedCatalogPanel() {
+  return (
+    <WorkflowPanel
+      description="Import and synchronization begin from one explicit, tested Provider Connection."
+      title="Connected Catalog"
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <Link
+          className={buttonVariants({ variant: "outline" })}
+          params={(prev) => ({
+            ...prev,
+            ...workspaceScopeParams(prev),
+          })}
+          to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers"
+        >
+          Review Purchase setup
+        </Link>
+        <p className="text-muted-foreground text-xs">
+          Provider catalog IDs stay behind mappings; Paywalls continue
+          referencing stable Mosaic Product IDs.
+        </p>
+      </div>
+    </WorkflowPanel>
+  );
+}
+
+function ProductFilterControls({
+  fieldIds,
+  filters,
+  onFiltersChange,
+}: {
+  fieldIds: string;
+  filters: ProductFilters;
+  onFiltersChange: (filters: ProductFilters) => void;
+}) {
+  return (
+    <WorkflowPanel title="Filters">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="font-medium text-sm" htmlFor={`${fieldIds}-search`}>
+          Search
+          <Input
+            className="mt-2"
+            id={`${fieldIds}-search`}
+            onChange={(event) =>
+              onFiltersChange({
+                ...filters,
+                search: event.target.value || undefined,
+              })
+            }
+            placeholder="Search Products"
+            value={filters.search ?? ""}
+          />
+        </label>
+        <div className="font-medium text-sm">
+          <label htmlFor="product-status-filter">Status</label>
+          <Select
+            items={STATUS_FILTER_OPTIONS}
+            onValueChange={(value) =>
+              onFiltersChange({
+                ...filters,
+                status: (value || undefined) as ProductFilters["status"],
+              })
+            }
+            value={filters.status ?? ""}
+          >
+            <SelectTrigger className="mt-2" id="product-status-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="font-medium text-sm">
+          <label htmlFor="product-type-filter">Type</label>
+          <Select
+            items={TYPE_FILTER_OPTIONS}
+            onValueChange={(value) =>
+              onFiltersChange({
+                ...filters,
+                type: (value || undefined) as ProductFilters["type"],
+              })
+            }
+            value={filters.type ?? ""}
+          >
+            <SelectTrigger className="mt-2" id="product-type-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TYPE_FILTER_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </WorkflowPanel>
+  );
+}
+
+function ProductList({
+  items,
+  returnTo,
+}: {
+  items: readonly Product[];
+  returnTo?: string;
+}) {
+  return (
+    <ul className="divide-y">
+      {items.map((product) => (
+        <li
+          className="flex items-center justify-between gap-4 py-4"
+          key={product.id}
+        >
+          <span>
+            <span className="block font-semibold text-sm">
+              {product.internalName}
+            </span>
+            <span className="mt-1 block text-muted-foreground text-xs">
+              {product.type === "subscription" ? "Subscription" : "One-time"} ·{" "}
+              {product.metadataSource === "mock"
+                ? "Mock metadata"
+                : "Provider metadata"}{" "}
+              · {product.status.replaceAll("_", " ")}
+            </span>
+          </span>
+          <Link
+            className="font-medium text-primary text-sm hover:underline"
+            params={(prev) => ({
+              ...prev,
+              ...workspaceScopeParams(prev),
+              productId: product.id,
+            })}
+            search={returnTo ? { returnTo } : {}}
+            to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId"
+          >
+            {returnTo ? "Open mappings" : "View usage"}
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }

@@ -28,6 +28,8 @@ import type {
   ActiveProviderAssignment,
   Application,
   Environment,
+  Paywall,
+  Product,
   ProviderConnection,
 } from "@/generated/api";
 
@@ -352,162 +354,53 @@ function ProviderAssignmentControl({
   if (reviewAction && (reviewAction === "clear" || selected)) {
     const isClearing = reviewAction === "clear";
     return (
-      <div className="ml-auto max-w-xs rounded border p-3 text-left">
-        <p className="font-semibold text-xs">
-          {(() => {
-            if (isClearing) {
-              return `Clear ${providerChoiceLabel(currentAssignment, current)}`;
-            }
-            if (currentAssignment) {
-              return `Replace ${providerChoiceLabel(currentAssignment, current)}`;
-            }
-            return "Select active provider";
-          })()}
-        </p>
-        <p className="mt-1 text-muted-foreground text-xs leading-5">
-          {isClearing
-            ? `Clearing this assignment leaves ${application.name} without a commerce provider in ${environment.name}. New publishing will fail readiness and SDK configuration cannot resolve connected Product metadata until another healthy provider is selected.`
-            : `${currentAssignment ? `${providerChoiceLabel(currentAssignment, current)} → ${selected?.label}. ` : ""}This changes provider resolution for ${application.name} in ${environment.name}. Published history remains immutable; new publishing readiness and SDK configuration use this explicit assignment.`}
-        </p>
-        {impactRequired && impact.isPending ? (
-          <p className="mt-2 text-muted-foreground text-xs" role="status">
-            Calculating affected Products and active Paywalls…
-          </p>
-        ) : null}
-        {impactRequired && impact.isError ? (
-          <div className="mt-2 rounded border border-destructive/40 p-2">
-            <p className="text-destructive text-xs" role="alert">
-              Impact could not be loaded. Confirmation remains disabled.
-            </p>
-            <Button
-              className="mt-2"
-              onClick={() => {
-                impact.refetch();
-              }}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Retry impact
-            </Button>
-          </div>
-        ) : null}
-        {impact.data ? (
-          <div className="mt-2 rounded bg-muted/50 p-2 text-xs leading-5">
-            <p className="font-medium">
-              {impact.data.products.length} affected Product
-              {impact.data.products.length === 1 ? "" : "s"} ·{" "}
-              {impact.data.paywalls.length} active Paywall
-              {impact.data.paywalls.length === 1 ? "" : "s"}
-            </p>
-            {impact.data.products.length > 0 ? (
-              <p className="text-muted-foreground">
-                Products:{" "}
-                {impact.data.products
-                  .map((product) => product.internalName)
-                  .join(", ")}
-              </p>
-            ) : null}
-            {impact.data.paywalls.length > 0 ? (
-              <p className="text-muted-foreground">
-                Paywalls:{" "}
-                {impact.data.paywalls.map((paywall) => paywall.name).join(", ")}
-              </p>
-            ) : null}
-            {impact.data.uncheckedPaywalls.length > 0 ? (
-              // Stated, not omitted: these are the Paywalls whose content
-              // Mosaic could not inspect, so the count above is a floor.
-              <p className="mt-1 text-destructive">
-                {impact.data.uncheckedPaywalls.length} Paywall
-                {impact.data.uncheckedPaywalls.length === 1 ? "" : "s"} could
-                not be checked — no active Draft exists in this Environment, so
-                Mosaic cannot tell whether their published content cites these
-                Products. Treat the count above as a minimum.
-              </p>
-            ) : null}
-            <a
-              className="font-medium text-primary hover:underline"
-              href={catalogHref}
-            >
-              Review affected Products
-            </a>
-          </div>
-        ) : null}
-        {mutation.error ? (
-          <p className="mt-2 text-destructive text-xs" role="alert">
-            {mutation.error.message}
-          </p>
-        ) : null}
-        {canManage ? null : (
-          <div className="mt-3 rounded border border-border bg-background p-3 text-xs">
-            <p className="font-medium">Owner or Admin approval required</p>
-            <p className="mt-1 text-muted-foreground">
-              Members can review this impact but cannot change Purchase setup.
-            </p>
-            {membersHref ? (
-              <a
-                className="mt-2 inline-flex font-semibold text-primary"
-                href={membersHref}
-              >
-                Ask an Owner or Admin
-              </a>
-            ) : null}
-          </div>
-        )}
-        <div className="mt-3 flex gap-2">
-          {canManage ? (
-            <Button
-              disabled={mutation.isPending || !canConfirmImpact}
-              onClick={() => {
-                if (isClearing) {
-                  clearProvider.mutate(undefined, {
-                    onSuccess: () => setReviewAction(null),
-                  });
-                  return;
+      <ProviderAssignmentReview
+        application={application}
+        canConfirm={canConfirmImpact}
+        canManage={canManage}
+        catalogHref={catalogHref}
+        currentAssignment={currentAssignment}
+        currentConnection={current}
+        environment={environment}
+        impact={impact.data}
+        impactFailed={impact.isError}
+        impactPending={impact.isPending}
+        impactRequired={impactRequired}
+        isClearing={isClearing}
+        membersHref={membersHref}
+        mutationError={mutation.error}
+        mutationPending={mutation.isPending}
+        onCancel={handleClick}
+        onConfirm={() => {
+          if (isClearing) {
+            clearProvider.mutate(undefined, {
+              onSuccess: () => setReviewAction(null),
+            });
+            return;
+          }
+          if (!selected) {
+            return;
+          }
+          setProvider.mutate(
+            selected.kind === "native"
+              ? {
+                  activationKind: "native_store",
+                  provider: selected.provider,
                 }
-                if (!selected) {
-                  return;
-                }
-                setProvider.mutate(
-                  selected.kind === "native"
-                    ? {
-                        activationKind: "native_store",
-                        provider: selected.provider,
-                      }
-                    : {
-                        acknowledgeProductionConnectionUse: false,
-                        activationKind: "provider_connection",
-                        connectionId: selected.connection.id,
-                        provider: selected.provider,
-                      },
-                  { onSuccess: () => setReviewAction(null) }
-                );
-              }}
-              size="sm"
-              type="button"
-            >
-              {(() => {
-                if (mutation.isPending) {
-                  return "Saving…";
-                }
-                if (isClearing) {
-                  return "Confirm clear";
-                }
-                return "Confirm selection";
-              })()}
-            </Button>
-          ) : null}
-          <Button
-            disabled={mutation.isPending}
-            onClick={handleClick}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Cancel
-          </Button>
-        </div>
-      </div>
+              : {
+                  acknowledgeProductionConnectionUse: false,
+                  activationKind: "provider_connection",
+                  connectionId: selected.connection.id,
+                  provider: selected.provider,
+                },
+            { onSuccess: () => setReviewAction(null) }
+          );
+        }}
+        onRetryImpact={() => {
+          impact.refetch();
+        }}
+        selectedLabel={selected?.label}
+      />
     );
   }
 
@@ -563,6 +456,214 @@ function ProviderAssignmentControl({
           </a>
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The impact review an assignment change is confirmed from.
+ *
+ * Confirmation stays disabled until the impact read succeeds, because replacing
+ * a provider without knowing which Products and Paywalls it touches is the one
+ * mistake this surface exists to prevent.
+ */
+function ProviderAssignmentReview({
+  application,
+  canConfirm,
+  canManage,
+  catalogHref,
+  currentAssignment,
+  currentConnection,
+  environment,
+  impact,
+  impactFailed,
+  impactPending,
+  impactRequired,
+  isClearing,
+  membersHref,
+  mutationError,
+  mutationPending,
+  onCancel,
+  onConfirm,
+  onRetryImpact,
+  selectedLabel,
+}: {
+  application: Application;
+  canConfirm: boolean;
+  canManage: boolean;
+  catalogHref: string;
+  currentAssignment?: ActiveProviderAssignment;
+  currentConnection?: ProviderConnection;
+  environment: Environment;
+  impact:
+    | {
+        paywalls: readonly Paywall[];
+        products: readonly Product[];
+        uncheckedPaywalls: readonly Paywall[];
+      }
+    | undefined;
+  impactFailed: boolean;
+  impactPending: boolean;
+  impactRequired: boolean;
+  isClearing: boolean;
+  membersHref?: string;
+  mutationError: Error | null;
+  mutationPending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  onRetryImpact: () => void;
+  selectedLabel?: string;
+}) {
+  return (
+    <div className="ml-auto max-w-xs rounded border p-3 text-left">
+      <p className="font-semibold text-xs">
+        {(() => {
+          if (isClearing) {
+            return `Clear ${providerChoiceLabel(currentAssignment, currentConnection)}`;
+          }
+          if (currentAssignment) {
+            return `Replace ${providerChoiceLabel(currentAssignment, currentConnection)}`;
+          }
+          return "Select active provider";
+        })()}
+      </p>
+      <p className="mt-1 text-muted-foreground text-xs leading-5">
+        {isClearing
+          ? `Clearing this assignment leaves ${application.name} without a commerce provider in ${environment.name}. New publishing will fail readiness and SDK configuration cannot resolve connected Product metadata until another healthy provider is selected.`
+          : `${currentAssignment ? `${providerChoiceLabel(currentAssignment, currentConnection)} → ${selectedLabel}. ` : ""}This changes provider resolution for ${application.name} in ${environment.name}. Published history remains immutable; new publishing readiness and SDK configuration use this explicit assignment.`}
+      </p>
+      {impactRequired && impactPending ? (
+        <p className="mt-2 text-muted-foreground text-xs" role="status">
+          Calculating affected Products and active Paywalls…
+        </p>
+      ) : null}
+      {impactRequired && impactFailed ? (
+        <div className="mt-2 rounded border border-destructive/40 p-2">
+          <p className="text-destructive text-xs" role="alert">
+            Impact could not be loaded. Confirmation remains disabled.
+          </p>
+          <Button
+            className="mt-2"
+            onClick={onRetryImpact}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Retry impact
+          </Button>
+        </div>
+      ) : null}
+      {impact ? (
+        <ProviderAssignmentImpactSummary
+          catalogHref={catalogHref}
+          impact={impact}
+        />
+      ) : null}
+      {mutationError ? (
+        <p className="mt-2 text-destructive text-xs" role="alert">
+          {mutationError.message}
+        </p>
+      ) : null}
+      {canManage ? null : (
+        <div className="mt-3 rounded border border-border bg-background p-3 text-xs">
+          <p className="font-medium">Owner or Admin approval required</p>
+          <p className="mt-1 text-muted-foreground">
+            Members can review this impact but cannot change Purchase setup.
+          </p>
+          {membersHref ? (
+            <a
+              className="mt-2 inline-flex font-semibold text-primary"
+              href={membersHref}
+            >
+              Ask an Owner or Admin
+            </a>
+          ) : null}
+        </div>
+      )}
+      <div className="mt-3 flex gap-2">
+        {canManage ? (
+          <Button
+            disabled={mutationPending || !canConfirm}
+            onClick={onConfirm}
+            size="sm"
+            type="button"
+          >
+            {(() => {
+              if (mutationPending) {
+                return "Saving…";
+              }
+              if (isClearing) {
+                return "Confirm clear";
+              }
+              return "Confirm selection";
+            })()}
+          </Button>
+        ) : null}
+        <Button
+          disabled={mutationPending}
+          onClick={onCancel}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The Products and Paywalls a change would touch, including the Paywalls Mosaic
+ * could not inspect.
+ */
+function ProviderAssignmentImpactSummary({
+  catalogHref,
+  impact,
+}: {
+  catalogHref: string;
+  impact: {
+    paywalls: readonly Paywall[];
+    products: readonly Product[];
+    uncheckedPaywalls: readonly Paywall[];
+  };
+}) {
+  return (
+    <div className="mt-2 rounded bg-muted/50 p-2 text-xs leading-5">
+      <p className="font-medium">
+        {impact.products.length} affected Product
+        {impact.products.length === 1 ? "" : "s"} · {impact.paywalls.length}{" "}
+        active Paywall
+        {impact.paywalls.length === 1 ? "" : "s"}
+      </p>
+      {impact.products.length > 0 ? (
+        <p className="text-muted-foreground">
+          Products:{" "}
+          {impact.products.map((product) => product.internalName).join(", ")}
+        </p>
+      ) : null}
+      {impact.paywalls.length > 0 ? (
+        <p className="text-muted-foreground">
+          Paywalls: {impact.paywalls.map((paywall) => paywall.name).join(", ")}
+        </p>
+      ) : null}
+      {impact.uncheckedPaywalls.length > 0 ? (
+        // Stated, not omitted: these are the Paywalls whose content
+        // Mosaic could not inspect, so the count above is a floor.
+        <p className="mt-1 text-destructive">
+          {impact.uncheckedPaywalls.length} Paywall
+          {impact.uncheckedPaywalls.length === 1 ? "" : "s"} could not be
+          checked — no active Draft exists in this Environment, so Mosaic cannot
+          tell whether their published content cites these Products. Treat the
+          count above as a minimum.
+        </p>
+      ) : null}
+      <a
+        className="font-medium text-primary hover:underline"
+        href={catalogHref}
+      >
+        Review affected Products
+      </a>
     </div>
   );
 }

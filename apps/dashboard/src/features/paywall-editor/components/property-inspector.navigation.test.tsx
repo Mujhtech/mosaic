@@ -25,12 +25,12 @@ import {
   expectSectionsOpen,
   expectValidationIssueFocus,
   getInspectorSection,
-  InspectorHarness,
   openInspectorSection,
   renderedPropertyAddresses,
   renderInspector,
   renderSeedMode,
-} from "./property-inspector-test-support";
+} from "./property-inspector-test-helpers";
+import { InspectorHarness } from "./property-inspector-test-support";
 
 describe("property inspector safety", () => {
   it("allows the former start destination to become a Sheet", async () => {

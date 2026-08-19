@@ -4,13 +4,15 @@ import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
 import type { CSSProperties, ReactNode } from "react";
 import { createElement } from "react";
 import {
+  InlineEditor,
+  NodeFrame,
+} from "@/features/paywall-editor/components/canvas-preview-node-primitives";
+import {
   alignmentStyle,
   appearanceStyle,
   countdownText,
   distributionStyle,
   headingElement,
-  InlineEditor,
-  NodeFrame,
   PROTOCOL_ICON_GLYPHS,
   type PreviewProductContext,
   productCardRequiresPrice,
@@ -19,7 +21,7 @@ import {
   resolveProductTemplate,
   subtreeIncludesId,
   typographyStyle,
-} from "@/features/paywall-editor/components/canvas-preview-node-primitives";
+} from "@/features/paywall-editor/components/canvas-preview-node-primitives-support";
 import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
 import type {
   Marker,
@@ -1187,16 +1189,18 @@ function AnnouncedSegments({
       {result.announcement.container.value ? (
         <span className="sr-only">{result.announcement.container.value}</span>
       ) : null}
-      {result.announcement.elements
-        .filter((element) => !skipped.has(element.segment))
-        .map((element) => (
-          <span
-            className="sr-only"
-            key={`${element.item ?? ""}.${element.segment}`}
-          >
-            {element.text}
-          </span>
-        ))}
+      {result.announcement.elements.flatMap((element) =>
+        skipped.has(element.segment)
+          ? []
+          : [
+              <span
+                className="sr-only"
+                key={`${element.item ?? ""}.${element.segment}`}
+              >
+                {element.text}
+              </span>,
+            ]
+      )}
     </>
   );
 }

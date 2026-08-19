@@ -45,7 +45,11 @@ import {
   storeCredentialHealthLabel,
   usesInboundNotificationEndpoint,
 } from "@/features/store-connections/types/store-connection-view";
-import type { StoreServerCredentialWithEndpoint } from "@/generated/api";
+import type {
+  Application,
+  StoreServerCredential,
+  StoreServerCredentialWithEndpoint,
+} from "@/generated/api";
 import { useOrganizationAccess } from "@/hooks/use-organization-access";
 import { storeConnectionsHref } from "@/lib/routing/workspace-hrefs";
 
@@ -204,108 +208,33 @@ export function StoreConnectionDetailPage({
               ) : null}
             </div>
 
-            <WorkflowPanel
-              description={storeCredentialHealthExplanation(
-                record.healthStatus
-              )}
-              title="Credential operations"
-            >
-              {access.canManage ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    disabled={!actions.test || test.isPending}
-                    onClick={handleClick}
-                    type="button"
-                  >
-                    {test.isPending ? "Testing…" : "Test connection"}
-                  </Button>
-                  {actions.rotate ? (
-                    <RotateStoreCredentialSheet
-                      onRotate={async (secret) => {
-                        const rotated = await rotate.mutateAsync({ secret });
-                        transferStoreCredentialEndpoint(
-                          queryClient,
-                          rotated,
-                          setRevealed,
-                          sanitizeSecretMutationState
-                        );
-                      }}
-                      provider={record.provider}
-                    />
-                  ) : null}
-                  {actions.revoke ? (
-                    <Button
-                      onClick={handleClick2}
-                      type="button"
-                      variant="destructive"
-                    >
-                      Revoke
-                    </Button>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-sm">
-                  Organization owner or admin permission is required to test,
-                  rotate, or revoke this credential.{" "}
-                  <a
-                    className="font-semibold text-primary"
-                    href={`/orgs/${encodeURIComponent(organizationId)}/members`}
-                  >
-                    Ask an Owner or Admin
-                  </a>
-                </p>
-              )}
-              {test.error || rotate.error ? (
-                <p className="mt-3 text-destructive text-sm" role="alert">
-                  {(test.error ?? rotate.error)?.message}
-                </p>
-              ) : null}
-              {test.isSuccess ? (
-                <p className="mt-3 text-muted-foreground text-sm" role="status">
-                  Test completed. Health is now{" "}
-                  {storeCredentialHealthLabel(test.data?.healthStatus)}. Testing
-                  reads only; it changes nothing in your store account.
-                </p>
-              ) : null}
-              {confirmRevoke ? (
-                <div className="mt-4 rounded border border-destructive/25 bg-destructive/5 p-4">
-                  <p className="font-semibold text-sm">
-                    Revoke this Store Server Credential?
-                  </p>
-                  <p className="mt-1 text-muted-foreground text-sm leading-6">
-                    Validation stops using this key and its intake token is
-                    cleared, so the notification endpoint stops resolving.
-                    Everything already recorded stays: the ledger is the
-                    evidence trail a revocation is usually part of
-                    investigating. Inputs that arrive afterwards are not
-                    attributed to this Project.
-                  </p>
-                  {revoke.error ? (
-                    <p className="mt-2 text-destructive text-sm" role="alert">
-                      {revoke.error.message}
-                    </p>
-                  ) : null}
-                  <div className="mt-3 flex gap-2">
-                    <Button
-                      disabled={revoke.isPending}
-                      onClick={handleClick3}
-                      type="button"
-                      variant="destructive"
-                    >
-                      {revoke.isPending ? "Revoking…" : "Confirm revoke"}
-                    </Button>
-                    <Button
-                      disabled={revoke.isPending}
-                      onClick={handleClick4}
-                      type="button"
-                      variant="outline"
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-            </WorkflowPanel>
+            <CredentialOperationsPanel
+              actions={actions}
+              canManage={access.canManage}
+              confirmRevoke={confirmRevoke}
+              credential={record}
+              membersHref={`/orgs/${encodeURIComponent(organizationId)}/members`}
+              onCancelRevoke={handleClick4}
+              onConfirmRevoke={handleClick3}
+              onRequestRevoke={handleClick2}
+              onRotate={async (secret) => {
+                const rotated = await rotate.mutateAsync({ secret });
+                transferStoreCredentialEndpoint(
+                  queryClient,
+                  rotated,
+                  setRevealed,
+                  sanitizeSecretMutationState
+                );
+              }}
+              onTest={handleClick}
+              revokeError={revoke.error}
+              revokePending={revoke.isPending}
+              rotateError={rotate.error}
+              testError={test.error}
+              testedHealthStatus={test.data?.healthStatus}
+              testPending={test.isPending}
+              testSuccess={test.isSuccess}
+            />
 
             {usesInboundNotificationEndpoint(record) ? (
               <NotificationEndpointPanel
@@ -318,101 +247,268 @@ export function StoreConnectionDetailPage({
 
             <NotificationSetupGuide credential={record} />
 
-            <WorkflowPanel
-              description="Everything Mosaic can show about the stored key. No ciphertext, no key material, and no way to reveal either."
-              title="Credential metadata"
-            >
-              <dl>
-                <DefinitionRow
-                  label="Status"
-                  value={credentialStatusLabel(record.status)}
-                />
-                <DefinitionRow
-                  label="Store Environment"
-                  value={storeEnvironmentLabel(record.storeEnvironment)}
-                />
-                <DefinitionRow
-                  label="Mosaic Environment"
-                  value={environmentName}
-                />
-                {record.provider === "app_store" ? (
-                  <>
-                    <DefinitionRow
-                      label="Issuer ID"
-                      value={record.appleIssuerId ?? "—"}
-                    />
-                    <DefinitionRow
-                      label="Key ID"
-                      value={record.appleKeyId ?? "—"}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <DefinitionRow
-                      label="Service account"
-                      value={record.googleClientEmail ?? "—"}
-                    />
-                    <DefinitionRow
-                      label="Pub/Sub subscription"
-                      value={`${record.googlePubSubProjectId ?? "—"} / ${record.googlePubSubSubscriptionId ?? "—"}`}
-                    />
-                  </>
-                )}
-                <DefinitionRow
-                  label="Last error code"
-                  value={record.lastErrorCode ?? "None recorded"}
-                />
-                <DefinitionRow
-                  label="Last tested"
-                  value={formatBillingTimestamp(record.lastTestedAt)}
-                />
-                <DefinitionRow
-                  label="Created"
-                  value={formatBillingTimestamp(record.createdAt)}
-                />
-                <DefinitionRow
-                  label="Rotated"
-                  value={formatBillingTimestamp(record.rotatedAt)}
-                />
-                <DefinitionRow
-                  label="Revoked"
-                  value={formatBillingTimestamp(record.revokedAt)}
-                />
-              </dl>
-            </WorkflowPanel>
+            <CredentialMetadataPanel
+              credential={record}
+              environmentName={environmentName}
+            />
 
-            <WorkflowPanel
-              description="A verified store payload is accepted only for an Application listed here. A mismatch is quarantined rather than attributed."
-              title="Application scope"
-            >
-              {(record.applications ?? []).length === 0 ? (
-                <p className="text-sm">
-                  No Application scope is recorded for this credential.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {record.applications?.map((application) => (
-                    <li
-                      className="flex flex-wrap items-center justify-between gap-2 rounded border p-3 text-sm"
-                      key={application.applicationId}
-                    >
-                      <span className="font-medium">
-                        {applications.data?.items.find(
-                          (item) => item.id === application.applicationId
-                        )?.name ?? application.applicationId}
-                      </span>
-                      <span className="text-muted-foreground text-xs">
-                        {application.platform?.toUpperCase()} ·{" "}
-                        {application.providerApplicationIdentifier}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </WorkflowPanel>
+            <CredentialApplicationScopePanel
+              applications={applications.data?.items ?? []}
+              credential={record}
+            />
           </>
         ) : null}
       </HostedResourceBoundary>
     </WorkspacePage>
+  );
+}
+
+/**
+ * Test, rotate, and revoke, with revocation confirmed in place because what it
+ * stops and what it keeps are not obvious from the word alone.
+ */
+function CredentialOperationsPanel({
+  actions,
+  canManage,
+  confirmRevoke,
+  credential,
+  membersHref,
+  onCancelRevoke,
+  onConfirmRevoke,
+  onRequestRevoke,
+  onRotate,
+  onTest,
+  revokeError,
+  revokePending,
+  rotateError,
+  testError,
+  testPending,
+  testSuccess,
+  testedHealthStatus,
+}: {
+  actions: { revoke: boolean; rotate: boolean; test: boolean };
+  canManage: boolean;
+  confirmRevoke: boolean;
+  credential: StoreServerCredential;
+  membersHref: string;
+  onCancelRevoke: () => void;
+  onConfirmRevoke: () => void;
+  onRequestRevoke: () => void;
+  onRotate: (secret: string) => Promise<void>;
+  onTest: () => void;
+  revokeError: Error | null;
+  revokePending: boolean;
+  rotateError: Error | null;
+  testError: Error | null;
+  testPending: boolean;
+  testSuccess: boolean;
+  testedHealthStatus: StoreServerCredential["healthStatus"];
+}) {
+  return (
+    <WorkflowPanel
+      description={storeCredentialHealthExplanation(credential.healthStatus)}
+      title="Credential operations"
+    >
+      {canManage ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            disabled={!actions.test || testPending}
+            onClick={onTest}
+            type="button"
+          >
+            {testPending ? "Testing…" : "Test connection"}
+          </Button>
+          {actions.rotate ? (
+            <RotateStoreCredentialSheet
+              onRotate={onRotate}
+              provider={credential.provider}
+            />
+          ) : null}
+          {actions.revoke ? (
+            <Button
+              onClick={onRequestRevoke}
+              type="button"
+              variant="destructive"
+            >
+              Revoke
+            </Button>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-sm">
+          Organization owner or admin permission is required to test, rotate, or
+          revoke this credential.{" "}
+          <a className="font-semibold text-primary" href={membersHref}>
+            Ask an Owner or Admin
+          </a>
+        </p>
+      )}
+      {testError || rotateError ? (
+        <p className="mt-3 text-destructive text-sm" role="alert">
+          {(testError ?? rotateError)?.message}
+        </p>
+      ) : null}
+      {testSuccess ? (
+        <p className="mt-3 text-muted-foreground text-sm" role="status">
+          Test completed. Health is now{" "}
+          {storeCredentialHealthLabel(testedHealthStatus)}. Testing reads only;
+          it changes nothing in your store account.
+        </p>
+      ) : null}
+      {confirmRevoke ? (
+        <div className="mt-4 rounded border border-destructive/25 bg-destructive/5 p-4">
+          <p className="font-semibold text-sm">
+            Revoke this Store Server Credential?
+          </p>
+          <p className="mt-1 text-muted-foreground text-sm leading-6">
+            Validation stops using this key and its intake token is cleared, so
+            the notification endpoint stops resolving. Everything already
+            recorded stays: the ledger is the evidence trail a revocation is
+            usually part of investigating. Inputs that arrive afterwards are not
+            attributed to this Project.
+          </p>
+          {revokeError ? (
+            <p className="mt-2 text-destructive text-sm" role="alert">
+              {revokeError.message}
+            </p>
+          ) : null}
+          <div className="mt-3 flex gap-2">
+            <Button
+              disabled={revokePending}
+              onClick={onConfirmRevoke}
+              type="button"
+              variant="destructive"
+            >
+              {revokePending ? "Revoking…" : "Confirm revoke"}
+            </Button>
+            <Button
+              disabled={revokePending}
+              onClick={onCancelRevoke}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </WorkflowPanel>
+  );
+}
+
+/**
+ * Everything Mosaic can state about the stored key, and nothing derived from
+ * the key material itself.
+ */
+function CredentialMetadataPanel({
+  credential,
+  environmentName,
+}: {
+  credential: StoreServerCredential;
+  environmentName: string;
+}) {
+  return (
+    <WorkflowPanel
+      description="Everything Mosaic can show about the stored key. No ciphertext, no key material, and no way to reveal either."
+      title="Credential metadata"
+    >
+      <dl>
+        <DefinitionRow
+          label="Status"
+          value={credentialStatusLabel(credential.status)}
+        />
+        <DefinitionRow
+          label="Store Environment"
+          value={storeEnvironmentLabel(credential.storeEnvironment)}
+        />
+        <DefinitionRow label="Mosaic Environment" value={environmentName} />
+        {credential.provider === "app_store" ? (
+          <>
+            <DefinitionRow
+              label="Issuer ID"
+              value={credential.appleIssuerId ?? "—"}
+            />
+            <DefinitionRow
+              label="Key ID"
+              value={credential.appleKeyId ?? "—"}
+            />
+          </>
+        ) : (
+          <>
+            <DefinitionRow
+              label="Service account"
+              value={credential.googleClientEmail ?? "—"}
+            />
+            <DefinitionRow
+              label="Pub/Sub subscription"
+              value={`${credential.googlePubSubProjectId ?? "—"} / ${credential.googlePubSubSubscriptionId ?? "—"}`}
+            />
+          </>
+        )}
+        <DefinitionRow
+          label="Last error code"
+          value={credential.lastErrorCode ?? "None recorded"}
+        />
+        <DefinitionRow
+          label="Last tested"
+          value={formatBillingTimestamp(credential.lastTestedAt)}
+        />
+        <DefinitionRow
+          label="Created"
+          value={formatBillingTimestamp(credential.createdAt)}
+        />
+        <DefinitionRow
+          label="Rotated"
+          value={formatBillingTimestamp(credential.rotatedAt)}
+        />
+        <DefinitionRow
+          label="Revoked"
+          value={formatBillingTimestamp(credential.revokedAt)}
+        />
+      </dl>
+    </WorkflowPanel>
+  );
+}
+
+/**
+ * The Applications a verified store payload may be attributed to.
+ */
+function CredentialApplicationScopePanel({
+  applications,
+  credential,
+}: {
+  applications: readonly Application[];
+  credential: StoreServerCredential;
+}) {
+  return (
+    <WorkflowPanel
+      description="A verified store payload is accepted only for an Application listed here. A mismatch is quarantined rather than attributed."
+      title="Application scope"
+    >
+      {(credential.applications ?? []).length === 0 ? (
+        <p className="text-sm">
+          No Application scope is recorded for this credential.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {credential.applications?.map((application) => (
+            <li
+              className="flex flex-wrap items-center justify-between gap-2 rounded border p-3 text-sm"
+              key={application.applicationId}
+            >
+              <span className="font-medium">
+                {applications.find(
+                  (item) => item.id === application.applicationId
+                )?.name ?? application.applicationId}
+              </span>
+              <span className="text-muted-foreground text-xs">
+                {application.platform?.toUpperCase()} ·{" "}
+                {application.providerApplicationIdentifier}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </WorkflowPanel>
   );
 }

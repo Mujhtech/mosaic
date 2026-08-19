@@ -40,7 +40,7 @@ import {
 } from "@/features/orgs/components/workspace-page";
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query";
-import type { ApiKey, ApiKeySecretResult } from "@/generated/api";
+import type { ApiKey, ApiKeySecretResult, Application } from "@/generated/api";
 import { workspaceScopeParams } from "@/lib/routing/workspace-params";
 
 interface ApiKeysPageProps {
@@ -52,6 +52,11 @@ interface ApiKeysPageProps {
 interface PendingKeyAction {
   action: "revoke" | "rotate";
   apiKey: ApiKey;
+}
+
+interface SelectOption {
+  label: string;
+  value: string;
 }
 
 export function ApiKeysPage({
@@ -195,221 +200,307 @@ export function ApiKeysPage({
       description="Keys are scoped to one environment. Raw secrets appear only after creation or rotation and are never listed again."
       title="API keys"
     >
-      <WorkflowPanel title="Environment">
-        <div className="flex max-w-md flex-col gap-2 font-medium text-sm">
-          <label htmlFor="api-key-environment">Selected environment</label>
+      <EnvironmentSelectPanel
+        onChange={(value) => {
+          dismissSecret();
+          setPendingAction(null);
+          navigate({
+            params: (prev) => ({
+              ...prev,
+              ...workspaceScopeParams(prev),
+            }),
+            search: { environmentId: value },
+            to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys",
+          });
+        }}
+        options={environmentOptions}
+        value={selectedEnvironment?.id ?? ""}
+      />
+
+      {revealed ? (
+        <OneTimeSecret onDismiss={dismissSecret} secret={revealed.secret} />
+      ) : null}
+
+      <PendingActionSheet
+        environmentName={selectedEnvironment?.name}
+        isPending={rotate.isPending || revoke.isPending}
+        onCancel={handleClick}
+        onConfirm={(action) => {
+          const onSuccess = () => setPendingAction(null);
+          if (action.action === "rotate") {
+            rotate.mutate(action.apiKey.id, {
+              onSuccess: (result) => {
+                revealSecret(result);
+                onSuccess();
+              },
+            });
+          } else {
+            revoke.mutate(action.apiKey.id, { onSuccess });
+          }
+        }}
+        pendingAction={pendingAction}
+      />
+
+      <HostedResourceBoundary state={state}>
+        <WorkflowPanel title="Environment keys">
+          <ul className="divide-y">
+            {items.map((apiKey) => (
+              <ApiKeyRow
+                apiKey={apiKey}
+                applications={applications.data?.items}
+                key={apiKey.id}
+                onRequestAction={setPendingAction}
+                revokePending={revoke.isPending}
+                rotatePending={rotate.isPending}
+              />
+            ))}
+          </ul>
+        </WorkflowPanel>
+      </HostedResourceBoundary>
+      {canManageKeys ? (
+        <CreateApiKeyPanel
+          applicationId={applicationId}
+          applicationOptions={applicationOptions}
+          createPending={create.isPending}
+          error={create.error ?? rotate.error ?? revoke.error}
+          onApplicationChange={setApplicationId}
+          onCreateSdkKey={handleClick2}
+          onCreateServerKey={handleClick3}
+        />
+      ) : null}
+    </WorkspacePage>
+  );
+}
+
+function EnvironmentSelectPanel({
+  onChange,
+  options,
+  value,
+}: {
+  onChange: (value: string) => void;
+  options: readonly SelectOption[];
+  value: string;
+}) {
+  return (
+    <WorkflowPanel title="Environment">
+      <div className="flex max-w-md flex-col gap-2 font-medium text-sm">
+        <label htmlFor="api-key-environment">Selected environment</label>
+        <Select items={options} onValueChange={onChange} value={value}>
+          <SelectTrigger id="api-key-environment">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </WorkflowPanel>
+  );
+}
+
+/**
+ * Rotation and revocation are destructive and irreversible, so the confirmation
+ * is a modal surface: it takes focus, traps it, restores focus to the invoking
+ * row action, and closes on Escape.
+ */
+function PendingActionSheet({
+  environmentName,
+  isPending,
+  onCancel,
+  onConfirm,
+  pendingAction,
+}: {
+  environmentName: string | undefined;
+  isPending: boolean;
+  onCancel: () => void;
+  onConfirm: (action: PendingKeyAction) => void;
+  pendingAction: PendingKeyAction | null;
+}) {
+  return (
+    <Sheet
+      onOpenChange={(open) => {
+        if (!open) {
+          onCancel();
+        }
+      }}
+      open={pendingAction !== null}
+    >
+      <SheetContent className="w-full sm:max-w-md">
+        {pendingAction ? (
+          <>
+            <SheetHeader className="border-b p-5">
+              <SheetTitle>
+                {pendingAction.action === "rotate" ? "Rotate" : "Revoke"}{" "}
+                {pendingAction.apiKey.prefix}••••
+              </SheetTitle>
+              <SheetDescription>
+                This action applies only to{" "}
+                {environmentName ?? "the selected environment"}.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="p-5">
+              <p className="text-muted-foreground text-sm leading-6">
+                {pendingAction.action === "rotate"
+                  ? "Rotation invalidates the previous credential and reveals its replacement once. Copy it before leaving this page."
+                  : "Revocation is permanent. Clients using this credential in the selected environment will stop authenticating."}
+              </p>
+            </div>
+            <SheetFooter className="flex-row flex-wrap gap-2 border-t p-5">
+              <Button
+                disabled={isPending}
+                onClick={() => onConfirm(pendingAction)}
+              >
+                Confirm {pendingAction.action}
+              </Button>
+              <Button onClick={onCancel} variant="ghost">
+                Cancel
+              </Button>
+            </SheetFooter>
+          </>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function ApiKeyRow({
+  apiKey,
+  applications,
+  onRequestAction,
+  revokePending,
+  rotatePending,
+}: {
+  apiKey: ApiKey;
+  applications: readonly Application[] | undefined;
+  onRequestAction: (action: PendingKeyAction) => void;
+  revokePending: boolean;
+  rotatePending: boolean;
+}) {
+  const revoked = Boolean(apiKey.revokedAt);
+  return (
+    <li className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center">
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-sm">
+          {apiKey.kind === "public_sdk"
+            ? "SDK key — safe for apps"
+            : "Server key — keep secret"}
+        </p>
+        <p className="mt-1 font-mono text-muted-foreground text-xs">
+          {apiKey.prefix}••••••••
+        </p>
+        <p className="mt-1 text-muted-foreground text-xs">
+          {(() => {
+            if (revoked) {
+              return "Revoked";
+            }
+            if (apiKey.lastUsedAt) {
+              return `Last used ${apiKey.lastUsedAt}`;
+            }
+            return "Never used";
+          })()}
+        </p>
+        {apiKey.kind === "public_sdk" ? (
+          <p className="mt-1 text-muted-foreground text-xs">
+            {readApiKeyApplicationId(apiKey)
+              ? `Analytics application: ${applications?.find((application) => application.id === readApiKeyApplicationId(apiKey))?.name ?? readApiKeyApplicationId(apiKey)}`
+              : "Legacy unbound key — configuration works, but analytics ingestion is rejected. Create an Application-bound SDK key to recover."}
+          </p>
+        ) : null}
+      </div>
+      <div className="flex gap-2">
+        <Button
+          disabled={revoked || rotatePending}
+          onClick={() => onRequestAction({ action: "rotate", apiKey })}
+          size="sm"
+          variant="outline"
+        >
+          Rotate
+        </Button>
+        <Button
+          disabled={revoked || revokePending}
+          onClick={() => onRequestAction({ action: "revoke", apiKey })}
+          size="sm"
+          variant="outline"
+        >
+          Revoke
+        </Button>
+      </div>
+    </li>
+  );
+}
+
+function CreateApiKeyPanel({
+  applicationId,
+  applicationOptions,
+  createPending,
+  error,
+  onApplicationChange,
+  onCreateSdkKey,
+  onCreateServerKey,
+}: {
+  applicationId: string;
+  applicationOptions: readonly SelectOption[];
+  createPending: boolean;
+  error: Error | null;
+  onApplicationChange: (applicationId: string) => void;
+  onCreateSdkKey: () => void;
+  onCreateServerKey: () => void;
+}) {
+  return (
+    <WorkflowPanel
+      description="SDK keys are safe for apps. Server keys must only be used by trusted backend services."
+      title="Create API key"
+    >
+      <div className="grid max-w-xl gap-3">
+        <div className="space-y-1 font-medium text-sm">
+          <label htmlFor="api-key-application">
+            Application for SDK analytics
+          </label>
           <Select
-            items={environmentOptions}
-            onValueChange={(value) => {
-              dismissSecret();
-              setPendingAction(null);
-              navigate({
-                params: (prev) => ({
-                  ...prev,
-                  ...workspaceScopeParams(prev),
-                }),
-                search: { environmentId: value },
-                to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys",
-              });
-            }}
-            value={selectedEnvironment?.id ?? ""}
+            items={applicationOptions}
+            onValueChange={(value) => onApplicationChange(value)}
+            value={applicationId}
           >
-            <SelectTrigger id="api-key-environment">
+            <SelectTrigger id="api-key-application">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {environmentOptions.map((option) => (
+              {applicationOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <span className="block font-normal text-muted-foreground text-xs">
+            Public SDK keys must be bound to one registered Application to
+            ingest analytics. Tenant scope still comes from the key; events
+            never submit an Application ID.
+          </span>
         </div>
-      </WorkflowPanel>
-
-      {revealed ? (
-        <OneTimeSecret onDismiss={dismissSecret} secret={revealed.secret} />
+        <div className="flex flex-wrap gap-2">
+          <Button
+            disabled={!applicationId || createPending}
+            onClick={onCreateSdkKey}
+          >
+            <KeyIcon aria-hidden size={16} />
+            Create SDK key
+          </Button>
+          <Button onClick={onCreateServerKey} variant="outline">
+            Create server key
+          </Button>
+        </div>
+      </div>
+      {error ? (
+        <p className="mt-4 text-destructive text-sm" role="alert">
+          {error.message}
+        </p>
       ) : null}
-
-      {/* Rotation and revocation are destructive and irreversible, so the
-          confirmation is a modal surface: it takes focus, traps it, restores
-          focus to the invoking row action, and closes on Escape. */}
-      <Sheet
-        onOpenChange={(open) => {
-          if (!open) {
-            setPendingAction(null);
-          }
-        }}
-        open={pendingAction !== null}
-      >
-        <SheetContent className="w-full sm:max-w-md">
-          {pendingAction ? (
-            <>
-              <SheetHeader className="border-b p-5">
-                <SheetTitle>
-                  {pendingAction.action === "rotate" ? "Rotate" : "Revoke"}{" "}
-                  {pendingAction.apiKey.prefix}••••
-                </SheetTitle>
-                <SheetDescription>
-                  This action applies only to{" "}
-                  {selectedEnvironment?.name ?? "the selected environment"}.
-                </SheetDescription>
-              </SheetHeader>
-              <div className="p-5">
-                <p className="text-muted-foreground text-sm leading-6">
-                  {pendingAction.action === "rotate"
-                    ? "Rotation invalidates the previous credential and reveals its replacement once. Copy it before leaving this page."
-                    : "Revocation is permanent. Clients using this credential in the selected environment will stop authenticating."}
-                </p>
-              </div>
-              <SheetFooter className="flex-row flex-wrap gap-2 border-t p-5">
-                <Button
-                  disabled={rotate.isPending || revoke.isPending}
-                  onClick={() => {
-                    const onSuccess = () => setPendingAction(null);
-                    if (pendingAction.action === "rotate") {
-                      rotate.mutate(pendingAction.apiKey.id, {
-                        onSuccess: (result) => {
-                          revealSecret(result);
-                          onSuccess();
-                        },
-                      });
-                    } else {
-                      revoke.mutate(pendingAction.apiKey.id, { onSuccess });
-                    }
-                  }}
-                >
-                  Confirm {pendingAction.action}
-                </Button>
-                <Button onClick={handleClick} variant="ghost">
-                  Cancel
-                </Button>
-              </SheetFooter>
-            </>
-          ) : null}
-        </SheetContent>
-      </Sheet>
-
-      <HostedResourceBoundary state={state}>
-        <WorkflowPanel title="Environment keys">
-          <ul className="divide-y">
-            {items.map((apiKey) => {
-              const revoked = Boolean(apiKey.revokedAt);
-              return (
-                <li
-                  className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center"
-                  key={apiKey.id}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-sm">
-                      {apiKey.kind === "public_sdk"
-                        ? "SDK key — safe for apps"
-                        : "Server key — keep secret"}
-                    </p>
-                    <p className="mt-1 font-mono text-muted-foreground text-xs">
-                      {apiKey.prefix}••••••••
-                    </p>
-                    <p className="mt-1 text-muted-foreground text-xs">
-                      {(() => {
-                        if (revoked) {
-                          return "Revoked";
-                        }
-                        if (apiKey.lastUsedAt) {
-                          return `Last used ${apiKey.lastUsedAt}`;
-                        }
-                        return "Never used";
-                      })()}
-                    </p>
-                    {apiKey.kind === "public_sdk" ? (
-                      <p className="mt-1 text-muted-foreground text-xs">
-                        {readApiKeyApplicationId(apiKey)
-                          ? `Analytics application: ${applications.data?.items.find((application) => application.id === readApiKeyApplicationId(apiKey))?.name ?? readApiKeyApplicationId(apiKey)}`
-                          : "Legacy unbound key — configuration works, but analytics ingestion is rejected. Create an Application-bound SDK key to recover."}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      disabled={revoked || rotate.isPending}
-                      onClick={() =>
-                        setPendingAction({ action: "rotate", apiKey })
-                      }
-                      size="sm"
-                      variant="outline"
-                    >
-                      Rotate
-                    </Button>
-                    <Button
-                      disabled={revoked || revoke.isPending}
-                      onClick={() =>
-                        setPendingAction({ action: "revoke", apiKey })
-                      }
-                      size="sm"
-                      variant="outline"
-                    >
-                      Revoke
-                    </Button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </WorkflowPanel>
-      </HostedResourceBoundary>
-      {canManageKeys ? (
-        <WorkflowPanel
-          description="SDK keys are safe for apps. Server keys must only be used by trusted backend services."
-          title="Create API key"
-        >
-          <div className="grid max-w-xl gap-3">
-            <div className="space-y-1 font-medium text-sm">
-              <label htmlFor="api-key-application">
-                Application for SDK analytics
-              </label>
-              <Select
-                items={applicationOptions}
-                onValueChange={(value) => setApplicationId(value)}
-                value={applicationId}
-              >
-                <SelectTrigger id="api-key-application">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {applicationOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <span className="block font-normal text-muted-foreground text-xs">
-                Public SDK keys must be bound to one registered Application to
-                ingest analytics. Tenant scope still comes from the key; events
-                never submit an Application ID.
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                disabled={!applicationId || create.isPending}
-                onClick={handleClick2}
-              >
-                <KeyIcon aria-hidden size={16} />
-                Create SDK key
-              </Button>
-              <Button onClick={handleClick3} variant="outline">
-                Create server key
-              </Button>
-            </div>
-          </div>
-          {create.error || rotate.error || revoke.error ? (
-            <p className="mt-4 text-destructive text-sm" role="alert">
-              {(create.error ?? rotate.error ?? revoke.error)?.message}
-            </p>
-          ) : null}
-        </WorkflowPanel>
-      ) : null}
-    </WorkspacePage>
+    </WorkflowPanel>
   );
 }
 

@@ -6,8 +6,8 @@ import {
   TrendChart,
   type TrendChartSeries,
   TrendMessage,
-  trendFrameHeight,
 } from "@/components/charts/trend-chart";
+import { trendFrameHeight } from "@/components/charts/trend-frame";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { overviewMetricsSeriesQueryOptions } from "@/features/projects/queries/overview-metrics-series-query";

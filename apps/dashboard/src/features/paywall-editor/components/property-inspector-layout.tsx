@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { updateAppearance } from "@/features/paywall-editor/components/property-inspector-background";
+import { updateAppearance } from "@/features/paywall-editor/components/property-inspector-background-support";
 import {
   type AppearanceValue,
   Field,
@@ -14,8 +14,8 @@ import {
   TwoColumn,
   type TypographyValue,
   useInspectorContext,
-  ZERO_INSETS,
 } from "@/features/paywall-editor/components/property-inspector-core";
+import { ZERO_INSETS } from "@/features/paywall-editor/components/property-inspector-core-support";
 import {
   CheckboxField,
   ColorField,
@@ -116,7 +116,7 @@ export function AppearanceSection({
   );
 }
 
-export function AppearancePaddingFields({ node }: { node: ProtocolNode }) {
+function AppearancePaddingFields({ node }: { node: ProtocolNode }) {
   const editor = useEditorActions();
   const appearance = ("appearance" in node ? node.appearance : undefined) ?? {};
   const padding =
@@ -275,7 +275,7 @@ export function SizingFields({ node }: { node: ProtocolNode }) {
   );
 }
 
-export function SizingAxisField({
+function SizingAxisField({
   axis,
   onModeChange,
   onValueChange,
@@ -361,7 +361,7 @@ export function SizingAxisField({
   );
 }
 
-export function OuterInsetsFields({ node }: { node: ProtocolNode }) {
+function OuterInsetsFields({ node }: { node: ProtocolNode }) {
   const editor = useEditorActions();
   return (
     <Field address="outerInsets" group label="Outer spacing">

@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components -- token controls share private immutable token helpers. */
 import { ArrowDownIcon } from "@phosphor-icons/react/dist/ssr/ArrowDown";
 import { ArrowUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowUp";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
@@ -15,138 +14,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  clampMotionDuration,
+  FIELD_CLASS,
+  MOTION_DURATION_MAXIMUM,
+  MOTION_DURATION_MINIMUM,
+  MOTION_EASING_OPTIONS,
+} from "@/features/paywall-editor/components/design-system-controls-support";
 import { InspectorColorControl } from "@/features/paywall-editor/components/inspector-color-control";
 import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
 import type {
   MosaicDocument,
   MotionEasing,
   MotionValue,
-  PaywallDesignSystem,
   ProtocolBackground,
   ProtocolColor,
   ProtocolShadow,
 } from "@/features/paywall-editor/types/editor";
-import { cloneValue } from "@/features/paywall-editor/utils/clone";
-import type { DesignCategory } from "@/features/paywall-editor/utils/style-authoring";
 import {
   clampGradientAngle,
   defaultMediaBackground,
   insertGradientStop,
   updateGradientStopPosition,
 } from "@/features/paywall-editor/utils/style-authoring";
-import type {
-  MosaicPaywallV04BackgroundToken,
-  MosaicPaywallV04ColorToken,
-  MosaicPaywallV04MotionToken,
-  MosaicPaywallV04ShadowToken,
-} from "@/lib/mosaic-protocol";
-
-export type DesignToken =
-  | MosaicPaywallV04ColorToken
-  | MosaicPaywallV04BackgroundToken
-  | MosaicPaywallV04ShadowToken
-  | MosaicPaywallV04MotionToken;
-
-export interface PendingDelete {
-  readonly category: DesignCategory;
-  readonly id: string;
-}
-
-export const FIELD_CLASS =
-  "border-input bg-background focus:border-ring focus:ring-ring/30 h-8 min-w-0 rounded border px-2 text-xs outline-none focus:ring-2";
-
-export function replaceTokenReferences(
-  value: unknown,
-  referenceType: string,
-  id: string,
-  replacement: unknown
-): unknown {
-  if (Array.isArray(value)) {
-    return value.map((entry) =>
-      replaceTokenReferences(entry, referenceType, id, replacement)
-    );
-  }
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-  const record = value as Record<string, unknown>;
-  if (record.type === referenceType && record.id === id) {
-    return cloneValue(replacement);
-  }
-  return Object.fromEntries(
-    Object.entries(record).map(([key, entry]) => [
-      key,
-      replaceTokenReferences(entry, referenceType, id, replacement),
-    ])
-  );
-}
-
-export function countTokenReferences(
-  value: unknown,
-  referenceType: string,
-  id: string
-): number {
-  if (Array.isArray(value)) {
-    return value.reduce(
-      (total, entry) => total + countTokenReferences(entry, referenceType, id),
-      0
-    );
-  }
-  if (!value || typeof value !== "object") {
-    return 0;
-  }
-  const record = value as Record<string, unknown>;
-  return (
-    (record.type === referenceType && record.id === id ? 1 : 0) +
-    Object.values(record).reduce<number>(
-      (total, entry) => total + countTokenReferences(entry, referenceType, id),
-      0
-    )
-  );
-}
-
-export function nextTokenId(tokens: readonly DesignToken[], prefix: string) {
-  const used = new Set(tokens.map((token) => token.id));
-  let ordinal = tokens.length + 1;
-  while (used.has(`${prefix}-${ordinal}`)) {
-    ordinal += 1;
-  }
-  return `${prefix}-${ordinal}`;
-}
-
-export function tokensFor(
-  system: PaywallDesignSystem,
-  category: DesignCategory
-): readonly DesignToken[] {
-  if (category === "colors") {
-    return system.colors;
-  }
-  if (category === "backgrounds") {
-    return system.backgrounds;
-  }
-  if (category === "motions") {
-    return "motions" in system ? system.motions : [];
-  }
-  return system.shadows;
-}
-
-/**
- * Drop a token from one catalog, leaving the other three untouched.
- *
- * Written once over `DesignCategory` rather than as a branch per catalog: the
- * filter is identical for all four, and a fourth copy of it was the shape the
- * motions catalog would otherwise have added.
- */
-export function withoutToken(
-  system: PaywallDesignSystem,
-  category: DesignCategory,
-  id: string
-): PaywallDesignSystem {
-  return {
-    ...system,
-    [category]: tokensFor(system, category).filter((token) => token.id !== id),
-  } as PaywallDesignSystem;
-}
 
 export function SectionHeading({
   count,
@@ -375,16 +265,6 @@ export function BackgroundEditor({
       onChange(defaultMediaBackground(type, videos[0].id));
     }
   }
-  const assetOptions = (value.type === "image" ? images : videos).map(
-    (asset) => ({
-      label: asset.id,
-      value: asset.id,
-    })
-  );
-  const posterOptions = [
-    { label: "No poster", value: "" },
-    ...images.map((asset) => ({ label: asset.id, value: asset.id })),
-  ];
   const selectedMediaExists =
     value.type === "image" || value.type === "video"
       ? document.assets.some(
@@ -393,64 +273,20 @@ export function BackgroundEditor({
       : true;
   return (
     <div className="space-y-2">
-      <Select
-        items={BACKGROUND_KIND_OPTIONS}
-        onValueChange={(kind) => changeType(kind as ProtocolBackground["type"])}
-        value={value.type}
-      >
-        <SelectTrigger aria-label="Background kind" size="sm">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {BACKGROUND_KIND_OPTIONS.map((option) => (
-            <SelectItem
-              disabled={
-                (option.value === "image" &&
-                  images.length === 0 &&
-                  value.type !== "image") ||
-                (option.value === "video" &&
-                  videos.length === 0 &&
-                  value.type !== "video")
-              }
-              key={option.value}
-              value={option.value}
-            >
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <BackgroundKindSelect
+        hasImages={images.length > 0}
+        hasVideos={videos.length > 0}
+        onChangeKind={changeType}
+        type={value.type}
+      />
       {images.length === 0 || videos.length === 0 || !selectedMediaExists ? (
-        <div className="flex flex-wrap gap-1.5 rounded border border-border bg-muted/30 p-2">
-          {selectedMediaExists ? null : (
-            <p className="w-full text-[11px] text-muted-foreground leading-4">
-              The selected media asset is missing. Add a replacement to keep
-              this style valid.
-            </p>
-          )}
-          {images.length === 0 ||
-          (value.type === "image" && !selectedMediaExists) ? (
-            <Button
-              onClick={() => onAddMedia("image")}
-              size="xs"
-              type="button"
-              variant="outline"
-            >
-              <PlusIcon aria-hidden /> Add image
-            </Button>
-          ) : null}
-          {videos.length === 0 ||
-          (value.type === "video" && !selectedMediaExists) ? (
-            <Button
-              onClick={() => onAddMedia("video")}
-              size="xs"
-              type="button"
-              variant="outline"
-            >
-              <PlusIcon aria-hidden /> Add video
-            </Button>
-          ) : null}
-        </div>
+        <MissingMediaActions
+          hasImages={images.length > 0}
+          hasVideos={videos.length > 0}
+          onAddMedia={onAddMedia}
+          selectedMediaExists={selectedMediaExists}
+          type={value.type}
+        />
       ) : null}
       {value.type === "color" ? (
         <ColorControl
@@ -462,206 +298,372 @@ export function BackgroundEditor({
         />
       ) : null}
       {value.type === "linearGradient" ? (
-        <label className="grid gap-1 text-[11px]">
-          <span className="text-muted-foreground">Angle</span>
+        <GradientAngleField onChange={onChange} value={value} />
+      ) : null}
+      {value.type === "radialGradient" ? (
+        <RadialGradientGeometryFields onChange={onChange} value={value} />
+      ) : null}
+      {value.type === "linearGradient" || value.type === "radialGradient" ? (
+        <GradientStopsEditor
+          document={document}
+          id={id}
+          onChange={onChange}
+          value={value}
+        />
+      ) : null}
+      {value.type === "image" || value.type === "video" ? (
+        <MediaBackgroundFields
+          document={document}
+          id={id}
+          images={images}
+          onChange={onChange}
+          value={value}
+          videos={videos}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function BackgroundKindSelect({
+  hasImages,
+  hasVideos,
+  onChangeKind,
+  type,
+}: {
+  hasImages: boolean;
+  hasVideos: boolean;
+  onChangeKind: (type: ProtocolBackground["type"]) => void;
+  type: ProtocolBackground["type"];
+}) {
+  return (
+    <Select
+      items={BACKGROUND_KIND_OPTIONS}
+      onValueChange={(kind) => onChangeKind(kind as ProtocolBackground["type"])}
+      value={type}
+    >
+      <SelectTrigger aria-label="Background kind" size="sm">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {BACKGROUND_KIND_OPTIONS.map((option) => (
+          <SelectItem
+            disabled={
+              (option.value === "image" && !hasImages && type !== "image") ||
+              (option.value === "video" && !hasVideos && type !== "video")
+            }
+            key={option.value}
+            value={option.value}
+          >
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function MissingMediaActions({
+  hasImages,
+  hasVideos,
+  onAddMedia,
+  selectedMediaExists,
+  type,
+}: {
+  hasImages: boolean;
+  hasVideos: boolean;
+  onAddMedia: (type: "image" | "video") => void;
+  selectedMediaExists: boolean;
+  type: ProtocolBackground["type"];
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5 rounded border border-border bg-muted/30 p-2">
+      {selectedMediaExists ? null : (
+        <p className="w-full text-[11px] text-muted-foreground leading-4">
+          The selected media asset is missing. Add a replacement to keep this
+          style valid.
+        </p>
+      )}
+      {!hasImages || (type === "image" && !selectedMediaExists) ? (
+        <Button
+          onClick={() => onAddMedia("image")}
+          size="xs"
+          type="button"
+          variant="outline"
+        >
+          <PlusIcon aria-hidden /> Add image
+        </Button>
+      ) : null}
+      {!hasVideos || (type === "video" && !selectedMediaExists) ? (
+        <Button
+          onClick={() => onAddMedia("video")}
+          size="xs"
+          type="button"
+          variant="outline"
+        >
+          <PlusIcon aria-hidden /> Add video
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function GradientAngleField({
+  onChange,
+  value,
+}: {
+  onChange: (value: ProtocolBackground) => void;
+  value: Extract<ProtocolBackground, { type: "linearGradient" }>;
+}) {
+  return (
+    <label className="grid gap-1 text-[11px]">
+      <span className="text-muted-foreground">Angle</span>
+      <input
+        className={FIELD_CLASS}
+        max={360}
+        min={0}
+        onChange={(event) =>
+          onChange({
+            ...value,
+            angle: clampGradientAngle(event.target.valueAsNumber),
+          })
+        }
+        type="number"
+        value={value.angle}
+      />
+    </label>
+  );
+}
+
+function RadialGradientGeometryFields({
+  onChange,
+  value,
+}: {
+  onChange: (value: ProtocolBackground) => void;
+  value: Extract<ProtocolBackground, { type: "radialGradient" }>;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-1.5">
+      {(["x", "y"] as const).map((axis) => (
+        <label className="grid gap-1 text-[11px]" key={axis}>
+          <span className="text-muted-foreground">
+            Centre {axis.toUpperCase()}
+          </span>
           <input
             className={FIELD_CLASS}
-            max={360}
+            max={100}
             min={0}
             onChange={(event) =>
               onChange({
                 ...value,
-                angle: clampGradientAngle(event.target.valueAsNumber),
+                center: {
+                  ...value.center,
+                  [axis]: event.target.valueAsNumber / 100,
+                },
               })
             }
             type="number"
-            value={value.angle}
+            value={Math.round(value.center[axis] * 100)}
           />
         </label>
-      ) : null}
-      {value.type === "radialGradient" ? (
-        <div className="grid grid-cols-3 gap-1.5">
-          {(["x", "y"] as const).map((axis) => (
-            <label className="grid gap-1 text-[11px]" key={axis}>
-              <span className="text-muted-foreground">
-                Centre {axis.toUpperCase()}
-              </span>
-              <input
-                className={FIELD_CLASS}
-                max={100}
-                min={0}
-                onChange={(event) =>
-                  onChange({
-                    ...value,
-                    center: {
-                      ...value.center,
-                      [axis]: event.target.valueAsNumber / 100,
-                    },
-                  })
-                }
-                type="number"
-                value={Math.round(value.center[axis] * 100)}
-              />
-            </label>
-          ))}
-          <label className="grid gap-1 text-[11px]">
-            <span className="text-muted-foreground">Radius</span>
-            <input
-              className={FIELD_CLASS}
-              max={200}
-              min={1}
-              onChange={(event) =>
-                onChange({ ...value, radius: event.target.valueAsNumber / 100 })
-              }
-              type="number"
-              value={Math.round(value.radius * 100)}
-            />
-          </label>
-        </div>
-      ) : null}
-      {value.type === "linearGradient" || value.type === "radialGradient" ? (
-        <div className="space-y-2">
-          {value.stops.map((stop, index) => (
-            <div
-              className="grid grid-cols-[1fr_4rem_auto] items-end gap-1.5"
-              key={stop.position}
-            >
-              <ColorControl
-                document={document}
-                id={`${id}-stop-${index}`}
-                label={`Stop ${index + 1}`}
-                onChange={(color) =>
-                  onChange({
-                    ...value,
-                    stops: value.stops.map((entry, current) =>
-                      current === index ? { ...entry, color } : entry
-                    ),
-                  })
-                }
-                value={stop.color}
-              />
-              <input
-                aria-label={`Stop ${index + 1} position`}
-                className={FIELD_CLASS}
-                max={100}
-                min={0}
-                onChange={(event) =>
-                  onChange({
-                    ...value,
-                    stops: updateGradientStopPosition(
-                      value.stops,
-                      index,
-                      event.target.valueAsNumber / 100
-                    ),
-                  })
-                }
-                type="number"
-                value={Math.round(stop.position * 100)}
-              />
-              <Button
-                aria-label={`Delete stop ${index + 1}`}
-                disabled={value.stops.length <= 2}
-                onClick={() =>
-                  onChange({
-                    ...value,
-                    stops: value.stops.filter(
-                      (_, current) => current !== index
-                    ),
-                  })
-                }
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <TrashIcon aria-hidden />
-              </Button>
-            </div>
-          ))}
+      ))}
+      <label className="grid gap-1 text-[11px]">
+        <span className="text-muted-foreground">Radius</span>
+        <input
+          className={FIELD_CLASS}
+          max={200}
+          min={1}
+          onChange={(event) =>
+            onChange({ ...value, radius: event.target.valueAsNumber / 100 })
+          }
+          type="number"
+          value={Math.round(value.radius * 100)}
+        />
+      </label>
+    </div>
+  );
+}
+
+function GradientStopsEditor({
+  document,
+  id,
+  onChange,
+  value,
+}: {
+  document: MosaicDocument;
+  id: string;
+  onChange: (value: ProtocolBackground) => void;
+  value: Extract<
+    ProtocolBackground,
+    { type: "linearGradient" | "radialGradient" }
+  >;
+}) {
+  return (
+    <div className="space-y-2">
+      {value.stops.map((stop, index) => (
+        <div
+          className="grid grid-cols-[1fr_4rem_auto] items-end gap-1.5"
+          key={stop.position}
+        >
+          <ColorControl
+            document={document}
+            id={`${id}-stop-${index}`}
+            label={`Stop ${index + 1}`}
+            onChange={(color) =>
+              onChange({
+                ...value,
+                stops: value.stops.map((entry, current) =>
+                  current === index ? { ...entry, color } : entry
+                ),
+              })
+            }
+            value={stop.color}
+          />
+          <input
+            aria-label={`Stop ${index + 1} position`}
+            className={FIELD_CLASS}
+            max={100}
+            min={0}
+            onChange={(event) =>
+              onChange({
+                ...value,
+                stops: updateGradientStopPosition(
+                  value.stops,
+                  index,
+                  event.target.valueAsNumber / 100
+                ),
+              })
+            }
+            type="number"
+            value={Math.round(stop.position * 100)}
+          />
           <Button
-            disabled={value.stops.length >= 8}
+            aria-label={`Delete stop ${index + 1}`}
+            disabled={value.stops.length <= 2}
             onClick={() =>
               onChange({
                 ...value,
-                stops: insertGradientStop(value.stops),
+                stops: value.stops.filter((_, current) => current !== index),
               })
             }
-            size="xs"
+            size="icon-sm"
             type="button"
-            variant="outline"
+            variant="ghost"
           >
-            <PlusIcon aria-hidden /> Add stop
+            <TrashIcon aria-hidden />
           </Button>
         </div>
-      ) : null}
-      {value.type === "image" || value.type === "video" ? (
-        <>
-          <Select
-            items={assetOptions}
-            onValueChange={(assetId) => onChange({ ...value, assetId })}
-            value={value.assetId}
-          >
-            <SelectTrigger aria-label={`${value.type} asset`} size="sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {assetOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            items={CONTENT_MODE_OPTIONS}
-            onValueChange={(contentMode) =>
-              onChange({ ...value, contentMode: contentMode as "fit" | "fill" })
-            }
-            value={value.contentMode}
-          >
-            <SelectTrigger aria-label="Content mode" size="sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CONTENT_MODE_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {value.type === "video" ? (
-            <Select
-              items={posterOptions}
-              onValueChange={(posterAssetId) =>
-                onChange({
-                  ...value,
-                  posterAssetId: posterAssetId || undefined,
-                })
-              }
-              value={value.posterAssetId ?? ""}
-            >
-              <SelectTrigger aria-label="Poster image" size="sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {posterOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null}
-          <ColorControl
-            document={document}
-            id={`${id}-fallback`}
-            label="Fallback colour"
-            onChange={(fallbackColor) => onChange({ ...value, fallbackColor })}
-            value={value.fallbackColor}
-          />
-        </>
-      ) : null}
+      ))}
+      <Button
+        disabled={value.stops.length >= 8}
+        onClick={() =>
+          onChange({
+            ...value,
+            stops: insertGradientStop(value.stops),
+          })
+        }
+        size="xs"
+        type="button"
+        variant="outline"
+      >
+        <PlusIcon aria-hidden /> Add stop
+      </Button>
     </div>
+  );
+}
+
+function MediaBackgroundFields({
+  document,
+  id,
+  images,
+  onChange,
+  value,
+  videos,
+}: {
+  document: MosaicDocument;
+  id: string;
+  images: MosaicDocument["assets"];
+  onChange: (value: ProtocolBackground) => void;
+  value: Extract<ProtocolBackground, { type: "image" | "video" }>;
+  videos: MosaicDocument["assets"];
+}) {
+  const assetOptions = (value.type === "image" ? images : videos).map(
+    (asset) => ({
+      label: asset.id,
+      value: asset.id,
+    })
+  );
+  const posterOptions = [
+    { label: "No poster", value: "" },
+    ...images.map((asset) => ({ label: asset.id, value: asset.id })),
+  ];
+  return (
+    <>
+      <Select
+        items={assetOptions}
+        onValueChange={(assetId) => onChange({ ...value, assetId })}
+        value={value.assetId}
+      >
+        <SelectTrigger aria-label={`${value.type} asset`} size="sm">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {assetOptions.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        items={CONTENT_MODE_OPTIONS}
+        onValueChange={(contentMode) =>
+          onChange({ ...value, contentMode: contentMode as "fit" | "fill" })
+        }
+        value={value.contentMode}
+      >
+        <SelectTrigger aria-label="Content mode" size="sm">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {CONTENT_MODE_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {value.type === "video" ? (
+        <Select
+          items={posterOptions}
+          onValueChange={(posterAssetId) =>
+            onChange({
+              ...value,
+              posterAssetId: posterAssetId || undefined,
+            })
+          }
+          value={value.posterAssetId ?? ""}
+        >
+          <SelectTrigger aria-label="Poster image" size="sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {posterOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
+      <ColorControl
+        document={document}
+        id={`${id}-fallback`}
+        label="Fallback colour"
+        onChange={(fallbackColor) => onChange({ ...value, fallbackColor })}
+        value={value.fallbackColor}
+      />
+    </>
   );
 }
 
@@ -723,34 +725,6 @@ export function ShadowEditor({
   );
 }
 
-/** The four normative easing presets, in the contract's own order. */
-export const MOTION_EASING_OPTIONS: readonly {
-  readonly description: string;
-  readonly label: string;
-  readonly value: MotionEasing;
-}[] = [
-  { description: "No shaping", label: "Linear", value: "linear" },
-  {
-    description: "Starts and ends on screen",
-    label: "Standard",
-    value: "standard",
-  },
-  {
-    description: "Something entering; fast in, settles",
-    label: "Decelerate",
-    value: "decelerate",
-  },
-  {
-    description: "Something leaving; slow out, speeds up",
-    label: "Accelerate",
-    value: "accelerate",
-  },
-];
-
-/** Durations are whole milliseconds, bounded by the contract at 0 to 2000. */
-export const MOTION_DURATION_MINIMUM = 0;
-export const MOTION_DURATION_MAXIMUM = 2000;
-
 export function MotionEditor({
   id,
   onChange,
@@ -810,83 +784,4 @@ export function MotionEditor({
       </label>
     </div>
   );
-}
-
-/**
- * A duration the contract will accept.
- *
- * An empty number input reads back as NaN, which would otherwise reach the
- * document and fail schema validation with a message about a type rather than
- * about the field the author was editing.
- */
-export function clampMotionDuration(candidate: number): number {
-  if (!Number.isFinite(candidate)) {
-    return MOTION_DURATION_MINIMUM;
-  }
-  return Math.min(
-    MOTION_DURATION_MAXIMUM,
-    Math.max(MOTION_DURATION_MINIMUM, Math.round(candidate))
-  );
-}
-
-/** The id stem new tokens in a catalog are numbered from. */
-export function tokenIdPrefix(category: DesignCategory) {
-  if (category === "colors") {
-    return "colour";
-  }
-  if (category === "backgrounds") {
-    return "background";
-  }
-  return category === "motions" ? "motion" : "shadow";
-}
-
-/**
- * Append a copy of one token, leaving the other catalogs untouched.
- *
- * Generic over the category for the same reason `withoutToken` is: the four
- * catalogs duplicate identically, and a per-catalog branch was the shape that
- * made adding a fourth catalog a four-place edit.
- */
-export function withDuplicatedToken(
-  system: PaywallDesignSystem,
-  category: DesignCategory,
-  id: string
-): PaywallDesignSystem {
-  const tokens = tokensFor(system, category);
-  const source = tokens.find((token) => token.id === id);
-  if (!source) {
-    return system;
-  }
-  return {
-    ...system,
-    [category]: [
-      ...tokens,
-      {
-        ...cloneValue(source),
-        id: nextTokenId(tokens, tokenIdPrefix(category)),
-        name: `${source.name} copy`,
-      },
-    ],
-  } as PaywallDesignSystem;
-}
-
-/** Move one token within its catalog, clamped at both ends. */
-export function withMovedToken(
-  system: PaywallDesignSystem,
-  category: DesignCategory,
-  id: string,
-  offset: -1 | 1
-): PaywallDesignSystem {
-  const tokens = tokensFor(system, category);
-  const index = tokens.findIndex((token) => token.id === id);
-  const target = index + offset;
-  if (index < 0 || target < 0 || target >= tokens.length) {
-    return system;
-  }
-  const next = [...tokens];
-  const [moved] = next.splice(index, 1);
-  if (moved) {
-    next.splice(target, 0, moved);
-  }
-  return { ...system, [category]: next } as PaywallDesignSystem;
 }

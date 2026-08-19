@@ -12,13 +12,13 @@ import {
   expectReadOnlyField,
   expectSectionsOpen,
   getInspectorSection,
-  InspectorHarness,
   openInspectorSection,
   renderedPropertyAddresses,
   renderedSectionTitles,
   renderInspector,
   renderSeedMode,
-} from "./property-inspector-test-support";
+} from "./property-inspector-test-helpers";
+import { InspectorHarness } from "./property-inspector-test-support";
 
 describe("property inspector safety", () => {
   it.each([

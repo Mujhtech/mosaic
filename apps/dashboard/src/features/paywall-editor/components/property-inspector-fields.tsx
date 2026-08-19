@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components -- internal inspector modules colocate private controls with their supporting types and transforms. */
 import { ArrowsHorizontalIcon } from "@phosphor-icons/react/dist/ssr/ArrowsHorizontal";
 import { ArrowsVerticalIcon } from "@phosphor-icons/react/dist/ssr/ArrowsVertical";
 import { ColumnsIcon } from "@phosphor-icons/react/dist/ssr/Columns";
@@ -24,10 +23,10 @@ import {
   type InspectorNode,
   TEXTAREA_CLASS,
   TwoColumn,
-  transactionEscape,
   useDocumentTransaction,
   useInspectorContext,
 } from "@/features/paywall-editor/components/property-inspector-core";
+import { transactionEscape } from "@/features/paywall-editor/components/property-inspector-core-support";
 import type {
   LocalizedText,
   MosaicDocument,
@@ -203,7 +202,7 @@ export function ComponentTextField({
   );
 }
 
-export function numberFieldLeadingIcon(address: string, label: string) {
+function numberFieldLeadingIcon(address: string, label: string) {
   const iconClass = "size-3.5";
   if (address.includes("cornerRadius")) {
     return <CornersOutIcon aria-hidden className={iconClass} />;

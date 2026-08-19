@@ -1,19 +1,20 @@
-/* eslint-disable react-refresh/only-export-components -- internal inspector modules colocate private controls with their supporting types and transforms. */
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
 import { DocumentBackgroundEditor } from "@/features/paywall-editor/components/property-inspector-background";
 import {
-  alignmentOptions,
   CompactOptionField,
-  distributionOptions,
   Field,
-  FLOW_OPTIONS,
   InspectorSection,
   TwoColumn,
   useInspectorContext,
 } from "@/features/paywall-editor/components/property-inspector-core";
+import {
+  alignmentOptions,
+  distributionOptions,
+  FLOW_OPTIONS,
+} from "@/features/paywall-editor/components/property-inspector-core-support";
 import {
   ColorField,
   EdgeInsetsFields,
@@ -50,7 +51,7 @@ export type SelectionStyledNode = Extract<
   { type: "productCard" | "productBadge" | "tabs" }
 >;
 
-export function isSelectionStyledNode(
+function isSelectionStyledNode(
   node: ProtocolNode
 ): node is SelectionStyledNode {
   return (
@@ -60,7 +61,7 @@ export function isSelectionStyledNode(
   );
 }
 
-export const PRODUCT_STYLE_OVERRIDE_FIELDS = [
+const PRODUCT_STYLE_OVERRIDE_FIELDS = [
   { label: "fill", path: ["background"] },
   { label: "shadow", path: ["shadow"] },
   { label: "stroke colour", path: ["border", "color"] },
@@ -73,7 +74,7 @@ export const PRODUCT_STYLE_OVERRIDE_FIELDS = [
   { label: "opacity", path: ["opacity"] },
 ] as const;
 
-export function productStyleOverrideExists(
+function productStyleOverrideExists(
   style: MosaicPaywallV04ProductCardSelectedStyle,
   path: readonly string[]
 ) {
@@ -87,7 +88,7 @@ export function productStyleOverrideExists(
   return true;
 }
 
-export function removeProductStyleOverride(
+function removeProductStyleOverride(
   style: MosaicPaywallV04ProductCardSelectedStyle,
   path: readonly string[]
 ) {

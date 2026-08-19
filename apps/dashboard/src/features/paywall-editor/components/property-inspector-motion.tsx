@@ -4,7 +4,7 @@ import {
   MOTION_DURATION_MAXIMUM,
   MOTION_DURATION_MINIMUM,
   MOTION_EASING_OPTIONS,
-} from "@/features/paywall-editor/components/design-system-controls";
+} from "@/features/paywall-editor/components/design-system-controls-support";
 import {
   InspectorSection,
   useInspectorContext,

@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components -- internal inspector modules colocate private controls with their supporting transforms. */
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 
@@ -12,15 +11,18 @@ import {
   BackgroundSection,
   BorderSection,
 } from "@/features/paywall-editor/components/property-inspector-background";
+import { withTimelineStyleCoPresence } from "@/features/paywall-editor/components/property-inspector-content-blocks-support";
 import {
-  alignmentOptions,
   CompactOptionField,
   Field,
-  FLOW_OPTIONS,
   InspectorSection,
   TwoColumn,
   useInspectorContext,
 } from "@/features/paywall-editor/components/property-inspector-core";
+import {
+  alignmentOptions,
+  FLOW_OPTIONS,
+} from "@/features/paywall-editor/components/property-inspector-core-support";
 import {
   ColorField,
   LocalizedField,
@@ -60,8 +62,6 @@ import {
 } from "@/features/paywall-editor/utils/protocol-component-rules";
 
 const MINIMUM_TIMELINE_ENTRIES = 2;
-const SEEDED_MARKER_COLOR = "action.primary";
-const SEEDED_MARKER_SIZE = 20;
 const SEEDED_AVATAR_SIZE = 40;
 const MAXIMUM_TIMELINE_ENTRIES = 12;
 const ICON_NAMES: readonly IconName[] = [
@@ -75,42 +75,6 @@ const ICON_NAMES: readonly IconName[] = [
   "chevronBackward",
   "chevronForward",
 ];
-
-/**
- * `markerColor`, `markerSize`, and `descriptionTypography` are required when an
- * entry consumes them and forbidden when none does. Every edit that can change
- * whether an entry carries a marker or a description runs through here, so the
- * inspector cannot leave the document in a state the protocol rejects — in
- * either direction.
- */
-export function withTimelineStyleCoPresence(
-  timeline: TimelineComponent
-): TimelineComponent {
-  const usesMarker = timeline.entries.some(
-    (entry) => entry.marker !== undefined
-  );
-  const usesDescription = timeline.entries.some(
-    (entry) => entry.description !== undefined
-  );
-  const next: TimelineComponent = { ...timeline };
-  if (usesMarker) {
-    // Adding the first marker makes these required, so the editor authors a
-    // starting value the author can then change. It never substitutes one for
-    // a field that is already authored.
-    next.markerColor = timeline.markerColor ?? SEEDED_MARKER_COLOR;
-    next.markerSize = timeline.markerSize ?? SEEDED_MARKER_SIZE;
-  } else {
-    delete next.markerColor;
-    delete next.markerSize;
-  }
-  if (usesDescription) {
-    next.descriptionTypography =
-      timeline.descriptionTypography ?? typography("caption", "start");
-  } else {
-    delete next.descriptionTypography;
-  }
-  return next;
-}
 
 function TimelineEntryEditor({
   index,

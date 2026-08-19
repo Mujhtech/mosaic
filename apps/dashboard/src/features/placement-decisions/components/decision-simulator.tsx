@@ -18,7 +18,11 @@ import type {
   PlacementDecisionsAdapter,
 } from "@/features/placement-decisions/api/placement-decisions-adapter";
 import { simulateDecisionMutationOptions } from "@/features/placement-decisions/mutations/placement-decision-mutations";
-import type { AttributeDefinition } from "@/features/placement-decisions/types/placement-decision";
+import type {
+  AttributeDefinition,
+  SimulationInput,
+  SimulationResult,
+} from "@/features/placement-decisions/types/placement-decision";
 
 const COUNTRY_CODE = /^[A-Za-z]{2}$/;
 
@@ -55,6 +59,71 @@ const PROVIDER_CAPABILITY_OPTIONS = [
   { label: "Access lookup", value: "entitlement_lookup" },
 ];
 
+interface SimulatorFormValues {
+  applicationVersion: string;
+  attributes: Record<string, string>;
+  country: string;
+  entitlementKey: string;
+  entitlementState:
+    | "active"
+    | "inactive"
+    | "unknown"
+    | "provider_unavailable"
+    | "failed";
+  installationId: string;
+  locale: string;
+  osVersion: string;
+  overrideToken: string;
+  platform: "ios" | "android";
+  productAvailability: "available" | "unavailable" | "unknown";
+  productId: string;
+  productReadiness: "ready" | "not_ready" | "unknown";
+  providerCapability: string;
+  userId: string;
+}
+
+/**
+ * Synthetic inputs become one request payload. Empty strings are omitted rather
+ * than sent, so an untouched control never narrows the simulated context.
+ */
+function toSimulationInput(value: SimulatorFormValues): SimulationInput {
+  return {
+    applicationVersion: value.applicationVersion || undefined,
+    attributes: Object.fromEntries(
+      Object.entries(value.attributes).filter(
+        ([, attributeValue]) => attributeValue !== ""
+      )
+    ),
+    country: value.country ? value.country.toUpperCase() : undefined,
+    entitlementStates: value.entitlementKey
+      ? { [value.entitlementKey]: value.entitlementState }
+      : {},
+    installationId: value.installationId || undefined,
+    locale: value.locale || undefined,
+    osVersion: value.osVersion || undefined,
+    platform: value.platform,
+    overrideToken: value.overrideToken || undefined,
+    productAvailability: value.productId
+      ? { [value.productId]: value.productAvailability }
+      : {},
+    productReadiness: value.productId
+      ? { [value.productId]: value.productReadiness }
+      : {},
+    providerCapabilities: value.providerCapability
+      ? [value.providerCapability]
+      : [],
+    userId: value.userId || undefined,
+  };
+}
+
+const IDENTITY_FIELD_LABELS = {
+  applicationVersion: "Application version",
+  installationId: "Installation ID",
+  locale: "Locale",
+  osVersion: "Operating system version",
+  userId: "Application user ID",
+};
+
 export function DecisionSimulator({
   adapter,
   attributes,
@@ -73,6 +142,41 @@ export function DecisionSimulator({
     (attribute) =>
       attribute.status === "active" && attribute.sensitivity === "standard"
   );
+  const clearSimulation = useCallback(() => simulation.reset(), [simulation]);
+
+  return (
+    <section
+      aria-labelledby="simulator-heading"
+      className="grid gap-5 xl:grid-cols-[minmax(20rem,0.8fr)_minmax(0,1.2fr)]"
+    >
+      <SimulatorForm
+        attributes={attributes}
+        errorMessage={simulation.error?.message}
+        isPending={simulation.isPending}
+        onClear={clearSimulation}
+        onSimulate={simulation.mutateAsync}
+        standardAttributes={standardAttributes}
+      />
+      <DecisionTracePanel onOpenRule={onOpenRule} result={simulation.data} />
+    </section>
+  );
+}
+
+function SimulatorForm({
+  attributes,
+  errorMessage,
+  isPending,
+  onClear,
+  onSimulate,
+  standardAttributes,
+}: {
+  attributes: readonly AttributeDefinition[];
+  errorMessage: string | undefined;
+  isPending: boolean;
+  onClear: () => void;
+  onSimulate: (input: SimulationInput) => Promise<SimulationResult>;
+  standardAttributes: readonly AttributeDefinition[];
+}) {
   const form = useForm({
     defaultValues: {
       applicationVersion: "",
@@ -99,464 +203,418 @@ export function DecisionSimulator({
       ),
     },
     onSubmit: async ({ value }) => {
-      await simulation.mutateAsync({
-        applicationVersion: value.applicationVersion || undefined,
-        attributes: Object.fromEntries(
-          Object.entries(value.attributes).filter(
-            ([, attributeValue]) => attributeValue !== ""
-          )
-        ),
-        country: value.country ? value.country.toUpperCase() : undefined,
-        entitlementStates: value.entitlementKey
-          ? { [value.entitlementKey]: value.entitlementState }
-          : {},
-        installationId: value.installationId || undefined,
-        locale: value.locale || undefined,
-        osVersion: value.osVersion || undefined,
-        platform: value.platform,
-        overrideToken: value.overrideToken || undefined,
-        productAvailability: value.productId
-          ? { [value.productId]: value.productAvailability }
-          : {},
-        productReadiness: value.productId
-          ? { [value.productId]: value.productReadiness }
-          : {},
-        providerCapabilities: value.providerCapability
-          ? [value.providerCapability]
-          : [],
-        userId: value.userId || undefined,
-      });
+      await onSimulate(toSimulationInput(value));
     },
   });
 
   const handleClick = useCallback(() => {
     form.reset();
-    simulation.reset();
-  }, [form, simulation]);
+    onClear();
+  }, [form, onClear]);
+
   return (
-    <section
-      aria-labelledby="simulator-heading"
-      className="grid gap-5 xl:grid-cols-[minmax(20rem,0.8fr)_minmax(0,1.2fr)]"
+    <form
+      autoComplete="off"
+      className="rounded border border-border p-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        form.handleSubmit();
+      }}
     >
-      <form
-        autoComplete="off"
-        className="rounded border border-border p-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          form.handleSubmit();
-        }}
-      >
-        <h2 className="font-semibold" id="simulator-heading">
-          Targeting simulator
-        </h2>
-        <p className="mt-1 text-muted-foreground text-sm">
-          Synthetic inputs are sent only for this simulation. They are not
-          placed in the URL, cache, browser storage, or recovery state.
-        </p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <form.Field name="platform">
+      <h2 className="font-semibold" id="simulator-heading">
+        Targeting simulator
+      </h2>
+      <p className="mt-1 text-muted-foreground text-sm">
+        Synthetic inputs are sent only for this simulation. They are not placed
+        in the URL, cache, browser storage, or recovery state.
+      </p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <form.Field name="platform">
+          {(field) => (
+            <SimulatorSelectField
+              id="simulator-platform"
+              label="Platform"
+              onValueChange={(value) =>
+                field.handleChange(value as "ios" | "android")
+              }
+              options={SIMULATOR_PLATFORM_OPTIONS}
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        {(
+          [
+            "osVersion",
+            "applicationVersion",
+            "locale",
+            "userId",
+            "installationId",
+          ] as const
+        ).map((name) => (
+          <form.Field key={name} name={name}>
             {(field) => (
-              <Field>
-                <FieldLabel htmlFor="simulator-platform">Platform</FieldLabel>
-                <Select
-                  items={SIMULATOR_PLATFORM_OPTIONS}
-                  onValueChange={(value) =>
-                    field.handleChange(value as "ios" | "android")
-                  }
-                  value={field.state.value}
-                >
-                  <SelectTrigger id="simulator-platform">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SIMULATOR_PLATFORM_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
+              <SimulatorTextField
+                autoComplete="off"
+                id={`simulator-${name}`}
+                label={IDENTITY_FIELD_LABELS[name]}
+                onChange={field.handleChange}
+                value={field.state.value}
+              />
             )}
           </form.Field>
-          {(
-            [
-              "osVersion",
-              "applicationVersion",
-              "locale",
-              "userId",
-              "installationId",
-            ] as const
-          ).map((name) => (
-            <form.Field key={name} name={name}>
+        ))}
+        <form.Field
+          name="country"
+          validators={{
+            onChange: ({ value }) =>
+              !value || COUNTRY_CODE.test(value)
+                ? undefined
+                : "Use an ISO two-letter country code.",
+          }}
+        >
+          {(field) => (
+            <Field
+              data-invalid={field.state.meta.errors.length > 0 || undefined}
+            >
+              <FieldLabel htmlFor="simulator-country">Country</FieldLabel>
+              <Input
+                autoComplete="off"
+                id="simulator-country"
+                maxLength={2}
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
+                placeholder="DE"
+                value={field.state.value}
+              />
+              <p className="text-muted-foreground text-xs">
+                Source: explicit host application input, never inferred from
+                locale.
+              </p>
+              <FieldError
+                errors={field.state.meta.errors.map((message) => ({
+                  message,
+                }))}
+              />
+            </Field>
+          )}
+        </form.Field>
+      </div>
+
+      <fieldset className="mt-4 grid gap-3 rounded border border-border p-3 sm:grid-cols-2">
+        <legend className="px-1 font-semibold text-xs">
+          Commerce and QA inputs
+        </legend>
+        <form.Field name="entitlementKey">
+          {(field) => (
+            <SimulatorTextField
+              id="simulator-access-key"
+              label="Access key"
+              onChange={field.handleChange}
+              placeholder="pro"
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field name="entitlementState">
+          {(field) => (
+            <SimulatorSelectField
+              id="simulator-access-state"
+              label="Access state"
+              onValueChange={(value) =>
+                field.handleChange(value as typeof field.state.value)
+              }
+              options={ACCESS_STATE_OPTIONS}
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field name="productId">
+          {(field) => (
+            <SimulatorTextField
+              id="simulator-product-id"
+              label="Mosaic Product ID"
+              onChange={field.handleChange}
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field name="productAvailability">
+          {(field) => (
+            <SimulatorSelectField
+              id="simulator-product-availability"
+              label="Product availability"
+              onValueChange={(value) =>
+                field.handleChange(value as typeof field.state.value)
+              }
+              options={PRODUCT_AVAILABILITY_OPTIONS}
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field name="productReadiness">
+          {(field) => (
+            <SimulatorSelectField
+              id="simulator-product-readiness"
+              label="Product readiness"
+              onValueChange={(value) =>
+                field.handleChange(value as typeof field.state.value)
+              }
+              options={PRODUCT_READINESS_OPTIONS}
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field name="providerCapability">
+          {(field) => (
+            <SimulatorSelectField
+              id="simulator-provider-capability"
+              label="Provider capability"
+              onValueChange={(value) => field.handleChange(value)}
+              options={PROVIDER_CAPABILITY_OPTIONS}
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field name="overrideToken">
+          {(field) => (
+            <SimulatorTextField
+              autoComplete="off"
+              id="simulator-override-token"
+              label="Test Override token"
+              onChange={field.handleChange}
+              type="password"
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+      </fieldset>
+
+      {standardAttributes.length > 0 ? (
+        <fieldset className="mt-4 grid gap-3 rounded border border-border p-3 sm:grid-cols-2">
+          <legend className="px-1 font-semibold text-xs">
+            Synthetic standard attributes
+          </legend>
+          {standardAttributes.map((attribute) => (
+            <form.Field key={attribute.id} name={`attributes.${attribute.key}`}>
               {(field) => (
-                <Field>
-                  <FieldLabel htmlFor={`simulator-${name}`}>
-                    {
-                      {
-                        applicationVersion: "Application version",
-                        installationId: "Installation ID",
-                        locale: "Locale",
-                        osVersion: "Operating system version",
-                        userId: "Application user ID",
-                      }[name]
-                    }
-                  </FieldLabel>
-                  <Input
-                    autoComplete="off"
-                    id={`simulator-${name}`}
-                    onChange={(event) =>
-                      field.handleChange(event.currentTarget.value)
-                    }
-                    value={field.state.value}
-                  />
-                </Field>
+                <SimulatorTextField
+                  autoComplete="off"
+                  id={`simulator-attribute-${attribute.key}`}
+                  label={attribute.key}
+                  onChange={field.handleChange}
+                  value={field.state.value}
+                />
               )}
             </form.Field>
           ))}
-          <form.Field
-            name="country"
-            validators={{
-              onChange: ({ value }) =>
-                !value || COUNTRY_CODE.test(value)
-                  ? undefined
-                  : "Use an ISO two-letter country code.",
-            }}
-          >
-            {(field) => (
-              <Field
-                data-invalid={field.state.meta.errors.length > 0 || undefined}
-              >
-                <FieldLabel htmlFor="simulator-country">Country</FieldLabel>
-                <Input
-                  autoComplete="off"
-                  id="simulator-country"
-                  maxLength={2}
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value)
-                  }
-                  placeholder="DE"
-                  value={field.state.value}
-                />
-                <p className="text-muted-foreground text-xs">
-                  Source: explicit host application input, never inferred from
-                  locale.
-                </p>
-                <FieldError
-                  errors={field.state.meta.errors.map((message) => ({
-                    message,
-                  }))}
-                />
-              </Field>
-            )}
-          </form.Field>
-        </div>
-
-        <fieldset className="mt-4 grid gap-3 rounded border border-border p-3 sm:grid-cols-2">
-          <legend className="px-1 font-semibold text-xs">
-            Commerce and QA inputs
-          </legend>
-          <form.Field name="entitlementKey">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor="simulator-access-key">
-                  Access key
-                </FieldLabel>
-                <Input
-                  id="simulator-access-key"
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value)
-                  }
-                  placeholder="pro"
-                  value={field.state.value}
-                />
-              </Field>
-            )}
-          </form.Field>
-          <form.Field name="entitlementState">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor="simulator-access-state">
-                  Access state
-                </FieldLabel>
-                <Select
-                  items={ACCESS_STATE_OPTIONS}
-                  onValueChange={(value) =>
-                    field.handleChange(value as typeof field.state.value)
-                  }
-                  value={field.state.value}
-                >
-                  <SelectTrigger id="simulator-access-state">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ACCESS_STATE_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-          </form.Field>
-          <form.Field name="productId">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor="simulator-product-id">
-                  Mosaic Product ID
-                </FieldLabel>
-                <Input
-                  id="simulator-product-id"
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value)
-                  }
-                  value={field.state.value}
-                />
-              </Field>
-            )}
-          </form.Field>
-          <form.Field name="productAvailability">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor="simulator-product-availability">
-                  Product availability
-                </FieldLabel>
-                <Select
-                  items={PRODUCT_AVAILABILITY_OPTIONS}
-                  onValueChange={(value) =>
-                    field.handleChange(value as typeof field.state.value)
-                  }
-                  value={field.state.value}
-                >
-                  <SelectTrigger id="simulator-product-availability">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRODUCT_AVAILABILITY_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-          </form.Field>
-          <form.Field name="productReadiness">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor="simulator-product-readiness">
-                  Product readiness
-                </FieldLabel>
-                <Select
-                  items={PRODUCT_READINESS_OPTIONS}
-                  onValueChange={(value) =>
-                    field.handleChange(value as typeof field.state.value)
-                  }
-                  value={field.state.value}
-                >
-                  <SelectTrigger id="simulator-product-readiness">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRODUCT_READINESS_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-          </form.Field>
-          <form.Field name="providerCapability">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor="simulator-provider-capability">
-                  Provider capability
-                </FieldLabel>
-                <Select
-                  items={PROVIDER_CAPABILITY_OPTIONS}
-                  onValueChange={(value) => field.handleChange(value)}
-                  value={field.state.value}
-                >
-                  <SelectTrigger id="simulator-provider-capability">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PROVIDER_CAPABILITY_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-          </form.Field>
-          <form.Field name="overrideToken">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor="simulator-override-token">
-                  Test Override token
-                </FieldLabel>
-                <Input
-                  autoComplete="off"
-                  id="simulator-override-token"
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value)
-                  }
-                  type="password"
-                  value={field.state.value}
-                />
-              </Field>
-            )}
-          </form.Field>
         </fieldset>
+      ) : null}
 
-        {standardAttributes.length > 0 ? (
-          <fieldset className="mt-4 grid gap-3 rounded border border-border p-3 sm:grid-cols-2">
-            <legend className="px-1 font-semibold text-xs">
-              Synthetic standard attributes
-            </legend>
-            {standardAttributes.map((attribute) => (
-              <form.Field
-                key={attribute.id}
-                name={`attributes.${attribute.key}`}
-              >
-                {(field) => (
-                  <Field>
-                    <FieldLabel
-                      htmlFor={`simulator-attribute-${attribute.key}`}
-                    >
-                      {attribute.key}
-                    </FieldLabel>
-                    <Input
-                      autoComplete="off"
-                      id={`simulator-attribute-${attribute.key}`}
-                      onChange={(event) =>
-                        field.handleChange(event.currentTarget.value)
-                      }
-                      value={field.state.value}
-                    />
-                  </Field>
-                )}
-              </form.Field>
-            ))}
-          </fieldset>
-        ) : null}
-
-        {attributes.some(
+      <SimulatorFormActions
+        errorMessage={errorMessage}
+        hasSensitiveAttributes={attributes.some(
           (attribute) => attribute.sensitivity === "sensitive"
-        ) ? (
-          <p className="mt-4 rounded border border-border bg-muted/30 p-3 text-xs">
-            Sensitive attributes cannot be entered in the simulator. They are
-            excluded from this run, and any sensitive values in server traces
-            are redacted.
-          </p>
-        ) : null}
-        <div className="mt-4 flex gap-2">
-          <Button disabled={simulation.isPending} type="submit">
-            {simulation.isPending ? "Evaluating…" : "Run simulation"}
-          </Button>
-          <Button onClick={handleClick} type="button" variant="outline">
-            Clear inputs
-          </Button>
-        </div>
-        {simulation.error ? (
-          <p className="mt-3 text-destructive text-sm" role="alert">
-            {simulation.error.message}
-          </p>
-        ) : null}
-      </form>
-
-      <section
-        aria-labelledby="trace-heading"
-        className="min-w-0 rounded border border-border p-4"
-      >
-        <h2 className="font-semibold" id="trace-heading">
-          Decision trace
-        </h2>
-        {simulation.data ? (
-          <>
-            <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded bg-muted/30 p-3 text-sm">
-              <dt>Final decision</dt>
-              <dd className="font-semibold">
-                {simulation.data.finalOutcome.type}
-              </dd>
-              <dt>Winning Rule</dt>
-              <dd>{simulation.data.winningRuleId ?? "Default decision"}</dd>
-              <dt>Assignment</dt>
-              <dd>{simulation.data.assignmentKeyType ?? "Not used"}</dd>
-              <dt>Bucket</dt>
-              <dd>{simulation.data.rolloutBucket ?? "Not evaluated"}</dd>
-              <dt>Product readiness</dt>
-              <dd>{simulation.data.productReadiness ?? "Not required"}</dd>
-            </dl>
-            {simulation.data.fallbackPath.length > 0 ? (
-              <p className="mt-3 rounded border border-border p-3 text-sm">
-                Fallback path: {simulation.data.fallbackPath.join(" → ")}
-              </p>
-            ) : null}
-            <ol className="mt-4 space-y-2">
-              {simulation.data.trace.map((step) => {
-                const stepRuleId = step.ruleId;
-                return (
-                  <li
-                    className="rounded border border-border p-3 text-sm"
-                    key={step.id}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium">{step.label}</p>
-                        <p className="mt-1 text-muted-foreground">
-                          {step.sensitive
-                            ? "Sensitive value redacted"
-                            : step.detail}
-                        </p>
-                        <p className="mt-1 text-muted-foreground text-xs">
-                          Source: {step.source ?? "decision configuration"}
-                        </p>
-                      </div>
-                      <span
-                        className={
-                          step.result === "unknown"
-                            ? "text-amber-700 dark:text-amber-300"
-                            : "text-muted-foreground"
-                        }
-                      >
-                        {step.result === "unknown" ? (
-                          <WarningCircleIcon aria-label="Unknown" />
-                        ) : (
-                          step.result
-                        )}
-                      </span>
-                    </div>
-                    {stepRuleId ? (
-                      <Button
-                        className="mt-2 h-auto p-0 text-xs"
-                        onClick={() => onOpenRule(stepRuleId)}
-                        size="sm"
-                        type="button"
-                        variant="link"
-                      >
-                        Open Rule
-                      </Button>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ol>
-          </>
-        ) : (
-          <p className="mt-3 text-muted-foreground text-sm">
-            Run a simulation to see source provenance, unknown states, rollout,
-            fallback, and the final decision.
-          </p>
         )}
-      </section>
+        isPending={isPending}
+        onClear={handleClick}
+      />
+    </form>
+  );
+}
+
+function SimulatorFormActions({
+  errorMessage,
+  hasSensitiveAttributes,
+  isPending,
+  onClear,
+}: {
+  errorMessage: string | undefined;
+  hasSensitiveAttributes: boolean;
+  isPending: boolean;
+  onClear: () => void;
+}) {
+  return (
+    <>
+      {hasSensitiveAttributes ? (
+        <p className="mt-4 rounded border border-border bg-muted/30 p-3 text-xs">
+          Sensitive attributes cannot be entered in the simulator. They are
+          excluded from this run, and any sensitive values in server traces are
+          redacted.
+        </p>
+      ) : null}
+      <div className="mt-4 flex gap-2">
+        <Button disabled={isPending} type="submit">
+          {isPending ? "Evaluating…" : "Run simulation"}
+        </Button>
+        <Button onClick={onClear} type="button" variant="outline">
+          Clear inputs
+        </Button>
+      </div>
+      {errorMessage ? (
+        <p className="mt-3 text-destructive text-sm" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+function SimulatorTextField({
+  autoComplete,
+  id,
+  label,
+  onChange,
+  placeholder,
+  type,
+  value,
+}: {
+  autoComplete?: "off";
+  id: string;
+  label: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  type?: "password";
+  value: string;
+}) {
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Input
+        autoComplete={autoComplete}
+        id={id}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        placeholder={placeholder}
+        type={type}
+        value={value}
+      />
+    </Field>
+  );
+}
+
+function SimulatorSelectField({
+  id,
+  label,
+  onValueChange,
+  options,
+  value,
+}: {
+  id: string;
+  label: string;
+  onValueChange: (value: string) => void;
+  options: readonly { label: string; value: string }[];
+  value: string;
+}) {
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Select items={options} onValueChange={onValueChange} value={value}>
+        <SelectTrigger id={id}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+function DecisionTracePanel({
+  onOpenRule,
+  result,
+}: {
+  onOpenRule: (ruleId: string) => void;
+  result: SimulationResult | undefined;
+}) {
+  return (
+    <section
+      aria-labelledby="trace-heading"
+      className="min-w-0 rounded border border-border p-4"
+    >
+      <h2 className="font-semibold" id="trace-heading">
+        Decision trace
+      </h2>
+      {result ? (
+        <>
+          <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded bg-muted/30 p-3 text-sm">
+            <dt>Final decision</dt>
+            <dd className="font-semibold">{result.finalOutcome.type}</dd>
+            <dt>Winning Rule</dt>
+            <dd>{result.winningRuleId ?? "Default decision"}</dd>
+            <dt>Assignment</dt>
+            <dd>{result.assignmentKeyType ?? "Not used"}</dd>
+            <dt>Bucket</dt>
+            <dd>{result.rolloutBucket ?? "Not evaluated"}</dd>
+            <dt>Product readiness</dt>
+            <dd>{result.productReadiness ?? "Not required"}</dd>
+          </dl>
+          {result.fallbackPath.length > 0 ? (
+            <p className="mt-3 rounded border border-border p-3 text-sm">
+              Fallback path: {result.fallbackPath.join(" → ")}
+            </p>
+          ) : null}
+          <ol className="mt-4 space-y-2">
+            {result.trace.map((step) => {
+              const stepRuleId = step.ruleId;
+              return (
+                <li
+                  className="rounded border border-border p-3 text-sm"
+                  key={step.id}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{step.label}</p>
+                      <p className="mt-1 text-muted-foreground">
+                        {step.sensitive
+                          ? "Sensitive value redacted"
+                          : step.detail}
+                      </p>
+                      <p className="mt-1 text-muted-foreground text-xs">
+                        Source: {step.source ?? "decision configuration"}
+                      </p>
+                    </div>
+                    <span
+                      className={
+                        step.result === "unknown"
+                          ? "text-amber-700 dark:text-amber-300"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      {step.result === "unknown" ? (
+                        <WarningCircleIcon aria-label="Unknown" />
+                      ) : (
+                        step.result
+                      )}
+                    </span>
+                  </div>
+                  {stepRuleId ? (
+                    <Button
+                      className="mt-2 h-auto p-0 text-xs"
+                      onClick={() => onOpenRule(stepRuleId)}
+                      size="sm"
+                      type="button"
+                      variant="link"
+                    >
+                      Open Rule
+                    </Button>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </>
+      ) : (
+        <p className="mt-3 text-muted-foreground text-sm">
+          Run a simulation to see source provenance, unknown states, rollout,
+          fallback, and the final decision.
+        </p>
+      )}
     </section>
   );
 }

@@ -9,7 +9,7 @@ import {
   InspectorContext,
   layerDisplayLabel,
   selectLayerMetadata,
-} from "@/features/paywall-editor/components/property-inspector-core";
+} from "@/features/paywall-editor/components/property-inspector-core-support";
 import { MotionSection } from "@/features/paywall-editor/components/property-inspector-motion";
 import { useEditorSelection } from "@/features/paywall-editor/hooks/use-editor-selection";
 import { useEditorStore } from "@/features/paywall-editor/stores/editor-store-context";

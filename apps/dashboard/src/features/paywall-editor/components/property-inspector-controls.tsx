@@ -27,12 +27,14 @@ import {
   CONTROL_CLASS,
   CompactOptionField,
   Field,
-  FLOW_OPTIONS,
   InspectorSection,
-  layerDisplayLabel,
   TwoColumn,
   useInspectorContext,
 } from "@/features/paywall-editor/components/property-inspector-core";
+import {
+  FLOW_OPTIONS,
+  layerDisplayLabel,
+} from "@/features/paywall-editor/components/property-inspector-core-support";
 import {
   CheckboxField,
   ComponentTextField,
@@ -64,7 +66,7 @@ import type { MosaicPaywallV04BaseTypography } from "@/lib/mosaic-protocol";
 
 const SCREEN_INDEX = /^\/screens\/(\d+)/;
 
-export function ButtonInspector({
+function ButtonInspector({
   node,
 }: {
   node: Extract<ProtocolNode, { type: "button" }>;
@@ -332,7 +334,7 @@ export function ButtonInspector({
   );
 }
 
-export function CarouselInspector({
+function CarouselInspector({
   node,
 }: {
   node: Extract<ProtocolNode, { type: "carousel" }>;
@@ -397,7 +399,7 @@ export function CarouselInspector({
   );
 }
 
-export function SwitchInspector({
+function SwitchInspector({
   node,
 }: {
   node: Extract<ProtocolNode, { type: "switch" }>;
@@ -448,7 +450,7 @@ export function SwitchInspector({
   );
 }
 
-export function CountdownInspector({
+function CountdownInspector({
   node,
 }: {
   node: Extract<ProtocolNode, { type: "countdown" }>;

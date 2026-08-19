@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withTimelineStyleCoPresence } from "@/features/paywall-editor/components/property-inspector-content-blocks";
+import { withTimelineStyleCoPresence } from "@/features/paywall-editor/components/property-inspector-content-blocks-support";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
 import { createEditorStore } from "@/features/paywall-editor/stores/editor-store";
 import type {
